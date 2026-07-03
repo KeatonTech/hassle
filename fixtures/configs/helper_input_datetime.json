@@ -1,0 +1,7 @@
+{
+  "id": "input_datetime_event",
+  "name": "Event Time",
+  "icon": "mdi:calendar-clock",
+  "has_date": true,
+  "has_time": true
+}

@@ -1,0 +1,21 @@
+{
+  "alias": "Geo Location Trigger",
+  "description": "Triggers on geolocation state change",
+  "trigger": [
+    {
+      "platform": "geo_location",
+      "source": "nsw_rural_fire_service_feed",
+      "zone": "zone.home",
+      "event": "enter"
+    }
+  ],
+  "action": [
+    {
+      "service": "notify.mobile_app",
+      "data": {
+        "message": "Geolocation event"
+      }
+    }
+  ],
+  "mode": "single"
+}

@@ -1,0 +1,31 @@
+{
+  "alias": "Repeat Count",
+  "description": "Demonstrates repeat with count",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "button.test"
+    }
+  ],
+  "action": [
+    {
+      "repeat": {
+        "count": "3",
+        "sequence": [
+          {
+            "service": "light.toggle",
+            "target": {
+              "entity_id": "light.hallway"
+            }
+          },
+          {
+            "delay": {
+              "seconds": 1
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "mode": "single"
+}

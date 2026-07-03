@@ -1,0 +1,25 @@
+{
+  "alias": "Script Mode Queued",
+  "description": "A script with queued mode",
+  "mode": "queued",
+  "max": 3,
+  "sequence": [
+    {
+      "service": "notify.persistent_notification",
+      "data": {
+        "message": "Script starting",
+        "title": "Notification"
+      }
+    },
+    {
+      "delay": "00:00:30"
+    },
+    {
+      "service": "notify.persistent_notification",
+      "data": {
+        "message": "Script completed",
+        "title": "Notification"
+      }
+    }
+  ]
+}

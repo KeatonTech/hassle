@@ -1,0 +1,53 @@
+{
+  "alias": "Mixed Triggers and Conditions",
+  "description": "Automation with multiple triggers and conditions",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.motion",
+      "id": "motion"
+    },
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.door",
+      "id": "door"
+    },
+    {
+      "platform": "time",
+      "at": "06:00:00",
+      "id": "morning"
+    }
+  ],
+  "condition": [
+    {
+      "condition": "and",
+      "conditions": [
+        {
+          "condition": "state",
+          "entity_id": "input_boolean.enable",
+          "state": "on"
+        },
+        {
+          "condition": "time",
+          "weekday": ["mon", "tue", "wed", "thu", "fri"]
+        },
+        {
+          "condition": "template",
+          "value_template": "{{ now().hour >= 6 and now().hour < 22 }}"
+        }
+      ]
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_on",
+      "target": {
+        "entity_id": "light.hallway"
+      },
+      "data": {
+        "brightness": 255
+      }
+    }
+  ],
+  "mode": "single"
+}

@@ -1,0 +1,31 @@
+{
+  "alias": "Condition Trigger",
+  "description": "Automation with trigger condition checking trigger_id",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.motion",
+      "id": "motion_trigger"
+    },
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.door",
+      "id": "door_trigger"
+    }
+  ],
+  "condition": [
+    {
+      "condition": "trigger",
+      "id": "motion_trigger"
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_on",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    }
+  ],
+  "mode": "single"
+}

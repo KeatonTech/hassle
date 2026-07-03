@@ -1,0 +1,19 @@
+{
+  "alias": "Template Trigger",
+  "description": "Triggers when template becomes true",
+  "trigger": [
+    {
+      "platform": "template",
+      "value_template": "{{ state_attr('light.hallway', 'brightness') > 100 }}"
+    }
+  ],
+  "action": [
+    {
+      "service": "automation.turn_off",
+      "target": {
+        "entity_id": "automation.template_trigger"
+      }
+    }
+  ],
+  "mode": "single"
+}

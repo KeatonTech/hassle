@@ -1,0 +1,20 @@
+{
+  "alias": "State Trigger Basic",
+  "description": "Basic state trigger example",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.motion_detector",
+      "to": "on"
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_on",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    }
+  ],
+  "mode": "single"
+}

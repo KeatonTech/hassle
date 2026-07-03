@@ -1,0 +1,22 @@
+{
+  "alias": "Event Trigger",
+  "description": "Triggers on custom event",
+  "trigger": [
+    {
+      "platform": "event",
+      "event_type": "custom_event",
+      "event_data": {
+        "action": "test"
+      }
+    }
+  ],
+  "action": [
+    {
+      "service": "notify.mobile_app",
+      "data": {
+        "message": "Custom event triggered"
+      }
+    }
+  ],
+  "mode": "single"
+}

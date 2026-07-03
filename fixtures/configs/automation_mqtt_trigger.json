@@ -1,0 +1,20 @@
+{
+  "alias": "MQTT Trigger",
+  "description": "Triggers on MQTT message",
+  "trigger": [
+    {
+      "platform": "mqtt",
+      "topic": "home/bedroom/motion",
+      "payload": "on"
+    }
+  ],
+  "action": [
+    {
+      "service": "switch.turn_on",
+      "target": {
+        "entity_id": "switch.bedroom_fan"
+      }
+    }
+  ],
+  "mode": "single"
+}

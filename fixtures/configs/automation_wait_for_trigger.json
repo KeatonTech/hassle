@@ -1,0 +1,30 @@
+{
+  "alias": "Wait For Trigger",
+  "description": "Demonstrates wait_for_trigger action",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "button.start"
+    }
+  ],
+  "action": [
+    {
+      "wait_for_trigger": [
+        {
+          "platform": "state",
+          "entity_id": "binary_sensor.door",
+          "to": "off"
+        }
+      ],
+      "timeout": "00:10:00",
+      "continue_on_timeout": true
+    },
+    {
+      "service": "notify.mobile_app",
+      "data": {
+        "message": "Wait completed"
+      }
+    }
+  ],
+  "mode": "single"
+}

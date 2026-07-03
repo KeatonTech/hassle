@@ -1,0 +1,25 @@
+{
+  "alias": "Condition Template",
+  "description": "Automation with template condition",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "sensor.temperature"
+    }
+  ],
+  "condition": [
+    {
+      "condition": "template",
+      "value_template": "{{ (state_attr('light.hallway', 'brightness') or 0) > 100 }}"
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_off",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    }
+  ],
+  "mode": "single"
+}

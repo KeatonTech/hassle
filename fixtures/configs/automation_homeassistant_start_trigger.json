@@ -1,0 +1,16 @@
+{
+  "alias": "HA Start Trigger",
+  "description": "Triggers when Home Assistant starts",
+  "trigger": [
+    {
+      "platform": "homeassistant",
+      "event": "start"
+    }
+  ],
+  "action": [
+    {
+      "service": "automation.reload"
+    }
+  ],
+  "mode": "single"
+}

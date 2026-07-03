@@ -1,0 +1,6 @@
+{
+  "id": "input_boolean_test",
+  "name": "Test Boolean",
+  "icon": "mdi:toggle-switch",
+  "initial": false
+}

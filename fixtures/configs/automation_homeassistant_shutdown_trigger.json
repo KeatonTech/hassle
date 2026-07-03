@@ -1,0 +1,19 @@
+{
+  "alias": "HA Shutdown Trigger",
+  "description": "Triggers when Home Assistant shuts down",
+  "trigger": [
+    {
+      "platform": "homeassistant",
+      "event": "shutdown"
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_off",
+      "target": {
+        "entity_id": "light.all"
+      }
+    }
+  ],
+  "mode": "single"
+}

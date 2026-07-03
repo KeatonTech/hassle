@@ -1,0 +1,19 @@
+{
+  "alias": "Tag Trigger",
+  "description": "Triggers on tag scan",
+  "trigger": [
+    {
+      "platform": "tag",
+      "tag_id": "tag_abc123"
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_on",
+      "target": {
+        "entity_id": "light.entryway"
+      }
+    }
+  ],
+  "mode": "single"
+}

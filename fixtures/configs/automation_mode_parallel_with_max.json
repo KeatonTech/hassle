@@ -1,0 +1,30 @@
+{
+  "alias": "Mode Parallel with Max",
+  "description": "Automation with mode parallel - runs multiple instances concurrently",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "sensor.counter"
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_on",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    },
+    {
+      "delay": "00:00:05"
+    },
+    {
+      "service": "light.turn_off",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    }
+  ],
+  "mode": "parallel",
+  "max": 10,
+  "max_exceeded": "warning"
+}

@@ -1,0 +1,7 @@
+{
+  "id": "schedule_morning",
+  "name": "Morning Schedule",
+  "icon": "mdi:calendar-clock",
+  "weekdays": ["mon", "tue", "wed", "thu", "fri"],
+  "time": "06:30:00"
+}

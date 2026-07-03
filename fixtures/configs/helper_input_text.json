@@ -1,0 +1,7 @@
+{
+  "id": "input_text_notification",
+  "name": "Notification",
+  "icon": "mdi:message",
+  "max": 255,
+  "pattern": "^[a-zA-Z0-9 ]*$"
+}

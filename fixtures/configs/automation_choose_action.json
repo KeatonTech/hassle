@@ -1,0 +1,62 @@
+{
+  "alias": "Choose Action",
+  "description": "Demonstrates choose with multiple conditions",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.motion"
+    }
+  ],
+  "action": [
+    {
+      "choose": [
+        {
+          "conditions": [
+            {
+              "condition": "state",
+              "entity_id": "light.bedroom",
+              "state": "off"
+            }
+          ],
+          "sequence": [
+            {
+              "service": "light.turn_on",
+              "target": {
+                "entity_id": "light.bedroom"
+              },
+              "data": {
+                "brightness": 255
+              }
+            }
+          ]
+        },
+        {
+          "conditions": [
+            {
+              "condition": "state",
+              "entity_id": "light.bedroom",
+              "state": "on"
+            }
+          ],
+          "sequence": [
+            {
+              "service": "light.turn_off",
+              "target": {
+                "entity_id": "light.bedroom"
+              }
+            }
+          ]
+        }
+      ],
+      "default": [
+        {
+          "service": "light.toggle",
+          "target": {
+            "entity_id": "light.bedroom"
+          }
+        }
+      ]
+    }
+  ],
+  "mode": "single"
+}

@@ -1,0 +1,29 @@
+{
+  "alias": "Mode Restart",
+  "description": "Automation with mode restart - restarts on each trigger",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.motion"
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_on",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    },
+    {
+      "delay": "00:02:00"
+    },
+    {
+      "service": "light.turn_off",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    }
+  ],
+  "mode": "restart",
+  "max_exceeded": "silent"
+}

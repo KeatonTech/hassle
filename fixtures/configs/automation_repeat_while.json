@@ -1,0 +1,31 @@
+{
+  "alias": "Repeat While",
+  "description": "Demonstrates repeat with while condition",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "sensor.counter"
+    }
+  ],
+  "action": [
+    {
+      "repeat": {
+        "while": [
+          {
+            "condition": "template",
+            "value_template": "{{ state_attr('input_number.counter', 'value') < 10 }}"
+          }
+        ],
+        "sequence": [
+          {
+            "service": "input_number.increment",
+            "target": {
+              "entity_id": "input_number.counter"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "mode": "single"
+}

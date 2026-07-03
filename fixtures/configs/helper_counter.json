@@ -1,0 +1,9 @@
+{
+  "id": "counter_items",
+  "name": "Items Counter",
+  "icon": "mdi:counter",
+  "initial": 0,
+  "step": 1,
+  "minimum": 0,
+  "maximum": 100
+}
