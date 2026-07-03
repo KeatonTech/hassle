@@ -1,0 +1,53 @@
+[project]
+name = "hassle"
+version = "0.0.0"
+description = "Hassle monorepo workspace root"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+hassle-core = { workspace = true }
+hassle-cli = { workspace = true }
+hassle-dev = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "ruff>=0.6",
+    "pyright>=1.1.380",
+    "hassle-core",
+    "hassle-cli",
+    "hassle-dev",
+]
+
+# ---------------------------------------------------------------------------
+# Shared tool configuration (applies across the whole workspace)
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["packages/hassle-core/src", "packages/hassle-cli/src", "packages/hassle-dev/src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pyright]
+# Frozen rule (CLAUDE.md / R7): pyright --strict on hassle-core.
+include = ["packages/hassle-core/src"]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+
+[tool.pytest.ini_options]
+testpaths = ["packages/hassle-core/tests", "packages/hassle-dev/tests"]
+addopts = "-ra"
+markers = [
+    "integration: tests that talk to a real Dockerized HA (M6+); never run in unit CI",
+]

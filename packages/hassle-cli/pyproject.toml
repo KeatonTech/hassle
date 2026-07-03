@@ -1,0 +1,18 @@
+[project]
+name = "hassle-cli"
+version = "0.0.0"
+description = "Hassle CLI: pull/plan/push/validate/test/run/fmt/stubs/explain/mirror/doctor."
+requires-python = ">=3.12"
+dependencies = [
+    "hassle-core",
+]
+
+[project.scripts]
+hassle = "hassle_cli.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hassle_cli"]
