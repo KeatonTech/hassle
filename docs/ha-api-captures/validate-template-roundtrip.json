@@ -1,0 +1,149 @@
+{
+  "records": [
+    {
+      "section": "validate_config_plural",
+      "request": "triggers/conditions/actions (plural) + trigger:/action: keys",
+      "response": {
+        "triggers": {
+          "valid": true,
+          "error": null
+        },
+        "conditions": {
+          "valid": true,
+          "error": null
+        },
+        "actions": {
+          "valid": true,
+          "error": null
+        }
+      },
+      "note": "validate_config REQUIRES plural keys (triggers/conditions/actions) and the new 'trigger:'/'action:' discriminators."
+    },
+    {
+      "section": "validate_config_plural_legacy_inner",
+      "request": "plural outer keys, legacy platform:/service: inner",
+      "response": {
+        "triggers": {
+          "valid": true,
+          "error": null
+        },
+        "conditions": {
+          "valid": true,
+          "error": null
+        },
+        "actions": {
+          "valid": true,
+          "error": null
+        }
+      },
+      "note": "Inner legacy 'platform:'/'service:' still accepted; only the OUTER block keys must be plural."
+    },
+    {
+      "section": "automation_post_plural_roundtrip",
+      "request": {
+        "alias": "Plural RT",
+        "triggers": [
+          {
+            "trigger": "state",
+            "entity_id": "input_boolean.hassle_flag",
+            "to": "on"
+          }
+        ],
+        "conditions": [],
+        "actions": [
+          {
+            "action": "input_boolean.turn_off",
+            "target": {
+              "entity_id": "input_boolean.hassle_flag"
+            }
+          }
+        ],
+        "mode": "single"
+      },
+      "response": {
+        "post": {
+          "status": 200,
+          "body": {
+            "result": "ok"
+          }
+        },
+        "read_back": {
+          "id": "hassle_plural_roundtrip",
+          "alias": "Plural RT",
+          "triggers": [
+            {
+              "trigger": "state",
+              "entity_id": "input_boolean.hassle_flag",
+              "to": "on"
+            }
+          ],
+          "conditions": [],
+          "actions": [
+            {
+              "action": "input_boolean.turn_off",
+              "target": {
+                "entity_id": "input_boolean.hassle_flag"
+              }
+            }
+          ],
+          "mode": "single"
+        }
+      },
+      "note": "POST accepts PLURAL keys (round-trip safe: HA returns plural, we can re-POST verbatim)."
+    },
+    {
+      "section": "helper_editable_attribute",
+      "request": "GET /api/states/input_boolean.hassle_flag",
+      "response": {
+        "entity_id": "input_boolean.hassle_flag",
+        "state": "off",
+        "attributes": {
+          "editable": true,
+          "icon": "mdi:flag",
+          "friendly_name": "Hassle Flag"
+        },
+        "last_changed": "2026-07-03T23:06:07.095945+00:00",
+        "last_reported": "2026-07-03T23:06:07.095945+00:00",
+        "last_updated": "2026-07-03T23:06:07.095945+00:00",
+        "context": {
+          "id": "01KWN3PWVQS7AG9TG1D5Q72GMY",
+          "parent_id": null,
+          "user_id": null
+        }
+      },
+      "note": "Storage-collection helper entity exposes attributes.editable == true (UI-editable). YAML helpers would be false."
+    },
+    {
+      "section": "render_template_ws",
+      "request": {
+        "type": "render_template",
+        "template": "{{ 1+2 }} ...",
+        "report_errors": true
+      },
+      "response": {
+        "ack": {
+          "id": 3,
+          "type": "result",
+          "success": true,
+          "result": null
+        },
+        "event": {
+          "id": 3,
+          "type": "event",
+          "event": {
+            "result": "3 off",
+            "listeners": {
+              "all": false,
+              "entities": [
+                "input_boolean.hassle_flag"
+              ],
+              "domains": [],
+              "time": false
+            }
+          }
+        }
+      },
+      "note": "WS render_template is a SUBSCRIPTION: result ack then event(s) with {result, listeners}. Supports strict/report_errors."
+    }
+  ]
+}
