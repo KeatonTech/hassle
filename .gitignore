@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.uv/
+dist/
+build/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.coverage
+htmlcov/
+
+# Editors / OS
+.DS_Store
+.idea/
+
+# Claude Code local (keep .claude/agents/ and shared settings tracked)
+.claude/settings.local.json
