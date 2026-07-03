@@ -18,6 +18,10 @@ Module: `hassle_core.ir` (package `hassle-core`). Public surface (`hassle_core.i
   `id`; scripts have an **extrinsic** object_id supplied via `key_hint=` at
   parse time (their config body has no id). `IRObject.object_key()` raises if
   identity is absent.
+- **Key opacity (downstream contract):** treat an object key as an opaque
+  string. If a consumer must recover `(kind, identity)`, split on the **first**
+  `:` only — the identity segment is not escaped and is not guaranteed
+  colon-free. Never `split(":")` and assume two parts.
 
 ## Models
 

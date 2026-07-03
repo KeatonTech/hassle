@@ -68,7 +68,9 @@ class IRObject(BaseModel):
 class AutomationConfig(IRObject):
     """A single automation config (``automations.yaml`` entry, keyed by ``id``)."""
 
-    id: str | None = None
+    # `id` is typed Any (not str) so that a non-string id round-trips verbatim
+    # rather than raising — I3 is "for ANY config". HA stores ids as strings.
+    id: Any = None
     alias: Any = None
     description: Any = None
     mode: Any = None
@@ -99,7 +101,8 @@ class ScriptConfig(IRObject):
 class HelperConfig(IRObject):
     """A storage-collection helper item (one of the nine domains, keyed by ``id``)."""
 
-    id: str | None = None
+    # See AutomationConfig.id — typed Any to preserve any id value verbatim (I3).
+    id: Any = None
     name: Any = None
     icon: Any = None
 

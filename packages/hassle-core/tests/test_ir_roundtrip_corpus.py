@@ -21,3 +21,13 @@ def test_ir_roundtrip_corpus(fx: Fixture) -> None:
     result = serialize(obj)
     # dict `==` is key-order-insensitive and recurses; list order is significant.
     assert result == fx.config
+
+
+def test_ir_roundtrips_non_string_id() -> None:
+    # Regression (reviewer nit, I3 "for ANY config"): a non-string id must
+    # round-trip verbatim, not raise. HA stores ids as strings, but the IR
+    # boundary must never mutate or reject data.
+    config = {"id": 1687201958261, "alias": "numeric id", "trigger": [], "action": []}
+    obj = parse(config, kind="automation")
+    assert serialize(obj) == config
+    assert obj.object_key() == "automation:1687201958261"
