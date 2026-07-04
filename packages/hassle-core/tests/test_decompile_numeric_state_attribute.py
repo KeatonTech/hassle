@@ -60,7 +60,7 @@ def test_automation_math_shade_sun_decompiles_with_zero_raw_nodes() -> None:
     objects = {obj.object_key(): obj}
     source = decompile_bundle(objects)
 
-    assert "attribute='elevation'" in source, source
+    assert 'attribute="elevation"' in source, source
 
     report = analyze_coverage(objects)
     assert not any(e.object_key == obj.object_key() for e in report.exceptions), (
