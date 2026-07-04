@@ -368,6 +368,11 @@ gate and orphan sweep in `doctor`.
 3. `test_pull_requires_clean_tree`: dirty repo → refusal with guidance; `--allow-dirty` works;
    non-git directory → one-time warning, still functions.
 4. `test_conflict_ux_snapshot`: 3-way DSL diff output golden.
+4b. `test_plan_labels_modernization_diffs` (M2 review finding): a legacy-form remote object
+    (inner `platform:`/scalar `delay:`) adopted then re-pushed produces a ONE-TIME plan diff
+    (Hassle compiles the modern form; HA stores it verbatim thereafter — capture-verified).
+    The plan renderer must label this class of diff as "modernization (one-time)" so users
+    aren't alarmed; snapshot-tested.
 5. `run --live` integration test (Dockerized HA): shadow created with `initial_state: off`,
    triggered with `skip_condition: false` by default (HA's own default is `true` — assert we
    override it), trace rendered with correct source lines, shadow deleted — **also on failure**
