@@ -1,0 +1,4 @@
+{
+  "error_type": "DuplicateObjectError",
+  "contains": ["automation:shared", "First", "Second"]
+}

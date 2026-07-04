@@ -1,0 +1,16 @@
+{
+  "automation:minimal": {
+    "id": "minimal",
+    "alias": "Minimal",
+    "triggers": [],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "data": {
+          "entity_id": "light.hallway"
+        }
+      }
+    ]
+  }
+}
