@@ -14,7 +14,7 @@ vocabulary) is simply never matched by :func:`matches_state_change` /
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, cast
 
 from hassle.testing.state import StateChange
@@ -42,6 +42,20 @@ def for_duration_of(trigger: dict[str, Any]) -> ForDuration | None:
             seconds=int(raw.get("seconds", 0)),  # type: ignore[arg-type]
         )
     return None
+
+
+def parse_offset(value: Any) -> timedelta:
+    """Parse a sun trigger/condition's signed ``"±HH:MM:SS"`` offset string.
+
+    Shared by the trigger engine (``offset:``) and the ``sun`` condition
+    (``after_offset:``/``before_offset:``) -- both use the identical shape.
+    """
+    if not isinstance(value, str) or not value:
+        return timedelta()
+    sign = -1 if value.startswith("-") else 1
+    text = value[1:] if value[0] in "+-" else value
+    hour, minute, second = (int(p) for p in text.split(":"))
+    return sign * timedelta(hours=hour, minutes=minute, seconds=second)
 
 
 def _trigger_type(trigger: dict[str, Any]) -> Any:

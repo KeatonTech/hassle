@@ -12,9 +12,9 @@ real sleep, fully deterministic (R8).
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from hassle.testing.calls import ServiceCall
@@ -23,6 +23,7 @@ from hassle.testing.triggers import (
     is_state_trigger,
     is_zone_trigger,
     numeric_state_crosses,
+    parse_offset,
     state_trigger_matches,
     zone_trigger_matches,
 )
@@ -30,6 +31,15 @@ from hassle.testing.triggers import (
 if TYPE_CHECKING:
     from hassle.testing.state import StateChange, StateStore
     from hassle.testing.templates import TemplateEngine
+
+# Returns today's configured sun times ({"sunrise": dt, "sunset": dt}), or
+# {} if none are configured (`sim.set_sun_times` was never called).
+SunTimesProvider = Callable[[], dict[str, datetime]]
+
+
+def no_sun_times() -> dict[str, datetime]:
+    """The default :data:`SunTimesProvider`: no sun times configured."""
+    return {}
 
 
 @dataclass
@@ -67,6 +77,7 @@ class ActionContext:
     calls: list[ServiceCall]
     variables: dict[str, Any] = field(default_factory=_empty_str_any_dict)
     trigger_ctx: dict[str, Any] = field(default_factory=_empty_str_any_dict)
+    sun_times: SunTimesProvider = no_sun_times
 
     def template_context(self, *, repeat: dict[str, Any] | None = None) -> dict[str, Any]:
         ctx = dict(self.variables)
@@ -131,11 +142,7 @@ def evaluate_condition(condition: dict[str, Any], ctx: ActionContext) -> bool:
         state = ctx.states.get(condition["entity_id"])
         return state is not None and state.state == condition.get("zone")
     if kind == "sun":
-        # Sun *conditions* (after/before configured event) are out of v1
-        # scope for condition evaluation (the trigger side is supported);
-        # treat as satisfied so bundles using it don't hard-fail simulation
-        # of unrelated logic -- documented limitation (see engine module doc).
-        return True
+        return _evaluate_sun_condition(condition, ctx)
     if kind == "trigger":
         return ctx.trigger_ctx.get("id") == condition.get("id")
     # Purpose-specific conditions (`met(...)`) and anything else unmodeled:
@@ -143,6 +150,36 @@ def evaluate_condition(condition: dict[str, Any], ctx: ActionContext) -> bool:
     # gating entirely, see engine.py) -- reaching here through the normal
     # trigger-evaluation path means an unknown classic-condition kind, which
     # we conservatively treat as not blocking (v1 scope, documented).
+    return True
+
+
+def _evaluate_sun_condition(condition: dict[str, Any], ctx: ActionContext) -> bool:
+    """``condition: sun`` (DESIGN §5.4/§10.1): now() is after/before a
+    configured sunrise/sunset event, each with its own optional offset.
+
+    Requires ``sim.set_sun_times(...)`` to have been called -- with no sun
+    times configured there is nothing to compare against, so (like an
+    unconfigured registry lookup elsewhere in v1) the condition is treated as
+    satisfied rather than hard-failing simulation of unrelated logic.
+    """
+    sun_times = ctx.sun_times()
+    if not sun_times:
+        return True
+    now = ctx.templates.now
+    after = condition.get("after")
+    if after is not None:
+        base = sun_times.get(after)
+        if base is not None:
+            target = base + parse_offset(condition.get("after_offset"))
+            if now < target:
+                return False
+    before = condition.get("before")
+    if before is not None:
+        base = sun_times.get(before)
+        if base is not None:
+            target = base + parse_offset(condition.get("before_offset"))
+            if now >= target:
+                return False
     return True
 
 

@@ -317,6 +317,107 @@ def test_sun_trigger_with_offset(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# sun *condition* (DESIGN §5.4/§10.1: F1 review finding -- distinct from the
+# sun trigger above; gates a state trigger's automation on time-of-day).
+# ---------------------------------------------------------------------------
+
+
+def test_sun_condition_after_blocks_before_the_target_moment(tmp_path: Path) -> None:
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, only_if, service, state, sun, when
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("binary_sensor.motion").to("on"))
+            only_if(sun(after="sunset", after_offset="-00:30:00"))
+            service("light.turn_on", entity_id="light.porch")
+        """,
+    )
+    sim.set_sun_times(sunrise="06:00:00", sunset="20:00:00")
+    sim.at("2026-07-03 12:00:00")
+    sim.state_change("binary_sensor.motion", "off", "on")
+    sim.assert_not_called("light.turn_on")
+
+
+def test_sun_condition_after_passes_at_and_beyond_the_target_moment(tmp_path: Path) -> None:
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, only_if, service, state, sun, when
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("binary_sensor.motion").to("on"))
+            only_if(sun(after="sunset", after_offset="-00:30:00"))
+            service("light.turn_on", entity_id="light.porch")
+        """,
+    )
+    sim.set_sun_times(sunrise="06:00:00", sunset="20:00:00")
+    sim.at("2026-07-03 19:30:00")
+    sim.state_change("binary_sensor.motion", "off", "on")
+    sim.assert_called("light.turn_on")
+
+
+def test_sun_condition_before_blocks_after_the_target_moment(tmp_path: Path) -> None:
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, only_if, service, state, sun, when
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("binary_sensor.motion").to("on"))
+            only_if(sun(before="sunrise"))
+            service("light.turn_on", entity_id="light.porch")
+        """,
+    )
+    sim.set_sun_times(sunrise="06:00:00", sunset="20:00:00")
+    sim.at("2026-07-03 12:00:00")
+    sim.state_change("binary_sensor.motion", "off", "on")
+    sim.assert_not_called("light.turn_on")
+
+
+def test_sun_condition_before_passes_before_the_target_moment(tmp_path: Path) -> None:
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, only_if, service, state, sun, when
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("binary_sensor.motion").to("on"))
+            only_if(sun(before="sunrise"))
+            service("light.turn_on", entity_id="light.porch")
+        """,
+    )
+    sim.set_sun_times(sunrise="06:00:00", sunset="20:00:00")
+    sim.at("2026-07-03 05:00:00")
+    sim.state_change("binary_sensor.motion", "off", "on")
+    sim.assert_called("light.turn_on")
+
+
+def test_sun_condition_unconfigured_treated_as_satisfied(tmp_path: Path) -> None:
+    """No `sim.set_sun_times(...)` call: nothing to compare against, so the
+    condition doesn't block unrelated logic (v1 documented fallback)."""
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, only_if, service, state, sun, when
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("binary_sensor.motion").to("on"))
+            only_if(sun(after="sunset"))
+            service("light.turn_on", entity_id="light.porch")
+        """,
+    )
+    sim.state_change("binary_sensor.motion", "off", "on")
+    sim.assert_called("light.turn_on")
+
+
+# ---------------------------------------------------------------------------
 # template trigger -- fires only on false->true edge
 # ---------------------------------------------------------------------------
 

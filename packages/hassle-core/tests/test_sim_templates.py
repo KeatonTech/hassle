@@ -408,6 +408,34 @@ def test_unsupported_template_raises_for_bad_syntax(tmp_path: Path) -> None:
     assert "hassle render --live" in str(excinfo.value)
 
 
+def test_unsupported_template_raises_for_unknown_filter_names_the_filter(
+    tmp_path: Path,
+) -> None:
+    """An unknown filter (`| some_unregistered_filter`) is a
+    TemplateAssertionError (a TemplateSyntaxError subclass) whose own message
+    already names the filter -- the error must surface that name instead of
+    the generic "invalid template syntax" (F2 review finding)."""
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, service, state, template, when
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("button.go").to("on"))
+            service(
+                "notify.mobile_app",
+                message=template("{{ states('sensor.temp') | some_unregistered_filter }}"),
+            )
+        """,
+    )
+    with pytest.raises(UnsupportedTemplateError) as excinfo:
+        sim.state_change("button.go", "off", "on")
+    message = str(excinfo.value)
+    assert "some_unregistered_filter" in message
+    assert "hassle render --live" in message
+
+
 def test_unsupported_template_names_the_construct(tmp_path: Path) -> None:
     sim = build_sim(
         tmp_path,

@@ -27,7 +27,8 @@ def _sim() -> Simulator:
 
 def test_motion_turns_on_light_at_night() -> None:
     sim = _sim()
-    sim.at("2026-07-03 22:30")  # after sunset
+    sim.set_sun_times(sunrise="06:00:00", sunset="20:00:00")
+    sim.at("2026-07-03 22:30")  # after sunset (and after the -00:30 offset)
     sim.set_state("input_boolean.guest_mode", "off")
     sim.state_change("binary_sensor.hall_motion", "off", "on")
     sim.assert_called("light.turn_on", entity_id="light.hallway", brightness_pct=60)
@@ -36,15 +37,25 @@ def test_motion_turns_on_light_at_night() -> None:
 
 
 def test_no_trigger_during_day() -> None:
+    """The automation's own `sun(after="sunset", after_offset="-00:30:00")`
+    condition (DESIGN §10.2) is the thing under test here -- guest_mode is
+    "off" (the condition that *would* let it fire), so a noon trigger not
+    firing proves the day/night gate itself, not guest-mode suppression."""
     sim = _sim()
-    sim.at("2026-07-03 12:00")
+    sim.set_sun_times(sunrise="06:00:00", sunset="20:00:00")
+    sim.at("2026-07-03 12:00")  # well before sunset -- the gate must hold
+    sim.set_state("input_boolean.guest_mode", "off")
     sim.state_change("binary_sensor.hall_motion", "off", "on")
-    # DESIGN's example doesn't gate the automation itself on time-of-day (no
-    # sun/time condition in the compiled automation) -- what it demonstrates
-    # is that a *guest_mode on* condition suppresses the light regardless of
-    # time. Set guest_mode on to match "should not trigger" semantics for
-    # this automation as written; day/night gating is exercised by the
-    # trigger-semantics suite (test_sim_triggers.py) since this automation
-    # has no sun/time condition of its own.
+    sim.assert_not_called("light.turn_on")
+
+
+def test_no_trigger_when_guest_mode_on_even_at_night() -> None:
+    """Separate assertion for guest-mode suppression (kept distinct from the
+    day/night gate test above, per review): guest_mode "on" blocks the light
+    even well after the sun gate is satisfied."""
+    sim = _sim()
+    sim.set_sun_times(sunrise="06:00:00", sunset="20:00:00")
+    sim.at("2026-07-03 22:30")  # after sunset -- the sun gate alone would pass
     sim.set_state("input_boolean.guest_mode", "on")
+    sim.state_change("binary_sensor.hall_motion", "off", "on")
     sim.assert_not_called("light.turn_on")

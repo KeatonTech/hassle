@@ -29,11 +29,13 @@ from typing import Any
 
 from hassle.testing.actions import (
     ActionContext,
+    SunTimesProvider,
     Suspend,
     SuspendDelay,
     SuspendWaitForTrigger,
     SuspendWaitTemplate,
     evaluate_condition,
+    no_sun_times,
     run_actions,
 )
 from hassle.testing.calls import ServiceCall
@@ -51,6 +53,7 @@ from hassle.testing.triggers import (
     is_time_trigger,
     is_zone_trigger,
     numeric_state_crosses,
+    parse_offset,
     state_trigger_matches,
     template_trigger_edge,
     time_matches,
@@ -93,6 +96,7 @@ class AutomationEngine:
         templates: TemplateEngine,
         calls: list[ServiceCall],
         clock_now: Any,
+        sun_times: SunTimesProvider = no_sun_times,
     ) -> None:
         self.object_key = object_key
         self.config = config
@@ -100,6 +104,7 @@ class AutomationEngine:
         self._templates = templates
         self._calls = calls
         self._clock_now = clock_now
+        self._sun_times = sun_times
         self.mode = config.get("mode", "single")
         self.max = int(config.get("max", _DEFAULT_MAX))
         default_max_exceeded = "single" if self.mode != "parallel" else "silent"
@@ -146,7 +151,12 @@ class AutomationEngine:
     def _evaluate_template_trigger(
         self, index: int, trigger: dict[str, Any], change: StateChange
     ) -> None:
-        ctx = ActionContext(states=self._states, templates=self._templates, calls=[])
+        ctx = ActionContext(
+            states=self._states,
+            templates=self._templates,
+            calls=[],
+            sun_times=self._sun_times,
+        )
 
         def _render_now() -> bool:
             rendered = ctx.render(trigger["value_template"])
@@ -220,7 +230,7 @@ class AutomationEngine:
             base = sun_times.get(trigger.get("event"))
             if base is None:
                 continue
-            target = base + _parse_offset(trigger.get("offset"))
+            target = base + parse_offset(trigger.get("offset"))
             out.append((index, now >= target))
         return out
 
@@ -234,7 +244,12 @@ class AutomationEngine:
         conditions = self.config.get("conditions", [])
         if not conditions:
             return True
-        ctx = ActionContext(states=self._states, templates=self._templates, calls=[])
+        ctx = ActionContext(
+            states=self._states,
+            templates=self._templates,
+            calls=[],
+            sun_times=self._sun_times,
+        )
         return all(evaluate_condition(c, ctx) for c in conditions)
 
     def _start_or_queue(
@@ -268,6 +283,7 @@ class AutomationEngine:
             templates=self._templates,
             calls=self._calls,
             trigger_ctx=trigger_ctx,
+            sun_times=self._sun_times,
         )
         gen = None if queued else run_actions(self.config.get("actions", []), ctx)
         return _Run(generator=gen, ctx=ctx, started_at=self._clock_now(), trigger_ctx=trigger_ctx)
@@ -327,13 +343,3 @@ class AutomationEngine:
             if run.wake_at is not None and now >= run.wake_at and is_waitable:
                 run.wake_at = None
                 self._advance_run(run, resume_value=None)
-
-
-def _parse_offset(value: Any) -> timedelta:
-    """Parse a sun trigger's signed ``"±HH:MM:SS"`` offset string."""
-    if not isinstance(value, str) or not value:
-        return timedelta()
-    sign = -1 if value.startswith("-") else 1
-    text = value[1:] if value[0] in "+-" else value
-    hour, minute, second = (int(p) for p in text.split(":"))
-    return sign * timedelta(hours=hour, minutes=minute, seconds=second)

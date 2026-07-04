@@ -82,6 +82,7 @@ class Simulator:
                 templates=self._templates,
                 calls=self._calls,
                 clock_now=lambda: self._clock.now,
+                sun_times=self._sun_times_today,
             )
             self._engines.append(engine)
             self._engines_by_key[key] = engine

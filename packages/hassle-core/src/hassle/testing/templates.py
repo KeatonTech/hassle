@@ -136,6 +136,12 @@ class TemplateEngine:
         self._env.globals.update(globals_)
         self._env.filters.update(filters)
 
+    @property
+    def now(self) -> datetime:
+        """The simulator's current fake-clock moment (for non-template callers
+        that need "now", e.g. the ``sun`` condition, §10.1)."""
+        return self._clock_now()
+
     def render(self, template_text: str, *, extra_context: Mapping[str, Any] | None = None) -> str:
         """Render ``template_text`` (a full ``{{ ... }}`` or plain string).
 
@@ -147,6 +153,13 @@ class TemplateEngine:
         context = dict(extra_context or {})
         try:
             compiled = self._env.from_string(template_text)
+        except jinja2.TemplateAssertionError as exc:
+            # Unknown filter/test (e.g. `| some_unregistered_filter`): jinja2
+            # raises this TemplateSyntaxError subclass with the offending
+            # name in its message ("No filter named 'x'.") -- name it
+            # directly rather than falling through to the generic message.
+            construct = _extract_filter_name(str(exc)) or "invalid template syntax"
+            raise UnsupportedTemplateError(construct, template_text, reason=str(exc)) from exc
         except jinja2.TemplateSyntaxError as exc:
             raise UnsupportedTemplateError(
                 "invalid template syntax", template_text, reason=str(exc)
@@ -178,3 +191,15 @@ def _extract_undefined_name(message: str) -> str:
         if len(parts) >= 2:
             return parts[-2] if message.strip().endswith("undefined") else parts[1]
     return message
+
+
+def _extract_filter_name(message: str) -> str | None:
+    # jinja2's TemplateAssertionError text for an unknown filter/test is
+    # "No filter named 'some_filter'." / "No test named 'some_test'." --
+    # extract the quoted name so the error names the construct (R6) instead
+    # of the generic "invalid template syntax".
+    if "No filter named" in message or "No test named" in message:
+        parts = message.split("'")
+        if len(parts) >= 2:
+            return parts[1]
+    return None
