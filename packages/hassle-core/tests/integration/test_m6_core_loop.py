@@ -55,9 +55,7 @@ def _seed(ha: DirectBackend) -> None:
     ha.create("script", {"id": "delete_me", "alias": "Delete me", "sequence": []})
 
 
-def test_core_loop_three_changes_and_source_preservation(
-    ha: DirectBackend, tmp_path: Path
-) -> None:
+def test_core_loop_three_changes_and_source_preservation(ha: DirectBackend, tmp_path: Path) -> None:
     _seed(ha)
     kinds = ("automation", "script", "input_boolean")
 
@@ -87,13 +85,20 @@ def test_core_loop_three_changes_and_source_preservation(
         "automation",
         {"id": "edit_me", "alias": "Edited locally", "trigger": [], "condition": [], "action": []},
     )
-    local["input_boolean:new_helper"] = ("input_boolean", {"id": "new_helper", "name": "New Helper"})
+    local["input_boolean:new_helper"] = (
+        "input_boolean",
+        {"id": "new_helper", "name": "New Helper"},
+    )
     del local["script:delete_me"]  # deleted locally
 
     # --- plan: exactly three push changes --------------------------------------
     remote = _remote_objmap(ha, kinds)
     plan = compute_plan(manifest=manifest, local_objects=local, remote_objects=remote)
-    push = [e for e in plan.entries if e.action in (PlanAction.UPDATE, PlanAction.CREATE, PlanAction.DELETE)]
+    push = [
+        e
+        for e in plan.entries
+        if e.action in (PlanAction.UPDATE, PlanAction.CREATE, PlanAction.DELETE)
+    ]
     assert len(push) == 3, [f"{e.object_key}:{e.action}" for e in plan.entries]
     assert plan.entry_for("automation:edit_me").action is PlanAction.UPDATE
     assert plan.entry_for("input_boolean:new_helper").action is PlanAction.CREATE

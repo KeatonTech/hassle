@@ -20,7 +20,9 @@ def test_applied_automation_is_ui_editable(ha: DirectBackend) -> None:
             "alias": "UI Editable Automation",
             "trigger": [{"platform": "state", "entity_id": "input_boolean.x", "to": "on"}],
             "condition": [],
-            "action": [{"service": "input_boolean.toggle", "target": {"entity_id": "input_boolean.x"}}],
+            "action": [
+                {"service": "input_boolean.toggle", "target": {"entity_id": "input_boolean.x"}}
+            ],
         },
     )
 
@@ -36,5 +38,7 @@ def test_applied_automation_is_ui_editable(ha: DirectBackend) -> None:
         for e in entries
         if e.get("platform") == "automation" and e.get("unique_id") == "ui_editable"
     ]
-    assert len(matching) == 1, "expected exactly one registry entry with unique_id == config id (I2)"
+    assert len(matching) == 1, (
+        "expected exactly one registry entry with unique_id == config id (I2)"
+    )
     assert matching[0]["entity_id"].startswith("automation.")

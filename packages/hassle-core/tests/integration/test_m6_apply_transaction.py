@@ -1,7 +1,7 @@
 """MILESTONES M6 tests 4 & 5 — transactional apply against real HA.
 
 - test 4 (`test_apply_rollback_live`): a push batch whose 3rd object is crafted
-  invalid (rejected by HA) → objects 1–2 are restored; HA state is hash-identical
+  invalid (rejected by HA) → objects 1-2 are restored; HA state is hash-identical
   to pre-apply.
 - test 5 (`test_apply_aborts_on_drift_live`): an object mutated via HA's API
   between plan and apply → apply aborts before writing anything. Includes the
@@ -56,7 +56,13 @@ def test_apply_rollback_live(ha: DirectBackend) -> None:
                 object_key="automation:roll_auto",
                 kind="automation",
                 action=PlanAction.UPDATE,
-                local={"id": "roll_auto", "alias": "Roll Auto v2", "trigger": [], "condition": [], "action": []},
+                local={
+                    "id": "roll_auto",
+                    "alias": "Roll Auto v2",
+                    "trigger": [],
+                    "condition": [],
+                    "action": [],
+                },
                 remote_hash_at_plan=auto_hash,
             ),
             PlanEntry(
@@ -74,7 +80,7 @@ def test_apply_rollback_live(ha: DirectBackend) -> None:
     assert result.outcomes["automation:roll_bad"] is ApplyOutcome.FAILED
     assert result.outcomes["input_boolean:roll_flag"] is ApplyOutcome.ROLLED_BACK
     assert result.outcomes["automation:roll_auto"] is ApplyOutcome.ROLLED_BACK
-    # HA state hash-identical to pre-apply (rollback restored objects 1–2).
+    # HA state hash-identical to pre-apply (rollback restored objects 1-2).
     assert _hash_state(ha, kinds) == before
 
 
@@ -99,7 +105,13 @@ def test_apply_aborts_on_drift_live(ha: DirectBackend) -> None:
                 object_key="automation:drift_me",
                 kind="automation",
                 action=PlanAction.UPDATE,
-                local={"id": "drift_me", "alias": "Local edit", "trigger": [], "condition": [], "action": []},
+                local={
+                    "id": "drift_me",
+                    "alias": "Local edit",
+                    "trigger": [],
+                    "condition": [],
+                    "action": [],
+                },
                 remote_hash_at_plan=plan_hash,
             )
         ]
@@ -119,7 +131,13 @@ def test_apply_aborts_on_create_collision_live(ha: DirectBackend) -> None:
                 object_key="automation:collide",
                 kind="automation",
                 action=PlanAction.CREATE,
-                local={"id": "collide", "alias": "Mine", "trigger": [], "condition": [], "action": []},
+                local={
+                    "id": "collide",
+                    "alias": "Mine",
+                    "trigger": [],
+                    "condition": [],
+                    "action": [],
+                },
             )
         ]
     )

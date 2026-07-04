@@ -53,7 +53,13 @@ def _diverge(ha: DirectBackend) -> tuple[dict[str, object], dict[str, object]]:
         {"id": "conflicted", "alias": "UI edit", "trigger": [], "condition": [], "action": []},
     )
     remote = ha.list_remote("automation")["conflicted"]
-    local = {"id": "conflicted", "alias": "Local edit", "trigger": [], "condition": [], "action": []}
+    local = {
+        "id": "conflicted",
+        "alias": "Local edit",
+        "trigger": [],
+        "condition": [],
+        "action": [],
+    }
     return local, remote
 
 

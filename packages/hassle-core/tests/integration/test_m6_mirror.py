@@ -49,5 +49,6 @@ def test_tightened_gate_raises_mirror_error_and_sync_unaffected(ha: DirectBacken
         mirror.push(_ZIP)
 
     # ...and sync is completely unaffected: normal backend ops still work.
-    ha.create("input_boolean", {"id": "after_mirror_fail", "name": "Still Fine"})
-    assert "after_mirror_fail" in ha.list_remote("input_boolean")
+    # (HA derives a helper's id from its name slug, so use the returned identity.)
+    identity = ha.create("input_boolean", {"name": "Still Fine"})
+    assert identity in ha.list_remote("input_boolean")

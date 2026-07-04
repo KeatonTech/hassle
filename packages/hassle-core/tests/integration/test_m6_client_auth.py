@@ -23,9 +23,11 @@ def test_bad_token_raises_clean_auth_error() -> None:
     url = os.environ.get("HASSLE_TEST_HA_URL")
     if not url:
         pytest.skip("needs HASSLE_TEST_HA_URL")
-    with pytest.raises(HaAuthError) as excinfo:
-        with DirectBackend(url, "definitely-not-a-valid-token") as backend:
-            backend.list_remote("automation")
+    with (
+        pytest.raises(HaAuthError) as excinfo,
+        DirectBackend(url, "definitely-not-a-valid-token") as backend,
+    ):
+        backend.list_remote("automation")
     message = str(excinfo.value)
     # Product-surface error: what / where / fix (R6).
     assert "token" in message.lower()
@@ -49,7 +51,9 @@ def test_automation_create_list_update_delete(ha: DirectBackend) -> None:
             "alias": "M6 CRUD",
             "trigger": [{"platform": "state", "entity_id": "input_boolean.x", "to": "on"}],
             "condition": [],
-            "action": [{"service": "input_boolean.toggle", "target": {"entity_id": "input_boolean.x"}}],
+            "action": [
+                {"service": "input_boolean.toggle", "target": {"entity_id": "input_boolean.x"}}
+            ],
         },
     )
     assert identity == "m6_crud"
@@ -61,7 +65,20 @@ def test_automation_create_list_update_delete(ha: DirectBackend) -> None:
     assert "triggers" in stored and "trigger" not in stored
     assert stored["actions"][0].get("action") == "input_boolean.toggle"
 
-    ha.update("automation", "m6_crud", {"id": "m6_crud", "alias": "M6 CRUD renamed"})
+    # HA's config API validates the full automation schema on every write, so an
+    # update carries a complete config (triggers/conditions/actions), never a
+    # partial patch.
+    ha.update(
+        "automation",
+        "m6_crud",
+        {
+            "id": "m6_crud",
+            "alias": "M6 CRUD renamed",
+            "trigger": [],
+            "condition": [],
+            "action": [],
+        },
+    )
     assert ha.list_remote("automation")["m6_crud"]["alias"] == "M6 CRUD renamed"
 
     ha.delete("automation", "m6_crud")
@@ -74,7 +91,9 @@ def test_script_create_list_update_delete(ha: DirectBackend) -> None:
         {
             "id": "m6_script",
             "alias": "M6 Script",
-            "sequence": [{"service": "input_boolean.toggle", "target": {"entity_id": "input_boolean.x"}}],
+            "sequence": [
+                {"service": "input_boolean.toggle", "target": {"entity_id": "input_boolean.x"}}
+            ],
         },
     )
     assert identity == "m6_script"

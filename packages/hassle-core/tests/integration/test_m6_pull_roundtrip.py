@@ -27,6 +27,11 @@ from hassle.ir.keys import HELPER_DOMAINS
 
 
 def _seed(ha: DirectBackend) -> None:
+    # Author in the modern plural / `trigger:`/`action:` schema — what the 2026.7
+    # UI writes and what the compiler emits — so `compile(decompile(remote))` is
+    # byte-exact. (A legacy `platform:`-form remote round-trips only up to the
+    # decompiler's documented one-time modernization, docs/ha-api-notes.md §16;
+    # that is an offline M2 concern, exercised there.)
     ha.create("input_boolean", {"id": "guest_mode", "name": "Guest Mode"})
     ha.create(
         "automation",
@@ -34,10 +39,13 @@ def _seed(ha: DirectBackend) -> None:
             "id": "hall_light",
             "alias": "Hallway light on motion",
             "mode": "restart",
-            "trigger": [{"platform": "state", "entity_id": "input_boolean.guest_mode", "to": "on"}],
-            "condition": [],
-            "action": [
-                {"service": "input_boolean.turn_off", "target": {"entity_id": "input_boolean.guest_mode"}},
+            "triggers": [{"trigger": "state", "entity_id": "input_boolean.guest_mode", "to": "on"}],
+            "conditions": [],
+            "actions": [
+                {
+                    "action": "input_boolean.turn_off",
+                    "target": {"entity_id": "input_boolean.guest_mode"},
+                },
                 {"delay": {"minutes": 5}},
             ],
         },
@@ -47,7 +55,12 @@ def _seed(ha: DirectBackend) -> None:
         {
             "id": "movie_time",
             "alias": "Movie time",
-            "sequence": [{"service": "input_boolean.toggle", "target": {"entity_id": "input_boolean.guest_mode"}}],
+            "sequence": [
+                {
+                    "action": "input_boolean.toggle",
+                    "target": {"entity_id": "input_boolean.guest_mode"},
+                }
+            ],
         },
     )
 
@@ -57,7 +70,7 @@ def _pull_ir(ha: DirectBackend) -> dict[str, object]:
     for kind in ("automation", "script", *sorted(HELPER_DOMAINS)):
         for identity, config in ha.list_remote(kind).items():
             obj = parse(config, kind=kind, key_hint=identity)
-            objects[obj.object_key] = obj
+            objects[obj.object_key()] = obj
     return objects
 
 
@@ -72,8 +85,8 @@ def test_pull_decompiles_compiles_and_roundtrips(ha: DirectBackend, tmp_path: Pa
     # a bundle, and recompile — exactly what `hassle pull` + `hassle validate` do.
     source = decompile_bundle(remote_ir)  # type: ignore[arg-type]
     bundle = tmp_path / "bundle"
-    (bundle / "automations").mkdir(parents=True)
-    (bundle / "automations" / "pulled.py").write_text(source, encoding="utf-8")
+    bundle.mkdir(parents=True)
+    (bundle / "pulled.py").write_text(source, encoding="utf-8")
 
     result = compile_bundle(bundle)
     compiled = {key: serialize(obj) for key, obj in result.objects.items()}

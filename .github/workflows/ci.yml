@@ -63,3 +63,75 @@ jobs:
         with:
           name: decompile-coverage-${{ matrix.os }}
           path: decompile-coverage.json
+
+  # ---------------------------------------------------------------------------
+  # M6 integration: the same integration-marked suite against real Home
+  # Assistant, on both the `stable` and `dev` images (MILESTONES M6 "Done
+  # when"). Docker (blocked in the M0.V sandbox) runs here; the tests target any
+  # instance via HASSLE_TEST_HA_URL / HASSLE_TEST_HA_TOKEN, so this is the same
+  # suite a developer runs against a local pip-installed HA.
+  # ---------------------------------------------------------------------------
+  integration:
+    name: integration · HA ${{ matrix.ha_tag }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ha_tag: [stable, dev]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync workspace
+        run: uv sync --frozen
+
+      - name: Write HA config (standard includes + helper domains + media)
+        run: |
+          mkdir -p ha-config/media/hassle
+          cat > ha-config/configuration.yaml <<'YAML'
+          default_config:
+          automation: !include automations.yaml
+          script: !include scripts.yaml
+          input_boolean:
+          input_number:
+          input_select:
+          input_text:
+          input_datetime:
+          input_button:
+          counter:
+          timer:
+          schedule:
+          media_source:
+          logger:
+            default: warning
+          YAML
+          echo "[]" > ha-config/automations.yaml
+          echo "{}" > ha-config/scripts.yaml
+
+      - name: Start Home Assistant (${{ matrix.ha_tag }})
+        run: |
+          docker run -d --name ha -p 8123:8123 \
+            -v "${{ github.workspace }}/ha-config:/config" \
+            ghcr.io/home-assistant/home-assistant:${{ matrix.ha_tag }}
+
+      - name: Onboard HA and mint a long-lived token
+        run: |
+          uv run python .github/scripts/onboard_ha.py ha_token.txt http://localhost:8123 \
+            | grep '^HASSLE_TEST_HA_TOKEN=' >> "$GITHUB_ENV"
+
+      - name: Integration tests (real HA)
+        env:
+          HASSLE_TEST_HA_URL: http://localhost:8123
+        run: uv run pytest -m integration packages/hassle-core/tests/integration -v
+
+      - name: HA logs on failure
+        if: failure()
+        run: docker logs ha || true

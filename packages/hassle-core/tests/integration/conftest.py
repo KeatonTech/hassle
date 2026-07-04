@@ -15,6 +15,7 @@ leak state into one another regardless of which HA image they run against.
 
 from __future__ import annotations
 
+import contextlib
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -27,9 +28,7 @@ from hassle.ir.keys import OBJECT_KINDS
 _HERE = Path(__file__).resolve().parent
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Mark every test collected under this directory ``integration``.
 
     A module-level ``pytestmark`` in a conftest does not propagate to sibling
@@ -58,10 +57,8 @@ def _wipe(backend: DirectBackend) -> None:
     """Delete every Hassle-managed object of every kind."""
     for kind in OBJECT_KINDS:
         for identity in list(backend.list_remote(kind)):
-            try:
+            with contextlib.suppress(Exception):  # best-effort teardown
                 backend.delete(kind, identity)
-            except Exception:  # noqa: BLE001 — best-effort teardown
-                pass
 
 
 @pytest.fixture

@@ -60,7 +60,7 @@ def test_ui_authored_purpose_trigger_roundtrips(ha: DirectBackend) -> None:
     }
     try:
         ha.create("automation", ui_authored)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         pytest.skip(f"HA rejected authored purpose trigger {trigger_type!r}: {exc}")
 
     pulled = ha.list_remote("automation")["purpose_probe"]

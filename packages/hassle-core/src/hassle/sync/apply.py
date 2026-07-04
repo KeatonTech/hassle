@@ -85,13 +85,18 @@ def apply_plan(
             remote_hash_now = None if remote_now is None else sha256_hash(remote_now)
             if remote_hash_now != entry.remote_hash_at_plan:
                 # Drift since plan time: abort before writing this or anything
-                # after it. Nothing beyond what's already applied is touched.
-                outcomes[entry.object_key] = ApplyOutcome.ABORTED
-                _mark_remaining_aborted(push_entries, entry, outcomes)
-                _rollback(backend, snapshots)
-                return ApplyResult(outcomes=outcomes, succeeded=False, manifest=None)
+                # after it. Objects already applied this run are rolled back.
+                return _abort(backend, entry, push_entries, outcomes, snapshots, applied)
             snapshots.append((entry.kind, identity, remote_now))
         else:  # CREATE
+            # CREATE-collision drift detection (M5 review finding, MILESTONES M6
+            # test 5): at plan time nothing existed under this identity, so a
+            # CREATE carries no `remote_hash_at_plan`. If some object has since
+            # materialized under that identity (a UI create, or a racing client),
+            # a blind create would silently overwrite it — that is drift too, and
+            # apply must abort before writing rather than clobber it.
+            if identity in backend.list_remote(entry.kind):
+                return _abort(backend, entry, push_entries, outcomes, snapshots, applied)
             snapshots.append((entry.kind, identity, None))
 
         try:
@@ -125,6 +130,24 @@ def _apply_one(backend: Backend, entry: PlanEntry, identity: str) -> None:
         backend.update(entry.kind, identity, entry.local)
     elif entry.action is PlanAction.DELETE:
         backend.delete(entry.kind, identity)
+
+
+def _abort(
+    backend: Backend,
+    entry: PlanEntry,
+    push_entries: list[PlanEntry],
+    outcomes: dict[str, ApplyOutcome],
+    snapshots: list[tuple[str, str, dict[str, object] | None]],
+    applied: list[str],
+) -> ApplyResult:
+    """Abort at ``entry`` (drift or CREATE-collision): nothing written past what
+    was already applied, and everything applied this run is rolled back."""
+    outcomes[entry.object_key] = ApplyOutcome.ABORTED
+    _mark_remaining_aborted(push_entries, entry, outcomes)
+    _rollback(backend, snapshots)
+    for key in applied:
+        outcomes[key] = ApplyOutcome.ROLLED_BACK
+    return ApplyResult(outcomes=outcomes, succeeded=False, manifest=None)
 
 
 def _mark_remaining_aborted(

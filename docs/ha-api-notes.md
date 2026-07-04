@@ -743,3 +743,112 @@ behavior -- but it means a fixture with no `condition` key at all recompiles
 with an explicit `conditions: []`, which the M2 round-trip test's expectation
 must account for the same way (`test_roundtrip_corpus.py`'s `setdefault` calls
 before comparing).
+
+## 17. M6 behavioral re-verification (DirectBackend + real-HA integration)
+
+> Verified 2026-07-04 while building `DirectBackend`/`HaClient`. **Environment
+> caveat (same as §0):** Docker image *layers* are still 403-blocked in this
+> sandbox (the `stable`/`dev` manifests fetch, but blob pulls from
+> `pkg-containers.githubusercontent.com` 403), so local verification again ran
+> against **HA 2026.2.3** (pip, Python 3.13.12). The M6 CI `integration` job runs
+> the *same* `integration/`-marked suite against real `stable` **and** `dev`
+> containers (Docker works in CI) — that is where the 2026.7-specific rows below
+> are confirmed. Everything here exercises long-stable surface unless flagged.
+
+### 17.1 Inner `platform:` is NOT rewritten to `trigger:` on storage (M4 finding) ✅
+The open M4 question (MILESTONES M6 test 5): does HA rewrite an inner legacy
+`platform:` discriminator to `trigger:` when it stores an automation? **No.**
+POSTing `triggers:[{"platform":"state",…}]` (or legacy `trigger:` outer) reads
+back with the inner key **unchanged** (`"platform":"state"`); only the *outer*
+block key is pluralized and `service:`→`action:`. So `normalize_ha`'s current
+rule (preserve inner `platform:`, §10.1/§16) is correct and needs no extension.
+`test_ha_does_not_rewrite_inner_platform_to_trigger` (integration) asserts
+`normalize_ha(posted) == stored` against real HA and is the standing evidence:
+if a future HA changes this, that test fails and `normalize_ha` gets the rule.
+(Also observed: scalar `delay: 5` is stored verbatim, not expanded.)
+
+### 17.2 Purpose-vocabulary enumeration WS API — found ✅ (provisional fixture shape kept, no R5 break)
+M0.V could not capture the enumeration API (§0). It is the pair of WS
+subscriptions **`trigger_platforms/subscribe`** and
+**`condition_platforms/subscribe`** (`homeassistant/components/websocket_api/
+commands.py`: `handle_subscribe_trigger_platforms` /
+`handle_subscribe_condition_platforms`). Each **acks with a `result`, then
+pushes an `event`** whose payload is a map `{ "<domain>.<event>": <description>,
+… }` (a full snapshot), followed by incremental `event`s as more platforms load.
+The **enumerated vocabulary is the set of keys**; each value is a UI description
+object Hassle currently discards. `DirectBackend.fetch_purpose_vocabulary()`
+reads the first snapshot event of each and returns
+`PurposeVocabulary(triggers=sorted(keys), conditions=sorted(keys))`.
+
+- On **2026.2.3 the snapshot is empty** (the purpose vocabulary is a 2026.7
+  feature) — so `fetch_purpose_vocabulary()` returns empty lists there, and the
+  round-trip half of MILESTONES M6 test 8 skips locally and runs in CI on
+  `stable`/`dev`.
+- **R5 note:** the provisional M0.1 fixture shape
+  (`registry.purpose_vocabulary = {triggers: [str], conditions: [str]}`) is
+  *derivable directly* from `sorted(payload.keys())`, so the shape does **not**
+  differ — the fixture and `RegistrySnapshot.PurposeVocabulary` are kept
+  unchanged, and no MILESTONES update is required. (Only the *source* moved from
+  "provisional" to "these two subscribe commands.")
+
+### 17.3 Parallel-branch `stop` semantics (M4 finding) ✅
+From `homeassistant/helpers/script.py` (`_async_step_parallel` + `async_run`'s
+`_StopScript` handling), authoritative and version-stable: each `parallel:`
+branch runs as its own sub-`Script`. A `stop` in a branch raises `_StopScript`,
+which re-raises out of the (non-top-level) branch; the branches run under
+`asyncio.gather(return_exceptions=True)`, so **sibling branches are NOT
+cancelled — they all run to completion**, and *then* the first `_StopScript`
+re-raises and propagates up, ending the whole run (actions in the enclosing
+sequence *after* the `parallel:` block are skipped). Net for the M4 simulator:
+`stop` in one branch stops the automation, but does not interrupt in-flight
+siblings.
+
+### 17.4 Media mirror: two gates reconfirmed + folder IS auto-created (corrects §10.4) ✅
+Full flow reconfirmed on 2026.2.3 (MILESTONES M6 test 9): upload
+`application/zip` → **400**, `image/png` → **200**; `resolve_media` → signed URL
+with `mime_type: audio/mpeg`; authenticated GET of the `.mp3` → **200**, bytes
+sha256-identical; `remove` → success. **Correction to §10.4:** the upload
+endpoint now `mkdir(parents=True, exist_ok=True)`s the target subfolder
+(`local_source.py::async_upload_media`) — verified by uploading to a
+non-existent subfolder, which returned 200 and created the folder on disk. So
+the mirror does **not** need to pre-create its folder (it still must avoid the
+media root — §10.4 — and still rides both incidental gates, so `MediaMirror`
+keeps the `folder != ""/"."` guard and the `image/png`-upload / `.mp3`-name
+strategy). Re-verify on 2026.7 in CI.
+
+### 17.5 Helpers derive their id from the name slug, ignoring a supplied `id`
+Real HA storage-collection `create` **assigns the item id by slugifying `name`
+and ignores any caller-supplied `id`** (§4). `DirectBackend.create` therefore
+strips `id` from the create payload and returns HA's assigned `result.id`.
+**Divergence from `FakeBackend`:** the M5 `FakeBackend._derive_identity` honors a
+supplied helper `id` if present. This does not affect M6 (DirectBackend matches
+real HA), but the compiler/CLI (M5/M7) should ensure a declared helper's `name`
+slugifies to its intended `id`, or the plan's object key will drift from HA's
+assigned identity. Flagged for M7.
+
+### 17.6 The config API validates the full schema on every write
+`POST /api/config/automation/config/{id}` rejects a partial body — e.g. an
+"update just the alias" payload missing `actions` returns
+`400 {"message":"Message malformed: required key not provided @ data['actions']"}`.
+So `update` must send a complete config (the sync engine always does; it pushes
+freshly compiled full configs).
+
+### 17.7 Config-REST auto-reload is asynchronous — `DirectBackend` blocks until it settles
+Confirming §2 behaviorally with timing: after a `POST`, the automation entity
+appears in `/api/states` after **~200–300 ms** (not synchronously); after
+`DELETE` it disappears within ~1 s. Because the `Backend` contract is
+synchronous (a `list_remote` right after a `create` must see it), `DirectBackend`
+**bounded-polls `/api/states` until the entity appears (create/update) or
+disappears (delete)** before returning (`_await_config_entity`, 10 s cap). This
+is transport-layer I/O waiting, not core-logic wall-clock (R8 governs
+compiler/simulator determinism). Helpers (WS storage collections) are
+synchronous and need no such wait.
+
+### 17.8 Hassle bug found + fixed (regression-tested): planned `delete` carried no re-verify hash
+The M6 core-loop integration test surfaced an M5 latent bug: `compute_plan`
+produced `delete` entries with `remote_hash_at_plan = None`, but `apply_plan`
+re-verifies the remote hash before deleting (DESIGN §8.2) — so every planned
+delete aborted as spurious "drift". No prior test ran a `compute_plan` delete
+through `apply_plan`. Fixed in `plan.py` (populate `remote_hash_at_plan` on the
+`delete` entry, mirroring `update`); regression-tested by
+`tests/test_plan_apply_delete_roundtrip.py` (R4). No interface change.

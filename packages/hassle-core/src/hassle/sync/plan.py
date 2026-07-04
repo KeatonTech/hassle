@@ -115,7 +115,14 @@ def _plan_one(
         # local deleted, remote still present
         if base_vs_remote_same:
             return PlanEntry(
-                object_key=object_key, kind=kind, action=PlanAction.DELETE, remote=remote_config
+                object_key=object_key,
+                kind=kind,
+                action=PlanAction.DELETE,
+                remote=remote_config,
+                # apply re-verifies this before deleting (DESIGN §8.2: abort on
+                # drift between plan and apply) — a DELETE must carry the
+                # plan-time remote hash just like an UPDATE does.
+                remote_hash_at_plan=remote_hash,
             )
         return PlanEntry(
             object_key=object_key,
