@@ -50,4 +50,5 @@ testpaths = ["packages/hassle-core/tests", "packages/hassle-dev/tests"]
 addopts = "-ra"
 markers = [
     "integration: tests that talk to a real Dockerized HA (M6+); never run in unit CI",
+    "hassle_bundle(path): M4 simulator tests -- bundle directory the `sim` fixture compiles",
 ]
