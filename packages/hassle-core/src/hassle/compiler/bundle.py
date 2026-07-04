@@ -82,6 +82,21 @@ class CompileResult:
         spans = self._spans.get(key, {}).get(section, [])
         return [s for s in spans if s is not None]
 
+    def span_at(self, obj: IRObject, section: str, index: int) -> SourceSpan | None:
+        """Per-item span lookup, positionally parallel to ``obj.to_ha()[section]``.
+
+        Unlike :meth:`spans_for` (which flattens and drops ``None`` entries,
+        losing index alignment with the IR block list), this returns the span
+        for exactly ``obj.to_ha()[section][index]`` — ``None`` if that item has
+        no span (e.g. a prebuilt object) or ``index`` is out of range. Purely
+        additive (M3): does not change ``spans_for``'s existing behavior.
+        """
+        key = obj.object_key()
+        spans = self._spans.get(key, {}).get(section, [])
+        if 0 <= index < len(spans):
+            return spans[index]
+        return None
+
 
 def _flatten_spans(nodes: list[RecordedNode]) -> list[SourceSpan | None]:
     return [n.span for n in nodes]

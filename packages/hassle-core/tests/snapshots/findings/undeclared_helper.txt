@@ -1,0 +1,1 @@
+`input_boolean.totally_undeclared` is not a known entity in the registry snapshot. at automation.py:6 Fix: Check the entity id against your registry snapshot (`hassle stubs --refresh`), or declare it as a helper in this bundle if it should exist.

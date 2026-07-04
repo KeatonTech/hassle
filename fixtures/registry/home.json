@@ -154,7 +154,44 @@
     {"entity_id": "input_number.max_temperature", "name": "Max Temperature", "original_name": "Max Temperature", "area_id": null, "device_id": null, "labels": [], "domain": "input_number", "platform": "helper"},
     {"entity_id": "input_text.vacation_note", "name": "Vacation Note", "original_name": "Vacation Note", "area_id": null, "device_id": null, "labels": [], "domain": "input_text", "platform": "helper"},
     {"entity_id": "automation.morning_lights", "name": "Morning Lights", "original_name": "Morning Lights", "area_id": null, "device_id": null, "labels": [], "domain": "automation", "platform": "automation"},
-    {"entity_id": "script.security_check", "name": "Security Check", "original_name": "Security Check", "area_id": null, "device_id": null, "labels": ["security"], "domain": "script", "platform": "script"}
+    {"entity_id": "script.security_check", "name": "Security Check", "original_name": "Security Check", "area_id": null, "device_id": null, "labels": ["security"], "domain": "script", "platform": "script"},
+    {"entity_id": "binary_sensor.alarm", "name": "Alarm Sensor", "original_name": "Alarm Sensor", "area_id": null, "device_id": null, "labels": ["security"], "domain": "binary_sensor", "platform": "template"},
+    {"entity_id": "binary_sensor.front_door", "name": "Front Door Sensor", "original_name": "Front Door Sensor", "area_id": "entryway", "device_id": "device_sensor_2", "labels": ["security"], "domain": "binary_sensor", "platform": "zigbee"},
+    {"entity_id": "binary_sensor.guest_arrived", "name": "Guest Arrived", "original_name": "Guest Arrived", "area_id": "entryway", "device_id": null, "labels": [], "domain": "binary_sensor", "platform": "template"},
+    {"entity_id": "binary_sensor.guest_sensor", "name": "Guest Sensor", "original_name": "Guest Sensor", "area_id": "entryway", "device_id": null, "labels": [], "domain": "binary_sensor", "platform": "template"},
+    {"entity_id": "binary_sensor.motion", "name": "Motion", "original_name": "Motion", "area_id": "hallway", "device_id": "device_sensor_1", "labels": ["motion"], "domain": "binary_sensor", "platform": "zigbee"},
+    {"entity_id": "binary_sensor.trigger", "name": "Test Trigger Sensor", "original_name": "Test Trigger Sensor", "area_id": null, "device_id": null, "labels": [], "domain": "binary_sensor", "platform": "template"},
+    {"entity_id": "binary_sensor.window", "name": "Window Sensor", "original_name": "Window Sensor", "area_id": "bedroom", "device_id": "device_sensor_9", "labels": ["security"], "domain": "binary_sensor", "platform": "zigbee"},
+    {"entity_id": "binary_sensor.office_motion", "name": "Office Motion", "original_name": "Office Motion", "area_id": "office", "device_id": null, "labels": ["motion"], "domain": "binary_sensor", "platform": "zigbee"},
+    {"entity_id": "binary_sensor.bedroom_motion", "name": "Bedroom Motion", "original_name": "Bedroom Motion", "area_id": "bedroom", "device_id": null, "labels": ["motion"], "domain": "binary_sensor", "platform": "zigbee"},
+    {"entity_id": "button.start", "name": "Start Button", "original_name": "Start Button", "area_id": null, "device_id": null, "labels": [], "domain": "button", "platform": "homeassistant"},
+    {"entity_id": "button.test", "name": "Test Button", "original_name": "Test Button", "area_id": null, "device_id": null, "labels": [], "domain": "button", "platform": "homeassistant"},
+    {"entity_id": "device_tracker.john", "name": "John", "original_name": "John", "area_id": null, "device_id": "device_person_1", "labels": [], "domain": "device_tracker", "platform": "gps"},
+    {"entity_id": "fan.living_room", "name": "Living Room Fan", "original_name": "Living Room Fan", "area_id": "living_room", "device_id": "device_fan_2", "labels": [], "domain": "fan", "platform": "tuya"},
+    {"entity_id": "input_boolean.armed", "name": "Armed", "original_name": "Armed", "area_id": null, "device_id": null, "labels": ["security"], "domain": "input_boolean", "platform": "helper"},
+    {"entity_id": "input_boolean.away", "name": "Away", "original_name": "Away", "area_id": null, "device_id": null, "labels": [], "domain": "input_boolean", "platform": "helper"},
+    {"entity_id": "input_boolean.done", "name": "Done", "original_name": "Done", "area_id": null, "device_id": null, "labels": [], "domain": "input_boolean", "platform": "helper"},
+    {"entity_id": "input_boolean.enable", "name": "Enable", "original_name": "Enable", "area_id": null, "device_id": null, "labels": [], "domain": "input_boolean", "platform": "helper"},
+    {"entity_id": "input_boolean.enable_automation", "name": "Enable Automation", "original_name": "Enable Automation", "area_id": null, "device_id": null, "labels": [], "domain": "input_boolean", "platform": "helper"},
+    {"entity_id": "input_boolean.mode", "name": "Mode Toggle", "original_name": "Mode Toggle", "area_id": null, "device_id": null, "labels": [], "domain": "input_boolean", "platform": "helper"},
+    {"entity_id": "input_number.counter", "name": "Counter Input", "original_name": "Counter Input", "area_id": null, "device_id": null, "labels": [], "domain": "input_number", "platform": "helper"},
+    {"entity_id": "input_select.house_mode", "name": "House Mode", "original_name": "House Mode", "area_id": null, "device_id": null, "labels": [], "domain": "input_select", "platform": "helper"},
+    {"entity_id": "input_text.entities", "name": "Entities List", "original_name": "Entities List", "area_id": null, "device_id": null, "labels": [], "domain": "input_text", "platform": "helper"},
+    {"entity_id": "light.a", "name": "Light A", "original_name": "Light A", "area_id": null, "device_id": null, "labels": [], "domain": "light", "platform": "template"},
+    {"entity_id": "light.b", "name": "Light B", "original_name": "Light B", "area_id": null, "device_id": null, "labels": [], "domain": "light", "platform": "template"},
+    {"entity_id": "light.all", "name": "All Lights", "original_name": "All Lights", "area_id": null, "device_id": null, "labels": [], "domain": "light", "platform": "group"},
+    {"entity_id": "light.entryway", "name": "Entryway Light", "original_name": "Entryway Light", "area_id": "entryway", "device_id": "device_light_22", "labels": [], "domain": "light", "platform": "hue"},
+    {"entity_id": "light.office", "name": "Office Light", "original_name": "Office Light", "area_id": "office", "device_id": "device_light_8", "labels": ["work"], "domain": "light", "platform": "hue"},
+    {"entity_id": "notify.phone", "name": "Phone Notification", "original_name": "Phone Notification", "area_id": null, "device_id": null, "labels": [], "domain": "notify", "platform": "mobile_app"},
+    {"entity_id": "scene.evening", "name": "Evening Scene", "original_name": "Evening Scene", "area_id": null, "device_id": null, "labels": [], "domain": "scene", "platform": "scene"},
+    {"entity_id": "script.greet_guest", "name": "Greet Guest", "original_name": "Greet Guest", "area_id": null, "device_id": null, "labels": [], "domain": "script", "platform": "script"},
+    {"entity_id": "sensor.counter", "name": "Counter Sensor", "original_name": "Counter Sensor", "area_id": null, "device_id": null, "labels": [], "domain": "sensor", "platform": "template"},
+    {"entity_id": "sensor.hall_motion", "name": "Hall Motion Sensor", "original_name": "Hall Motion Sensor", "area_id": "hallway", "device_id": "device_sensor_3", "labels": [], "domain": "sensor", "platform": "zigbee"},
+    {"entity_id": "sensor.humidity", "name": "Humidity", "original_name": "Humidity", "area_id": null, "device_id": null, "labels": [], "domain": "sensor", "platform": "template"},
+    {"entity_id": "sensor.temperature", "name": "Temperature", "original_name": "Temperature", "area_id": null, "device_id": null, "labels": [], "domain": "sensor", "platform": "template"},
+    {"entity_id": "sensor.wireless_device_battery", "name": "Wireless Device Battery", "original_name": "Wireless Device Battery", "area_id": null, "device_id": null, "labels": [], "domain": "sensor", "platform": "zigbee"},
+    {"entity_id": "switch.porch", "name": "Porch Switch", "original_name": "Porch Switch", "area_id": "porch", "device_id": null, "labels": [], "domain": "switch", "platform": "tuya"},
+    {"entity_id": "switch.pump", "name": "Pump Switch", "original_name": "Pump Switch", "area_id": null, "device_id": null, "labels": [], "domain": "switch", "platform": "tuya"}
   ],
   "areas": [
     {"area_id": "hallway", "name": "Hallway"},
@@ -284,7 +321,10 @@
     {"device_id": "device_media_7", "name": "Bathroom Speaker", "area_id": "utility"},
     {"device_id": "device_camera_6", "name": "Side Yard Camera", "area_id": "outdoor"},
     {"device_id": "device_lock_5", "name": "Garage Side Door Lock", "area_id": "garage"},
-    {"device_id": "device_fan_4", "name": "Kitchen Fan", "area_id": "kitchen"}
+    {"device_id": "device_fan_4", "name": "Kitchen Fan", "area_id": "kitchen"},
+    {"device_id": "1234567890abcdef", "name": "Z-Wave Scene Controller", "area_id": null},
+    {"device_id": "aaaabbbbccccdddd1111222233334444", "name": "Downstairs Vacuum Device", "area_id": "living_room"},
+    {"device_id": "abc123", "name": "Legacy Test Device", "area_id": null}
   ],
   "services": {
     "light": {
@@ -292,6 +332,7 @@
         "name": "Turn on",
         "description": "Turn on one or more lights",
         "fields": {
+          "brightness": {"type": "integer", "description": "Brightness (0-255)", "example": 180},
           "brightness_pct": {"type": "integer", "description": "Brightness (0-100%)", "example": 75},
           "transition": {"type": "float", "description": "Transition time in seconds", "example": 2},
           "color_temp": {"type": "integer", "description": "Color temperature in Kelvin", "example": 4000}
@@ -341,7 +382,7 @@
         "name": "Send notification",
         "description": "Send a notification message",
         "fields": {
-          "message": {"type": "string", "description": "Message to send"},
+          "message": {"type": "string", "description": "Message to send", "required": true},
           "title": {"type": "string", "description": "Optional title"}
         }
       }
@@ -388,6 +429,53 @@
         "description": "Trigger an automation",
         "fields": {"skip_condition": {"type": "boolean", "description": "Skip conditions", "example": false}}
       }
+    },
+    "timer": {
+      "start": {
+        "name": "Start",
+        "description": "Start a timer",
+        "fields": {
+          "duration": {"type": "string", "description": "Duration override"}
+        }
+      },
+      "cancel": {
+        "name": "Cancel",
+        "description": "Cancel a timer",
+        "fields": {}
+      }
+    },
+    "schedule": {
+      "reload": {
+        "name": "Reload",
+        "description": "Reload schedule helpers from storage",
+        "fields": {}
+      }
+    },
+    "vacuum": {
+      "start": {
+        "name": "Start",
+        "description": "Start or resume cleaning",
+        "fields": {}
+      },
+      "return_to_base": {
+        "name": "Return to base",
+        "description": "Send the vacuum back to its dock",
+        "fields": {}
+      }
+    },
+    "fan": {
+      "turn_on": {
+        "name": "Turn on",
+        "description": "Turn on the fan",
+        "fields": {
+          "percentage": {"type": "integer", "description": "Speed percentage", "example": 50}
+        }
+      },
+      "turn_off": {
+        "name": "Turn off",
+        "description": "Turn off the fan",
+        "fields": {}
+      }
     }
   },
   "purpose_vocabulary": {
@@ -407,7 +495,9 @@
       "update.installed",
       "door.opened",
       "door.closed",
-      "water_leak.detected"
+      "water_leak.detected",
+      "lawn_mower.returned_to_dock",
+      "timer.remaining_time_reached"
     ],
     "conditions": [
       "climate.is_target_temperature",
@@ -415,7 +505,8 @@
       "climate.cooling",
       "device.battery_level",
       "device.motion_detected",
-      "schedule.is_active"
+      "schedule.is_active",
+      "climate.is_target_humidity"
     ]
   }
 }

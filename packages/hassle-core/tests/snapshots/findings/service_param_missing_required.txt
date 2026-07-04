@@ -1,0 +1,1 @@
+`notify.notify` is missing its required parameter `message`. at automation.py:6 Fix: Pass `message=...` to this `service(...)` call.

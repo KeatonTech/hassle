@@ -1,0 +1,1 @@
+`light.turn_on`'s `brightness_pct` expects an integer value, got 'not_a_number' (str). at automation.py:6 Fix: Pass an integer value for `brightness_pct` (or a template string).

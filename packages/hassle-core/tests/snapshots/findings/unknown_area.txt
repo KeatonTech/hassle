@@ -1,0 +1,1 @@
+`not_a_real_area` is not a known area_id in the registry snapshot. at automation.py:6 Fix: Check the area_id against your registry snapshot.
