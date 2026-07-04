@@ -1,0 +1,47 @@
+{
+  "automation:misc_primitives": {
+    "id": "misc_primitives",
+    "alias": "Misc action primitives",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.trigger",
+        "to": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "variables": {
+          "greeting": "hello",
+          "count": 3
+        }
+      },
+      {
+        "event": "hassle_custom_event",
+        "event_data": {
+          "room": "hallway",
+          "level": 2
+        }
+      },
+      {
+        "action": "climate.get_forecast",
+        "target": {
+          "entity_id": "climate.living_room"
+        },
+        "response_variable": "forecast"
+      },
+      {
+        "action": "notify.mobile_app",
+        "data": {
+          "message": "done"
+        },
+        "continue_on_error": true
+      },
+      {
+        "stop": "all done",
+        "error": false
+      }
+    ]
+  }
+}

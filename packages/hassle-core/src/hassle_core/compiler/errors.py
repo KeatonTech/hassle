@@ -67,6 +67,29 @@ class UnknownAutomationOptionError(CompileError):
         )
 
 
+class ElseWithoutIfError(CompileError):
+    """``else_then``/``else_if`` used when the preceding action isn't an ``if``/``choose``.
+
+    DESIGN §5.5: ``with else_then():`` and ``with else_if(...):`` must attach to
+    the action recorded immediately before them in the same action list. Used
+    at the start of a list, or after some other action, they have nothing to
+    attach to.
+    """
+
+    def __init__(self, call: str, span: SourceSpan | None) -> None:
+        self.call = call
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        super().__init__(
+            f"`with {call}(...):`{where} does not immediately follow an `if_then`/"
+            f"`choose`/`else_if` action in the same action list. HA's `if`/`choose` "
+            f"else-branch is a structural part of that action, so `{call}` must be "
+            f"the very next statement after the `with if_then(...):`/`with choose():` "
+            f"(or `else_if`) block it belongs to. Fix: move `with {call}(...):` "
+            f"directly after its `if`/`choose`, with no other action recorded in "
+            f"between."
+        )
+
+
 class NoRecordingContextError(CompileError):
     """A recording call (``when``/``only_if``/service/``delay``) ran outside a context.
 

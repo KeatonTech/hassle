@@ -17,12 +17,28 @@ from __future__ import annotations
 
 from hassle_core.compiler import (
     CompileTimeBranchError,
+    ElseWithoutIfError,
     automation,
+    choose,
     delay,
+    else_if,
+    else_then,
+    event,
+    if_then,
     only_if,
+    parallel,
+    repeat_count,
+    repeat_for_each,
+    repeat_until,
+    repeat_while,
     script,
     service,
+    service_ext,
     state,
+    stop,
+    variables,
+    wait_for,
+    wait_template,
     when,
 )
 
@@ -31,13 +47,34 @@ from hassle_core.compiler import (
 #   recording verbs: when, only_if
 #   M1-core builders: state, service, delay
 #   trap error (assertable by bundles/tests): CompileTimeBranchError
+#   control-flow (actions/control-flow workstream, DESIGN §5.5): if_then,
+#     else_then, else_if, choose, repeat_count, repeat_while, repeat_until,
+#     repeat_for_each, parallel, wait_for, wait_template
+#   action primitives: stop, variables, event, service_ext
+#   else-without-if trap error: ElseWithoutIfError
 __all__ = [
     "CompileTimeBranchError",
+    "ElseWithoutIfError",
     "automation",
+    "choose",
     "delay",
+    "else_if",
+    "else_then",
+    "event",
+    "if_then",
     "only_if",
+    "parallel",
+    "repeat_count",
+    "repeat_for_each",
+    "repeat_until",
+    "repeat_while",
     "script",
     "service",
+    "service_ext",
     "state",
+    "stop",
+    "variables",
+    "wait_for",
+    "wait_template",
     "when",
 ]

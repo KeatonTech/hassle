@@ -1,0 +1,34 @@
+{
+  "automation:porch_repeat_count": {
+    "id": "porch_repeat_count",
+    "alias": "Porch repeat count",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "button.test",
+        "to": "pressed"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "repeat": {
+          "count": 3,
+          "sequence": [
+            {
+              "action": "light.toggle",
+              "target": {
+                "entity_id": "light.hallway"
+              }
+            },
+            {
+              "delay": {
+                "seconds": 1
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

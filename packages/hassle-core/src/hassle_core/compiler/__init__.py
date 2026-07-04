@@ -17,6 +17,7 @@ this module is the implementation home.
 
 from __future__ import annotations
 
+from hassle_core.compiler.action_verbs import event, service_ext, stop, variables
 from hassle_core.compiler.actions import delay, service
 from hassle_core.compiler.builders import (
     DelayAction,
@@ -29,10 +30,24 @@ from hassle_core.compiler.bundle import (
     compile_bundle,
     compile_registered,
 )
+from hassle_core.compiler.control_flow import (
+    choose,
+    else_if,
+    else_then,
+    if_then,
+    parallel,
+    repeat_count,
+    repeat_for_each,
+    repeat_until,
+    repeat_while,
+    wait_for,
+    wait_template,
+)
 from hassle_core.compiler.errors import (
     CompileError,
     CompileTimeBranchError,
     DuplicateObjectError,
+    ElseWithoutIfError,
     NoRecordingContextError,
     UnknownAutomationOptionError,
 )
@@ -69,6 +84,7 @@ __all__ = [
     "ConditionBuilder",
     "DelayAction",
     "DuplicateObjectError",
+    "ElseWithoutIfError",
     "NoRecordingContextError",
     "RecordedNode",
     "Recorder",
@@ -81,18 +97,33 @@ __all__ = [
     "UnknownAutomationOptionError",
     "automation",
     "capture_span",
+    "choose",
     "compile_bundle",
     "compile_registered",
     "current_registry",
     "delay",
+    "else_if",
+    "else_then",
+    "event",
     "fresh",
+    "if_then",
     "only_if",
+    "parallel",
     "record_action",
     "record_condition",
     "record_trigger",
     "recording",
+    "repeat_count",
+    "repeat_for_each",
+    "repeat_until",
+    "repeat_while",
     "script",
     "service",
+    "service_ext",
     "state",
+    "stop",
+    "variables",
+    "wait_for",
+    "wait_template",
     "when",
 ]
