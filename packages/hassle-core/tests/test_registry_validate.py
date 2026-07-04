@@ -125,6 +125,196 @@ def a():
     assert not any("light.hallway" in f.message for f in findings if f.code == "unknown-entity")
 
 
+# --- reviewer B1: unknown entities inside nested control-flow containers ---
+# extraction reaching nested positions is necessary but validation must also
+# actually surface a Finding for an unknown entity buried inside if/choose/
+# repeat/parallel/wait_for_trigger -- a three-position probe (if_then body,
+# repeat_count body, parallel body) that the reviewer found silently missed.
+
+
+def test_unknown_entity_inside_if_then_body(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, if_then, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with if_then(state("sensor.temperature").is_("hot")):
+        service("light.turn_on", target={"entity_id": "light.does_not_exist_if_body"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert any(
+        f.code == "unknown-entity" and "light.does_not_exist_if_body" in f.message
+        for f in findings
+    )
+
+
+def test_unknown_entity_inside_else_body(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, else_then, if_then, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with if_then(state("sensor.temperature").is_("hot")):
+        service("light.turn_on", target={"entity_id": "light.hallway"})
+    with else_then():
+        service("light.turn_on", target={"entity_id": "light.does_not_exist_else_body"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert any(
+        f.code == "unknown-entity" and "light.does_not_exist_else_body" in f.message
+        for f in findings
+    )
+
+
+def test_unknown_entity_inside_choose_branch(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, choose, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with choose() as c:
+        with c.when_(state("input_select.house_mode").is_("night")):
+            service("light.turn_on", target={"entity_id": "light.does_not_exist_choose_branch"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert any(
+        f.code == "unknown-entity" and "light.does_not_exist_choose_branch" in f.message
+        for f in findings
+    )
+
+
+def test_unknown_entity_inside_choose_default(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, choose, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with choose() as c:
+        with c.when_(state("input_select.house_mode").is_("night")):
+            service("light.turn_on", target={"entity_id": "light.hallway"})
+        with c.default():
+            service("light.turn_on", target={"entity_id": "light.does_not_exist_choose_default"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert any(
+        f.code == "unknown-entity" and "light.does_not_exist_choose_default" in f.message
+        for f in findings
+    )
+
+
+def test_unknown_entity_inside_repeat_body(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, repeat_count, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with repeat_count(2):
+        service("light.turn_on", target={"entity_id": "light.does_not_exist_repeat_body"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert any(
+        f.code == "unknown-entity" and "light.does_not_exist_repeat_body" in f.message
+        for f in findings
+    )
+
+
+def test_unknown_entity_inside_parallel_body(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, parallel, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with parallel():
+        service("light.turn_on", target={"entity_id": "light.does_not_exist_parallel_body"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert any(
+        f.code == "unknown-entity" and "light.does_not_exist_parallel_body" in f.message
+        for f in findings
+    )
+
+
+def test_unknown_entity_inside_nested_repeat_inside_choose(
+    tmp_path: Path, snapshot: RegistrySnapshot
+) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, choose, repeat_count, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with choose() as c:
+        with c.when_(state("input_boolean.armed").is_("on")):
+            with repeat_count(2):
+                service(
+                    "light.turn_on",
+                    target={"entity_id": "light.does_not_exist_nested_nested"},
+                )
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert any(
+        f.code == "unknown-entity" and "light.does_not_exist_nested_nested" in f.message
+        for f in findings
+    )
+
+
+def test_unknown_entity_inside_wait_for_trigger(
+    tmp_path: Path, snapshot: RegistrySnapshot
+) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, service, state, wait_for, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.hall_motion").to("on"))
+    wait_for(state("binary_sensor.does_not_exist_wait_for").to("off"))
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert any(
+        f.code == "unknown-entity" and "binary_sensor.does_not_exist_wait_for" in f.message
+        for f in findings
+    )
+
+
 # --- milestone test 2: did-you-mean -----------------------------------------
 
 

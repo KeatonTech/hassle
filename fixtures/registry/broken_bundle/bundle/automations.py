@@ -11,18 +11,24 @@ only `hassle.registry.validate.validate_bundle` flags these.
 from hassle import (
     area,
     automation,
+    choose,
     device_id,
+    else_then,
     floor,
+    if_then,
     label,
     met,
     on,
     only_if,
+    parallel,
     raw_action,
     raw_condition,
     raw_trigger,
+    repeat_count,
     service,
     state,
     template,
+    wait_for,
     when,
 )
 
@@ -226,3 +232,74 @@ def broken_mixed_positions():
             "target": {"label_id": ["security", "not_a_real_label_25"]},
         }
     )  # 29: unknown label_id inside a raw trigger target LIST form
+
+
+# --- automation 10: unknown entities nested inside control-flow containers -
+# (reviewer B1) extraction/validation must recurse into if/choose/repeat/
+# parallel/wait_for_trigger bodies, not just the top-level trigger/condition/
+# action lists -- these seeds pin that blind spot shut for good.
+
+
+@automation(id="broken_nested_if_then_else", alias="Broken: nested if/then/else")
+def broken_nested_if_then_else():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with if_then(state("sensor.temperature").is_("hot")):
+        service(
+            "light.turn_on", target={"entity_id": "light.does_not_exist_26"}
+        )  # 30: unknown entity inside an if_then body
+    with else_then():
+        service(
+            "light.turn_on", target={"entity_id": "light.does_not_exist_27"}
+        )  # 31: unknown entity inside an else_then body
+
+
+@automation(id="broken_nested_choose", alias="Broken: nested choose branch + default")
+def broken_nested_choose():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with choose() as c:
+        with c.when_(state("input_select.house_mode").is_("night")):
+            service(
+                "light.turn_on", target={"entity_id": "light.does_not_exist_28"}
+            )  # 32: unknown entity inside a choose() branch
+        with c.default():
+            service(
+                "light.turn_on", target={"entity_id": "light.does_not_exist_29"}
+            )  # 33: unknown entity inside a choose() default
+
+
+@automation(id="broken_nested_repeat", alias="Broken: nested repeat body")
+def broken_nested_repeat():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with repeat_count(2):
+        service(
+            "light.turn_on", target={"entity_id": "light.does_not_exist_30"}
+        )  # 34: unknown entity inside a repeat_count body
+
+
+@automation(id="broken_nested_parallel", alias="Broken: nested parallel body")
+def broken_nested_parallel():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with parallel():
+        service(
+            "light.turn_on", target={"entity_id": "light.does_not_exist_31"}
+        )  # 35: unknown entity inside a parallel() body
+
+
+@automation(id="broken_nested_repeat_inside_choose", alias="Broken: repeat nested inside choose")
+def broken_nested_repeat_inside_choose():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with choose() as c:
+        with c.when_(state("input_boolean.armed").is_("on")):
+            with repeat_count(2):
+                service(
+                    "light.turn_on", target={"entity_id": "light.does_not_exist_32"}
+                )  # 36: unknown entity two levels deep (repeat inside choose)
+
+
+@automation(id="broken_nested_wait_for_trigger", alias="Broken: wait_for_trigger inner trigger")
+def broken_nested_wait_for_trigger():
+    when(state("binary_sensor.hall_motion").to("on"))
+    wait_for(
+        state("binary_sensor.does_not_exist_33").to("off")
+    )  # 37: unknown entity inside wait_for_trigger's inner trigger block
+    service("light.turn_on", target={"entity_id": "light.hallway"})

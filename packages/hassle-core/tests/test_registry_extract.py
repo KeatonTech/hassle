@@ -178,3 +178,133 @@ def test_extract_from_kitchen_sink_golden_has_spans() -> None:
     # have one so validation Findings can carry file:line, milestone item 7).
     with_span = [r for r in refs if r.span is not None]
     assert len(with_span) > 0
+
+
+# --- reviewer B1: recursive descent into nested action containers ----------
+# extract_references must reach entity/target references nested inside
+# if_then/else_then, choose branches + default, repeat, parallel, and
+# wait_for_trigger's inner trigger blocks -- not just the top-level
+# trigger/condition/action lists.
+
+
+def test_extract_reaches_if_then_else_branches(tmp_path: Path) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, else_then, if_then, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.trigger").to("on"))
+    with if_then(state("sensor.temperature").is_("hot")):
+        service("light.turn_on", target={"entity_id": "light.if_branch_entity"})
+    with else_then():
+        service("light.turn_on", target={"entity_id": "light.else_branch_entity"})
+""",
+    )
+    result = compile_bundle(bundle)
+    refs = extract_references(result)
+    entity_ids = {r.entity_id for r in refs if r.entity_id is not None}
+    assert "light.if_branch_entity" in entity_ids
+    assert "light.else_branch_entity" in entity_ids
+
+
+def test_extract_reaches_choose_branch_and_default(tmp_path: Path) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, choose, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.trigger").to("on"))
+    with choose() as c:
+        with c.when_(state("input_select.house_mode").is_("night")):
+            service("light.turn_on", target={"entity_id": "light.choose_branch_entity"})
+        with c.default():
+            service("light.turn_on", target={"entity_id": "light.choose_default_entity"})
+""",
+    )
+    result = compile_bundle(bundle)
+    refs = extract_references(result)
+    entity_ids = {r.entity_id for r in refs if r.entity_id is not None}
+    assert "light.choose_branch_entity" in entity_ids
+    assert "light.choose_default_entity" in entity_ids
+
+
+def test_extract_reaches_repeat_sequence(tmp_path: Path) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, repeat_count, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.trigger").to("on"))
+    with repeat_count(2):
+        service("light.turn_on", target={"entity_id": "light.repeat_body_entity"})
+""",
+    )
+    result = compile_bundle(bundle)
+    refs = extract_references(result)
+    entity_ids = {r.entity_id for r in refs if r.entity_id is not None}
+    assert "light.repeat_body_entity" in entity_ids
+
+
+def test_extract_reaches_parallel_sequence(tmp_path: Path) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, parallel, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.trigger").to("on"))
+    with parallel():
+        service("light.turn_on", target={"entity_id": "light.parallel_body_entity"})
+""",
+    )
+    result = compile_bundle(bundle)
+    refs = extract_references(result)
+    entity_ids = {r.entity_id for r in refs if r.entity_id is not None}
+    assert "light.parallel_body_entity" in entity_ids
+
+
+def test_extract_reaches_nested_repeat_inside_choose(tmp_path: Path) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, choose, repeat_count, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.trigger").to("on"))
+    with choose() as c:
+        with c.when_(state("input_boolean.armed").is_("on")):
+            with repeat_count(2):
+                service("light.turn_on", target={"entity_id": "light.nested_nested_entity"})
+""",
+    )
+    result = compile_bundle(bundle)
+    refs = extract_references(result)
+    entity_ids = {r.entity_id for r in refs if r.entity_id is not None}
+    assert "light.nested_nested_entity" in entity_ids
+
+
+def test_extract_reaches_wait_for_trigger_inner_trigger(tmp_path: Path) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, service, state, wait_for, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.trigger").to("on"))
+    wait_for(state("binary_sensor.wait_for_inner_entity").to("off"))
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+""",
+    )
+    result = compile_bundle(bundle)
+    refs = extract_references(result)
+    entity_ids = {r.entity_id for r in refs if r.entity_id is not None}
+    assert "binary_sensor.wait_for_inner_entity" in entity_ids
