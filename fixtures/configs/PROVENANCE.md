@@ -121,3 +121,9 @@ This file documents the source and purpose of each fixture in the corpus. All fi
 | automation_purpose_trigger_renamed_legacy_key.json | Real-world preserved broken config; battery.low is pre-2026.7 key renamed to battery.became_low without migration; M3 will flag with rename hint; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose trigger using deprecated/renamed pre-2026.7 key that still stores and deserializes but is no longer valid for new automations |
 
 All fixtures are valid JSON per Home Assistant's schema as of July 2026 and exercise the full M0 construct checklist.
+
+## M2 addendum: HA-canonical stored shape (zero-transformation round-trip)
+
+| Fixture | Source | Construct |
+|---------|--------|-----------|
+| automation_ha_canonical_modern.json | Synthesized to match the exact post-2024.10 HA storage shape verified in docs/ha-api-notes.md §10.1 (real POST->GET capture, docs/ha-api-captures/normalize-post-get-pair.json): string `id`, plural `triggers`/`conditions`/`actions`, modern `trigger:`/`action:` discriminators throughout (no `platform:`/`service:` anywhere), no scalar/string-form `delay`, nested `choose`/`default`. This is what a real live `GET /api/config/automation/config/{id}` returns for an automation authored in the current HA UI -- the fixture the decompiler's zero-transformation round-trip (`test_ha_canonical_zero_transformation_roundtrip`) is judged against. | plural schema + modern discriminators + nested choose, all in one already-canonical fixture |
