@@ -1,0 +1,19 @@
+{
+  "script:angle_calc": {
+    "alias": "Angle calc",
+    "fields": {
+      "sun_angle": {
+        "default": 0
+      }
+    },
+    "sequence": [
+      {
+        "action": "input_number.set_value",
+        "data": {
+          "entity_id": "input_number.angle_radians",
+          "degrees": "{{ sun_angle / 360 * 2 * pi }}"
+        }
+      }
+    ]
+  }
+}

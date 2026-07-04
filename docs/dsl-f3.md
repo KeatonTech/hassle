@@ -117,6 +117,42 @@ bundles are written.
   expression build up the Jinja string; a native Python `if` on one raises
   `CompileTimeBranchError`.)
 
+### Runtime-math expression surface (M1.1 ADDITION, DESIGN §5.4 extension)
+Symbolic-expression extension of the template builder (docs/ha-api-notes.md
+records no deviation; every builder mirrors HA's Jinja math set 1:1). All of
+this is additive to `hassle.__all__`; nothing above changed.
+- Trig/algebra (bare Jinja function calls): `sin`, `cos`, `tan`, `asin`,
+  `acos`, `atan`, `atan2`, `sqrt`, `log`.
+- Jinja2-filter mirrors: `round_(x, precision=None)` → `| round` /
+  `| round(n)`; `abs_(x)` → `| abs`; `min_(*args)` / `max_(*args)` →
+  `[a, b, ...] | min` / `| max` (Jinja2's `min`/`max` filters take an
+  iterable, not varargs).
+- Constants: `PI`, `E_`, `TAU` — bare `TemplateExpr` leaves rendering to
+  Jinja's own global names (`pi`/`e`/`tau`), never folded to a Python float.
+- Datetime helpers: `as_datetime(x)`, `as_timestamp(x)`, `today_at(time_str)`,
+  `timedelta_(**units)` (trailing underscore so it never collides with
+  stdlib `datetime.timedelta`).
+- `var(name)` — a runtime reference to an action-level `variables:` key
+  (`{{ name }}`); unlike `param()`, freeform (no signature-bound validation).
+- `param(name)` is now documented as a composable `Expr`: it always returned
+  a `TemplateExpr` (no behavior changed), this milestone just exercises and
+  pins that composability (`param("x") / 360 * 2 * PI`).
+- `.attr(name)` on any entity reference (`EntityRef`, returned by helper
+  declarations and by `hassle.registry.entities`) → `state_attr('domain.id',
+  'name')`, e.g. `e.sun.sun.attr("elevation")`.
+- `concat(*parts)` — explicit string join via Jinja's `~` operator. Documented
+  decision: `+` on a `TemplateExpr` is **always arithmetic**, never string
+  concatenation; `concat(...)` is the explicit spelling for joining text.
+- Full reflected-operator set: `//`, `%`, `**` (with reflected forms) and
+  unary `-`, alongside the M1 set (`+ - * /`, comparisons, `& | ~`).
+- `PythonMathMisuseError` — Python's stdlib `math.*` (or a bare `float()`/
+  `int()`) called on a runtime `TemplateExpr` raises this what/where/fix error
+  instead of a bare `TypeError`; `math.pi` etc. as a **plain Python constant**
+  is not a trap — it is just a literal, and composes fine.
+- **One-way sugar:** the M2 decompiler always reconstructs a compiled Jinja
+  string as a raw `template("...")` string; it never re-derives the operator/
+  builder call chain (`cos(...)`, `.attr(...)`, …) that produced it.
+
 ### Control flow (DESIGN §5.5) — context managers
 - `if_then(condition)` / `else_then()` / `else_if(condition)`.
 - `choose()` → use `as c:` then `c.when_(condition)` / `c.default()`.
@@ -135,6 +171,8 @@ bundles are written.
 - `ElseWithoutIfError` — `else_then()`/`else_if()` with no preceding `if`/`choose`.
 - `NoParamContextError` — `param()` outside a `@shared_script` body.
 - `UnknownParamError` — `param(name)` naming a field absent from the signature.
+- `PythonMathMisuseError` (M1.1 ADDITION) — Python's stdlib `math.*`/`float()`/
+  `int()` called on a runtime `TemplateExpr` (MILESTONES M1.1 test 3).
 
 ## Stability contract
 
@@ -176,6 +214,15 @@ These are how new builder families are added; they are **not** in
   `ScriptCallAction`, `Raw{Trigger,Condition,Action}`, `capture_span`. These are
   importable from `hassle.compiler` for tooling but are **not** part of the
   frozen bundle-facing surface.
+- `hassle.compiler.math_expr` (M1.1 ADDITION) — the sibling module the
+  runtime-math builders live in; its module-internal `_call`/`_filter`/
+  `_render_operand`/`_render_call_arg` are not part of the frozen surface
+  (only the function/constant names re-exported through `hassle.__all__`
+  are). `TemplateExpr.render_as_operand(min_prec=...)` (on the frozen-surface
+  `TemplateExpr`) is the sanctioned public seam a sibling builder module uses
+  to render one expression nested inside another without reaching into the
+  private `_as_operand`/`_prec`/`_compound` fields — same convention as
+  subclassing `builders._NoBool` for the `__bool__` trap.
 
 ## Acceptance
 
