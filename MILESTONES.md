@@ -320,7 +320,9 @@ check via `get_config` with a tested-range warning.
 4. `test_apply_rollback_live`: push batch where object 3 of 3 is crafted invalid (rejected by
    HA) → objects 1–2 restored; HA state hash-identical to pre-apply.
 5. `test_apply_aborts_on_drift_live`: mutate an object via HA's API between plan and apply →
-   apply aborts before writing anything.
+   apply aborts before writing anything. Include the CREATE-collision case (M5 review
+   finding): an object appearing under a planned-create identity between plan and apply is
+   drift too — DirectBackend must detect it and abort rather than overwrite.
 6. UI-editability check: after apply, `GET /api/config/automation/config/{id}` returns the
    config and the automation entity exists with correct unique_id (I2 proxy for "UI can edit it").
 7. Auth: bad token → clean 401 error surfaced with fix hint; `hassle login` validation path.
