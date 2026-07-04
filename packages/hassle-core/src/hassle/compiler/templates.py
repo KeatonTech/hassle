@@ -87,28 +87,32 @@ from hassle.compiler.spans import capture_span
 
 
 class PythonMathMisuseError(CompileError):
-    """Python's stdlib ``math`` module was called on a runtime ``TemplateExpr``.
+    """Python's stdlib ``math``/numeric-coercion machinery was called on a
+    runtime ``TemplateExpr``.
 
     ``math.cos(x)`` (and every other ``math.*`` function) calls ``float(x)`` on
-    its argument before doing anything else. A ``TemplateExpr`` has no runtime
+    its argument before doing anything else; ``round(x)`` calls ``__round__``;
+    ``math.trunc(x)`` calls ``__trunc__``. A ``TemplateExpr`` has no runtime
     value at compile time -- it is Jinja text under construction -- so this is
     the same class of mistake DESIGN §5.5 traps for a Python ``if`` on a state
     expression: it looks like it should work, and would either raise a bare
     ``TypeError`` or (worse) silently coerce to something meaningless. M1.1
     (MILESTONES M1.1 test 3) traps it at the same boundary (``__float__``/
-    ``__int__``) with the same what/where/fix shape.
+    ``__int__``/``__round__``/``__trunc__``) with the same what/where/fix shape.
     """
 
     def __init__(self, expr_repr: str, span: Any) -> None:
         where = f" at {span.file}:{span.line}" if span is not None else ""
         super().__init__(
-            f"You called Python's `math`/`float()`/`int()` on the runtime expression "
-            f"`{expr_repr}`{where}. Stdlib `math.*` functions call `float()` on their "
-            f"argument, but a Hassle template expression has no value until it renders "
-            f"inside Home Assistant -- it is Jinja text under construction, not a number. "
+            f"You called Python's `math`/`float()`/`int()`/`round()`/`math.trunc()` on "
+            f"the runtime expression `{expr_repr}`{where}. Those stdlib functions call "
+            f"`float()`/`__round__`/`__trunc__` on their argument, but a Hassle template "
+            f"expression has no value until it renders inside Home Assistant -- it is "
+            f"Jinja text under construction, not a number. "
             f"Fix: use Hassle's own math builders instead, e.g. "
-            f"`from hassle.compiler.math_expr import cos` and call `cos({expr_repr})`, "
-            f"which stays inside the template and renders to Jinja's `cos(...)`."
+            f"`from hassle.compiler.math_expr import cos, round_` and call "
+            f"`cos({expr_repr})` / `round_({expr_repr})`, which stay inside the template "
+            f"and render to Jinja's `cos(...)` / `| round`."
         )
 
 
@@ -200,9 +204,30 @@ class TemplateExpr(_NoBool, str):
         return repr(value)
 
     @staticmethod
-    def _binop(left: Any, right: Any, op: str, *, prec: int | None = None) -> TemplateExpr:
-        rendered_left = TemplateExpr._render_operand(left, min_prec=prec)
-        rendered_right = TemplateExpr._render_operand(right, min_prec=prec)
+    def _binop(
+        left: Any, right: Any, op: str, *, prec: int | None = None, right_assoc: bool = False
+    ) -> TemplateExpr:
+        """Build a binary-op ``TemplateExpr``, respecting associativity.
+
+        A same-precedence child on the operator's "loose" side (the side
+        Python/Jinja fold left-to-right without needing parens) may render
+        flat; a same-precedence child on the "tight" side needs its own
+        precedence to be strictly *higher* to render flat, or grouping would
+        silently change -- ``a - (b - c)`` is not ``a - b - c`` (which reads as
+        ``(a - b) - c``). Left-associative operators (default, ``prec`` set
+        and ``right_assoc=False``: ``+ - * / // %``) treat the left operand as
+        loose (``min_prec=prec``) and the right as tight (``min_prec=prec+1``).
+        ``**`` (``right_assoc=True``) is the mirror image: Python/Jinja fold it
+        right-to-left, so the right operand is loose and the left is tight.
+        """
+        if prec is None:
+            left_min = right_min = None
+        elif right_assoc:
+            left_min, right_min = prec + 1, prec
+        else:
+            left_min, right_min = prec, prec + 1
+        rendered_left = TemplateExpr._render_operand(left, min_prec=left_min)
+        rendered_right = TemplateExpr._render_operand(right, min_prec=right_min)
         return TemplateExpr(f"{rendered_left} {op} {rendered_right}", compound=True, prec=prec)
 
     # -- comparisons producing a new template (DESIGN §5.5 trap applies) ------
@@ -297,10 +322,18 @@ class TemplateExpr(_NoBool, str):
         return TemplateExpr._binop(other, self, "%", prec=TemplateExpr._PREC_MUL)
 
     def __pow__(self, other: Any) -> TemplateExpr:
-        return TemplateExpr._binop(self, other, "**", prec=TemplateExpr._PREC_MUL + 1)
+        # ** is right-associative in both Python and Jinja (a ** b ** c means
+        # a ** (b ** c)): the RIGHT operand is the "loose" side here, the LEFT
+        # is "tight" -- the mirror of +/-/*// etc. -- so (a ** b) ** c must
+        # keep its parens (it is a strictly different value from a ** b ** c).
+        return TemplateExpr._binop(
+            self, other, "**", prec=TemplateExpr._PREC_MUL + 1, right_assoc=True
+        )
 
     def __rpow__(self, other: Any) -> TemplateExpr:
-        return TemplateExpr._binop(other, self, "**", prec=TemplateExpr._PREC_MUL + 1)
+        return TemplateExpr._binop(
+            other, self, "**", prec=TemplateExpr._PREC_MUL + 1, right_assoc=True
+        )
 
     def __neg__(self) -> TemplateExpr:
         return TemplateExpr(f"-{self._as_operand()}", compound=True)
@@ -345,17 +378,25 @@ class TemplateExpr(_NoBool, str):
         """
         return self._as_operand(min_prec=min_prec)
 
-    # -- M1.1 trap: Python's stdlib `math`/`float()`/`int()` on a runtime
-    # expression (MILESTONES M1.1 test 3). `math.cos(x)` etc. call `float(x)`
-    # on their argument before doing anything else; without this, that would
-    # either raise a bare TypeError or (for other stdlib consumers) silently
-    # coerce to something meaningless. `math.pi` (a plain Python float, not
-    # something that touches this class at all) is unaffected -- it just folds
-    # in as a literal, which is exactly the point: it is not a trap.
+    # -- M1.1 trap: Python's stdlib `math`/`float()`/`int()`/`round()`/
+    # `math.trunc()` on a runtime expression (MILESTONES M1.1 test 3).
+    # `math.cos(x)` etc. call `float(x)` on their argument, `round(x)` calls
+    # `__round__`, `math.trunc(x)` calls `__trunc__` -- all before doing
+    # anything else; without this, each would either raise a bare TypeError or
+    # (for other stdlib consumers) silently coerce to something meaningless.
+    # `math.pi` (a plain Python float, not something that touches this class
+    # at all) is unaffected -- it just folds in as a literal, which is exactly
+    # the point: it is not a trap.
     def __float__(self) -> float:
         raise PythonMathMisuseError(self._branch_repr(), capture_span(depth=0))
 
     def __int__(self) -> int:
+        raise PythonMathMisuseError(self._branch_repr(), capture_span(depth=0))
+
+    def __round__(self, ndigits: int | None = None) -> float:
+        raise PythonMathMisuseError(self._branch_repr(), capture_span(depth=0))
+
+    def __trunc__(self) -> int:
         raise PythonMathMisuseError(self._branch_repr(), capture_span(depth=0))
 
 
