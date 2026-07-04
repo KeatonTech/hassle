@@ -1,0 +1,4 @@
+{
+  "error_type": "ElseWithoutIfError",
+  "contains": ["else_then", "bad.py:9"]
+}

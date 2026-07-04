@@ -1,0 +1,35 @@
+{
+  "automation:repeat_until_done": {
+    "id": "repeat_until_done",
+    "alias": "Repeat until done",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "input_boolean.done",
+        "to": "off"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "repeat": {
+          "until": [
+            {
+              "condition": "state",
+              "entity_id": "input_boolean.done",
+              "state": "on"
+            }
+          ],
+          "sequence": [
+            {
+              "action": "input_boolean.turn_on",
+              "target": {
+                "entity_id": "input_boolean.done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

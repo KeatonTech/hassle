@@ -1,0 +1,26 @@
+{
+  "automation:wait_template_hallway": {
+    "id": "wait_template_hallway",
+    "alias": "Wait template",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.motion",
+        "to": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "wait_template": "{{ state_attr('light.hallway', 'brightness') > 100 }}",
+        "timeout": "00:05:00"
+      },
+      {
+        "action": "light.turn_off",
+        "target": {
+          "entity_id": "light.hallway"
+        }
+      }
+    ]
+  }
+}

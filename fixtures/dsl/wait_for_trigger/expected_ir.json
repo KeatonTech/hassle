@@ -1,0 +1,33 @@
+{
+  "automation:wait_for_door": {
+    "id": "wait_for_door",
+    "alias": "Wait for trigger",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "button.start",
+        "to": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "wait_for_trigger": [
+          {
+            "trigger": "state",
+            "entity_id": "binary_sensor.door",
+            "to": "off"
+          }
+        ],
+        "timeout": "00:10:00",
+        "continue_on_timeout": true
+      },
+      {
+        "action": "notify.mobile_app",
+        "data": {
+          "message": "Wait completed"
+        }
+      }
+    ]
+  }
+}

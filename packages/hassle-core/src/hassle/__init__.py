@@ -7,30 +7,32 @@ distribution (``packages/hassle-core/src/hassle``), so there is exactly one whee
 to install and the public surface and its implementation version together.
 
 ``__all__`` here is the **F3 freeze candidate** declared at the end of M1: additions
-are allowed in later milestones, changes are not (R5). It is deliberately minimal —
-only the M1-core primitives plus the names the two follow-on M1 workstreams
-(triggers/conditions, actions/control-flow) will extend. Each of those adds its own
-names to this list in its own PR.
+are allowed in later milestones, changes are not (R5). See ``docs/dsl-f3.md``.
 """
 
 from __future__ import annotations
 
 from hassle_core.compiler import (
     CompileTimeBranchError,
+    ElseWithoutIfError,
     all_of,
     any_of,
     area,
     automation,
     calendar,
+    choose,
     delay,
     device,
     device_id,
+    else_if,
+    else_then,
     event,
     floor,
     geo_location,
     homeassistant_shutdown,
     homeassistant_start,
     hours,
+    if_then,
     label,
     met,
     minutes,
@@ -39,52 +41,54 @@ from hassle_core.compiler import (
     numeric_state,
     on,
     only_if,
+    parallel,
     persistent_notification,
+    repeat_count,
+    repeat_for_each,
+    repeat_until,
+    repeat_while,
     script,
     seconds,
     service,
+    service_ext,
     state,
+    stop,
     sun,
     tag,
     template,
     time,
     time_pattern,
     trigger_condition,
+    variables,
+    wait_for,
+    wait_template,
     webhook,
     when,
     with_trigger_options,
     zone,
 )
 
-# F3 freeze candidate (sorted; ruff RUF022). Grouped by role for the reader:
-#   decorators: automation, script
-#   recording verbs: when, only_if
-#   M1-core builders: state, service, delay
-#   classic trigger/condition builders (triggers/conditions workstream, DESIGN §5.4):
-#     numeric_state, time, time_pattern, sun, event, zone, template, webhook, mqtt,
-#     calendar, persistent_notification, tag, geo_location, homeassistant_start,
-#     homeassistant_shutdown, device, trigger_condition
-#   condition combinators: any_of, all_of, not_
-#   duration helpers: hours, minutes, seconds
-#   purpose-specific builders (2026.7+, DESIGN §5.4): on, met, area, floor, label,
-#     device_id
-#   trap error (assertable by bundles/tests): CompileTimeBranchError
 __all__ = [
     "CompileTimeBranchError",
+    "ElseWithoutIfError",
     "all_of",
     "any_of",
     "area",
     "automation",
     "calendar",
+    "choose",
     "delay",
     "device",
     "device_id",
+    "else_if",
+    "else_then",
     "event",
     "floor",
     "geo_location",
     "homeassistant_shutdown",
     "homeassistant_start",
     "hours",
+    "if_then",
     "label",
     "met",
     "minutes",
@@ -93,17 +97,27 @@ __all__ = [
     "numeric_state",
     "on",
     "only_if",
+    "parallel",
     "persistent_notification",
+    "repeat_count",
+    "repeat_for_each",
+    "repeat_until",
+    "repeat_while",
     "script",
     "seconds",
     "service",
+    "service_ext",
     "state",
+    "stop",
     "sun",
     "tag",
     "template",
     "time",
     "time_pattern",
     "trigger_condition",
+    "variables",
+    "wait_for",
+    "wait_template",
     "webhook",
     "when",
     "with_trigger_options",
