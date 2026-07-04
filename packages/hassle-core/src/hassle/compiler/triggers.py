@@ -102,6 +102,7 @@ class NumericStateExpr(_TriggerBase):
         above: float | None = None,
         below: float | None = None,
         value_template: str | None = None,
+        attribute: str | None = None,
         for_: Any = None,
     ) -> None:
         super().__init__()
@@ -109,6 +110,7 @@ class NumericStateExpr(_TriggerBase):
         self._above = above
         self._below = below
         self._value_template = value_template
+        self._attribute = attribute
         self._init_for(for_)
 
     def _trigger_type(self) -> str:
@@ -119,6 +121,8 @@ class NumericStateExpr(_TriggerBase):
 
     def _fields(self) -> dict[str, Any]:
         fields: dict[str, Any] = {"entity_id": self._entity_id}
+        if self._attribute is not None:
+            fields["attribute"] = self._attribute
         if self._above is not None:
             fields["above"] = self._above
         if self._below is not None:
@@ -140,11 +144,22 @@ def numeric_state(
     above: float | None = None,
     below: float | None = None,
     value_template: str | None = None,
+    attribute: str | None = None,
     for_: Any = None,
 ) -> NumericStateExpr:
-    """Build a ``numeric_state`` trigger/condition (DESIGN §5.4)."""
+    """Build a ``numeric_state`` trigger/condition (DESIGN §5.4).
+
+    ``attribute=`` (M1.1 addition) reads an entity attribute instead of its
+    main state (HA's ``numeric_state`` schema field of the same name; see
+    ``fixtures/dsl/shade_tracks_sun``'s sun-elevation condition).
+    """
     return NumericStateExpr(
-        entity_id, above=above, below=below, value_template=value_template, for_=for_
+        entity_id,
+        above=above,
+        below=below,
+        value_template=value_template,
+        attribute=attribute,
+        for_=for_,
     )
 
 

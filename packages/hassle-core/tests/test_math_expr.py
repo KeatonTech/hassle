@@ -43,8 +43,17 @@ from hassle.compiler.templates import TemplateExpr, var
 
 
 def test_acceptance_example_param_sun_angle() -> None:
-    # param("sun_angle") / 360 * 2 * PI
-    result = param("sun_angle") / 360 * 2 * PI
+    # param("sun_angle") / 360 * 2 * PI -- param() only resolves inside an
+    # active @shared_script body (see fixtures/dsl/shared_script_param_math
+    # for the end-to-end compiled golden); the active-fields context is set
+    # directly here to exercise the expression in isolation.
+    from hassle.compiler.scripts import _ACTIVE_FIELDS
+
+    token = _ACTIVE_FIELDS.set(frozenset({"sun_angle"}))
+    try:
+        result = param("sun_angle") / 360 * 2 * PI
+    finally:
+        _ACTIVE_FIELDS.reset(token)
     assert isinstance(result, TemplateExpr)
     assert result.to_template() == "{{ sun_angle / 360 * 2 * pi }}"
 
@@ -177,6 +186,13 @@ def test_nested_mixed_ops_precedence_grouping() -> None:
 
 
 def test_deeply_nested_mixed_ops() -> None:
+    # `(x + y)` must stay grouped (`+` is lower precedence than the `*` it is
+    # an operand of); `* z` and `- 1` are same-precedence and chain flat; the
+    # whole `... / 2` division is also same-precedence with the `-` above it,
+    # so it chains flat too -- matching Python/Jinja's own left-to-right,
+    # same-precedence binding. Under-grouping (dropping a *necessary* paren,
+    # which would silently change meaning) is the failure this test guards;
+    # extra parens remain acceptable elsewhere per the milestone.
     x = var("x")
     y = var("y")
     z = var("z")

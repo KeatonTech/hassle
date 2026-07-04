@@ -1,1 +1,32 @@
-{}
+{
+  "automation:shade_tracks_sun": {
+    "id": "shade_tracks_sun",
+    "alias": "Shade Tracks Sun",
+    "mode": "single",
+    "triggers": [
+      {
+        "trigger": "time_pattern",
+        "minutes": "/5"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "numeric_state",
+        "entity_id": "sun.sun",
+        "attribute": "elevation",
+        "above": 0
+      }
+    ],
+    "actions": [
+      {
+        "action": "cover.set_cover_position",
+        "target": {
+          "entity_id": "cover.living_room_shade"
+        },
+        "data": {
+          "position": "{{ (100 * cos(state_attr('sun.sun', 'elevation') * pi / 180)) | round(0) }}"
+        }
+      }
+    ]
+  }
+}

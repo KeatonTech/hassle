@@ -49,6 +49,23 @@ class EntityRef(str):
         obj.object_id = object_id
         return obj
 
+    def attr(self, attribute: str) -> Any:
+        """``entity.attr("name")`` -> ``state_attr('domain.object_id', 'name')``
+        (MILESTONES M1.1 deliverable, DESIGN §5.4).
+
+        An Expr leaf (a :class:`~hassle.compiler.templates.TemplateExpr`):
+        composes with every operator like any other template leaf. Bare (no
+        implicit ``| float``) since HA attribute values are heterogeneous --
+        the same convention as this method's pinned golden
+        (``fixtures/dsl/shade_tracks_sun``), which multiplies the result
+        directly. Imported lazily to avoid a helpers<->templates import cycle
+        (``templates.py`` imports from ``builders.py``, which this module does
+        not touch).
+        """
+        from hassle.compiler.templates import TemplateExpr
+
+        return TemplateExpr(f"state_attr({str(self)!r}, {attribute!r})")
+
 
 def reset_declared_helpers() -> None:
     """Clear the process-wide declared-helpers list (tests / repeated compiles)."""
