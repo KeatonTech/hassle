@@ -36,10 +36,19 @@ from hassle_core.compiler.errors import (
     NoRecordingContextError,
     UnknownAutomationOptionError,
 )
+from hassle_core.compiler.macros import macro
 from hassle_core.compiler.protocols import (
     ActionBuilder,
     ConditionBuilder,
     TriggerBuilder,
+)
+from hassle_core.compiler.raw import (
+    RawAction,
+    RawCondition,
+    RawTrigger,
+    raw_action,
+    raw_condition,
+    raw_trigger,
 )
 from hassle_core.compiler.recording import (
     RecordedNode,
@@ -59,7 +68,15 @@ from hassle_core.compiler.registry import (
     fresh,
     script,
 )
+from hassle_core.compiler.scripts import (
+    NoParamContextError,
+    ScriptCallAction,
+    UnknownParamError,
+    param,
+    shared_script,
+)
 from hassle_core.compiler.spans import SourceSpan, capture_span
+from hassle_core.compiler.templates import TemplateExpr, expr, template
 
 __all__ = [
     "ActionBuilder",
@@ -69,30 +86,45 @@ __all__ = [
     "ConditionBuilder",
     "DelayAction",
     "DuplicateObjectError",
+    "NoParamContextError",
     "NoRecordingContextError",
+    "RawAction",
+    "RawCondition",
+    "RawTrigger",
     "RecordedNode",
     "Recorder",
     "RegisteredObject",
     "Registry",
+    "ScriptCallAction",
     "ServiceAction",
     "SourceSpan",
     "StateExpr",
+    "TemplateExpr",
     "TriggerBuilder",
     "UnknownAutomationOptionError",
+    "UnknownParamError",
     "automation",
     "capture_span",
     "compile_bundle",
     "compile_registered",
     "current_registry",
     "delay",
+    "expr",
     "fresh",
+    "macro",
     "only_if",
+    "param",
+    "raw_action",
+    "raw_condition",
+    "raw_trigger",
     "record_action",
     "record_condition",
     "record_trigger",
     "recording",
     "script",
     "service",
+    "shared_script",
     "state",
+    "template",
     "when",
 ]
