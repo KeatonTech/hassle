@@ -495,7 +495,9 @@
       "update.installed",
       "door.opened",
       "door.closed",
-      "water_leak.detected"
+      "water_leak.detected",
+      "lawn_mower.returned_to_dock",
+      "timer.remaining_time_reached"
     ],
     "conditions": [
       "climate.is_target_temperature",
@@ -503,7 +505,8 @@
       "climate.cooling",
       "device.battery_level",
       "device.motion_detected",
-      "schedule.is_active"
+      "schedule.is_active",
+      "climate.is_target_humidity"
     ]
   }
 }

@@ -288,7 +288,7 @@ def broken_nested_parallel():
 @automation(id="broken_nested_repeat_inside_choose", alias="Broken: repeat nested inside choose")
 def broken_nested_repeat_inside_choose():
     when(state("binary_sensor.hall_motion").to("on"))
-    with choose() as c:
+    with choose() as c:  # noqa: SIM117 - deliberately deep (repeat nested inside choose)
         with c.when_(state("input_boolean.armed").is_("on")):
             with repeat_count(2):
                 service(

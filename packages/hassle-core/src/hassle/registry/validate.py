@@ -2,11 +2,46 @@
 snapshot) -> list[Finding]`.
 
 Offline only (fixtures/registry snapshot); no network. Covers:
-- unknown entity/area/floor/label/device references (milestone test 1, 2b)
+- unknown entity/area/floor/label/device references (milestone test 1, 2b),
+  including references nested inside if/choose/repeat/parallel/
+  wait_for_trigger action containers (see `hassle.registry.extract`'s
+  recursive descent)
 - did-you-mean suggestions (test 2)
 - purpose-vocabulary validation + known-renames hints (test 2b)
 - bundle-declared helpers counting as existing (test 3)
 - service-call parameter validation: unknown/wrong-type/missing-required (test 4)
+
+## Coverage boundaries (deliberate permissiveness; M9's docs generator
+sources this section for the agent-facing docs, so keep it accurate)
+
+Two rules are intentionally permissive rather than strict, both because the
+IR shape this validator walks (`IRObject.to_ha()`) does not retain enough
+information to tell "the user's mistake" apart from "a legitimate escape
+hatch":
+
+- **A service whose schema has an empty `fields: {}` is never checked for
+  unknown/wrong-type params.** The registry snapshot's `services[domain]
+  [service].fields` dict does not distinguish "this service genuinely takes
+  no parameters" from "the schema capture is incomplete" -- both look like an
+  empty dict. Treating empty-fields as "nothing enforceable" avoids flagging
+  every real, intentional param on a service HA's `get_services` happens not
+  to have fully described (`_validate_service_params`, the `not
+  service_def.fields` guard).
+- **A bare `entity_id=` kwarg to `service(...)` is never flagged as an
+  "unknown service param."** HA's own legacy target-shorthand
+  (`entity_id="light.x"` instead of `target={"entity_id": "light.x"}`) and an
+  intentional service data field are merged into the exact same `data` dict
+  by the compiler's `ServiceAction` builder with no residual marker of which
+  one it started as -- so `entity_id` is unconditionally exempted from the
+  unknown-param check regardless of the service (`_validate_service_params`,
+  the `param_name == "entity_id"` guard). The entity_id *value* itself is
+  still validated as a normal entity reference by `_validate_references`;
+  only the "is `entity_id` a recognized field of this service" question is
+  skipped.
+
+Everything else this module checks is strict: an unrecognized entity/area/
+floor/label/device id, purpose-vocabulary type, or (non-empty-schema)
+service param always produces a Finding.
 """
 
 from __future__ import annotations

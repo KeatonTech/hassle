@@ -8,6 +8,33 @@ single value or list), Jinja template strings (AST-walked, with a regex
 fallback), and `raw_*` blocks (which are just plain dicts by this point, no
 different from any other trigger/condition/action body).
 
+**Recursive descent into nested action containers (reviewer B1 fix).** An
+action list is not flat: `if`/`choose`/`repeat`/`parallel` are themselves
+action-shaped dicts whose *own* fields hold further trigger/condition/action
+lists (`then`/`else`, `conditions`+`sequence`, `sequence`, `default`,
+`while`/`until`), and `wait_for_trigger` holds a nested trigger list. A block
+found only at the top of `actions`/`triggers`/`conditions` would silently miss
+every entity reference buried inside one of these containers -- exactly the
+gap the reviewer's three-position probe (if_then body, repeat_count body,
+parallel body) caught. `_walk_block` therefore recurses into every nested
+container key after processing the container's own fields, dispatching each
+nested list to the right *position* (condition-shaped lists validate their
+`condition`/`type` field against the condition vocabulary; action-shaped lists
+against nothing extra; `wait_for_trigger`'s list is trigger-shaped) so a
+purpose type nested inside, say, a `repeat.while` list is still checked
+against the right (`conditions`) vocabulary half.
+
+Nested blocks do not carry their own per-item span in `CompileResult` (the
+recording machinery gives the *container* action one span at its own
+`with if_then(...):`-style call site; the bodies nested inside it are folded
+into that single recorded node with no separate span retained per inner
+item, docs/m1-internal-api.md §2) -- so every reference found while recursing
+inherits the *container's* span. This is coarser than a top-level reference's
+span (it points at the `with if_then(...):` line, not the exact nested
+`service(...)` call), but it is still a real, correct file:line rather than
+none at all, and is the most precise span the current span-tracking
+architecture can give without changing the M1-frozen recording internals.
+
 Each `Reference` carries the file:line span of the DSL call that produced the
 block it came from (M1 spans, `CompileResult.spans_for`), so a Finding built
 from it can always point at a source line (subject to the source having a
@@ -122,6 +149,17 @@ def _as_list(value: Any) -> list[Any]:
     return [value]
 
 
+def _is_template_string(value: Any) -> bool:
+    """A Jinja placeholder (e.g. ``"{{ repeat.item }}"``) is a *runtime*
+    reference, never a literal entity/area/floor/label/device id -- treating
+    one as a literal id is a false positive (seen in `repeat_for_each`'s
+    `target: {"entity_id": "{{ repeat.item }}"}`). Such strings are only ever
+    scanned for embedded `states()`/`state_attr()`/`is_state()` calls
+    (`_extract_entity_ids_from_jinja`), never taken at face value elsewhere.
+    """
+    return isinstance(value, str) and "{{" in value
+
+
 def _extract_entity_ids_from_jinja(text: str) -> set[str]:
     """Entity ids referenced inside a Jinja string's `states()`/`state_attr()`/
     `is_state()` calls — AST-first, regex fallback restricted to known domains.
@@ -156,7 +194,7 @@ def _target_refs(target: dict[str, Any]) -> list[tuple[str, str]]:
         if key not in target:
             continue
         for value in _as_list(target[key]):
-            if isinstance(value, str):
+            if isinstance(value, str) and not _is_template_string(value):
                 out.append((key, value))
     return out
 
@@ -197,7 +235,7 @@ def _walk_block(
     # {"service": "...", "entity_id": "..."} legacy longhand.
     if "entity_id" in block:
         for value in _as_list(block["entity_id"]):
-            if isinstance(value, str):
+            if isinstance(value, str) and not _is_template_string(value):
                 refs.append(
                     _make_ref(
                         key="entity_id",
@@ -211,7 +249,7 @@ def _walk_block(
 
     # Top-level device_id (classic `device` trigger/condition raw shape),
     # e.g. {"platform": "device", "device_id": "abc123", ...}.
-    if isinstance(block.get("device_id"), str):
+    if isinstance(block.get("device_id"), str) and not _is_template_string(block["device_id"]):
         refs.append(
             _make_ref(
                 key="device_id",
@@ -224,11 +262,12 @@ def _walk_block(
         )
 
     # A bare `zone` field referencing a zone entity (zone/geo_location triggers).
-    if isinstance(block.get("zone"), str) and "." in block["zone"]:
+    zone_value = block.get("zone")
+    if isinstance(zone_value, str) and "." in zone_value and not _is_template_string(zone_value):
         refs.append(
             _make_ref(
                 key="entity_id",
-                value=block["zone"],
+                value=zone_value,
                 object_key=object_key,
                 section=section,
                 span=span,
@@ -260,7 +299,7 @@ def _walk_block(
             data = cast(dict[str, Any], data_raw)
             if "entity_id" in data:
                 for value in _as_list(data["entity_id"]):
-                    if isinstance(value, str):
+                    if isinstance(value, str) and not _is_template_string(value):
                         refs.append(
                             _make_ref(
                                 key="entity_id",
@@ -304,6 +343,78 @@ def _walk_block(
                         source="template",
                     )
                 )
+
+    refs.extend(_walk_nested_containers(block, object_key=object_key, span=span))
+
+    return refs
+
+
+# Nested container keys that hold a *condition*-position list (validated the
+# same way `conditions` is): `if`'s own condition list, a `choose` branch's
+# `conditions`, and `repeat`'s `while`/`until` condition lists.
+_NESTED_CONDITION_KEYS = ("if", "conditions", "while", "until")
+
+# Nested container keys that hold an *action*-position list: `if`'s `then`/
+# `else`, a `choose` branch's or `repeat`'s `sequence`, and `choose`'s
+# `default`. Plain `sequence` (scripts, `repeat_for_each`) is included too.
+_NESTED_ACTION_KEYS = ("then", "else", "sequence", "default")
+
+
+def _walk_nested_containers(
+    block: dict[str, Any], *, object_key: str, span: SourceSpan | None
+) -> list[Reference]:
+    """Recurse into `if`/`choose`/`repeat`/`parallel`/`wait_for_trigger`'s own
+    nested trigger/condition/action lists (reviewer B1). Every reference found
+    while recursing inherits the container's own span (see module docstring:
+    nested bodies have no separate per-item span of their own).
+    """
+    refs: list[Reference] = []
+
+    for key in _NESTED_CONDITION_KEYS:
+        for nested in as_dict_list(block.get(key)):
+            refs.extend(_walk_block(nested, object_key=object_key, section="conditions", span=span))
+
+    for key in _NESTED_ACTION_KEYS:
+        for nested in as_dict_list(block.get(key)):
+            refs.extend(_walk_block(nested, object_key=object_key, section="actions", span=span))
+
+    # `choose`: a top-level LIST of {"conditions": [...], "sequence": [...]}
+    # branches (distinct from the `if`/`repeat`/`parallel` dict-shaped
+    # containers above).
+    for branch in as_dict_list(block.get("choose")):
+        refs.extend(_walk_nested_containers(branch, object_key=object_key, span=span))
+
+    # `parallel`: a top-level LIST of {"sequence": [...]} branches.
+    for branch in as_dict_list(block.get("parallel")):
+        refs.extend(_walk_nested_containers(branch, object_key=object_key, span=span))
+
+    # `repeat`: a single dict (not a list) holding `count`/`while`/`until`/
+    # `for_each` + `sequence` -- walk it as one more nested block.
+    repeat_body_raw = block.get("repeat")
+    if isinstance(repeat_body_raw, dict):
+        repeat_body = cast(dict[str, Any], repeat_body_raw)
+        refs.extend(_walk_nested_containers(repeat_body, object_key=object_key, span=span))
+        # `for_each` items are themselves plain entity-id-shaped strings in the
+        # DSL's own goldens (e.g. `repeat_for_each(["light.bedroom", ...])`),
+        # not dicts -- catch them here since `as_dict_list` would drop them.
+        for item in _as_list(repeat_body.get("for_each")):
+            if isinstance(item, str) and "." in item and not _is_template_string(item):
+                refs.append(
+                    _make_ref(
+                        key="entity_id",
+                        value=item,
+                        object_key=object_key,
+                        section="actions",
+                        span=span,
+                        source="repeat_for_each",
+                    )
+                )
+
+    # `wait_for_trigger`: a top-level LIST of trigger-shaped dicts (a single
+    # recorded action with no further per-item span of its own, see the
+    # module docstring), the one nested container in *trigger* position.
+    for nested in as_dict_list(block.get("wait_for_trigger")):
+        refs.extend(_walk_block(nested, object_key=object_key, section="triggers", span=span))
 
     return refs
 

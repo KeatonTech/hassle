@@ -148,8 +148,7 @@ def a():
     result = compile_bundle(bundle)
     findings = validate_bundle(result, snapshot)
     assert any(
-        f.code == "unknown-entity" and "light.does_not_exist_if_body" in f.message
-        for f in findings
+        f.code == "unknown-entity" and "light.does_not_exist_if_body" in f.message for f in findings
     )
 
 
@@ -292,9 +291,7 @@ def a():
     )
 
 
-def test_unknown_entity_inside_wait_for_trigger(
-    tmp_path: Path, snapshot: RegistrySnapshot
-) -> None:
+def test_unknown_entity_inside_wait_for_trigger(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
     bundle = _write_bundle(
         tmp_path,
         """
