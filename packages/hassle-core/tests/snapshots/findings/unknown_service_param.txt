@@ -1,0 +1,1 @@
+`bogus_param` is not a known parameter of `light.turn_on` (fields: brightness, brightness_pct, color_temp, transition). at automation.py:6 Fix: Remove `bogus_param=` or correct its spelling.

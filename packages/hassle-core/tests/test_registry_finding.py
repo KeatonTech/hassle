@@ -43,11 +43,7 @@ def test_finding_without_span_omits_location_gracefully() -> None:
 
 
 def test_finding_is_frozen_and_hashable() -> None:
-    f1 = Finding(
-        code="x", severity="error", file="a.py", line=1, message="m", fix="f"
-    )
-    f2 = Finding(
-        code="x", severity="error", file="a.py", line=1, message="m", fix="f"
-    )
+    f1 = Finding(code="x", severity="error", file="a.py", line=1, message="m", fix="f")
+    f2 = Finding(code="x", severity="error", file="a.py", line=1, message="m", fix="f")
     assert f1 == f2
     assert hash(f1) == hash(f2)

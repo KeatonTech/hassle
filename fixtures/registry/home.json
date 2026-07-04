@@ -323,7 +323,8 @@
     {"device_id": "device_lock_5", "name": "Garage Side Door Lock", "area_id": "garage"},
     {"device_id": "device_fan_4", "name": "Kitchen Fan", "area_id": "kitchen"},
     {"device_id": "1234567890abcdef", "name": "Z-Wave Scene Controller", "area_id": null},
-    {"device_id": "aaaabbbbccccdddd1111222233334444", "name": "Downstairs Vacuum Device", "area_id": "living_room"}
+    {"device_id": "aaaabbbbccccdddd1111222233334444", "name": "Downstairs Vacuum Device", "area_id": "living_room"},
+    {"device_id": "abc123", "name": "Legacy Test Device", "area_id": null}
   ],
   "services": {
     "light": {

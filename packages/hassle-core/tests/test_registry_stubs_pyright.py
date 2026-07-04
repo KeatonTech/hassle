@@ -6,14 +6,19 @@ milestone brief. No network: pyright runs fully offline against local files
 only (it does not fetch anything for a stdlib-only check like this).
 
 Mechanism: a temp directory containing
-  - a `hassle/registry/entities.pyi` stub file at the same import path pyright
+  - a `hassle/registry/__init__.pyi` stub file at the same import path pyright
     would resolve `from hassle.registry import entities as e` to, generated
-    from `fixtures/registry/home.json`,
+    from `fixtures/registry/home.json`. It must be `__init__.pyi` (not a fake
+    `entities.pyi` submodule) because at runtime `entities` is a **module-level
+    variable** inside the real `hassle/registry/__init__.py` (an
+    `_EntitiesRegistry` instance), not a submodule — a stub submodule file
+    would shadow it with a *module* named `entities`, which resolves attribute
+    access differently (and does not carry our class-based typing at all).
   - a tiny sample.py using that import with one deliberate typo,
   - a pyrightconfig.json scoping pyright to this temp dir and pointing at the
     real hassle-core src (via extraPaths) so `hassle` itself resolves, while
-    letting the local `.pyi` stub win for `hassle.registry.entities` specifically
-    (achieved by placing the stub at `<tmp>/typings/hassle/registry/entities.pyi`
+    letting the local `.pyi` stub win for `hassle.registry` specifically
+    (achieved by placing the stub at `<tmp>/typings/hassle/registry/__init__.pyi`
     and setting `stubPath` — pyright prefers a custom stubPath stub over the
     real runtime module for that dotted path).
 
@@ -26,7 +31,6 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -67,15 +71,19 @@ def _run_pyright(cwd: Path) -> subprocess.CompletedProcess[str]:
 
 
 def _setup_typings(tmp_path: Path) -> Path:
-    """Build `<tmp>/typings/hassle/registry/entities.pyi` from the fixture snapshot."""
+    """Build `<tmp>/typings/hassle/registry/__init__.pyi` from the fixture snapshot.
+
+    `entities` must appear as a module-level variable declaration in
+    `hassle/registry/__init__.pyi` (matching the real runtime package shape),
+    not as a separate `entities.pyi` submodule stub.
+    """
     snapshot = RegistrySnapshot.load(FIXTURE)
     stub_text = generate_entities_stub(snapshot)
     typings_dir = tmp_path / "typings" / "hassle" / "registry"
     typings_dir.mkdir(parents=True, exist_ok=True)
-    (typings_dir / "entities.pyi").write_text(stub_text, encoding="utf-8")
-    # Package markers so pyright treats these as regular packages.
+    (typings_dir / "__init__.pyi").write_text(stub_text, encoding="utf-8")
+    # Package marker so pyright treats `hassle` itself as a regular package.
     (tmp_path / "typings" / "hassle" / "__init__.pyi").write_text("", encoding="utf-8")
-    (typings_dir / "__init__.pyi").write_text("from . import entities as entities\n", encoding="utf-8")
     return typings_dir
 
 
@@ -116,7 +124,7 @@ def test_pyright_accepts_correct_entity_reference(tmp_path: Path) -> None:
     _write_pyrightconfig(tmp_path)
     sample = tmp_path / "sample.py"
     sample.write_text(
-        "from hassle.registry import entities as e\n" "good = e.light.hallway\n",
+        "from hassle.registry import entities as e\ngood = e.light.hallway\n",
         encoding="utf-8",
     )
 

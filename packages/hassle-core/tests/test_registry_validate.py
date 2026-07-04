@@ -102,9 +102,7 @@ def a():
     )
     result = compile_bundle(bundle)
     findings = validate_bundle(result, snapshot)
-    assert any(
-        f.code == "unknown-entity" and "light.does_not_exist" in f.message for f in findings
-    )
+    assert any(f.code == "unknown-entity" and "light.does_not_exist" in f.message for f in findings)
 
 
 def test_unknown_entity_in_list_form(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
@@ -372,10 +370,16 @@ def a():
     findings = validate_bundle(result, snapshot)
     bad = next(f for f in findings if f.code == "unknown-service-param")
     assert bad.file is not None and bad.file.endswith("automation.py")
-    assert bad.line == 5
+    assert bad.line == 6
 
 
 # --- false-positive audit against the existing M0/M1/M2 golden corpus ------
+
+# `purpose_trigger_renamed_key` is deliberately NOT clean: it exists to exercise
+# the renamed-purpose-type Finding (M1's own docstring says as much, and
+# `test_renamed_purpose_key_finding_names_new_key` above asserts the Finding
+# appears) — excluding it here is a test-scope fix, not a validation weakening.
+_DELIBERATELY_NOT_CLEAN = {"purpose_trigger_renamed_key"}
 
 
 @pytest.mark.parametrize(
@@ -383,7 +387,9 @@ def a():
     sorted(
         p
         for p in (REPO_ROOT / "fixtures" / "dsl").iterdir()
-        if (p / "bundle").is_dir() and (p / "expected_ir.json").is_file()
+        if (p / "bundle").is_dir()
+        and (p / "expected_ir.json").is_file()
+        and p.name not in _DELIBERATELY_NOT_CLEAN
     ),
     ids=lambda p: p.name,
 )

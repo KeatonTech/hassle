@@ -22,4 +22,4 @@ def test_renames_table_exact_entries() -> None:
         "climate.target_humidity": "climate.is_target_humidity",
         "climate.target_temperature": "climate.is_target_temperature",
     }
-    assert PURPOSE_RENAMES == expected
+    assert expected == PURPOSE_RENAMES

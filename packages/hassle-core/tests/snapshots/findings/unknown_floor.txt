@@ -1,0 +1,1 @@
+`not_a_real_floor` is not a known floor_id in the registry snapshot. at automation.py:6 Fix: Check the floor_id against your registry snapshot.

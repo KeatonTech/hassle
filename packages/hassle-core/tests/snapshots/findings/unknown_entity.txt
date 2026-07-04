@@ -1,0 +1,1 @@
+`light.halway` is not a known entity in the registry snapshot. at automation.py:6 Fix: Did you mean `light.hallway`?

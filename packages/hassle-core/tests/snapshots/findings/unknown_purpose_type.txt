@@ -1,0 +1,1 @@
+`nonsense.made_up_type` is not a known purpose-trigger type in the registry snapshot's enumerated vocabulary. at automation.py:6 Fix: Check the spelling against `hassle stubs --refresh`'s enumerated vocabulary, or refresh the registry snapshot if this is a newer HA release.

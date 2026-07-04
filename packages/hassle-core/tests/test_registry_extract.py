@@ -54,7 +54,10 @@ from hassle import automation, raw_action, raw_trigger
 @automation(id="a", alias="A")
 def a():
     raw_trigger({"trigger": "state", "entity_id": ["binary_sensor.a", "binary_sensor.b"]})
-    raw_action({"action": "light.turn_on", "target": {"entity_id": ["light.hallway", "light.kitchen"]}})
+    raw_action({
+        "action": "light.turn_on",
+        "target": {"entity_id": ["light.hallway", "light.kitchen"]},
+    })
 """,
     )
     result = compile_bundle(bundle)
