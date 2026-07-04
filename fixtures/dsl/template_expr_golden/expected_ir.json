@@ -1,0 +1,28 @@
+{
+  "automation:template_demo": {
+    "id": "template_demo",
+    "alias": "Template expression demo",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.motion",
+        "to": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "notify.mobile_app",
+        "data": {
+          "is_hot": "{{ states('sensor.outdoor_temp') | float > 25 }}",
+          "target_minus_one": "{{ states('input_number.target_temp') | float - 1 }}",
+          "adjusted_over_limit": "{{ (states('sensor.outdoor_temp') | float + 2) > 30 }}",
+          "hot_and_armed": "{{ (states('sensor.outdoor_temp') | float > 25) and (states('input_boolean.armed') | float == 'on') }}",
+          "hot_or_cold": "{{ (states('sensor.outdoor_temp') | float > 30) or (states('sensor.outdoor_temp') | float < 0) }}",
+          "not_armed": "{{ not (states('input_boolean.armed') | float == 'on') }}",
+          "raw_expr": "{{ now().hour }}"
+        }
+      }
+    ]
+  }
+}

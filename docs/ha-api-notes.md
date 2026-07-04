@@ -523,3 +523,63 @@ default live run mirrors a real trigger — exactly as the design states.
 
 *Verified 2026-07-03 against Home Assistant 2026.2.3 (see §0 for why not 2026.7). Re-verify §10 on
 2026.7 in M6.*
+
+---
+
+## 12. M1 internal-api contract gap: helpers / raw_automation / @blueprint_automation
+not wired into `compile_bundle` (found by the templates/macros/object-types work item)
+
+**Not an HA-behavior finding — an internal extension-contract gap in
+docs/m1-internal-api.md**, flagged here per CLAUDE.md's "if the internal-api
+contract is insufficient, stop and report rather than modifying core."
+
+`compile_bundle`/`compile_registered` (`packages/hassle-core/src/hassle_core/compiler/bundle.py`,
+frozen for follow-on M1 workstreams) only drain `registry.Registry` -- a list of
+`RegisteredObject`, each of which is compiled by opening a `Recorder` and calling
+`reg.func()` once, i.e. "run a function, record trigger/condition/action calls
+into it." That model fits automations, scripts, and (via a caller-side wrapper)
+`@shared_script` calls -- all trigger/condition/action-shaped. It does **not**
+fit:
+
+- **Helper declarations** (DESIGN §5.7: `input_boolean(id=..., name=...)` etc.)
+  -- a helper is a plain declarative object with no function body to record.
+- **`raw_automation`/`@raw_automation`/`@blueprint_automation`** (DESIGN §5.8)
+  -- each is a whole *top-level object* that must land in
+  `CompileResult.objects` under `"automation:<id>"`, not a trigger/condition/
+  action recorded *inside* one (unlike `raw_trigger`/`raw_condition`/
+  `raw_action`, which fit the existing seam fine and are fully wired up).
+
+Getting either into `CompileResult.objects` requires a change to one of the
+two files the m1/templates work item was told not to edit:
+
+- `registry.py`: `RegisteredObject` requires a `func: Callable`; there is no
+  registration path for a pre-built IR object today (only `automation()`/
+  `script()` populate a `Registry`, both function-decorator shaped).
+- `bundle.py`: `compile_registered`'s loop unconditionally opens a `Recorder`
+  and calls `reg.func()` before an `if reg.kind == "automation" / elif
+  "script" / else: raise ValueError` branch (bundle.py, `compile_registered`).
+  There is no branch that skips the recorder and calls the already-public
+  `CompileResult.add()` directly with a pre-built `HelperConfig`/
+  `AutomationConfig`.
+
+**What was built instead:** `hassle_core.compiler.helpers` and
+`hassle_core.compiler.raw_automation` implement the full model/builder layer
+correctly and with test coverage (`HelperConfig`/`AutomationConfig`
+construction, the nine helper domains, JSON-serializability validation for raw
+bodies, the DESIGN §5.8 `inputs=` -> stored `use_blueprint.input` singular-key
+mapping per §10.5 above, `normalize_ha` applied) and track their declarations
+in a process-wide list (`declared_helpers()` / `declared_raw_automations()`,
+mirroring `registry.Registry`'s own pattern) -- but nothing compiles them into
+`compile_bundle(bundle_dir).objects`. They are deliberately **not** added to
+`hassle.__all__` (the F3 public DSL surface) so as not to advertise a
+half-working construct.
+
+**Minimal fix (for whoever picks this up, likely alongside the actions/
+control-flow or a dedicated integration pass):** add a `Registry.add_object
+(kind, obj: IRObject, span)` (or equivalent) path in `registry.py` that
+doesn't require a `func`, and a branch in `compile_registered` (bundle.py)
+that, for such entries, skips `with recording(...): reg.func()` entirely and
+calls `result.add(obj, spans={}, decl_span=reg.span, duplicate_of=reg.span)`
+directly. Both `helpers.py`'s and `raw_automation.py`'s constructor functions
+already produce the exact `IRObject` this would need — only the last
+"register it" step is missing.

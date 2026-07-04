@@ -59,6 +59,7 @@ from hassle_core.compiler.errors import (
     NoRecordingContextError,
     UnknownAutomationOptionError,
 )
+from hassle_core.compiler.macros import macro
 from hassle_core.compiler.protocols import (
     ActionBuilder,
     ConditionBuilder,
@@ -78,6 +79,14 @@ from hassle_core.compiler.purpose import (
     met,
     on,
 )
+from hassle_core.compiler.raw import (
+    RawAction,
+    RawCondition,
+    RawTrigger,
+    raw_action,
+    raw_condition,
+    raw_trigger,
+)
 from hassle_core.compiler.recording import (
     RecordedNode,
     Recorder,
@@ -96,7 +105,15 @@ from hassle_core.compiler.registry import (
     fresh,
     script,
 )
+from hassle_core.compiler.scripts import (
+    NoParamContextError,
+    ScriptCallAction,
+    UnknownParamError,
+    param,
+    shared_script,
+)
 from hassle_core.compiler.spans import SourceSpan, capture_span
+from hassle_core.compiler.templates import expr
 from hassle_core.compiler.triggers import (
     CalendarTrigger,
     DeviceTrigger,
@@ -116,7 +133,6 @@ from hassle_core.compiler.triggers import (
     ZoneExpr,
     calendar,
     device,
-    event,
     geo_location,
     homeassistant_shutdown,
     homeassistant_start,
@@ -152,15 +168,20 @@ __all__ = [
     "HomeAssistantTrigger",
     "LabelTarget",
     "MqttTrigger",
+    "NoParamContextError",
     "NoRecordingContextError",
     "NumericStateExpr",
     "PersistentNotificationTrigger",
     "PurposeCondition",
     "PurposeTrigger",
+    "RawAction",
+    "RawCondition",
+    "RawTrigger",
     "RecordedNode",
     "Recorder",
     "RegisteredObject",
     "Registry",
+    "ScriptCallAction",
     "ServiceAction",
     "SourceSpan",
     "StateExpr",
@@ -173,6 +194,7 @@ __all__ = [
     "TriggerConditionExpr",
     "TriggerWithOptions",
     "UnknownAutomationOptionError",
+    "UnknownParamError",
     "WebhookTrigger",
     "ZoneExpr",
     "all_of",
@@ -191,6 +213,7 @@ __all__ = [
     "else_if",
     "else_then",
     "event",
+    "expr",
     "floor",
     "fresh",
     "geo_location",
@@ -199,6 +222,7 @@ __all__ = [
     "hours",
     "if_then",
     "label",
+    "macro",
     "met",
     "minutes",
     "mqtt",
@@ -208,7 +232,11 @@ __all__ = [
     "on",
     "only_if",
     "parallel",
+    "param",
     "persistent_notification",
+    "raw_action",
+    "raw_condition",
+    "raw_trigger",
     "record_action",
     "record_condition",
     "record_trigger",
@@ -221,6 +249,7 @@ __all__ = [
     "seconds",
     "service",
     "service_ext",
+    "shared_script",
     "state",
     "stop",
     "sun",
