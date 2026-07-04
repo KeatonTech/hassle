@@ -150,6 +150,32 @@ in the DSL (checklist in PR description).
 
 ---
 
+## M1.1 — Runtime-math expression surface (additive under F3; after M1 merges, parallel with M2–M5)
+
+Symbolic-expression extension of the template builder (SymPy-style: leaves return Expr objects,
+operators compose, render to Jinja at compile time — owner-confirmed direction). Everything here
+is an F3 ADDITION; no existing name may change.
+
+**Deliverables:** math builders mirroring HA's Jinja set 1:1 (sin/cos/tan/asin/acos/atan/atan2/
+sqrt/log, round_/min_/max_/abs_); constants PI/E_/TAU rendering to Jinja names (`pi`, not
+3.14159…); attribute access `e.sun.sun.attr("elevation")` → `state_attr(...)`; `var("name")`
+references; `param()` upgraded to a composable Expr; datetime helpers (as_datetime, timedelta_,
+as_timestamp, today_at); full reflected-operator set; documented `+`-is-not-concat decision
+(explicit concat helper).
+
+**Write these tests first**
+1. Acceptance examples verbatim: `param("sun_angle") / 360 * 2 * PI` and
+   `var("wakeup_time") + var("offset")` → exact Jinja goldens.
+2. Reflected-operator/precedence torture test (literals on either side; nested mixed ops;
+   wrong grouping = failure, extra parens acceptable).
+3. Trap boundary: `math.cos(state(x).value)` raises the CompileTimeBranchError-family teaching
+   error; `math.pi` as a plain constant folds into a literal and compiles fine.
+4. Golden `shade_tracks_sun` matching the corpus fixture byte-for-byte (see M0 corpus addendum 2).
+5. Docs: operator table extended; note that expression sugar is one-way (decompiler keeps Jinja
+   as `template("...")` strings).
+
+---
+
 ## M2 — Decompiler + round-trip
 
 **Goal:** `IR → DSL Python`, lossless against the corpus, stable, spliceable.
@@ -217,7 +243,7 @@ validation against `get_services` schemas; Jinja syntax lint; `.pyi` stub genera
 
 **Deliverables:** state machine; trigger engine (v1 set per DESIGN §10.1); full action executor
 (`choose/if/repeat/parallel/wait_*`, variables, `stop`), **mode semantics**
-(`single/restart/queued/parallel`); Jinja subset engine with `UnsupportedTemplateError`;
+(`single/restart/queued/parallel`); Jinja subset engine with `UnsupportedTemplateError` — the environment MUST register HA's math globals/filters (sin/cos/tan/asin/acos/atan/atan2/sqrt/log, pi/e/tau, round/min/max/abs), which stock jinja2 lacks, and resolve `variables:` scope in templates;
 `sim` pytest fixture + assertion API (`assert_called`, `assert_not_called`, `calls`, `fire`,
 `advance`, `at`, `state_change`, `set_state`); `hassle test` entry point.
 

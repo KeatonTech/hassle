@@ -21,3 +21,6 @@ htmlcov/
 
 # Claude Code local (keep .claude/agents/ and shared settings tracked)
 .claude/settings.local.json
+
+# Claude Code agent worktrees (never commit)
+.claude/worktrees/

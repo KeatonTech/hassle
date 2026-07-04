@@ -630,7 +630,9 @@ fake clock + trigger evaluator + action executor.
   a designed-for v2 simulator extension.)
 - **Templates:** real jinja2 plus reimplementations of the most-used HA extensions (`states()`,
   `is_state()`, `state_attr()`, `now()`, `today_at()`, `as_timestamp`, `float/int/round`,
-  timedelta arithmetic, `iif`). Unsupported constructs raise
+  timedelta arithmetic, `iif`) **and HA's math set** (sin/cos/tan/asin/acos/atan/atan2/sqrt/
+  log, pi/e/tau, min/max/abs — stock jinja2 lacks these; without them every math-template
+  automation would be untestable in the simulator). Unsupported constructs raise
   `UnsupportedTemplateError` with a pointer to `hassle render --live` (never silently wrong).
 - **Clock:** `sim.advance(minutes=5)` deterministically fires due time triggers, expires delays
   and waits. No wall-clock, no sleeps, no flakes.
