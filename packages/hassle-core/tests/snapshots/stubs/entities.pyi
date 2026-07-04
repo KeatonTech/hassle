@@ -162,6 +162,7 @@ class _Cover:
     garage_door: CoverEntity  # cover.garage_door - "Garage Door"
     kitchen_blinds: CoverEntity  # cover.kitchen_blinds - "Kitchen Blinds"
     living_room_blinds: CoverEntity  # cover.living_room_blinds - "Living Room Blinds"
+    living_room_shade: CoverEntity  # cover.living_room_shade - "Living Room Shade"
     office_blinds: CoverEntity  # cover.office_blinds - "Office Blinds"
     def __getitem__(self, object_id: str) -> CoverEntity: ...
 
