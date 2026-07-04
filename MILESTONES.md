@@ -78,6 +78,18 @@ later milestone tests against.
 **Done when:** corpus ≥ 40 with all constructs represented (checked by `corpus-stats` in CI),
 tests 1–4 green, **F1 declared**.
 
+### M0.1 — corpus addendum (post-2026.7 finding; small, do before M1 golden work)
+
+HA 2026.7 made **purpose-specific triggers/conditions** the UI default (DESIGN §4 quirks) —
+UI-authored automations will contain them immediately, so the corpus must cover them. Add ≥ 6
+fixtures: purpose triggers with entity / area / label targets; `behavior:` `first`/`each`/`all`;
+`options.for`; a purpose-specific *condition* (e.g. `climate.is_target_temperature`); and one
+fixture using a **renamed pre-2026.7 key** (e.g. `battery.low`) to exercise M3's rename hint.
+Extend `fixtures/registry/home.json` with floors (`config/floor_registry/list` shape) and a
+`purpose_vocabulary` section (the enumerated trigger/condition type list M3 validates against;
+shape provisional until M6 captures the real API). IR round-trip tests must pass unchanged —
+these are ordinary plural-schema configs to the IR.
+
 ### M0.V — API verification spike (parallel task, small)
 
 DESIGN §4 was source-verified against HA core in July 2026, but must be verified
@@ -100,7 +112,10 @@ DESIGN §4 if any. These captures become the `FakeBackend` fixtures for M5.
 (operator overloading → Jinja); `@macro` inlining; `@shared_script`; `@script`; helper
 declarations; `raw_*` passthrough; `@blueprint_automation`; source-span tracking on every IR
 node; `CompileTimeBranchError` trap; bundle loader (imports bundle in isolation, collects
-registered objects, rejects duplicate ids); entity indexing form (`e.sensor["3d_printer"]`).
+registered objects, rejects duplicate ids); entity indexing form (`e.sensor["3d_printer"]`);
+**`normalize_ha`** — the singular→plural / `service:`→`action:` normalization HA itself applies
+on storage (docs/ha-api-notes.md §10.1), applied by the compiler to everything it emits,
+including legacy-form `raw_*` bodies (added to `hassle_core.ir` as an F1-compatible extension).
 
 **Write these tests first**
 1. **Golden pairs** `fixtures/dsl/{case}/bundle/…py` → `expected_ir.json`: one case per DSL
@@ -118,6 +133,14 @@ registered objects, rejects duplicate ids); entity indexing form (`e.sensor["3d_
 7. `test_compile_deterministic` (R8): two runs, byte-identical IR JSON.
 8. `test_entity_attr_and_index_equivalent`: `e.sensor._3d_printer` and `e.sensor["3d_printer"]`
    compile to the same entity reference.
+9. `test_compiler_emits_plural_schema`: all compiled output uses `triggers/conditions/actions` +
+   `action:`; a `raw_automation` authored with legacy singular keys and `service:` compiles to
+   the plural form, and `normalize_ha` output matches HA's real POST→GET normalization pair
+   captured in `docs/ha-api-captures/` (golden).
+10. `test_purpose_trigger_builder` (DESIGN §5.4): `on("motion.detected", target=area("office"),
+    behavior="first", for_=minutes(5))` and `met("climate.is_target_temperature", target=…)`
+    golden-compile to the stored 2026.7 shape (`trigger:`/`condition:` type string, `target:`,
+    `behavior:`, `options:`); all five target forms (entity/area/floor/label/device) covered.
 
 **Done when:** goldens green, F3 declared, and every fixture-corpus *construct* is expressible
 in the DSL (checklist in PR description).
@@ -133,8 +156,11 @@ LibCST-based single-object splice into an existing file; DSL-coverage metric.
 
 **Write these tests first**
 1. `test_roundtrip_corpus` (**the** invariant, I3): for every fixture:
-   `compile(decompile(x)) ≈ x` (canonical-hash equality). No exceptions — `raw` fallback makes
-   this achievable by construction.
+   `compile(decompile(x)) ≈ normalize_ha(x)` (canonical-hash equality; `normalize_ha(x) == x`
+   for every fixture already in HA's stored plural form). No exceptions — `raw` fallback makes
+   this achievable by construction. The legacy-form fixtures
+   (`automation_legacy_platform_naming`, `automation_service_call_longhand`) are the cases
+   where normalization applies.
 2. `test_decompile_stable`: `decompile(x)` twice → identical bytes; `decompile(compile(decompile(x)))`
    → identical to first decompile (fixed point).
 3. `test_decompile_prefers_dsl`: corpus coverage report ≥ **90 % of fixture objects decompile
@@ -163,6 +189,10 @@ validation against `get_services` schemas; Jinja syntax lint; `.pyi` stub genera
 1. `test_unknown_entity_flagged` / `test_known_entity_ok` — incl. inside templates, inside raw
    blocks, in `entity_id: [list]` forms, and in trigger/condition/action positions.
 2. `test_did_you_mean`: `light.halway` → suggests `light.hallway`.
+2b. `test_purpose_vocabulary_validation`: unknown purpose type string → Finding; a renamed
+    pre-2026.7 key (`battery.low`) → Finding whose fix text names the new key
+    (`battery.became_low`, from the known-renames table); target `area_id`/`floor_id`/
+    `label_id` values validated against the registry snapshot (floors included).
 3. `test_bundle_declared_helper_counts`: automation referencing a helper declared in the same
    bundle (not in registry) validates clean; referencing an undeclared one fails.
 4. `test_service_param_validation`: unknown param, wrong type, missing required — each a distinct
@@ -265,8 +295,17 @@ check via `get_config` with a tested-range warning.
 6. UI-editability check: after apply, `GET /api/config/automation/config/{id}` returns the
    config and the automation entity exists with correct unique_id (I2 proxy for "UI can edit it").
 7. Auth: bad token → clean 401 error surfaced with fix hint; `hassle login` validation path.
-8. Mirror round-trip: upload bundle.zip (Content-Type gate handled), resolve + download bytes
-   identical, remove works; simulated tightened gate (403/400) → warning, sync unaffected.
+8. Purpose-vocabulary enumeration (DESIGN §4): find and capture the WS API the 2026.7 UI uses
+   to enumerate available purpose-specific trigger/condition types; wire it into the registry
+   snapshot (replacing the provisional M0.1 `purpose_vocabulary` shape — update the fixture and
+   MILESTONES in the same PR per R5 if the shape differs); verify a UI-authored purpose-trigger
+   automation pulls, round-trips, and pushes byte-stable against real 2026.7.
+9. Mirror round-trip: upload ZIP bytes under a media extension (both gates handled — upload
+   Content-Type AND download extension, per DESIGN §4 quirks), resolve + download bytes
+   identical, remove works; determine and document the target-folder creation story (upload
+   does not mkdir); never target the media root; simulated tightened gate (403/400/404) →
+   warning, sync unaffected. Re-confirm all docs/ha-api-notes.md §10 findings on HA `stable`
+   (2026.7+) — M0.V ran on 2026.2.3 (see notes §0).
 
 **Done when:** integration suite green in CI against HA `stable` **and** `dev` tags; a smoke
 checklist against the owner's real instance (`docs/SMOKE.md`) executed once.

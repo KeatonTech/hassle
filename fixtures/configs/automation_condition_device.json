@@ -1,0 +1,28 @@
+{
+  "alias": "Condition Device",
+  "description": "Automation with device condition",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "sensor.temperature"
+    }
+  ],
+  "condition": [
+    {
+      "condition": "device",
+      "device_id": "abc123def456",
+      "domain": "light",
+      "entity_id": "light.bedroom",
+      "type": "is_on"
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_off",
+      "target": {
+        "entity_id": "light.bedroom"
+      }
+    }
+  ],
+  "mode": "single"
+}

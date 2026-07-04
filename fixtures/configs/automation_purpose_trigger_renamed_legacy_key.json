@@ -1,0 +1,21 @@
+{
+  "alias": "Purpose Trigger Renamed Legacy Key",
+  "description": "Automation with pre-2026.7 purpose trigger key that was renamed without migration",
+  "triggers": [
+    {
+      "trigger": "battery.low",
+      "target": {
+        "entity_id": "sensor.wireless_device_battery"
+      }
+    }
+  ],
+  "actions": [
+    {
+      "action": "notify.mobile_app_keaton",
+      "data": {
+        "message": "Battery low warning"
+      }
+    }
+  ],
+  "mode": "single"
+}

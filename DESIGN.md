@@ -95,7 +95,12 @@ implementing agents).
 - **I2 — Stable identity.** An object's HA `id` is its identity. The toolchain never changes an
   existing `id`; entity registry data (entity_id, areas, labels, categories) survives because of this.
 - **I3 — Lossless round-trip.** `compile(decompile(x)) == x` (semantic JSON equality) for *any*
-  HA config, via the `raw` escape hatch (§5.8) when the DSL can't model a construct.
+  HA config, via the `raw` escape hatch (§5.8) when the DSL can't model a construct. Precisely:
+  equality is modulo HA's *own* storage normalization (HA ≥ 2024.10 rewrites legacy singular
+  `trigger/condition/action` + `service:` to the plural schema before storing — see
+  docs/ha-api-notes.md §10.1), so `compile(decompile(x)) == normalize_ha(x)`; for configs as HA
+  actually stores and returns them — the only ones the sync engine ever sees — that is exact
+  equality.
 - **I4 — No runtime dependency.** HA never depends on Hassle to execute anything.
 - **I5 — Tests test the artifact.** The simulator executes the *compiled JSON*, not the Python,
   so tests validate exactly what will be uploaded.
@@ -142,22 +147,48 @@ behaviorally in M0.V against a live HA instance** (see MILESTONES); HA versions 
 | Automations | `automations.yaml`, keyed by `id` | Enumerate: list states for domain `automation`, read `attributes.id`; fetch: `GET /api/config/automation/config/{id}` | `POST/DELETE /api/config/automation/config/{id}` (auto-reloads) |
 | Scripts | `scripts.yaml`, keyed by object_id | object_id from `entity_id`; `GET /api/config/script/config/{object_id}` | `POST/DELETE` same path |
 | Helpers (storage-collection): `input_boolean`, `input_number`, `input_select`, `input_text`, `input_datetime`, `input_button`, `counter`, `timer`, `schedule` | `.storage/{domain}` | WS `{domain}/list` (also `{domain}/subscribe`) | WS `{domain}/create`, `{domain}/update`, `{domain}/delete` — update/delete take the item id as `{domain}_id` (e.g. `input_boolean_id`). Storage items are `editable: true`; YAML-defined helpers coexist as `editable: false` and are out of scope (I1) |
-| Entity/device/area/label registries | `.storage/*` | WS `config/entity_registry/list`, `config/device_registry/list`, `config/area_registry/list`, `config/label_registry/list` | (read-only for Hassle v1) |
+| Entity/device/area/floor/label registries | `.storage/*` | WS `config/entity_registry/list`, `config/device_registry/list`, `config/area_registry/list`, `config/floor_registry/list`, `config/label_registry/list` | (read-only for Hassle v1) |
 | Services + schemas | — | WS `get_services` | — |
 | Validation | — | WS `validate_config` (trigger/condition/action blocks); `POST /api/config/core/check_config` | — |
 | Traces | — | WS `trace/list` (domain [+ item_id]); `trace/get` requires domain + item_id + **run_id**; admin-only | — |
 | Template render | — | `POST /api/template`; WS `render_template` (subscription; `strict`, `report_errors` flags) | — |
 | Media (optional mirror, §8.5) | `/media` dir | WS `media_source/browse_media`, `media_source/resolve_media`; authenticated `GET /media/{source}/{path}` | `POST /api/media_source/local_source/upload` (admin, multipart `media_content_id` + `file`); WS `media_source/local_source/remove` |
 
-API quirks the implementation must respect (all source-verified):
+API quirks the implementation must respect (source-verified July 2026, then behaviorally
+verified against a live instance in M0.V — details and raw captures in
+[docs/ha-api-notes.md](docs/ha-api-notes.md), corrections in its §10):
 
+- **Plural schema normalization (HA ≥ 2024.10).** The config API accepts legacy singular keys
+  (`trigger/condition/action`, `service:`) but **stores and returns the plural form**
+  (`triggers/conditions/actions`, `action:`). WS `validate_config` rejects singular outer keys
+  outright. Hassle's compiled and canonical-hashed form is therefore always plural (§7.1).
+- **Automation `entity_id` derives from the alias, not the id** (`slug(alias)`). Never construct
+  `automation.<id>`; resolve entity_ids by matching `attributes.id` from `/api/states`.
+- **Purpose-specific triggers/conditions (HA 2026.7+, web-verified July 2026).** HA 2026.7 made
+  a new trigger/condition vocabulary the UI default: 200+ namespaced types stored as
+  `trigger: <domain>.<event>` (e.g. `motion.detected`, `battery.became_low`,
+  `vacuum.returned_to_dock`) with a `target:` block (`entity_id`/`device_id`/`area_id`/
+  `floor_id`/`label_id`), a `behavior:` key (`first`/`each`/`all` multi-target semantics), and
+  an `options:` block (e.g. `for:`). Same plural storage schema, same config API — the UI will
+  generate these constantly from 2026.7 on, so Hassle must treat them as first-class (§5.4),
+  not `raw`. Caution: HA renamed several of these keys between their Labs debut and 2026.7
+  (e.g. `battery.low` → `battery.became_low`, `schedule.turned_on` → `schedule.block_started`)
+  **without migration — old keys simply stop working** — so the vocabulary must be treated as
+  data (enumerated from the instance, validated with rename hints), never hard-coded. M6 must
+  find and capture the WS API the UI uses to enumerate available purpose types (M0.V ran on
+  2026.2.3 and could not).
 - `automation.trigger`'s `skip_condition` **defaults to `true`** — live runs must pass
   `skip_condition: false` explicitly unless the user asked for `--skip-conditions` (§10.4).
 - The automation `id` attribute has moved into `capability_attributes` in recent HA — it still
   surfaces in `/api/states` attribute payloads, but don't assume its position in internals.
-- The media upload endpoint gates only on the **client-supplied multipart `Content-Type`**
-  (must start with `image/`, `video/`, or `audio/`); it never inspects bytes or extension.
-  The mirror (§8.5) depends on this incidental behavior — treat as fragile by design.
+- The media endpoints have **two independent incidental gates** the mirror (§8.5) must pass:
+  upload checks only the client-supplied multipart `Content-Type` (must start with `image/`,
+  `video/`, or `audio/`; bytes/extension never inspected), while **download** (`GET /media/…`)
+  404s unless the file *extension* maps to an image/video/audio MIME type. So the mirrored ZIP
+  must be stored under a media extension (e.g. `bundle.mp3`; bytes unchanged). Also: never
+  upload to the media root (its signed URLs are broken — notes §10.4), and the target subfolder
+  must already exist (upload does not mkdir; M6 determines the folder-creation story). Treat the
+  whole mirror as fragile by design.
 - On HAOS/Supervised, `/media` is a **separate opt-in toggle in backups** (recommended off by
   HA). Do not claim mirrored files are in backups unless the user enables that toggle.
 - Long-lived access tokens have no introspection endpoint; validity is checked by making any
@@ -245,10 +276,24 @@ append actions. The body is a *description*, not runtime code (§5.5).
 
 ### 5.4 Triggers, conditions, templates
 
-Every HA trigger/condition type has a typed builder: `state()`, `numeric_state()`, `time()`,
-`time_pattern()`, `sun()`, `event()`, `zone()`, `template()`, `webhook()`, `device()` (raw
-passthrough), `mqtt()`, `calendar()`, `persistent_notification()`, plus `for_=` durations,
+Every classic HA trigger/condition type has a typed builder: `state()`, `numeric_state()`,
+`time()`, `time_pattern()`, `sun()`, `event()`, `zone()`, `template()`, `webhook()`, `device()`
+(raw passthrough), `mqtt()`, `calendar()`, `persistent_notification()`, plus `for_=` durations,
 trigger `id=`s, `not_(...)`, `any_of(...)`, `all_of(...)`.
+
+**Purpose-specific triggers/conditions (2026.7+, §4)** get one *generic* typed builder rather
+than 200+ hand-written ones — the vocabulary is instance data, not code:
+
+```python
+when(on("motion.detected", target=area("office"), behavior="first", for_=minutes(5)))
+only_if(met("climate.is_target_temperature", target=e.climate.living))
+# targets: e.<domain>.<object_id> | area("office") | floor("upstairs") | label("security") | device_id("…")
+```
+
+The type string is validated against the vocabulary enumerated from the instance (tier 2, §9),
+with rename hints for HA's known Labs→2026.7 renames; target ids are validated against the
+registries. Decompilation of UI-authored purpose triggers produces exactly this form — never
+`raw`.
 
 Templates are built with operator overloading and compile to Jinja:
 
@@ -344,9 +389,13 @@ Also granular: `raw_trigger({...})`, `raw_action({...})` inside normal DSL autom
 Blueprint-based automations decompile to a structured form, not raw:
 
 ```python
-@blueprint_automation(id="...", use_blueprint="motion_light.yaml",
+@blueprint_automation(id="...", use_blueprint="hassle/motion_light.yaml",  # author-qualified path
                       inputs={"motion_entity": e.binary_sensor.hall_motion})
 ```
+
+(DSL keeps the ergonomic `inputs=`; the stored JSON key is `use_blueprint.input` — singular —
+and the path includes the author directory. The compiler/decompiler map between the two; see
+docs/ha-api-notes.md §10.5.)
 
 The decompiler's "DSL coverage %" over the fixture corpus is a tracked metric (MILESTONES M2);
 `raw` is the correctness backstop, not the plan.
@@ -395,6 +444,12 @@ union), `Condition`, `Action` (tagged union incl. `choose/if/repeat/parallel/wai
   HA adds fields; the IR must never drop them.
 - **Canonical JSON serialization** (sorted keys, stable list order) so object hashing (§8) is
   deterministic.
+- **The canonical form is the plural schema** (§4 quirks): the compiler always emits
+  `triggers/conditions/actions` and `action:` — including for `raw_*` bodies a user authored in
+  legacy singular form, which are normalized exactly as HA itself would normalize them on
+  storage (`normalize_ha`, an M1 deliverable). The decompiler accepts both forms as input.
+  Without this, every locally-compiled object would hash differently from HA's stored copy and
+  the plan would show perpetual spurious diffs.
 
 Pipelines: `DSL —(trace)→ IR —(serialize)→ HA JSON` and `HA JSON —(parse)→ IR —(codegen)→ DSL`.
 The IR is the frozen interface between workstreams (see MILESTONES: freeze point F1).
@@ -518,13 +573,16 @@ CLI affordances that keep this honest:
 ### 8.5 Optional: the in-HA mirror (best-effort)
 
 `hassle mirror push` uploads the bundle as a ZIP to HA's local media storage
-(`media-source://media_source/local/hassle/bundle.zip`) via the verified upload API (§4);
-`hassle mirror pull` fetches it. Purpose: a copy of sources+tests living *inside* HA (and inside
-HA backups **if** the user enables the Media toggle). Explicitly best-effort:
+(`media-source://media_source/local/hassle/hassle-bundle.mp3` — ZIP bytes under a media file
+extension, which is required to pass the download gate; see §4 quirks) via the verified upload
+API; `hassle mirror pull` fetches it and verifies it is a valid ZIP. Purpose: a copy of
+sources+tests living *inside* HA (and inside HA backups **if** the user enables the Media
+toggle). Explicitly best-effort:
 
-- The upload endpoint's content gate is a client-supplied Content-Type prefix check — Hassle
-  declares an acceptable type; if HA ever tightens this, `mirror` degrades to a clear warning
-  and **nothing else in Hassle is affected** (sync never depends on the mirror).
+- The mechanism rides on **two** incidental gates (upload Content-Type prefix, download
+  extension→MIME mapping) plus a pre-existing target folder — all verified working in M0.V, any
+  of which HA could change. If any gate closes, `mirror` degrades to a clear warning and
+  **nothing else in Hassle is affected** (sync never depends on the mirror).
 - Off by default; enabled via `hassle.toml` (`mirror = true`), and `hassle push` then refreshes
   it automatically after a successful apply.
 
@@ -536,7 +594,7 @@ HA backups **if** the user enables the Media toggle). Explicitly best-effort:
 |---|---|---|---|
 | 0. pyright on stubs | editor / CI | entity typos, wrong service params, type errors | as you type |
 | 1. Compile | CLI | DSL misuse (incl. `CompileTimeBranchError`), duplicate ids, bad options | `hassle validate`, pre-plan |
-| 2. Registry | CLI, offline | references to nonexistent entities/services/areas/devices/labels — including inside `raw_*` blocks and Jinja strings (entity-id extraction lint); "did you mean `light.hallway`?" suggestions; bundle-declared helpers count as existing | `hassle validate` |
+| 2. Registry | CLI, offline | references to nonexistent entities/services/areas/floors/devices/labels — including inside `raw_*` blocks and Jinja strings (entity-id extraction lint); unknown purpose-trigger/condition type strings (validated against the instance's enumerated vocabulary, with rename hints for HA's known Labs→2026.7 renames); "did you mean `light.hallway`?" suggestions; bundle-declared helpers count as existing | `hassle validate` |
 | 3. Template lint | CLI, offline | Jinja syntax errors; unknown entities inside templates | `hassle validate` |
 | 4. Server-side | CLI → HA, pre-apply | anything HA itself rejects: WS `validate_config` per object + `check_config` | automatic during plan/apply; `hassle validate --live` |
 
@@ -561,9 +619,12 @@ fake clock + trigger evaluator + action executor.
   `stop`, mode semantics (`single/restart/queued/parallel` — including the classic
   "restart cancels my delay" behaviors, which are exactly what people need tests for).
 - **Triggers (v1 set):** state (incl. `for_`), numeric_state, time, time_pattern, sun
-  (configurable sunrise/sunset), event, template (subset), zone. Anything else: the test fires
-  the automation manually — `sim.fire(automation, trigger_ctx={...})` — so *no automation is
-  untestable*, some just skip trigger evaluation.
+  (configurable sunrise/sunset), event, template (subset), zone. Anything else — including the
+  2026.7 purpose-specific vocabulary (§4), which is semantically defined per-type by HA and too
+  large to reimplement faithfully — the test fires the automation manually:
+  `sim.fire(automation, trigger_ctx={...})`. So *no automation is untestable*, some just skip
+  trigger evaluation. (Mapping the most common purpose triggers onto state-trigger semantics is
+  a designed-for v2 simulator extension.)
 - **Templates:** real jinja2 plus reimplementations of the most-used HA extensions (`states()`,
   `is_state()`, `state_attr()`, `now()`, `today_at()`, `as_timestamp`, `float/int/round`,
   timedelta arithmetic, `iif`). Unsupported constructs raise
@@ -715,7 +776,7 @@ they're near-identical). Designed-for future plugins, in rough order:
 | HA API drift across versions | Medium | M0.V verification checklist; CLI checks HA version via `get_config` and warns outside the tested range; CI job against HA `dev` container |
 | Concurrent edits (UI while pushing) | Medium | Hash re-check at apply time (§8.2); simultaneous-apply race documented as accepted limitation |
 | User skips git and loses hand-written sources | Medium | `hassle init`/pull offers `git init`; one-time warning in bare directories; optional mirror (§8.5) as belt-and-suspenders |
-| Media upload gate tightened by HA (mirror breaks) | Low (feature is optional) | Mirror is best-effort by design; degrades to a warning; sync never depends on it |
+| Media gates tightened by HA — upload Content-Type or download extension check (mirror breaks) | Low (feature is optional) | Mirror is best-effort by design; degrades to a warning; sync never depends on it |
 | Bundle Python does something malicious/surprising at compile time | Low (user's own code) | Compile sandbox: no network, sys.path isolation; documented that the bundle is code you review like any repo |
 
 ## 16. Decisions log and open questions

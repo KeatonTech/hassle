@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.11.26"
+
+jobs:
+  ci:
+    name: lint · typecheck · unit · corpus
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS + Linux are the two target platforms (MILESTONES M7).
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync workspace
+        run: uv sync --frozen
+
+      - name: Ruff format (check)
+        run: uv run ruff format --check .
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Pyright (strict on hassle-core)
+        run: uv run pyright
+
+      - name: Unit tests (no network; integration excluded)
+        run: uv run pytest -m "not integration"
+
+      - name: Corpus contract (>= 40 fixtures, all constructs)
+        run: uv run hassle-dev corpus-stats
+
+      - name: Goldens unchanged
+        run: uv run hassle-dev goldens

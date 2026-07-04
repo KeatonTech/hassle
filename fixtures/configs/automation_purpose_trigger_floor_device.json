@@ -1,0 +1,28 @@
+{
+  "alias": "Purpose Trigger Floor and Device",
+  "description": "Purpose-specific triggers with floor_id and device_id targets, behavior each on first",
+  "triggers": [
+    {
+      "trigger": "battery.became_low",
+      "target": {
+        "floor_id": "upstairs"
+      },
+      "behavior": "each"
+    },
+    {
+      "trigger": "vacuum.returned_to_dock",
+      "target": {
+        "device_id": "aaaabbbbccccdddd1111222233334444"
+      }
+    }
+  ],
+  "actions": [
+    {
+      "action": "notify.mobile_app_keaton",
+      "data": {
+        "message": "Device event detected"
+      }
+    }
+  ],
+  "mode": "single"
+}

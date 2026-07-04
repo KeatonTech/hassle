@@ -1,0 +1,26 @@
+{
+  "alias": "Condition Sun",
+  "description": "Automation with sun condition",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.motion"
+    }
+  ],
+  "condition": [
+    {
+      "condition": "sun",
+      "after": "sunset",
+      "after_offset": "-01:00:00"
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_on",
+      "target": {
+        "entity_id": "light.porch"
+      }
+    }
+  ],
+  "mode": "single"
+}

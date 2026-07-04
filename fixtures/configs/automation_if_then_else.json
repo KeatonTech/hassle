@@ -1,0 +1,44 @@
+{
+  "alias": "If Then Else",
+  "description": "Demonstrates if/then/else_then structure",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "sensor.temperature"
+    }
+  ],
+  "action": [
+    {
+      "if": [
+        {
+          "condition": "numeric_state",
+          "entity_id": "sensor.temperature",
+          "above": 25
+        }
+      ],
+      "then": [
+        {
+          "service": "climate.set_temperature",
+          "target": {
+            "entity_id": "climate.living_room"
+          },
+          "data": {
+            "temperature": 20
+          }
+        }
+      ],
+      "else": [
+        {
+          "service": "climate.set_temperature",
+          "target": {
+            "entity_id": "climate.living_room"
+          },
+          "data": {
+            "temperature": 22
+          }
+        }
+      ]
+    }
+  ],
+  "mode": "single"
+}

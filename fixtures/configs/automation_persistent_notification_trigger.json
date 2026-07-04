@@ -1,0 +1,19 @@
+{
+  "alias": "Persistent Notification Trigger",
+  "description": "Triggers on persistent notification",
+  "trigger": [
+    {
+      "platform": "persistent_notification",
+      "notification_id": "test_notification"
+    }
+  ],
+  "action": [
+    {
+      "service": "persistent_notification.dismiss",
+      "data": {
+        "notification_id": "test_notification"
+      }
+    }
+  ],
+  "mode": "single"
+}

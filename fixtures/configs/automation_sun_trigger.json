@@ -1,0 +1,6 @@
+{
+  "alias": "Sun Trigger",
+  "trigger": [{"platform": "sun", "event": "sunset", "offset": "-00:30:00"}],
+  "action": [{"service": "light.turn_on", "target": {"entity_id": "light.porch"}, "data": {"brightness_pct": 75}}],
+  "mode": "single"
+}

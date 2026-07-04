@@ -1,0 +1,39 @@
+{
+  "alias": "With Trigger ID and Variables",
+  "description": "Automation with trigger IDs and trigger variables",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.motion",
+      "id": "motion_detected"
+    },
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.door",
+      "to": "on",
+      "id": "door_opened"
+    }
+  ],
+  "trigger_variables": {
+    "light_entity": "light.hallway",
+    "brightness_level": "255"
+  },
+  "action": [
+    {
+      "service": "light.turn_on",
+      "target": {
+        "entity_id": "{{ trigger_variables.light_entity }}"
+      },
+      "data": {
+        "brightness": "{{ trigger_variables.brightness_level }}"
+      }
+    },
+    {
+      "service": "notify.persistent_notification",
+      "data": {
+        "message": "Triggered by {{ trigger.id }}"
+      }
+    }
+  ],
+  "mode": "single"
+}

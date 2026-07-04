@@ -1,0 +1,26 @@
+{
+  "alias": "Condition Zone",
+  "description": "Automation with zone condition",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "device_tracker.john"
+    }
+  ],
+  "condition": [
+    {
+      "condition": "zone",
+      "entity_id": "device_tracker.john",
+      "zone": "zone.work"
+    }
+  ],
+  "action": [
+    {
+      "service": "notify.mobile_app",
+      "data": {
+        "message": "John is at work"
+      }
+    }
+  ],
+  "mode": "single"
+}

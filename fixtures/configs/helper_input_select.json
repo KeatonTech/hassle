@@ -1,0 +1,11 @@
+{
+  "id": "input_select_mode",
+  "name": "Mode",
+  "icon": "mdi:cog",
+  "options": [
+    "Auto",
+    "Manual",
+    "Eco",
+    "Away"
+  ]
+}

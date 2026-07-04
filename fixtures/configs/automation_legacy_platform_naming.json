@@ -1,0 +1,16 @@
+{
+  "alias": "Legacy Platform Naming",
+  "description": "Automation using legacy platform key instead of trigger",
+  "platform": "state",
+  "entity_id": "binary_sensor.motion",
+  "to": "on",
+  "action": [
+    {
+      "service": "light.turn_on",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    }
+  ],
+  "mode": "single"
+}

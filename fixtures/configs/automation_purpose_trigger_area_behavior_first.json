@@ -1,0 +1,22 @@
+{
+  "alias": "Purpose Trigger Area Behavior First",
+  "description": "Purpose-specific trigger with area_id target and behavior first",
+  "triggers": [
+    {
+      "trigger": "motion.detected",
+      "target": {
+        "area_id": "office"
+      },
+      "behavior": "first"
+    }
+  ],
+  "actions": [
+    {
+      "action": "light.turn_on",
+      "target": {
+        "entity_id": "light.office_ceiling"
+      }
+    }
+  ],
+  "mode": "single"
+}

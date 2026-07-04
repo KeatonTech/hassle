@@ -1,0 +1,195 @@
+{
+  "records": [
+    {
+      "section": "automation_entity_id_derivation",
+      "request": "config id=hassle_skipcond, alias='Skip Cond Probe'",
+      "response": {
+        "resolved_entity_id": "automation.skip_cond_probe"
+      },
+      "note": "FINDING: automation entity_id = slug(alias) (here automation.skip_cond_probe), NOT automation.<id>. The config 'id' surfaces only as attributes.id / registry unique_id. Enumerate by matching attributes.id."
+    },
+    {
+      "section": "skip_condition_default",
+      "request": {
+        "service": "automation.trigger",
+        "data": {
+          "entity_id": "automation.skip_cond_probe"
+        }
+      },
+      "response": {
+        "counter_before": "0",
+        "counter_after": "1",
+        "action_ran": true
+      },
+      "note": "automation.trigger with NO skip_condition -> HA default skip_condition=true -> conditions SKIPPED -> action RAN despite the false condition. Confirms DESIGN \u00a74 quirk."
+    },
+    {
+      "section": "skip_condition_false",
+      "request": {
+        "service": "automation.trigger",
+        "data": {
+          "entity_id": "automation.skip_cond_probe",
+          "skip_condition": false
+        }
+      },
+      "response": {
+        "counter_before": "0",
+        "counter_after": "0",
+        "action_ran": false
+      },
+      "note": "automation.trigger with skip_condition:false -> conditions EVALUATED -> false -> action did NOT run. Hassle must send skip_condition:false to mimic a real trigger (DESIGN \u00a710.4)."
+    },
+    {
+      "section": "trace_list",
+      "kind": "ws",
+      "type": "trace/list",
+      "request": {
+        "type": "trace/list",
+        "domain": "automation",
+        "item_id": "hassle_skipcond"
+      },
+      "response": {
+        "count": 2,
+        "traces": [
+          {
+            "last_step": "action/0",
+            "run_id": "79957469bca39307dad082e71e45dbd1",
+            "state": "stopped",
+            "script_execution": "finished",
+            "timestamp": {
+              "start": "2026-07-03T23:09:40.411924+00:00",
+              "finish": "2026-07-03T23:09:40.412872+00:00"
+            },
+            "domain": "automation",
+            "item_id": "hassle_skipcond",
+            "trigger": null
+          },
+          {
+            "last_step": "condition/0/entity_id/0",
+            "run_id": "c94890ae5aecd97482bdbd8028ff0ef3",
+            "state": "stopped",
+            "script_execution": "failed_conditions",
+            "timestamp": {
+              "start": "2026-07-03T23:09:41.419917+00:00",
+              "finish": "2026-07-03T23:09:41.420068+00:00"
+            },
+            "domain": "automation",
+            "item_id": "hassle_skipcond",
+            "trigger": null
+          }
+        ]
+      },
+      "note": "trace/list by domain(+item_id) -> list of {run_id, timestamp, state, script_execution, ...}."
+    },
+    {
+      "section": "trace_get",
+      "kind": "ws",
+      "type": "trace/get",
+      "request": {
+        "type": "trace/get",
+        "domain": "automation",
+        "item_id": "hassle_skipcond",
+        "run_id": "c94890ae5aecd97482bdbd8028ff0ef3"
+      },
+      "response": {
+        "last_step": "condition/0/entity_id/0",
+        "run_id": "c94890ae5aecd97482bdbd8028ff0ef3",
+        "state": "stopped",
+        "script_execution": "failed_conditions",
+        "timestamp": {
+          "start": "2026-07-03T23:09:41.419917+00:00",
+          "finish": "2026-07-03T23:09:41.420068+00:00"
+        },
+        "domain": "automation",
+        "item_id": "hassle_skipcond",
+        "trigger": null,
+        "trace": {
+          "trigger": [
+            {
+              "path": "trigger",
+              "timestamp": "2026-07-03T23:09:41.419981+00:00",
+              "changed_variables": {
+                "this": {
+                  "entity_id": "automation.skip_cond_probe",
+                  "state": "on",
+                  "attributes": {
+                    "id": "hassle_skipcond",
+                    "last_triggered": "2026-07-03T23:09:40.412080+00:00",
+                    "mode": "single",
+                    "current": 0,
+                    "friendly_name": "Skip Cond Probe"
+                  },
+                  "last_changed": "2026-07-03T23:09:38.901647+00:00",
+                  "last_reported": "2026-07-03T23:09:40.412829+00:00",
+                  "last_updated": "2026-07-03T23:09:40.412829+00:00",
+                  "context": {
+                    "id": "01KWN3XD5VPTMM3RQSJ4R58YFC",
+                    "parent_id": "01KWN3XD5PA6PYMPZH6T0QTV0X",
+                    "user_id": null
+                  }
+                },
+                "trigger": {
+                  "platform": null
+                }
+              }
+            }
+          ],
+          "condition/0": [
+            {
+              "path": "condition/0",
+              "timestamp": "2026-07-03T23:09:41.420011+00:00",
+              "result": {
+                "result": false
+              }
+            }
+          ],
+          "condition/0/entity_id/0": [
+            {
+              "path": "condition/0/entity_id/0",
+              "timestamp": "2026-07-03T23:09:41.420028+00:00",
+              "result": {
+                "result": false,
+                "state": "off",
+                "wanted_state": "on"
+              }
+            }
+          ]
+        },
+        "config": {
+          "id": "hassle_skipcond",
+          "alias": "Skip Cond Probe",
+          "triggers": [
+            {
+              "trigger": "state",
+              "entity_id": "input_boolean.gate",
+              "to": "on"
+            }
+          ],
+          "conditions": [
+            {
+              "condition": "state",
+              "entity_id": "input_boolean.gate",
+              "state": "on"
+            }
+          ],
+          "actions": [
+            {
+              "action": "counter.increment",
+              "target": {
+                "entity_id": "counter.trace_counter"
+              }
+            }
+          ],
+          "mode": "single"
+        },
+        "blueprint_inputs": null,
+        "context": {
+          "id": "01KWN3XE5BSHQY1WE64XBFQ7CY",
+          "parent_id": "01KWN3XE5BQ9NF7N60S2PMF3H8",
+          "user_id": null
+        }
+      },
+      "note": "trace/get REQUIRES domain+item_id+run_id -> full trace: trace steps keyed by path, config, context, trigger, condition results. Admin-only."
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "alias": "Parallel Action",
+  "description": "Demonstrates parallel sequences",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.guest_arrived"
+    }
+  ],
+  "action": [
+    {
+      "parallel": [
+        {
+          "sequence": [
+            {
+              "service": "light.turn_on",
+              "target": {
+                "entity_id": "light.hallway"
+              }
+            }
+          ]
+        },
+        {
+          "sequence": [
+            {
+              "service": "light.turn_on",
+              "target": {
+                "entity_id": "light.living_room"
+              }
+            }
+          ]
+        },
+        {
+          "sequence": [
+            {
+              "service": "script.greet_guest"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "mode": "single"
+}

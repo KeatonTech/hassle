@@ -1,0 +1,6 @@
+{
+  "id": "input_button_test",
+  "name": "Test Button",
+  "icon": "mdi:button-pointer",
+  "device_class": "restart"
+}

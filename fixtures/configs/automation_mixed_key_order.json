@@ -1,0 +1,38 @@
+{
+  "action": [
+    {
+      "delay": "00:00:10"
+    },
+    {
+      "service": "notify.persistent_notification",
+      "data": {
+        "message": "Temperature changed",
+        "title": "Temperature Alert"
+      }
+    },
+    {
+      "service": "light.turn_off",
+      "target": {
+        "entity_id": "light.bedroom"
+      }
+    }
+  ],
+  "trigger": [
+    {
+      "entity_id": "sensor.temperature",
+      "platform": "state",
+      "from": "20",
+      "to": "25"
+    }
+  ],
+  "alias": "Mixed Key Order Example",
+  "description": "Realistic automation with odd key ordering preserved",
+  "mode": "restart",
+  "condition": [
+    {
+      "condition": "state",
+      "entity_id": "input_boolean.automation_active",
+      "state": "on"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "alias": "Calendar Trigger",
+  "description": "Triggers when calendar event starts",
+  "trigger": [
+    {
+      "platform": "calendar",
+      "entity_id": "calendar.holidays",
+      "event": "start"
+    }
+  ],
+  "action": [
+    {
+      "service": "notify.mobile_app",
+      "data": {
+        "message": "Calendar event starting"
+      }
+    }
+  ],
+  "mode": "single"
+}

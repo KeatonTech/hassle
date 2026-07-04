@@ -1,0 +1,22 @@
+{
+  "alias": "Service Call Longhand",
+  "description": "Demonstrates service call with full data structure",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "input_boolean.mode"
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_on",
+      "data": {
+        "entity_id": "light.hallway",
+        "brightness": 200,
+        "color_temp": 370,
+        "transition": 2
+      }
+    }
+  ],
+  "mode": "single"
+}

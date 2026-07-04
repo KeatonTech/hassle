@@ -1,0 +1,18 @@
+{
+  "alias": "Time Pattern Trigger",
+  "description": "Triggers on time pattern",
+  "trigger": [
+    {
+      "platform": "time_pattern",
+      "hours": "/1",
+      "minutes": "0"
+    }
+  ],
+  "action": [
+    {
+      "service": "homeassistant.update_entity",
+      "target": {"entity_id": "sensor.uptime"}
+    }
+  ],
+  "mode": "single"
+}

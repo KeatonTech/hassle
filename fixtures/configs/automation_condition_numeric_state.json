@@ -1,0 +1,26 @@
+{
+  "alias": "Condition Numeric State",
+  "description": "Automation with numeric_state condition",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "sensor.humidity"
+    }
+  ],
+  "condition": [
+    {
+      "condition": "numeric_state",
+      "entity_id": "sensor.humidity",
+      "above": 60
+    }
+  ],
+  "action": [
+    {
+      "service": "switch.turn_on",
+      "target": {
+        "entity_id": "switch.dehumidifier"
+      }
+    }
+  ],
+  "mode": "single"
+}

@@ -1,0 +1,28 @@
+{
+  "alias": "Mode Single",
+  "description": "Automation with mode single - ignores new triggers while running",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.motion"
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_on",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    },
+    {
+      "delay": "00:00:10"
+    },
+    {
+      "service": "light.turn_off",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    }
+  ],
+  "mode": "single"
+}

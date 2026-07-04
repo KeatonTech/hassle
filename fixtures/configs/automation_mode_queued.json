@@ -1,0 +1,29 @@
+{
+  "alias": "Mode Queued",
+  "description": "Automation with mode queued - queues triggers",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.motion"
+    }
+  ],
+  "action": [
+    {
+      "service": "light.turn_on",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    },
+    {
+      "delay": "00:00:30"
+    },
+    {
+      "service": "light.turn_off",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    }
+  ],
+  "mode": "queued",
+  "max": 5
+}

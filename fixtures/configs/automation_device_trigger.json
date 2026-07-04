@@ -1,0 +1,22 @@
+{
+  "alias": "Device Trigger",
+  "description": "Triggers on device event",
+  "trigger": [
+    {
+      "platform": "device",
+      "device_id": "1234567890abcdef",
+      "domain": "zwave",
+      "type": "scene_activation",
+      "subtype": "scene_001"
+    }
+  ],
+  "action": [
+    {
+      "service": "scene.turn_on",
+      "target": {
+        "entity_id": "scene.evening"
+      }
+    }
+  ],
+  "mode": "single"
+}

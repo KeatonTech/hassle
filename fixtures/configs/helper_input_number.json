@@ -1,0 +1,10 @@
+{
+  "id": "input_number_temperature",
+  "name": "Target Temperature",
+  "icon": "mdi:thermometer",
+  "min": 10,
+  "max": 30,
+  "step": 0.5,
+  "unit_of_measurement": "°C",
+  "mode": "slider"
+}

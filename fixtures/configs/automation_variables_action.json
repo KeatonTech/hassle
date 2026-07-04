@@ -1,0 +1,26 @@
+{
+  "alias": "Variables Action",
+  "description": "Demonstrates variables in actions",
+  "trigger": [
+    {
+      "platform": "state",
+      "entity_id": "sensor.temperature"
+    }
+  ],
+  "action": [
+    {
+      "variables": {
+        "temp_value": "{{ states('sensor.temperature') }}",
+        "threshold": "25",
+        "action_name": "cool_down"
+      }
+    },
+    {
+      "service": "notify.mobile_app",
+      "data": {
+        "message": "Temperature is {{ temp_value }}, threshold is {{ threshold }}"
+      }
+    }
+  ],
+  "mode": "single"
+}

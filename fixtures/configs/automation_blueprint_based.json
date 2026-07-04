@@ -1,0 +1,16 @@
+{
+  "id": "bp_motion_light_1",
+  "alias": "Blueprint Based Motion Light",
+  "description": "Automation based on motion light blueprint",
+  "use_blueprint": {
+    "path": "community/motion_activated_light.yaml",
+    "input": {
+      "motion_entity": "binary_sensor.hallway_motion",
+      "light_target": {
+        "entity_id": "light.hallway"
+      },
+      "delay_off": 600,
+      "brightness": 100
+    }
+  }
+}

@@ -1,0 +1,1239 @@
+{
+  "records": [
+    {
+      "section": "ws_handshake",
+      "kind": "ws",
+      "request": {
+        "type": "auth",
+        "access_token": "<long-lived-token>"
+      },
+      "response": {
+        "server_hello": {
+          "type": "auth_required",
+          "ha_version": "2026.2.3"
+        },
+        "auth_result": {
+          "type": "auth_ok",
+          "ha_version": "2026.2.3"
+        }
+      },
+      "note": "WS handshake: server->auth_required(ha_version); client->auth; server->auth_ok."
+    },
+    {
+      "section": "helper_input_boolean_create",
+      "kind": "ws",
+      "type": "input_boolean/create",
+      "request": {
+        "type": "input_boolean/create",
+        "name": "Hassle Flag",
+        "icon": "mdi:flag"
+      },
+      "response": {
+        "id": 1,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "hassle_flag_2",
+          "name": "Hassle Flag",
+          "icon": "mdi:flag"
+        }
+      },
+      "note": "Storage-collection helper create. Response.result.id is the object_id (== entity object_id)."
+    },
+    {
+      "section": "automation_create",
+      "kind": "rest",
+      "method": "POST",
+      "path": "/api/config/automation/config/hassle_auto_demo",
+      "request": {
+        "alias": "Hassle Demo Automation",
+        "description": "created by M0.V harness",
+        "mode": "single",
+        "trigger": [
+          {
+            "platform": "state",
+            "entity_id": "input_boolean.hassle_flag_2",
+            "to": "on"
+          }
+        ],
+        "condition": [],
+        "action": [
+          {
+            "service": "input_boolean.turn_off",
+            "target": {
+              "entity_id": "input_boolean.hassle_flag_2"
+            }
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "content_type": "application/json",
+        "body": {
+          "result": "ok"
+        }
+      },
+      "note": "Create/update automation keyed by id. We SENT singular 'trigger/condition/action/service'."
+    },
+    {
+      "section": "automation_autoreload",
+      "kind": "rest",
+      "method": "GET",
+      "path": "/api/states/automation.hassle_auto_demo",
+      "request": null,
+      "response": {
+        "appeared": false,
+        "state_obj": null
+      },
+      "note": "Entity appears with NO explicit reload call -> POST auto-reloads. attributes.id == config id."
+    },
+    {
+      "section": "automation_read_normalized",
+      "kind": "rest",
+      "method": "GET",
+      "path": "/api/config/automation/config/hassle_auto_demo",
+      "request": null,
+      "response": {
+        "status": 200,
+        "content_type": "application/json",
+        "body": {
+          "id": "hassle_auto_demo",
+          "alias": "Hassle Demo Automation",
+          "description": "created by M0.V harness",
+          "triggers": [
+            {
+              "platform": "state",
+              "entity_id": "input_boolean.hassle_flag_2",
+              "to": "on"
+            }
+          ],
+          "conditions": [],
+          "actions": [
+            {
+              "target": {
+                "entity_id": "input_boolean.hassle_flag_2"
+              },
+              "action": "input_boolean.turn_off"
+            }
+          ],
+          "mode": "single"
+        }
+      },
+      "note": "READ-BACK: HA returns PLURAL 'triggers/conditions/actions' and 'action:' (not 'service:'). This is HA's 2024.10+ schema normalization -- a round-trip (I3) concern."
+    },
+    {
+      "section": "automation_enumerate",
+      "kind": "rest",
+      "method": "GET",
+      "path": "/api/states",
+      "request": null,
+      "response": {
+        "automation_entities": [
+          {
+            "entity_id": "automation.hassle_demo_automation",
+            "state": "on",
+            "attributes": {
+              "id": "hassle_auto_demo",
+              "last_triggered": null,
+              "mode": "single",
+              "current": 0,
+              "friendly_name": "Hassle Demo Automation"
+            }
+          }
+        ]
+      },
+      "note": "Enumerate automations via GET /api/states; read attributes.id (also present: current, last_triggered, mode)."
+    },
+    {
+      "section": "id_vs_unique_id",
+      "kind": "ws",
+      "type": "config/entity_registry/list",
+      "request": {
+        "type": "config/entity_registry/list"
+      },
+      "response": {
+        "automation_registry_entries": [
+          {
+            "area_id": null,
+            "categories": {},
+            "config_entry_id": null,
+            "config_subentry_id": null,
+            "created_at": 1783119967.139193,
+            "device_id": null,
+            "disabled_by": null,
+            "entity_category": null,
+            "entity_id": "automation.hassle_demo_automation",
+            "has_entity_name": false,
+            "hidden_by": null,
+            "icon": null,
+            "id": "f13e702886d3e49fc75b0d9bd207105d",
+            "labels": [],
+            "modified_at": 1783119995.066935,
+            "name": null,
+            "options": {},
+            "original_name": "Hassle Demo Automation",
+            "platform": "automation",
+            "translation_key": null,
+            "unique_id": "hassle_auto_demo"
+          }
+        ]
+      },
+      "note": "Entity registry unique_id == config id for automations. (I2 rationale.)"
+    },
+    {
+      "section": "script_create",
+      "kind": "rest",
+      "method": "POST",
+      "path": "/api/config/script/config/hassle_script_demo",
+      "request": {
+        "alias": "Hassle Demo Script",
+        "mode": "single",
+        "sequence": [
+          {
+            "service": "input_boolean.toggle",
+            "target": {
+              "entity_id": "input_boolean.hassle_flag_2"
+            }
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "content_type": "application/json",
+        "body": {
+          "result": "ok"
+        }
+      },
+      "note": "Scripts keyed by object_id. We SENT 'service' + 'sequence'."
+    },
+    {
+      "section": "script_read_normalized",
+      "kind": "rest",
+      "method": "GET",
+      "path": "/api/config/script/config/hassle_script_demo",
+      "request": null,
+      "response": {
+        "status": 200,
+        "content_type": "application/json",
+        "body": {
+          "alias": "Hassle Demo Script",
+          "mode": "single",
+          "sequence": [
+            {
+              "target": {
+                "entity_id": "input_boolean.hassle_flag_2"
+              },
+              "action": "input_boolean.toggle"
+            }
+          ]
+        }
+      },
+      "note": "Script read-back: 'service' normalized to 'action'; 'sequence' stays 'sequence'."
+    },
+    {
+      "section": "check_config",
+      "kind": "rest",
+      "method": "POST",
+      "path": "/api/config/core/check_config",
+      "request": {},
+      "response": {
+        "status": 200,
+        "content_type": "application/json",
+        "body": {
+          "result": "valid",
+          "errors": null,
+          "warnings": null
+        }
+      },
+      "note": "POST /api/config/core/check_config -> {result: valid|invalid, errors, warnings}."
+    },
+    {
+      "section": "template_render_rest",
+      "kind": "rest",
+      "method": "POST",
+      "path": "/api/template",
+      "request": {
+        "template": "{{ states('input_boolean.hassle_flag_2') }} / {{ 1 + 2 }}"
+      },
+      "response": {
+        "status": 200,
+        "content_type": "text/plain; charset=utf-8",
+        "body": "off / 3"
+      },
+      "note": "POST /api/template renders a Jinja template; returns rendered string (text/plain)."
+    },
+    {
+      "section": "helper_input_boolean_full_cycle",
+      "kind": "ws",
+      "type": "input_boolean/create|list|update|delete",
+      "request": {
+        "create": {
+          "type": "input_boolean/create",
+          "name": "H bool",
+          "icon": "mdi:toggle-switch"
+        },
+        "update": {
+          "type": "input_boolean/update",
+          "input_boolean_id": "h_bool",
+          "name": "H bool 2",
+          "icon": "mdi:flag"
+        },
+        "delete": {
+          "type": "input_boolean/delete",
+          "input_boolean_id": "h_bool"
+        }
+      },
+      "response": {
+        "create": {
+          "id": 3,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_bool",
+            "name": "H bool",
+            "icon": "mdi:toggle-switch"
+          }
+        },
+        "list_first_item": {
+          "id": "hassle_flag",
+          "name": "Hassle Flag",
+          "icon": "mdi:flag"
+        },
+        "list_count": 3,
+        "update": {
+          "id": 5,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_bool",
+            "name": "H bool 2",
+            "icon": "mdi:flag"
+          }
+        },
+        "delete": {
+          "id": 6,
+          "type": "result",
+          "success": true,
+          "result": null
+        }
+      },
+      "note": "input_boolean: create returns result.id; UPDATE and DELETE both key the item as 'input_boolean_id'. list items carry editable:true for storage helpers."
+    },
+    {
+      "section": "helper_input_number_full_cycle",
+      "kind": "ws",
+      "type": "input_number/create|list|update|delete",
+      "request": {
+        "create": {
+          "type": "input_number/create",
+          "name": "H num",
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "mode": "slider"
+        },
+        "update": {
+          "type": "input_number/update",
+          "input_number_id": "h_num",
+          "name": "H num 2",
+          "min": 0,
+          "max": 200,
+          "step": 2,
+          "mode": "box"
+        },
+        "delete": {
+          "type": "input_number/delete",
+          "input_number_id": "h_num"
+        }
+      },
+      "response": {
+        "create": {
+          "id": 7,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_num",
+            "name": "H num",
+            "min": 0.0,
+            "max": 100.0,
+            "step": 1.0,
+            "mode": "slider"
+          }
+        },
+        "list_first_item": {
+          "id": "h_num",
+          "name": "H num",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 1.0,
+          "mode": "slider"
+        },
+        "list_count": 1,
+        "update": {
+          "id": 9,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_num",
+            "name": "H num 2",
+            "min": 0.0,
+            "max": 200.0,
+            "step": 2.0,
+            "mode": "box"
+          }
+        },
+        "delete": {
+          "id": 10,
+          "type": "result",
+          "success": true,
+          "result": null
+        }
+      },
+      "note": "input_number: create returns result.id; UPDATE and DELETE both key the item as 'input_number_id'. list items carry editable:true for storage helpers."
+    },
+    {
+      "section": "helper_input_select_full_cycle",
+      "kind": "ws",
+      "type": "input_select/create|list|update|delete",
+      "request": {
+        "create": {
+          "type": "input_select/create",
+          "name": "H sel",
+          "options": [
+            "a",
+            "b",
+            "c"
+          ]
+        },
+        "update": {
+          "type": "input_select/update",
+          "input_select_id": "h_sel",
+          "name": "H sel 2",
+          "options": [
+            "x",
+            "y"
+          ]
+        },
+        "delete": {
+          "type": "input_select/delete",
+          "input_select_id": "h_sel"
+        }
+      },
+      "response": {
+        "create": {
+          "id": 11,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_sel",
+            "name": "H sel",
+            "options": [
+              "a",
+              "b",
+              "c"
+            ]
+          }
+        },
+        "list_first_item": {
+          "id": "h_sel",
+          "name": "H sel",
+          "options": [
+            "a",
+            "b",
+            "c"
+          ]
+        },
+        "list_count": 1,
+        "update": {
+          "id": 13,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_sel",
+            "name": "H sel 2",
+            "options": [
+              "x",
+              "y"
+            ]
+          }
+        },
+        "delete": {
+          "id": 14,
+          "type": "result",
+          "success": true,
+          "result": null
+        }
+      },
+      "note": "input_select: create returns result.id; UPDATE and DELETE both key the item as 'input_select_id'. list items carry editable:true for storage helpers."
+    },
+    {
+      "section": "helper_input_text_full_cycle",
+      "kind": "ws",
+      "type": "input_text/create|list|update|delete",
+      "request": {
+        "create": {
+          "type": "input_text/create",
+          "name": "H text",
+          "min": 0,
+          "max": 100
+        },
+        "update": {
+          "type": "input_text/update",
+          "input_text_id": "h_text",
+          "name": "H text 2",
+          "min": 1,
+          "max": 50
+        },
+        "delete": {
+          "type": "input_text/delete",
+          "input_text_id": "h_text"
+        }
+      },
+      "response": {
+        "create": {
+          "id": 15,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_text",
+            "name": "H text",
+            "min": 0,
+            "max": 100,
+            "mode": "text"
+          }
+        },
+        "list_first_item": {
+          "id": "h_text",
+          "name": "H text",
+          "min": 0,
+          "max": 100,
+          "mode": "text"
+        },
+        "list_count": 1,
+        "update": {
+          "id": 17,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_text",
+            "name": "H text 2",
+            "min": 1,
+            "max": 50,
+            "mode": "text"
+          }
+        },
+        "delete": {
+          "id": 18,
+          "type": "result",
+          "success": true,
+          "result": null
+        }
+      },
+      "note": "input_text: create returns result.id; UPDATE and DELETE both key the item as 'input_text_id'. list items carry editable:true for storage helpers."
+    },
+    {
+      "section": "helper_input_datetime_full_cycle",
+      "kind": "ws",
+      "type": "input_datetime/create|list|update|delete",
+      "request": {
+        "create": {
+          "type": "input_datetime/create",
+          "name": "H dt",
+          "has_date": true,
+          "has_time": true
+        },
+        "update": {
+          "type": "input_datetime/update",
+          "input_datetime_id": "h_dt",
+          "name": "H dt 2",
+          "has_date": true,
+          "has_time": false
+        },
+        "delete": {
+          "type": "input_datetime/delete",
+          "input_datetime_id": "h_dt"
+        }
+      },
+      "response": {
+        "create": {
+          "id": 19,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_dt",
+            "name": "H dt",
+            "has_date": true,
+            "has_time": true
+          }
+        },
+        "list_first_item": {
+          "id": "h_dt",
+          "name": "H dt",
+          "has_date": true,
+          "has_time": true
+        },
+        "list_count": 1,
+        "update": {
+          "id": 21,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_dt",
+            "name": "H dt 2",
+            "has_date": true,
+            "has_time": false
+          }
+        },
+        "delete": {
+          "id": 22,
+          "type": "result",
+          "success": true,
+          "result": null
+        }
+      },
+      "note": "input_datetime: create returns result.id; UPDATE and DELETE both key the item as 'input_datetime_id'. list items carry editable:true for storage helpers."
+    },
+    {
+      "section": "helper_input_button_full_cycle",
+      "kind": "ws",
+      "type": "input_button/create|list|update|delete",
+      "request": {
+        "create": {
+          "type": "input_button/create",
+          "name": "H btn"
+        },
+        "update": {
+          "type": "input_button/update",
+          "input_button_id": "h_btn",
+          "name": "H btn 2"
+        },
+        "delete": {
+          "type": "input_button/delete",
+          "input_button_id": "h_btn"
+        }
+      },
+      "response": {
+        "create": {
+          "id": 23,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_btn",
+            "name": "H btn"
+          }
+        },
+        "list_first_item": {
+          "id": "h_btn",
+          "name": "H btn"
+        },
+        "list_count": 1,
+        "update": {
+          "id": 25,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_btn",
+            "name": "H btn 2"
+          }
+        },
+        "delete": {
+          "id": 26,
+          "type": "result",
+          "success": true,
+          "result": null
+        }
+      },
+      "note": "input_button: create returns result.id; UPDATE and DELETE both key the item as 'input_button_id'. list items carry editable:true for storage helpers."
+    },
+    {
+      "section": "helper_counter_full_cycle",
+      "kind": "ws",
+      "type": "counter/create|list|update|delete",
+      "request": {
+        "create": {
+          "type": "counter/create",
+          "name": "H counter",
+          "initial": 0,
+          "step": 1,
+          "minimum": 0,
+          "maximum": 10
+        },
+        "update": {
+          "type": "counter/update",
+          "counter_id": "h_counter",
+          "name": "H counter 2",
+          "step": 2,
+          "maximum": 20
+        },
+        "delete": {
+          "type": "counter/delete",
+          "counter_id": "h_counter"
+        }
+      },
+      "response": {
+        "create": {
+          "id": 27,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_counter",
+            "name": "H counter",
+            "initial": 0,
+            "step": 1,
+            "minimum": 0,
+            "maximum": 10,
+            "restore": true
+          }
+        },
+        "list_first_item": {
+          "id": "h_counter",
+          "name": "H counter",
+          "initial": 0,
+          "step": 1,
+          "minimum": 0,
+          "maximum": 10,
+          "restore": true
+        },
+        "list_count": 1,
+        "update": {
+          "id": 29,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_counter",
+            "name": "H counter 2",
+            "step": 2,
+            "maximum": 20,
+            "minimum": null,
+            "initial": 0,
+            "restore": true
+          }
+        },
+        "delete": {
+          "id": 30,
+          "type": "result",
+          "success": true,
+          "result": null
+        }
+      },
+      "note": "counter: create returns result.id; UPDATE and DELETE both key the item as 'counter_id'. list items carry editable:true for storage helpers."
+    },
+    {
+      "section": "helper_timer_full_cycle",
+      "kind": "ws",
+      "type": "timer/create|list|update|delete",
+      "request": {
+        "create": {
+          "type": "timer/create",
+          "name": "H timer",
+          "duration": "00:01:00"
+        },
+        "update": {
+          "type": "timer/update",
+          "timer_id": "h_timer",
+          "name": "H timer 2",
+          "duration": "00:05:00"
+        },
+        "delete": {
+          "type": "timer/delete",
+          "timer_id": "h_timer"
+        }
+      },
+      "response": {
+        "create": {
+          "id": 31,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_timer",
+            "name": "H timer",
+            "duration": "0:01:00",
+            "restore": false
+          }
+        },
+        "list_first_item": {
+          "id": "h_timer",
+          "name": "H timer",
+          "duration": "0:01:00",
+          "restore": false
+        },
+        "list_count": 1,
+        "update": {
+          "id": 33,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_timer",
+            "name": "H timer 2",
+            "duration": "0:05:00",
+            "restore": false
+          }
+        },
+        "delete": {
+          "id": 34,
+          "type": "result",
+          "success": true,
+          "result": null
+        }
+      },
+      "note": "timer: create returns result.id; UPDATE and DELETE both key the item as 'timer_id'. list items carry editable:true for storage helpers."
+    },
+    {
+      "section": "helper_schedule_full_cycle",
+      "kind": "ws",
+      "type": "schedule/create|list|update|delete",
+      "request": {
+        "create": {
+          "type": "schedule/create",
+          "name": "H schedule",
+          "monday": [
+            {
+              "from": "08:00:00",
+              "to": "17:00:00"
+            }
+          ]
+        },
+        "update": {
+          "type": "schedule/update",
+          "schedule_id": "h_schedule",
+          "name": "H schedule 2",
+          "tuesday": [
+            {
+              "from": "09:00:00",
+              "to": "12:00:00"
+            }
+          ]
+        },
+        "delete": {
+          "type": "schedule/delete",
+          "schedule_id": "h_schedule"
+        }
+      },
+      "response": {
+        "create": {
+          "id": 35,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_schedule",
+            "name": "H schedule",
+            "monday": [
+              {
+                "from": "08:00:00",
+                "to": "17:00:00"
+              }
+            ],
+            "tuesday": [],
+            "friday": [],
+            "saturday": [],
+            "thursday": [],
+            "sunday": [],
+            "wednesday": []
+          }
+        },
+        "list_first_item": {
+          "id": "h_schedule",
+          "name": "H schedule",
+          "monday": [
+            {
+              "from": "08:00:00",
+              "to": "17:00:00"
+            }
+          ],
+          "tuesday": [],
+          "friday": [],
+          "saturday": [],
+          "thursday": [],
+          "sunday": [],
+          "wednesday": []
+        },
+        "list_count": 1,
+        "update": {
+          "id": 37,
+          "type": "result",
+          "success": true,
+          "result": {
+            "id": "h_schedule",
+            "name": "H schedule 2",
+            "tuesday": [
+              {
+                "from": "09:00:00",
+                "to": "12:00:00"
+              }
+            ],
+            "friday": [],
+            "monday": [],
+            "saturday": [],
+            "thursday": [],
+            "sunday": [],
+            "wednesday": []
+          }
+        },
+        "delete": {
+          "id": 38,
+          "type": "result",
+          "success": true,
+          "result": null
+        }
+      },
+      "note": "schedule: create returns result.id; UPDATE and DELETE both key the item as 'schedule_id'. list items carry editable:true for storage helpers."
+    },
+    {
+      "section": "registry_entity_registry",
+      "kind": "ws",
+      "type": "config/entity_registry/list",
+      "request": {
+        "type": "config/entity_registry/list"
+      },
+      "response": {
+        "count": 19,
+        "sample": [
+          {
+            "area_id": null,
+            "categories": {},
+            "config_entry_id": "01KWN3BPRZZF3ZQX00KH9WWZ6J",
+            "config_subentry_id": null,
+            "created_at": 1783119600.418939,
+            "device_id": "665d9ff158e33d61835d0fe3d932b058",
+            "disabled_by": "integration",
+            "entity_category": "diagnostic",
+            "entity_id": "binary_sensor.sun_solar_rising",
+            "has_entity_name": true,
+            "hidden_by": null,
+            "icon": null,
+            "id": "af463ac391b39b0f2e92c47ac04eeab3",
+            "labels": [],
+            "modified_at": 1783119600.41908,
+            "name": null,
+            "options": {},
+            "original_name": "Solar rising",
+            "platform": "sun",
+            "translation_key": "solar_rising",
+            "unique_id": "01KWN3BPRZZF3ZQX00KH9WWZ6J-solar_rising"
+          },
+          {
+            "area_id": null,
+            "categories": {},
+            "config_entry_id": "01KWN3BPRZZF3ZQX00KH9WWZ6J",
+            "config_subentry_id": null,
+            "created_at": 1783119600.419747,
+            "device_id": "665d9ff158e33d61835d0fe3d932b058",
+            "disabled_by": null,
+            "entity_category": "diagnostic",
+            "entity_id": "sensor.sun_next_dawn",
+            "has_entity_name": true,
+            "hidden_by": null,
+            "icon": null,
+            "id": "013557e598e449c7b0d4924e4e5d10a4",
+            "labels": [],
+            "modified_at": 1783119600.419893,
+            "name": null,
+            "options": {},
+            "original_name": "Next dawn",
+            "platform": "sun",
+            "translation_key": "next_dawn",
+            "unique_id": "01KWN3BPRZZF3ZQX00KH9WWZ6J-next_dawn"
+          },
+          {
+            "area_id": null,
+            "categories": {},
+            "config_entry_id": "01KWN3BPRZZF3ZQX00KH9WWZ6J",
+            "config_subentry_id": null,
+            "created_at": 1783119600.420181,
+            "device_id": "665d9ff158e33d61835d0fe3d932b058",
+            "disabled_by": null,
+            "entity_category": "diagnostic",
+            "entity_id": "sensor.sun_next_dusk",
+            "has_entity_name": true,
+            "hidden_by": null,
+            "icon": null,
+            "id": "56f2c02608514ab35175d1838ea6eb88",
+            "labels": [],
+            "modified_at": 1783119600.42022,
+            "name": null,
+            "options": {},
+            "original_name": "Next dusk",
+            "platform": "sun",
+            "translation_key": "next_dusk",
+            "unique_id": "01KWN3BPRZZF3ZQX00KH9WWZ6J-next_dusk"
+          }
+        ]
+      },
+      "note": "config/entity_registry/list: read-only registry list (Hassle v1)."
+    },
+    {
+      "section": "registry_device_registry",
+      "kind": "ws",
+      "type": "config/device_registry/list",
+      "request": {
+        "type": "config/device_registry/list"
+      },
+      "response": {
+        "count": 2,
+        "sample": [
+          {
+            "area_id": null,
+            "configuration_url": null,
+            "config_entries": [
+              "01KWN3BPRZZF3ZQX00KH9WWZ6J"
+            ],
+            "config_entries_subentries": {
+              "01KWN3BPRZZF3ZQX00KH9WWZ6J": [
+                null
+              ]
+            },
+            "connections": [],
+            "created_at": 1783119600.418772,
+            "disabled_by": null,
+            "entry_type": "service",
+            "hw_version": null,
+            "id": "665d9ff158e33d61835d0fe3d932b058",
+            "identifiers": [
+              [
+                "sun",
+                "01KWN3BPRZZF3ZQX00KH9WWZ6J"
+              ]
+            ],
+            "labels": [],
+            "manufacturer": null,
+            "model": null,
+            "model_id": null,
+            "modified_at": 1783119600.418818,
+            "name_by_user": null,
+            "name": "Sun",
+            "primary_config_entry": "01KWN3BPRZZF3ZQX00KH9WWZ6J",
+            "serial_number": null,
+            "sw_version": null,
+            "via_device_id": null
+          },
+          {
+            "area_id": null,
+            "configuration_url": "homeassistant://config/backup",
+            "config_entries": [
+              "01KWN3BPXTBNBE9A6HPWCT33EK"
+            ],
+            "config_entries_subentries": {
+              "01KWN3BPXTBNBE9A6HPWCT33EK": [
+                null
+              ]
+            },
+            "connections": [],
+            "created_at": 1783119600.575814,
+            "disabled_by": null,
+            "entry_type": "service",
+            "hw_version": null,
+            "id": "e7ded57acf106f4c654e9b94da515971",
+            "identifiers": [
+              [
+                "backup",
+                "backup_manager"
+              ]
+            ],
+            "labels": [],
+            "manufacturer": "Home Assistant",
+            "model": "Home Assistant Backup",
+            "model_id": null,
+            "modified_at": 1783119600.575859,
+            "name_by_user": null,
+            "name": "Backup",
+            "primary_config_entry": "01KWN3BPXTBNBE9A6HPWCT33EK",
+            "serial_number": null,
+            "sw_version": "2026.2.3",
+            "via_device_id": null
+          }
+        ]
+      },
+      "note": "config/device_registry/list: read-only registry list (Hassle v1)."
+    },
+    {
+      "section": "registry_area_registry",
+      "kind": "ws",
+      "type": "config/area_registry/list",
+      "request": {
+        "type": "config/area_registry/list"
+      },
+      "response": {
+        "count": 3,
+        "sample": [
+          {
+            "aliases": [],
+            "area_id": "living_room",
+            "floor_id": null,
+            "humidity_entity_id": null,
+            "icon": "mdi:sofa",
+            "labels": [],
+            "name": "Living Room",
+            "picture": null,
+            "temperature_entity_id": null,
+            "created_at": 1783119627.148377,
+            "modified_at": 1783119627.148378
+          },
+          {
+            "aliases": [],
+            "area_id": "kitchen",
+            "floor_id": null,
+            "humidity_entity_id": null,
+            "icon": "mdi:stove",
+            "labels": [],
+            "name": "Kitchen",
+            "picture": null,
+            "temperature_entity_id": null,
+            "created_at": 1783119627.148439,
+            "modified_at": 1783119627.14844
+          },
+          {
+            "aliases": [],
+            "area_id": "bedroom",
+            "floor_id": null,
+            "humidity_entity_id": null,
+            "icon": "mdi:bed",
+            "labels": [],
+            "name": "Bedroom",
+            "picture": null,
+            "temperature_entity_id": null,
+            "created_at": 1783119627.148464,
+            "modified_at": 1783119627.148464
+          }
+        ]
+      },
+      "note": "config/area_registry/list: read-only registry list (Hassle v1)."
+    },
+    {
+      "section": "registry_label_registry",
+      "kind": "ws",
+      "type": "config/label_registry/list",
+      "request": {
+        "type": "config/label_registry/list"
+      },
+      "response": {
+        "count": 0,
+        "sample": []
+      },
+      "note": "config/label_registry/list: read-only registry list (Hassle v1)."
+    },
+    {
+      "section": "get_services",
+      "kind": "ws",
+      "type": "get_services",
+      "request": {
+        "type": "get_services"
+      },
+      "response": {
+        "domain_count": 20,
+        "domains_sample": [
+          "automation",
+          "backup",
+          "counter",
+          "frontend",
+          "homeassistant",
+          "input_boolean",
+          "input_button",
+          "input_datetime",
+          "input_number",
+          "input_select",
+          "input_text",
+          "logger",
+          "persistent_notification",
+          "person",
+          "scene"
+        ],
+        "input_boolean_services": {
+          "reload": {
+            "fields": {}
+          },
+          "turn_on": {
+            "fields": {},
+            "target": {
+              "entity": [
+                {
+                  "domain": [
+                    "input_boolean"
+                  ]
+                }
+              ]
+            }
+          },
+          "turn_off": {
+            "fields": {},
+            "target": {
+              "entity": [
+                {
+                  "domain": [
+                    "input_boolean"
+                  ]
+                }
+              ]
+            }
+          },
+          "toggle": {
+            "fields": {},
+            "target": {
+              "entity": [
+                {
+                  "domain": [
+                    "input_boolean"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "light_turn_on_schema_present": false
+      },
+      "note": "get_services -> {domain: {service: {name, description, fields, target}}}. Field schemas drive stubs/validation."
+    },
+    {
+      "section": "validate_config",
+      "kind": "ws",
+      "type": "validate_config",
+      "request": {
+        "good": {
+          "trigger": "...",
+          "condition": "...",
+          "action": "..."
+        },
+        "bad": {
+          "trigger": [
+            {
+              "platform": "state"
+            }
+          ],
+          "condition": [
+            {
+              "condition": "nonsense"
+            }
+          ],
+          "action": [
+            {
+              "not_a_real_key": true
+            }
+          ]
+        }
+      },
+      "response": {
+        "good": {
+          "id": 44,
+          "type": "result",
+          "success": false,
+          "error": {
+            "code": "invalid_format",
+            "message": "extra keys not allowed @ data['action']. Got [{'service': 'input_boolean.toggle', 'target': {'entity_id': 'input_boolean.hassle_flag_2'}}]\nextra keys not allowed @ data['condition']. Got [{'condition': 'state', 'entity_id': 'input_boolean.hassle_flag_2', 'state': 'on'}]\nextra keys not allowed @ data['trigger']. Got [{'platform': 'state', 'entity_id': 'input_boolean.hassle_flag_2'}]"
+          }
+        },
+        "bad": {
+          "id": 45,
+          "type": "result",
+          "success": false,
+          "error": {
+            "code": "invalid_format",
+            "message": "extra keys not allowed @ data['action']. Got [{'not_a_real_key': True}]\nextra keys not allowed @ data['condition']. Got [{'condition': 'nonsense'}]\nextra keys not allowed @ data['trigger']. Got [{'platform': 'state'}]"
+          }
+        }
+      },
+      "note": "validate_config returns {trigger:{valid,error}, condition:{...}, action:{...}} per block."
+    }
+  ],
+  "ws_object_id_note": null,
+  "automation_id": "hassle_auto_demo",
+  "script_id": "hassle_script_demo"
+}
