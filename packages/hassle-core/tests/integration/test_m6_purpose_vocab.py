@@ -20,9 +20,15 @@ from __future__ import annotations
 import pytest
 
 from hassle.backend import DirectBackend
+from hassle.backend.version import parse_ha_version
 from hassle.ir import parse, serialize
 from hassle.ir.canonical import sha256_hash
 from hassle.registry.snapshot import PurposeVocabulary
+
+
+def _is_2026_7_or_newer(ha: DirectBackend) -> bool:
+    parsed = parse_ha_version(ha.ha_version)
+    return parsed is not None and parsed >= (2026, 7, 0)
 
 
 def test_purpose_vocabulary_enumeration_shape(ha: DirectBackend) -> None:
@@ -31,6 +37,12 @@ def test_purpose_vocabulary_enumeration_shape(ha: DirectBackend) -> None:
     # Every enumerated type is a namespaced `<domain>.<event>` string (§4).
     for type_string in [*vocab.triggers, *vocab.conditions]:
         assert "." in type_string, f"purpose type {type_string!r} is not namespaced"
+    # On 2026.7+ the vocabulary MUST be populated — this is the headline M6
+    # deliverable, and CI (stable/dev) is where it is really exercised. Asserting
+    # non-empty here (rather than skip-on-empty) keeps the check falsifiable: a
+    # broken enumeration fails CI instead of passing vacuously.
+    if _is_2026_7_or_newer(ha):
+        assert vocab.triggers, "expected a non-empty purpose-trigger vocabulary on HA >= 2026.7"
 
 
 def test_registry_snapshot_uses_enumerated_vocabulary(ha: DirectBackend) -> None:

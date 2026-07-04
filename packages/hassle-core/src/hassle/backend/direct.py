@@ -31,6 +31,7 @@ from types import TracebackType
 from typing import Any, cast
 
 from hassle.backend.client import HaClient
+from hassle.backend.errors import HaApiError
 from hassle.backend.version import version_warning
 from hassle.ir.keys import HELPER_DOMAINS, OBJECT_KINDS
 from hassle.registry.snapshot import PurposeVocabulary, RegistrySnapshot
@@ -70,9 +71,15 @@ class DirectBackend:
 
     def __enter__(self) -> DirectBackend:
         # Eagerly validate auth + capture the HA version, like `hassle login`
-        # (DESIGN §4): a bad token surfaces here as HaAuthError.
-        config: dict[str, Any] = self._run(self._client.rest_get("/api/config"))
-        self._ha_version = str(config.get("version", ""))
+        # (DESIGN §4): a bad token surfaces here as HaAuthError. If that probe
+        # fails, __exit__ is never called, so tear down the loop thread + session
+        # here rather than leak them on the very failure this probe exists to catch.
+        try:
+            config: dict[str, Any] = self._run(self._client.rest_get("/api/config"))
+            self._ha_version = str(config.get("version", ""))
+        except BaseException:
+            self.close()
+            raise
         return self
 
     def __exit__(
@@ -289,9 +296,15 @@ class DirectBackend:
         return PurposeVocabulary(triggers=triggers, conditions=conditions)
 
     async def _subscribe_keys(self, command: str) -> list[str]:
+        # Swallow ONLY "command not supported" (HA older than 2026.7 rejects the
+        # subscription with success:false -> HaApiError): that legitimately means
+        # "no purpose vocabulary". A connection/timeout/envelope error must
+        # propagate, so a broken enumeration on real 2026.7 fails loudly instead
+        # of masquerading as an empty vocabulary (which would let CI's purpose-
+        # vocab verification pass vacuously).
         try:
             event = await self._client.ws_subscribe_first_event(command)
-        except Exception:
+        except HaApiError:
             return []
         if not isinstance(event, dict):
             return []

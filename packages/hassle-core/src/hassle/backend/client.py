@@ -34,6 +34,15 @@ _RETRYABLE = (
     asyncio.TimeoutError,
 )
 
+# Errors `ws.send_json` raises when the socket is already gone. A failure here
+# means the command never reached HA, so a single reconnect+resend is safe even
+# for non-idempotent writes.
+_WS_SEND_FAILURES = (
+    ConnectionResetError,
+    aiohttp.ClientError,
+    RuntimeError,
+)
+
 
 class HaClient:
     """Async transport to one HA instance (REST + WS)."""
@@ -195,7 +204,16 @@ class HaClient:
         raise HaConnectionError(f"could not open the HA WebSocket ({last_exc}).")
 
     async def _ws_recv(self, ws: aiohttp.ClientWebSocketResponse) -> dict[str, Any]:
-        msg = await asyncio.wait_for(ws.receive(), timeout=self._timeout.total)
+        try:
+            msg = await asyncio.wait_for(ws.receive(), timeout=self._timeout.total)
+        except TimeoutError as err:
+            # A wedged instance that accepted a command but never replies: surface
+            # a styled connection error (R6), not a bare TimeoutError.
+            raise HaConnectionError(
+                f"Home Assistant did not respond on the WebSocket within "
+                f"{self._timeout.total}s. Fix: check that the instance is healthy "
+                "and reachable."
+            ) from err
         if msg.type in (
             aiohttp.WSMsgType.CLOSE,
             aiohttp.WSMsgType.CLOSING,
@@ -218,22 +236,29 @@ class HaClient:
     async def ws_command(self, type: str, **payload: Any) -> Any:
         """Send a WS command and return its ``result`` (raising on failure).
 
-        Reconnects and retries once if the socket was dropped between calls
-        (a common case for a CLI that opens the client, idles, then acts).
+        A reconnect+resend happens **only when the send itself fails** on a stale
+        socket (the command never reached HA, so resending is safe). If the socket
+        drops *after* the send — while awaiting the result — the error propagates
+        without resending: HA may already have processed the command, and a
+        non-idempotent helper `create` must never be double-applied.
         """
         async with self._ws_lock:
-            for attempt in range(2):
+            ws = await self._ensure_ws()
+            msg_id = self._next_id()
+            try:
+                await ws.send_json({"id": msg_id, "type": type, **payload})
+            except _WS_SEND_FAILURES:
+                # Socket looked open but the write failed: reconnect and send once
+                # more (the first attempt never landed on HA).
+                self._ws = None
                 ws = await self._ensure_ws()
                 msg_id = self._next_id()
                 try:
                     await ws.send_json({"id": msg_id, "type": type, **payload})
-                    return await self._await_result(ws, msg_id)
-                except HaConnectionError:
+                except _WS_SEND_FAILURES as err:
                     self._ws = None
-                    if attempt == 0:
-                        continue
-                    raise
-        raise HaConnectionError("unreachable")
+                    raise HaConnectionError(f"could not send WS command {type!r}: {err}") from err
+            return await self._await_result(ws, msg_id)
 
     async def _await_result(self, ws: aiohttp.ClientWebSocketResponse, msg_id: int) -> Any:
         while True:
