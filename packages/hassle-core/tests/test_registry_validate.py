@@ -312,6 +312,66 @@ def a():
     )
 
 
+# --- coordinator fix-forward: template-valued target strings must still be
+# scanned for embedded Jinja entity refs, not just exempted from literal-id
+# validation. `_is_template_string` correctly stops a placeholder like
+# `{{ repeat.item }}` from being treated as a literal id, but a template
+# string that actually calls `states(...)` (e.g. inside a `target:` block)
+# must still reach `_extract_entity_ids_from_jinja` -- the same scan `data`/
+# `service_data` values already get.
+
+
+def test_unknown_entity_inside_template_valued_target_nested_in_if_then(
+    tmp_path: Path, snapshot: RegistrySnapshot
+) -> None:
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, if_then, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with if_then(state("sensor.temperature").is_("hot")):
+        service(
+            "light.turn_on",
+            target={"entity_id": "{{ states('sensor.definitely_missing') }}"},
+        )
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert any(
+        f.code == "unknown-entity" and "sensor.definitely_missing" in f.message
+        for f in findings
+    )
+
+
+def test_repeat_for_each_placeholder_still_yields_zero_findings(
+    tmp_path: Path, snapshot: RegistrySnapshot
+) -> None:
+    """No regression on the placeholder case that motivated `_is_template_string`
+    in the first place: `{{ repeat.item }}` must never be treated as a literal
+    entity_id, and it has no embedded `states(...)`-style call to scan either,
+    so it must still yield zero findings.
+    """
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, repeat_for_each, service, state, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.hall_motion").to("on"))
+    with repeat_for_each(["light.hallway", "light.kitchen"]):
+        service("light.turn_on", target={"entity_id": "{{ repeat.item }}"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert findings == [], f"unexpected findings on repeat_for_each placeholder: {findings}"
+
+
 # --- milestone test 2: did-you-mean -----------------------------------------
 
 
