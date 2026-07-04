@@ -1,0 +1,28 @@
+{
+  "alias": "Purpose Trigger Entity Target",
+  "description": "Purpose-specific trigger with entity_id target and for_ duration",
+  "triggers": [
+    {
+      "trigger": "motion.detected",
+      "target": {
+        "entity_id": "binary_sensor.hall_motion"
+      },
+      "options": {
+        "for": {
+          "hours": 0,
+          "minutes": 5,
+          "seconds": 0
+        }
+      }
+    }
+  ],
+  "actions": [
+    {
+      "action": "light.turn_on",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    }
+  ],
+  "mode": "single"
+}

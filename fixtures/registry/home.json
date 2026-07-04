@@ -177,6 +177,10 @@
     {"label_id": "security", "name": "Security"},
     {"label_id": "work", "name": "Work"}
   ],
+  "floors": [
+    {"floor_id": "upstairs", "name": "Upstairs", "level": 1, "icon": "mdi:stairs-up", "aliases": []},
+    {"floor_id": "downstairs", "name": "Downstairs", "level": 0, "icon": "mdi:stairs-down", "aliases": []}
+  ],
   "devices": [
     {"device_id": "device_light_1", "name": "Hallway Light", "area_id": "hallway"},
     {"device_id": "device_light_2", "name": "Living Room Light", "area_id": "living_room"},
@@ -385,5 +389,33 @@
         "fields": {"skip_condition": {"type": "boolean", "description": "Skip conditions", "example": false}}
       }
     }
+  },
+  "purpose_vocabulary": {
+    "_comment": "Enumerated purpose-specific trigger/condition types (HA 2026.7+). Shape provisional — M6 will capture the real WS API enumeration (MILESTONES M6 test 8). Contains all types used by M0.1 fixtures plus realistic extensions.",
+    "triggers": [
+      "motion.detected",
+      "motion.cleared",
+      "opening.opened",
+      "opening.closed",
+      "battery.became_low",
+      "battery.no_longer_low",
+      "vacuum.returned_to_dock",
+      "vacuum.left_dock",
+      "schedule.block_started",
+      "schedule.block_ended",
+      "update.became_available",
+      "update.installed",
+      "door.opened",
+      "door.closed",
+      "water_leak.detected"
+    ],
+    "conditions": [
+      "climate.is_target_temperature",
+      "climate.heating",
+      "climate.cooling",
+      "device.battery_level",
+      "device.motion_detected",
+      "schedule.is_active"
+    ]
   }
 }

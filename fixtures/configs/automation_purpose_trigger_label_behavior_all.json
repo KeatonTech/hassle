@@ -1,0 +1,22 @@
+{
+  "alias": "Purpose Trigger Label Behavior All",
+  "description": "Purpose-specific trigger with label_id target and behavior all",
+  "triggers": [
+    {
+      "trigger": "opening.opened",
+      "target": {
+        "label_id": "security"
+      },
+      "behavior": "all"
+    }
+  ],
+  "actions": [
+    {
+      "action": "siren.turn_on",
+      "target": {
+        "entity_id": "siren.garage_alarm"
+      }
+    }
+  ],
+  "mode": "single"
+}

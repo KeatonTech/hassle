@@ -109,4 +109,15 @@ This file documents the source and purpose of each fixture in the corpus. All fi
 - **Scripts:** basic, fields/parameters, mode: queued
 - **Real-world:** legacy platform key naming, mixed key order preservation, trigger_id + trigger_variables
 
+## Purpose-Specific Triggers and Conditions (M0.1 addendum)
+
+| Fixture | Source | Construct |
+|---------|--------|-----------|
+| automation_purpose_trigger_entity_target.json | Shape from https://www.home-assistant.io/triggers/motion.detected/; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose trigger with entity_id target and for_ duration |
+| automation_purpose_trigger_area_behavior_first.json | Shape from https://www.home-assistant.io/triggers/motion.detected/ and https://www.home-assistant.io/blog/2026/07/01/release-20267/; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose trigger with area_id target and behavior first |
+| automation_purpose_trigger_label_behavior_all.json | Shape from https://www.home-assistant.io/blog/2026/07/01/release-20267/; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose trigger with label_id target and behavior all |
+| automation_purpose_trigger_floor_device.json | Shape from https://www.home-assistant.io/blog/2026/07/01/release-20267/; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose triggers with floor_id and device_id targets |
+| automation_purpose_condition.json | Shape from https://www.home-assistant.io/blog/2026/07/01/release-20267/; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose-specific condition (climate.is_target_temperature) |
+| automation_purpose_trigger_renamed_legacy_key.json | Real-world preserved broken config; battery.low is pre-2026.7 key renamed to battery.became_low without migration; M3 will flag with rename hint; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose trigger using deprecated/renamed pre-2026.7 key that still stores and deserializes but is no longer valid for new automations |
+
 All fixtures are valid JSON per Home Assistant's schema as of July 2026 and exercise the full M0 construct checklist.

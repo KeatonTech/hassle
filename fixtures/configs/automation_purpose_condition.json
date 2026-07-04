@@ -1,0 +1,28 @@
+{
+  "alias": "Purpose-Specific Condition",
+  "description": "Automation with classic state trigger and purpose-specific condition",
+  "triggers": [
+    {
+      "platform": "state",
+      "entity_id": "binary_sensor.living_room_motion",
+      "to": "on"
+    }
+  ],
+  "conditions": [
+    {
+      "condition": "climate.is_target_temperature",
+      "target": {
+        "entity_id": "climate.living_room"
+      }
+    }
+  ],
+  "actions": [
+    {
+      "action": "light.turn_on",
+      "target": {
+        "entity_id": "light.living_room"
+      }
+    }
+  ],
+  "mode": "single"
+}
