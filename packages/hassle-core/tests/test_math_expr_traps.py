@@ -46,3 +46,23 @@ def test_stdlib_math_pi_plain_constant_folds_and_compiles_fine() -> None:
     x = var("x")
     result = x * math.pi
     assert result.to_template() == f"{{{{ x * {math.pi!r} }}}}"
+
+
+def test_builtin_round_on_runtime_expr_raises_teaching_error() -> None:
+    # round(x) calls __round__, same class of mistake as math.cos(x) calling
+    # __float__ -- both are stdlib functions reaching for a Python numeric
+    # value a TemplateExpr does not have at compile time.
+    x = var("x")
+    with pytest.raises(CompileError) as excinfo:
+        round(x)
+    message = str(excinfo.value)
+    assert "round(" in message or "__round__" in message
+    assert "hassle.compiler.math_expr" in message or "round_(" in message
+
+
+def test_stdlib_math_trunc_on_runtime_expr_raises_teaching_error() -> None:
+    x = var("x")
+    with pytest.raises(CompileError) as excinfo:
+        math.trunc(x)
+    message = str(excinfo.value)
+    assert "trunc(" in message or "__trunc__" in message
