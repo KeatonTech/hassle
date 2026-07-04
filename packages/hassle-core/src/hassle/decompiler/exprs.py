@@ -244,6 +244,7 @@ def _trig_numeric_state(body: dict[str, Any]) -> str | None:
         "trigger",
         "platform",
         "entity_id",
+        "attribute",
         "above",
         "below",
         "value_template",
@@ -258,7 +259,7 @@ def _trig_numeric_state(body: dict[str, Any]) -> str | None:
     if not isinstance(entity_id, str):
         return None
     parts = [repr(entity_id)]
-    for key in ("above", "below", "value_template"):
+    for key in ("attribute", "above", "below", "value_template"):
         if key in body:
             parts.append(f"{key}={render_literal(body[key])}")
     call = f"numeric_state({', '.join(parts)})"
@@ -485,11 +486,11 @@ def _cond_state(body: dict[str, Any]) -> str | None:
 
 
 def _cond_numeric_state(body: dict[str, Any]) -> str | None:
-    known = {"condition", "entity_id", "above", "below", "value_template"}
+    known = {"condition", "entity_id", "attribute", "above", "below", "value_template"}
     if not set(body) <= known or "entity_id" not in body:
         return None
     parts = [repr(body["entity_id"])]
-    for key in ("above", "below", "value_template"):
+    for key in ("attribute", "above", "below", "value_template"):
         if key in body:
             parts.append(f"{key}={render_literal(body[key])}")
     return f"numeric_state({', '.join(parts)})"
