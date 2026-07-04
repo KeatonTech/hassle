@@ -1,0 +1,26 @@
+{
+  "automation:weird_device_trigger": {
+    "id": "weird_device_trigger",
+    "alias": "Weird device trigger thing",
+    "triggers": [
+      {
+        "platform": "device",
+        "device_id": "abc123",
+        "type": "turned_on"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "device",
+        "device_id": "abc123",
+        "type": "is_on"
+      }
+    ],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "entity_id": "light.hallway"
+      }
+    ]
+  }
+}

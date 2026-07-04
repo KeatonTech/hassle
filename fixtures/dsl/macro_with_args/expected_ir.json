@@ -1,0 +1,52 @@
+{
+  "automation:alert": {
+    "id": "alert",
+    "alias": "Alert flash",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.alarm",
+        "to": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "data": {
+          "entity_id": "light.hallway"
+        }
+      },
+      {
+        "action": "light.turn_off",
+        "data": {
+          "entity_id": "light.hallway"
+        }
+      },
+      {
+        "action": "light.turn_on",
+        "data": {
+          "entity_id": "light.hallway"
+        }
+      },
+      {
+        "action": "light.turn_off",
+        "data": {
+          "entity_id": "light.hallway"
+        }
+      },
+      {
+        "action": "light.turn_on",
+        "data": {
+          "entity_id": "light.hallway"
+        }
+      },
+      {
+        "action": "light.turn_off",
+        "data": {
+          "entity_id": "light.hallway"
+        }
+      }
+    ]
+  }
+}
