@@ -7,28 +7,20 @@ an :class:`EntityRef` usable as an entity id wherever the DSL expects one
 (triggers, templates, service calls) -- the "import-and-reference pattern"
 (DESIGN §5.7: "referenced by import elsewhere").
 
-**Scope note (contract gap, reported to the orchestrator/human):** this module
-builds the ``HelperConfig`` objects correctly (:func:`declared_helpers` returns
-everything declared so far in the process), but nothing here wires them into
-``CompileResult.objects`` -- ``compile_bundle``/``compile_registered`` (in the
-off-limits ``bundle.py``) only drain ``registry.Registry`` (automations and
-scripts, "run a function, record trigger/condition/action calls into it").
-A helper is not function-shaped: it is a plain declarative object, so it does
-not fit that model, and there is no seam today to add a second object stream
-into the same ``CompileResult`` without editing ``bundle.py``'s compile loop
-(and, to register a non-function object at all, ``registry.py``). See
-``raw.py``'s module docstring and the final report for the exact minimal
-change needed. Until that lands, a bundle that calls ``input_boolean(...)`` at
-module scope will have the helper *object* built correctly by this module, but
-it will NOT appear in ``compile_bundle(...).objects`` -- only in
-:func:`declared_helpers` (useful for this module's own unit tests, and for
-whatever wires the gap shut later).
+**Registration (§12 fix, M1 integration):** each constructor registers the
+built :class:`HelperConfig` into the active bundle registry via
+``Registry.add_object`` (registry.py), so ``compile_bundle`` lands it in
+``CompileResult.objects`` under ``"<domain>:<id>"`` (bundle.py drains the
+prebuilt stream alongside the function-shaped automations/scripts). The
+process-wide :func:`declared_helpers` list is retained for this module's own
+unit tests and is reset per compile by ``fresh()``.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from hassle_core.compiler.spans import capture_span
 from hassle_core.ir import HELPER_DOMAINS
 from hassle_core.ir.models import HelperConfig
 
@@ -80,6 +72,12 @@ def _declare_helper(domain: str, id: str, **fields: Any) -> EntityRef:
     helper = HelperConfig.model_validate(body)
     helper.attach_domain(domain)
     _DECLARED.append(helper)
+    # §12 registration path: also register into the active bundle registry so the
+    # compiler lands this helper in CompileResult.objects (bundle.py drains it).
+    # Imported lazily to avoid a registry<->helpers import cycle at module load.
+    from hassle_core.compiler.registry import current_registry
+
+    current_registry().add_object(helper, capture_span(depth=1))
     return EntityRef(domain, id)
 
 

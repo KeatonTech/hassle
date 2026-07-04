@@ -1,0 +1,13 @@
+{
+  "automation:hall_motion_blueprint": {
+    "id": "hall_motion_blueprint",
+    "use_blueprint": {
+      "path": "hassle/motion_light.yaml",
+      "input": {
+        "motion_entity": "binary_sensor.hall_motion",
+        "light_target": "light.hallway",
+        "no_motion_wait": 90
+      }
+    }
+  }
+}

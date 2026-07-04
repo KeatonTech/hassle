@@ -1,0 +1,54 @@
+{
+  "input_boolean:guest_mode": {
+    "id": "guest_mode",
+    "name": "Guest Mode",
+    "icon": "mdi:account"
+  },
+  "input_number:target_temp": {
+    "id": "target_temp",
+    "name": "Target Temp",
+    "min": 10,
+    "max": 30,
+    "step": 0.5,
+    "mode": "slider"
+  },
+  "input_select:house_mode": {
+    "id": "house_mode",
+    "name": "House Mode",
+    "options": [
+      "home",
+      "away",
+      "night"
+    ]
+  },
+  "input_text:last_message": {
+    "id": "last_message",
+    "name": "Last Message",
+    "max": 255
+  },
+  "input_datetime:wake_time": {
+    "id": "wake_time",
+    "name": "Wake Time",
+    "has_date": false,
+    "has_time": true
+  },
+  "input_button:run_scene": {
+    "id": "run_scene",
+    "name": "Run Scene"
+  },
+  "counter:door_opens": {
+    "id": "door_opens",
+    "name": "Door Opens",
+    "initial": 0,
+    "step": 1
+  },
+  "timer:cooldown": {
+    "id": "cooldown",
+    "name": "Cooldown",
+    "duration": "00:05:00"
+  },
+  "schedule:heating": {
+    "id": "heating",
+    "name": "Heating Schedule"
+  }
+}

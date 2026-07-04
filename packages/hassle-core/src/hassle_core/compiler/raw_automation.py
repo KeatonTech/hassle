@@ -15,22 +15,15 @@ over a zero-arg function returning the dict (mirroring ``@automation``'s own
 shape, so it would slot into the same registration model if the pipeline gap
 below were closed), and a plain-call form taking the dict directly.
 
-**Scope note (contract gap, reported to the orchestrator/human) -- same root
-cause as ``helpers.py``:** a raw/blueprint automation is a whole bundle-level
-*object* (it must appear in ``CompileResult.objects`` under
-``"automation:<id>"``), not a trigger/condition/action *inside* one. Getting a
-new top-level object into ``CompileResult.objects`` requires either a new
-``Registry``/``RegisteredObject`` registration path (``registry.py``) or a new
-branch in ``compile_registered`` (``bundle.py``) that skips the "run a
-function, record trigger/condition/action calls into it" recorder model and
-calls ``CompileResult.add()`` directly with a pre-built ``AutomationConfig``.
-Both are outside this workstream's editable files (docs/m1-internal-api.md
-marks ``bundle.py`` "No"; ``registry.py`` has no seam for a non-function
-registration today). This module therefore builds and validates the IR object
-correctly (:func:`build_raw_automation` / :func:`build_blueprint_automation`,
-plus the JSON-serializability error, M1 test 5) and tracks declarations
-(:func:`declared_raw_automations`, mirroring ``helpers.py``'s pattern), but
-nothing here wires them into ``compile_bundle(...).objects`` yet.
+**Registration (§12 fix, M1 integration) -- same path as ``helpers.py``:** a
+raw/blueprint automation is a whole bundle-level *object* (it appears in
+``CompileResult.objects`` under ``"automation:<id>"``), not a trigger/condition/
+action *inside* one. Each builder registers the validated ``AutomationConfig``
+into the active bundle registry via ``Registry.add_object`` (registry.py); the
+compiler drains that prebuilt stream and adds them straight to the
+``CompileResult`` (bundle.py), skipping the recorder model. The process-wide
+:func:`declared_raw_automations` list is retained for this module's unit tests
+and reset per compile by ``fresh()``.
 """
 
 from __future__ import annotations
@@ -92,6 +85,13 @@ def _build(automation_id: str, body: dict[str, Any], span: SourceSpan | None) ->
     normalized = normalize_ha(full_body, kind="automation")
     obj = AutomationConfig.model_validate(normalized)
     _DECLARED.append(obj)
+    # §12 registration path: register into the active bundle registry so the
+    # compiler lands this automation in CompileResult.objects under
+    # "automation:<id>" (bundle.py drains the prebuilt stream). Lazy import to
+    # avoid a registry<->raw_automation import cycle at module load.
+    from hassle_core.compiler.registry import current_registry
+
+    current_registry().add_object(obj, span)
     return obj
 
 

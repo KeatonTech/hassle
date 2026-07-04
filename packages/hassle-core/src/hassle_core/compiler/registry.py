@@ -18,6 +18,7 @@ from typing import Any
 
 from hassle_core.compiler.recording import check_options
 from hassle_core.compiler.spans import SourceSpan, capture_span
+from hassle_core.ir.models import IRObject
 
 
 @dataclass
@@ -33,16 +34,45 @@ class RegisteredObject:
     declared_id: str
 
 
+@dataclass
+class PrebuiltObject:
+    """An already-built IR object awaiting registration into the CompileResult.
+
+    Unlike :class:`RegisteredObject` there is no function to run inside a
+    recorder — helper declarations (DESIGN §5.7) and ``raw_automation`` /
+    ``@blueprint_automation`` (DESIGN §5.8) are whole top-level objects. The
+    compiler adds these straight to ``CompileResult.objects`` (bundle.py),
+    skipping the trigger/condition/action recording model (§12 fix).
+    """
+
+    obj: IRObject
+    span: SourceSpan | None
+
+
 def _empty_registered() -> list[RegisteredObject]:
+    return []
+
+
+def _empty_prebuilt() -> list[PrebuiltObject]:
     return []
 
 
 @dataclass
 class Registry:
     objects: list[RegisteredObject] = field(default_factory=_empty_registered)
+    prebuilt: list[PrebuiltObject] = field(default_factory=_empty_prebuilt)
 
     def add(self, obj: RegisteredObject) -> None:
         self.objects.append(obj)
+
+    def add_object(self, obj: IRObject, span: SourceSpan | None) -> None:
+        """Register an already-built IR object (helper / raw / blueprint).
+
+        The §12 registration path: no ``func`` is required. The compiler drains
+        these alongside the function-shaped registrations and adds them directly
+        to the ``CompileResult`` (bundle.py).
+        """
+        self.prebuilt.append(PrebuiltObject(obj=obj, span=span))
 
 
 # Default None (ruff B039: no mutable ContextVar default); a fresh Registry is
