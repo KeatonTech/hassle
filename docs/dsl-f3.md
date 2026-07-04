@@ -59,9 +59,11 @@ bundles are written.
 - `macro` — `@macro` marks a compile-time-inlined function (DESIGN §5.6).
 - `raw_automation` — `@raw_automation(id=...)` over a zero-arg function returning
   a verbatim automation dict (DESIGN §5.8; `normalize_ha` is applied).
-- `blueprint_automation` — `blueprint_automation(id=, use_blueprint=, inputs=)`;
-  maps `inputs=` → stored `use_blueprint.input` with an author-qualified path
-  (docs/ha-api-notes.md §10.5).
+- `blueprint_automation` — `blueprint_automation(id=, use_blueprint=, inputs=,
+  alias=, description=)`; maps `inputs=` → stored `use_blueprint.input` with an
+  author-qualified path (docs/ha-api-notes.md §10.5). `alias=`/`description=`
+  are an M2 addition (widening, not a break — real blueprint automations carry
+  these top-level fields alongside `use_blueprint`, docs/ha-api-notes.md §10.5).
 - Helper declarations (DESIGN §5.7), one per storage-collection domain, each
   returning an `EntityRef` usable as an entity id elsewhere:
   `input_boolean`, `input_number`, `input_select`, `input_text`,

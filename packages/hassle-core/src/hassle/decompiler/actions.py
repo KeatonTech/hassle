@@ -1,0 +1,385 @@
+"""Decompile a single action dict to one or more DSL statements.
+
+Unlike triggers/conditions (single expressions), actions decompile to
+*statements* -- a plain service call is one line, but ``if``/``choose``/
+``repeat``/``parallel`` need a ``with ...:`` block with a nested body. Each
+``decompile_action`` call returns a list of source lines (already indented
+relative to the block they're emitted into); the caller is responsible for the
+surrounding indentation level.
+
+Falls back to ``raw_action({...})`` for any action shape not modeled here
+(DESIGN §5.8, I3) -- never drops data.
+"""
+
+from __future__ import annotations
+
+from typing import Any, cast
+
+from hassle.decompiler.exprs import decompile_condition, render_literal
+
+INDENT = "    "
+
+
+def _indent_lines(lines: list[str], levels: int = 1) -> list[str]:
+    prefix = INDENT * levels
+    return [f"{prefix}{line}" if line else line for line in lines]
+
+
+def _raw_action(body: Any) -> list[str]:
+    return [f"raw_action({render_literal(body)})"]
+
+
+def decompile_action(body: Any) -> list[str]:
+    """Decompile one action dict to source lines, or the ``raw_action`` fallback."""
+    if not isinstance(body, dict):
+        return _raw_action(body)
+    action_body = cast("dict[str, Any]", body)
+
+    if "action" in action_body and _is_plain_service_call(action_body):
+        return _service_call(action_body)
+    if "delay" in action_body and set(action_body) == {"delay"}:
+        delay_src = _delay_source(action_body["delay"])
+        if delay_src is not None:
+            return [delay_src]
+    if "if" in action_body:
+        result = _if_then(action_body)
+        if result is not None:
+            return result
+    if "choose" in action_body:
+        result = _choose(action_body)
+        if result is not None:
+            return result
+    if "repeat" in action_body and set(action_body) == {"repeat"}:
+        result = _repeat(action_body)
+        if result is not None:
+            return result
+    if "parallel" in action_body and set(action_body) == {"parallel"}:
+        result = _parallel(action_body)
+        if result is not None:
+            return result
+    if "wait_for_trigger" in action_body:
+        result = _wait_for(action_body)
+        if result is not None:
+            return result
+    if "wait_template" in action_body:
+        return _wait_template(action_body)
+    if "stop" in action_body:
+        return _stop(action_body)
+    if "variables" in action_body and set(action_body) == {"variables"}:
+        return _variables(action_body)
+    if "event" in action_body and set(action_body) <= {"event", "event_data"}:
+        return _fire_event(action_body)
+
+    return _raw_action(action_body)
+
+
+def _is_plain_service_call(body: dict[str, Any]) -> bool:
+    known = {"action", "target", "data", "response_variable", "continue_on_error"}
+    return set(body) <= known and isinstance(body.get("action"), str)
+
+
+_DURATION_UNIT_KEYS = frozenset({"hours", "minutes", "seconds", "milliseconds"})
+
+
+def _delay_source(value: Any) -> str | None:
+    """Build a ``delay(...)`` call for any of HA's three duration forms.
+
+    HA accepts a delay as a dict of units, an ``"HH:MM:SS"`` string, or a bare
+    number of seconds -- all functionally equivalent. The typed ``delay()``
+    builder only emits the dict form (docs/ha-api-notes.md's M2 findings), so
+    decompiling a string/numeric delay to it modernizes the representation --
+    cosmetic, same treatment as the trigger-discriminator modernization
+    (test_roundtrip_corpus.py's ``_modernized`` documents and accounts for
+    this for the round-trip test specifically).
+    """
+    if isinstance(value, dict):
+        duration = cast("dict[str, Any]", value)
+        if set(duration) <= _DURATION_UNIT_KEYS:
+            parts = [f"{k}={v!r}" for k, v in duration.items()]
+            return f"delay({', '.join(parts)})"
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return f"delay(seconds={value!r})"
+    if isinstance(value, str):
+        pieces = value.split(":")
+        if len(pieces) == 3 and all(p.isdigit() for p in pieces):
+            h, m, s = (int(p) for p in pieces)
+            units: list[tuple[str, int]] = [
+                (k, v) for k, v in (("hours", h), ("minutes", m), ("seconds", s)) if v
+            ]
+            kwargs = [f"{k}={v!r}" for k, v in units]
+            return f"delay({', '.join(kwargs) or 'seconds=0'})"
+    return None
+
+
+def _service_call(body: dict[str, Any]) -> list[str]:
+    action = body["action"]
+    parts = [repr(action)]
+    if "target" in body:
+        parts.append(f"target={render_literal(body['target'])}")
+    data = body.get("data")
+    if isinstance(data, dict):
+        data_dict = cast("dict[str, Any]", data)
+        for k, v in data_dict.items():
+            parts.append(f"{k}={render_literal(v)}")
+    elif data is not None:
+        parts.append(f"data={render_literal(data)}")
+    if "response_variable" in body:
+        parts.append(f"response_variable={render_literal(body['response_variable'])}")
+    if "continue_on_error" in body:
+        parts.append(f"continue_on_error={render_literal(body['continue_on_error'])}")
+    return [f"service({', '.join(parts)})"]
+
+
+def _actions_block(items: Any) -> list[list[str]] | None:
+    if not isinstance(items, list):
+        return None
+    item_list = cast("list[Any]", items)
+    result: list[list[str]] = []
+    for item in item_list:
+        if not isinstance(item, dict):
+            return None
+        result.append(decompile_action(item))
+    return result
+
+
+def _flatten(blocks: list[list[str]]) -> list[str]:
+    out: list[str] = []
+    for block in blocks:
+        out.extend(block)
+    return out
+
+
+def _if_then(body: dict[str, Any]) -> list[str] | None:
+    known = {"if", "then", "else"}
+    if not set(body) <= known:
+        return None
+    raw_conds = body.get("if")
+    then = body.get("then")
+    if not isinstance(raw_conds, list):
+        return None
+    conds = cast("list[Any]", raw_conds)
+    if len(conds) != 1 or not isinstance(conds[0], dict):
+        return None
+    cond_dict = cast("dict[str, Any]", conds[0])
+    cond_src = decompile_condition(cond_dict)
+    if cond_src is None:
+        return None
+    then_lines = _actions_block(then)
+    if then_lines is None:
+        return None
+    out = [f"with if_then({cond_src}):"]
+    if not then_lines:
+        out.extend(_indent_lines(["pass"]))
+    else:
+        out.extend(_indent_lines(_flatten(then_lines)))
+    if "else" in body:
+        else_lines = _actions_block(body["else"])
+        if else_lines is None:
+            return None
+        out.append("with else_then():")
+        if not else_lines:
+            out.extend(_indent_lines(["pass"]))
+        else:
+            out.extend(_indent_lines(_flatten(else_lines)))
+    return out
+
+
+def _choose(body: dict[str, Any]) -> list[str] | None:
+    known = {"choose", "default"}
+    if not set(body) <= known:
+        return None
+    branches = body.get("choose")
+    if not isinstance(branches, list):
+        return None
+    branch_list = cast("list[Any]", branches)
+    branch_srcs: list[tuple[str, list[str]]] = []
+    for branch in branch_list:
+        if not isinstance(branch, dict):
+            return None
+        branch_dict = cast("dict[str, Any]", branch)
+        if set(branch_dict) != {"conditions", "sequence"}:
+            return None
+        raw_conds = branch_dict["conditions"]
+        if not isinstance(raw_conds, list):
+            return None
+        conds = cast("list[Any]", raw_conds)
+        if len(conds) != 1 or not isinstance(conds[0], dict):
+            return None
+        cond_dict = cast("dict[str, Any]", conds[0])
+        cond_src = decompile_condition(cond_dict)
+        if cond_src is None:
+            return None
+        seq_lines = _actions_block(branch_dict["sequence"])
+        if seq_lines is None:
+            return None
+        branch_srcs.append((cond_src, _flatten(seq_lines)))
+
+    out = ["with choose() as c:"]
+    for cond_src, seq_lines in branch_srcs:
+        out.extend(_indent_lines([f"with c.when_({cond_src}):"]))
+        if not seq_lines:
+            out.extend(_indent_lines(["pass"], levels=2))
+        else:
+            out.extend(_indent_lines(seq_lines, levels=2))
+    if "default" in body:
+        default_lines = _actions_block(body["default"])
+        if default_lines is None:
+            return None
+        out.extend(_indent_lines(["with c.default():"]))
+        flat_default = _flatten(default_lines)
+        if not flat_default:
+            out.extend(_indent_lines(["pass"], levels=2))
+        else:
+            out.extend(_indent_lines(flat_default, levels=2))
+    return out
+
+
+def _repeat(body: dict[str, Any]) -> list[str] | None:
+    raw_repeat = body["repeat"]
+    if not isinstance(raw_repeat, dict) or "sequence" not in raw_repeat:
+        return None
+    repeat = cast("dict[str, Any]", raw_repeat)
+    seq_lines = _actions_block(repeat["sequence"])
+    if seq_lines is None:
+        return None
+    flat_seq = _flatten(seq_lines)
+
+    header: str | None = None
+    if "count" in repeat and set(repeat) == {"count", "sequence"}:
+        header = f"with repeat_count({render_literal(repeat['count'])}):"
+    elif "while" in repeat and set(repeat) == {"while", "sequence"}:
+        raw_conds = repeat["while"]
+        if isinstance(raw_conds, list):
+            conds = cast("list[Any]", raw_conds)
+            if len(conds) == 1 and isinstance(conds[0], dict):
+                cond_dict = cast("dict[str, Any]", conds[0])
+                cond_src = decompile_condition(cond_dict)
+                if cond_src is not None:
+                    header = f"with repeat_while({cond_src}):"
+    elif "until" in repeat and set(repeat) == {"until", "sequence"}:
+        raw_conds = repeat["until"]
+        if isinstance(raw_conds, list):
+            conds = cast("list[Any]", raw_conds)
+            if len(conds) == 1 and isinstance(conds[0], dict):
+                cond_dict = cast("dict[str, Any]", conds[0])
+                cond_src = decompile_condition(cond_dict)
+                if cond_src is not None:
+                    header = f"with repeat_until({cond_src}):"
+    elif "for_each" in repeat and set(repeat) == {"for_each", "sequence"}:
+        header = f"with repeat_for_each({render_literal(repeat['for_each'])}):"
+
+    if header is None:
+        return None
+    out = [header]
+    if not flat_seq:
+        out.extend(_indent_lines(["pass"]))
+    else:
+        out.extend(_indent_lines(flat_seq))
+    return out
+
+
+def _parallel(body: dict[str, Any]) -> list[str] | None:
+    branches = body["parallel"]
+    if not isinstance(branches, list):
+        return None
+    branch_list = cast("list[Any]", branches)
+    flat: list[str] = []
+    for branch in branch_list:
+        if not isinstance(branch, dict):
+            return None
+        branch_dict = cast("dict[str, Any]", branch)
+        if set(branch_dict) != {"sequence"}:
+            return None
+        raw_seq = branch_dict["sequence"]
+        if not isinstance(raw_seq, list):
+            return None
+        seq = cast("list[Any]", raw_seq)
+        if len(seq) != 1 or not isinstance(seq[0], dict):
+            # Only the "one action per branch" shape (what the compiler emits,
+            # matching fixtures/configs/automation_parallel_action.json) is
+            # decompiled to `parallel()`; anything else falls back to raw.
+            return None
+        action_lines = decompile_action(seq[0])
+        flat.extend(action_lines)
+    out = ["with parallel():"]
+    if not flat:
+        out.extend(_indent_lines(["pass"]))
+    else:
+        out.extend(_indent_lines(flat))
+    return out
+
+
+def _wait_for(body: dict[str, Any]) -> list[str] | None:
+    from hassle.decompiler.exprs import decompile_trigger
+
+    known = {"wait_for_trigger", "timeout", "continue_on_timeout"}
+    if not set(body) <= known:
+        return None
+    triggers = body["wait_for_trigger"]
+    if not isinstance(triggers, list):
+        return None
+    trigger_list = cast("list[Any]", triggers)
+    trigger_srcs: list[str] = []
+    for trig in trigger_list:
+        if not isinstance(trig, dict):
+            return None
+        trig_dict = cast("dict[str, Any]", trig)
+        src = decompile_trigger(trig_dict)
+        if src is None:
+            return None
+        trigger_srcs.append(src)
+    parts = list(trigger_srcs)
+    if "timeout" in body:
+        parts.append(f"timeout={render_literal(body['timeout'])}")
+    if "continue_on_timeout" in body:
+        parts.append(f"continue_on_timeout={render_literal(body['continue_on_timeout'])}")
+    return [f"wait_for({', '.join(parts)})"]
+
+
+def _wait_template(body: dict[str, Any]) -> list[str]:
+    known = {"wait_template", "timeout", "continue_on_timeout"}
+    if not set(body) <= known:
+        return _raw_action(body)
+    parts = [repr(body["wait_template"])]
+    if "timeout" in body:
+        parts.append(f"timeout={render_literal(body['timeout'])}")
+    if "continue_on_timeout" in body:
+        parts.append(f"continue_on_timeout={render_literal(body['continue_on_timeout'])}")
+    return [f"wait_template({', '.join(parts)})"]
+
+
+def _stop(body: dict[str, Any]) -> list[str]:
+    known = {"stop", "error"}
+    if not set(body) <= known:
+        return _raw_action(body)
+    parts: list[str] = []
+    message = body.get("stop")
+    if message:
+        parts.append(repr(message))
+    if "error" in body:
+        parts.append(f"error={render_literal(body['error'])}")
+    return [f"stop({', '.join(parts)})"]
+
+
+def _variables(body: dict[str, Any]) -> list[str]:
+    raw_kwargs = body["variables"]
+    if not isinstance(raw_kwargs, dict):
+        return _raw_action(body)
+    kwargs = cast("dict[str, Any]", raw_kwargs)
+    parts = [f"{k}={render_literal(v)}" for k, v in kwargs.items()]
+    return [f"variables({', '.join(parts)})"]
+
+
+def _fire_event(body: dict[str, Any]) -> list[str]:
+    event_type = body["event"]
+    if not isinstance(event_type, str):
+        return _raw_action(body)
+    parts = [repr(event_type)]
+    event_data = body.get("event_data")
+    if isinstance(event_data, dict):
+        data_dict = cast("dict[str, Any]", event_data)
+        for k, v in data_dict.items():
+            parts.append(f"{k}={render_literal(v)}")
+    return [f"fire_event({', '.join(parts)})"]

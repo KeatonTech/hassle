@@ -21,6 +21,8 @@ dev = [
     "pytest>=8.2",
     "ruff>=0.6",
     "pyright>=1.1.380",
+    "libcst>=1.4",
+    "hypothesis>=6.100",
     "hassle-core",
     "hassle-cli",
     "hassle-dev",
@@ -34,6 +36,11 @@ dev = [
 line-length = 100
 target-version = "py312"
 src = ["packages/hassle-core/src", "packages/hassle-cli/src", "packages/hassle-dev/src"]
+# `new_middle_def.py` is a single-object *splice fragment* (M2 test fixture) --
+# a replacement body meant to be spliced into an existing file that already
+# carries the imports, not a standalone importable bundle (unlike every real
+# fixtures/dsl/*/bundle/*.py, which import from `hassle` and lint clean).
+extend-exclude = ["fixtures/splice/three_automations/new_middle_def.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

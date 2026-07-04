@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from hassle_dev.corpus import analyze, find_configs_dir
+from hassle_dev.decompile_coverage import run_decompile_coverage
 from hassle_dev.goldens import find_dsl_dir, run_goldens
 
 
@@ -72,6 +73,27 @@ def _cmd_goldens(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_decompile_coverage(args: argparse.Namespace) -> int:
+    configs_dir: Path | None = args.configs or find_configs_dir()
+    if configs_dir is None or not configs_dir.is_dir():
+        print("decompile-coverage: could not locate fixtures/configs/ (pass --configs DIR)")
+        return 2
+
+    out_file: Path = args.out
+    exit_code, report = run_decompile_coverage(configs_dir, out_file)
+    print(f"decompile-coverage: {report['total_objects']} object(s) analyzed")
+    print(f"  clean (zero raw_* nodes): {report['clean_objects']}/{report['total_objects']}")
+    print(f"  clean fraction: {report['clean_fraction']:.1%} (gate: 90%)")
+    print(f"  report written to {out_file}")
+    if report["exceptions"]:
+        print("  exceptions:")
+        for exc in report["exceptions"]:
+            print(f"    {exc['object_key']}: {exc['raw_node_count']} raw_* node(s)")
+    if exit_code != 0:
+        print("\nDSL COVERAGE GATE NOT MET (< 90%)")
+    return exit_code
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="hassle-dev")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -84,6 +106,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_gold.add_argument("--update", action="store_true", help="regenerate goldens in place")
     p_gold.add_argument("--dsl", type=Path, default=None, help="path to fixtures/dsl")
     p_gold.set_defaults(func=_cmd_goldens)
+
+    p_cov = sub.add_parser(
+        "decompile-coverage", help="report/gate DSL-coverage over fixtures/configs"
+    )
+    p_cov.add_argument("--configs", type=Path, default=None, help="path to fixtures/configs")
+    p_cov.add_argument(
+        "--out", type=Path, required=True, help="path to write the JSON coverage report"
+    )
+    p_cov.set_defaults(func=_cmd_decompile_coverage)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

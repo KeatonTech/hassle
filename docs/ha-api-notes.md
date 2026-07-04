@@ -487,6 +487,14 @@ so the mirror never targets the bare root.
   **`<author>/motion_light.yaml`**, not a bare filename. The DSL surface can keep `inputs=` for
   ergonomics, but the compiler/decompiler IR must emit/read `use_blueprint.input` and the
   author-qualified `path`. Update §5.8's example (or note the DSL↔JSON mapping explicitly).
+- **M2 finding:** a stored blueprint automation also carries the usual top-level
+  `alias`/`description` fields alongside `use_blueprint` (see
+  `fixtures/configs/automation_blueprint_based.json`), which the M1
+  `blueprint_automation(id=, use_blueprint=, inputs=)` builder had no kwargs
+  for. Fixed as an F3 *addition* (widening, not a break, per docs/dsl-f3.md's
+  stability contract): `alias=`/`description=` optional kwargs added in M2 so
+  the decompiler can round-trip a blueprint automation's alias/description
+  without falling back to `raw_automation`.
 
 ### 10.6 `skip_condition` default — quirk #2 — CONFIRMED (`true`)
 `automation.trigger` with **no** `skip_condition` runs the actions **even when conditions are
@@ -645,3 +653,93 @@ templates.py's `state(x).value` previously read `StateExpr`'s private
 integration pass added a public read-only `StateExpr.entity_id` accessor and
 switched `.value`/`expr()` to use it; the private-attr coupling and its
 deviation note are gone.
+
+## 14. M2 finding: the compiler always materializes an explicit automation `id`
+
+`hassle.compiler.bundle._build_automation` sets `body["id"] = options.get("id")
+or reg.func.__name__` unconditionally -- there is no DSL shape that produces an
+automation with no `id` at all; every `@automation`-decorated function compiles
+to an explicit `id` field (the decorator's `id=` kwarg, or the function name).
+
+This is a real constraint the M2 decompiler/round-trip test had to account for:
+about 50 of the `fixtures/configs/automation_*.json` fixtures have **no** `id`
+field at all (they're hand-authored docs examples predating the corpus's
+identity convention; real HA always assigns an `id` on creation and returns it
+on every read, docs/ha-api-notes.md §2). Decompiling one of these fixtures and
+recompiling it therefore always adds an explicit `id` (the fixture's filename
+stem, used as the synthesized identity) to the output -- correctly matching
+what a real HA automation would already have, not a lossy round-trip. M2's
+`test_roundtrip_corpus` (`packages/hassle-core/tests/test_roundtrip_corpus.py`)
+compares against `normalize_ha(x)` **with that synthesized id added** for these
+fixtures specifically, rather than bare `normalize_ha(x)`.
+
+No DESIGN.md text is contradicted by this (§7.1/§7.3 don't claim decompiled
+output is byte-identical-including-omitted-fields; I3 is about round-tripping
+*any config*, and a config missing its own identity is not really "any config"
+HA would ever hand back) -- flagged here per CLAUDE.md's "record + flag" rule
+because it was non-obvious until the round-trip test was written against the
+real corpus.
+
+## 15. M2 correction: most of the corpus is legacy singular-form, not "two fixtures"
+
+MILESTONES M2 test 1 names ``automation_legacy_platform_naming`` and
+``automation_service_call_longhand`` as "the cases where normalization
+applies," implying they are the exception. Checking the actual corpus:
+**48 of the 55 ``automation_*.json`` fixtures** use the legacy singular schema
+(`trigger`/`condition`/`action` outer keys, some with `service:`) -- the corpus
+was built before M0.1 added the 2026.7 purpose-vocabulary fixtures (which are
+plural by construction, since that vocabulary postdates the singular/plural
+split). Only 6 automation fixtures are already plural.
+
+This doesn't change any test's correctness (`test_roundtrip_corpus` and
+`test_normalize_ha_is_identity_for_plural_fixtures`,
+`packages/hassle-core/tests/test_roundtrip_corpus.py`, are fixture-shape-driven,
+not hardcoded to the two named fixtures), but the milestone text's framing is
+misleading for anyone reading it as "normalization is a rare edge case in this
+corpus" -- it is the majority case. Flagged here rather than silently
+worked around.
+
+## 16. M2 finding: typed trigger builders cannot reproduce a legacy `platform:` key
+
+`normalize_ha` correctly preserves an inner `platform:` discriminator verbatim
+(§10.1, §14 above -- verified against real HA: it is never rewritten to
+`trigger:` on storage). But **every typed trigger builder in
+`hassle.compiler.{triggers,builders,purpose}.py` always emits the modern
+`trigger:` key** (`_TriggerBase.to_trigger()`'s `{"trigger": self._trigger_type(), ...}`)
+-- there is no builder-level way to ask for the legacy spelling. DESIGN §5.8's
+own example shows a `platform:`-keyed device trigger going through
+`raw_automation`/`raw_trigger`, which is the intended path for exact-spelling
+preservation.
+
+48 of the 55 corpus automation fixtures use `platform:` (see §15). Decompiling
+all of them to `raw_trigger` (to preserve the spelling exactly) would leave the
+M2 DSL-coverage metric far under the 90% gate, on a corpus that is mostly
+legacy-form fixtures by historical accident (see §15) rather than
+representative of what a 2026.7 UI actually writes today.
+
+**Decision (recorded, scoped to the decompiler's own round-trip test only):**
+the decompiler emits the typed builder for a `platform:`-keyed trigger
+(`state(...)`, `zone(...)`, etc.) rather than falling back to `raw_trigger`,
+accepting that this modernizes the discriminator spelling on the next
+recompile -- a decompile+recompile cycle is expected to modernize a config to
+the current schema, exactly as HA's own schema migrations behave when a config
+is re-saved through a newer editor. This is purely cosmetic (the trigger's
+meaning is unchanged) and does **not** touch `normalize_ha` itself, which stays
+byte-faithful to verified real-HA behavior for the sync engine's actual hashing
+(M5+ — `manifest.lock` still hashes exactly what HA stores). The test-local
+`_modernized()` helper in `test_roundtrip_corpus.py` documents and implements
+this narrowly (only at trigger positions, never conditions/actions, which have
+no such legacy synonym).
+
+## 17. M2 finding: the compiler always materializes `triggers`/`conditions`/`actions`
+
+`hassle.compiler.bundle._build_automation` sets all three keys unconditionally
+(`body["triggers"] = [...]`, etc., even when the corresponding DSL call was
+never made), so a compiled automation always has explicit `triggers: []`/
+`conditions: []`/`actions: []` for any block the DSL body didn't populate. This
+is already accepted M1 behavior (`fixtures/dsl/minimal/expected_ir.json` has
+`"triggers": []` for an automation with no `when(...)` call), not new M2
+behavior -- but it means a fixture with no `condition` key at all recompiles
+with an explicit `conditions: []`, which the M2 round-trip test's expectation
+must account for the same way (`test_roundtrip_corpus.py`'s `setdefault` calls
+before comparing).

@@ -53,3 +53,13 @@ jobs:
 
       - name: Goldens unchanged
         run: uv run hassle-dev goldens
+
+      - name: Decompiler DSL-coverage gate (>= 90%, M2)
+        run: uv run hassle-dev decompile-coverage --out decompile-coverage.json
+
+      - name: Upload decompiler coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: decompile-coverage-${{ matrix.os }}
+          path: decompile-coverage.json
