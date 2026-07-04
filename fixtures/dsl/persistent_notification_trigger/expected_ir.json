@@ -1,0 +1,21 @@
+{
+  "automation:persistent_notification_trigger": {
+    "id": "persistent_notification_trigger",
+    "alias": "Persistent Notification Trigger",
+    "triggers": [
+      {
+        "trigger": "persistent_notification",
+        "notification_id": "test_notification"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "persistent_notification.dismiss",
+        "data": {
+          "notification_id": "test_notification"
+        }
+      }
+    ]
+  }
+}

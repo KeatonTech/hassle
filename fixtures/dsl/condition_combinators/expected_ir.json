@@ -1,0 +1,58 @@
+{
+  "automation:condition_combinators": {
+    "id": "condition_combinators",
+    "alias": "Condition And Or Not",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.motion",
+        "to": "on"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "and",
+        "conditions": [
+          {
+            "condition": "state",
+            "entity_id": "input_boolean.mode",
+            "state": "on"
+          },
+          {
+            "condition": "or",
+            "conditions": [
+              {
+                "condition": "state",
+                "entity_id": "light.bedroom",
+                "state": "on"
+              },
+              {
+                "condition": "state",
+                "entity_id": "light.living_room",
+                "state": "on"
+              }
+            ]
+          },
+          {
+            "condition": "not",
+            "conditions": [
+              {
+                "condition": "state",
+                "entity_id": "input_boolean.away",
+                "state": "on"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "target": {
+          "entity_id": "light.hallway"
+        }
+      }
+    ]
+  }
+}

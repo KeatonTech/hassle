@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from hassle_core.ir import parse, serialize
+from hassle.ir import parse, serialize
 
 # Unknown fields planted at every level: top-level, inside a trigger item, inside
 # a condition item, inside an action item, inside a nested choose branch, and

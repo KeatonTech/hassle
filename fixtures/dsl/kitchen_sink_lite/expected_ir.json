@@ -1,0 +1,56 @@
+{
+  "automation:sink": {
+    "id": "sink",
+    "alias": "Kitchen sink lite",
+    "description": "every core primitive",
+    "mode": "queued",
+    "max": 10,
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.door",
+        "to": "open"
+      },
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.window",
+        "from": "on",
+        "to": "off"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "state",
+        "entity_id": "input_boolean.armed",
+        "state": "on"
+      },
+      {
+        "condition": "state",
+        "entity_id": "alarm_control_panel.home",
+        "state": "armed_away"
+      }
+    ],
+    "actions": [
+      {
+        "action": "notify.mobile_app",
+        "target": {
+          "entity_id": "notify.phone"
+        },
+        "data": {
+          "message": "Door opened"
+        }
+      },
+      {
+        "delay": {
+          "seconds": 30
+        }
+      },
+      {
+        "action": "light.turn_off",
+        "data": {
+          "entity_id": "light.hallway"
+        }
+      }
+    ]
+  }
+}

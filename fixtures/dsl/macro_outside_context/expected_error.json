@@ -1,0 +1,4 @@
+{
+  "error_type": "NoRecordingContextError",
+  "contains": ["macro notify_all()", "bad.py:12"]
+}

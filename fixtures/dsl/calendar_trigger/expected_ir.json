@@ -1,0 +1,22 @@
+{
+  "automation:calendar_trigger": {
+    "id": "calendar_trigger",
+    "alias": "Calendar Trigger",
+    "triggers": [
+      {
+        "trigger": "calendar",
+        "entity_id": "calendar.holidays",
+        "event": "start"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "notify.mobile_app",
+        "data": {
+          "message": "Calendar event starting"
+        }
+      }
+    ]
+  }
+}

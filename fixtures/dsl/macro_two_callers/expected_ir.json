@@ -1,0 +1,60 @@
+{
+  "automation:front_door": {
+    "id": "front_door",
+    "alias": "Front door opened",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.front_door",
+        "to": "open"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "notify.mobile_app_keaton",
+        "data": {
+          "message": "Front door opened"
+        }
+      },
+      {
+        "action": "notify.mobile_app_spouse",
+        "data": {
+          "message": "Front door opened"
+        }
+      }
+    ]
+  },
+  "automation:back_door": {
+    "id": "back_door",
+    "alias": "Back door opened",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.back_door",
+        "to": "open"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "notify.mobile_app_keaton",
+        "data": {
+          "message": "Back door opened"
+        }
+      },
+      {
+        "action": "notify.mobile_app_spouse",
+        "data": {
+          "message": "Back door opened"
+        }
+      },
+      {
+        "action": "light.turn_on",
+        "data": {
+          "entity_id": "light.porch"
+        }
+      }
+    ]
+  }
+}

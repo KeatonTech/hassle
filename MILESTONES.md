@@ -43,7 +43,9 @@ the frozen IR (F1). M8 (VS Code) and M9 (docs) can start early in stub form but 
 - **F2** (start of M5): the `Backend` protocol (Python `Protocol` in `hassle-core`, spec'd in
   `docs/backend.md`) + the plan/apply data model. M5 builds the sync engine against `FakeBackend`;
   M6 builds `DirectBackend` against the same protocol — independently.
-- **F3** (end of M1): DSL public API surface (`hassle.__all__`) — additions allowed, changes are not.
+- **F3** (end of M1): DSL public API surface (`hassle.__all__`, 72 names, plus the
+  `hassle.registry.entities` entry point) — additions allowed, changes are not.
+  Declared in [docs/dsl-f3.md](docs/dsl-f3.md).
 
 ---
 
@@ -115,7 +117,8 @@ node; `CompileTimeBranchError` trap; bundle loader (imports bundle in isolation,
 registered objects, rejects duplicate ids); entity indexing form (`e.sensor["3d_printer"]`);
 **`normalize_ha`** — the singular→plural / `service:`→`action:` normalization HA itself applies
 on storage (docs/ha-api-notes.md §10.1), applied by the compiler to everything it emits,
-including legacy-form `raw_*` bodies (added to `hassle_core.ir` as an F1-compatible extension).
+including legacy-form `raw_*` bodies (added to `hassle.ir` as an F1-compatible extension;
+module renamed from `hassle_core.ir` 2026-07-03, owner decision — see docs/ir-f1.md).
 
 **Write these tests first**
 1. **Golden pairs** `fixtures/dsl/{case}/bundle/…py` → `expected_ir.json`: one case per DSL

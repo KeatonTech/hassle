@@ -523,3 +523,125 @@ default live run mirrors a real trigger — exactly as the design states.
 
 *Verified 2026-07-03 against Home Assistant 2026.2.3 (see §0 for why not 2026.7). Re-verify §10 on
 2026.7 in M6.*
+
+---
+
+## 12. M1 internal-api contract gap: helpers / raw_automation / @blueprint_automation
+not wired into `compile_bundle` (found by the templates/macros/object-types work item)
+
+> **RESOLVED in the M1 integration pass (branch `m1/dsl-compiler`).** The
+> minimal fix sketched below was implemented as-is: `Registry.add_object(obj,
+> span)` (registry.py) registers a pre-built `IRObject` with no `func`;
+> `compile_registered` (bundle.py) drains a `prebuilt` stream and calls
+> `result.add(...)` directly, before the function-shaped registrations.
+> `helpers.py` and `raw_automation.py` builders now register into the active
+> bundle registry; `compile_bundle` resets their process-wide `_DECLARED` lists
+> per compile (R8). Public names (`input_boolean`…`schedule`, `raw_automation`,
+> `blueprint_automation`) are in `hassle.__all__`. Goldens:
+> `fixtures/dsl/{helper_declarations,raw_automation_legacy,blueprint_automation}`.
+> The rest of this section is retained as the original gap report.
+>
+> **Also renamed 2026-07-03 (owner decision, same integration pass):** the
+> `hassle-core` distribution collapsed its two top-level import packages
+> (`hassle_core` + a thin `hassle` facade) into one, `hassle`. Every
+> `hassle_core.*` path in the retained report below is now `hassle.*`; see
+> docs/ir-f1.md and docs/dsl-f3.md for the full rename note.
+
+**Not an HA-behavior finding — an internal extension-contract gap in
+docs/m1-internal-api.md**, flagged here per CLAUDE.md's "if the internal-api
+contract is insufficient, stop and report rather than modifying core."
+
+`compile_bundle`/`compile_registered` (`packages/hassle-core/src/hassle/compiler/bundle.py`
+-- path renamed 2026-07-03 from `hassle_core/compiler/bundle.py`, owner decision, see
+docs/ir-f1.md; frozen for follow-on M1 workstreams) only drain `registry.Registry` -- a list of
+`RegisteredObject`, each of which is compiled by opening a `Recorder` and calling
+`reg.func()` once, i.e. "run a function, record trigger/condition/action calls
+into it." That model fits automations, scripts, and (via a caller-side wrapper)
+`@shared_script` calls -- all trigger/condition/action-shaped. It does **not**
+fit:
+
+- **Helper declarations** (DESIGN §5.7: `input_boolean(id=..., name=...)` etc.)
+  -- a helper is a plain declarative object with no function body to record.
+- **`raw_automation`/`@raw_automation`/`@blueprint_automation`** (DESIGN §5.8)
+  -- each is a whole *top-level object* that must land in
+  `CompileResult.objects` under `"automation:<id>"`, not a trigger/condition/
+  action recorded *inside* one (unlike `raw_trigger`/`raw_condition`/
+  `raw_action`, which fit the existing seam fine and are fully wired up).
+
+Getting either into `CompileResult.objects` requires a change to one of the
+two files the m1/templates work item was told not to edit:
+
+- `registry.py`: `RegisteredObject` requires a `func: Callable`; there is no
+  registration path for a pre-built IR object today (only `automation()`/
+  `script()` populate a `Registry`, both function-decorator shaped).
+- `bundle.py`: `compile_registered`'s loop unconditionally opens a `Recorder`
+  and calls `reg.func()` before an `if reg.kind == "automation" / elif
+  "script" / else: raise ValueError` branch (bundle.py, `compile_registered`).
+  There is no branch that skips the recorder and calls the already-public
+  `CompileResult.add()` directly with a pre-built `HelperConfig`/
+  `AutomationConfig`.
+
+**What was built instead:** `hassle.compiler.helpers` and
+`hassle.compiler.raw_automation` (paths renamed 2026-07-03 from
+`hassle_core.compiler.*`) implement the full model/builder layer
+correctly and with test coverage (`HelperConfig`/`AutomationConfig`
+construction, the nine helper domains, JSON-serializability validation for raw
+bodies, the DESIGN §5.8 `inputs=` -> stored `use_blueprint.input` singular-key
+mapping per §10.5 above, `normalize_ha` applied) and track their declarations
+in a process-wide list (`declared_helpers()` / `declared_raw_automations()`,
+mirroring `registry.Registry`'s own pattern) -- but nothing compiles them into
+`compile_bundle(bundle_dir).objects`. They are deliberately **not** added to
+`hassle.__all__` (the F3 public DSL surface) so as not to advertise a
+half-working construct.
+
+**Minimal fix (for whoever picks this up, likely alongside the actions/
+control-flow or a dedicated integration pass):** add a `Registry.add_object
+(kind, obj: IRObject, span)` (or equivalent) path in `registry.py` that
+doesn't require a `func`, and a branch in `compile_registered` (bundle.py)
+that, for such entries, skips `with recording(...): reg.func()` entirely and
+calls `result.add(obj, spans={}, decl_span=reg.span, duplicate_of=reg.span)`
+directly. Both `helpers.py`'s and `raw_automation.py`'s constructor functions
+already produce the exact `IRObject` this would need — only the last
+"register it" step is missing.
+
+---
+
+## 13. M1 integration-pass DSL-surface decisions (branch `m1/dsl-compiler`)
+
+Merging the three M1 workstreams (triggers, actions, templates) onto the core
+surfaced two public-name collisions and required API smoothing before the F3
+freeze. These are DSL-surface facts (not HA-behavior findings), recorded here
+per CLAUDE.md and backed by `packages/hassle-core/tests/test_integration_api.py`.
+
+### 13.1 `event` is the trigger; the fire-event action is `fire_event`
+Both the triggers workstream (event **trigger**, DESIGN §5.4) and the actions
+workstream (fire-event **action**) exported a public `event`. They are different
+functions and cannot share a name. Resolution: `event` = the trigger builder
+(DESIGN §5.4 lists it among triggers); the fire-event action was renamed
+`fire_event`. Both are public.
+
+### 13.2 `template()` is one builder serving both contexts
+The triggers workstream exported `template()` → a template **trigger/condition**;
+the templates workstream exported `template()` → a raw-Jinja **value** string.
+DESIGN §5.4 sanctions both spellings of `template()`. Resolution: a single
+`str`-subclass `TemplateExpr` (templates.py) that also implements
+`to_trigger`/`to_condition`, so `template("{{…}}")` is a Jinja value as a bare
+expression and a template trigger/condition inside `when`/`only_if`. The
+triggers-module duplicate was deleted.
+
+### 13.3 API smoothing folded two wrapper functions away (pre-F3)
+The workstreams honored the core freeze by shipping wrappers instead of editing
+`builders.py`/`actions.py`. The integration pass (which has core-edit rights)
+folded them in and deleted the wrappers so the public surface has one way to do
+each thing:
+- `with_trigger_options(state(...), id=, enabled=, variables=, for_=)` →
+  folded into `state().to(...)`/`.is_(...)`/`.with_options(...)`; wrapper deleted.
+- `service_ext(..., response_variable=, continue_on_error=)` → folded into
+  `service(...)`; `service_ext` deleted.
+
+### 13.4 `StateExpr.entity_id` is now public (deviation note retired)
+templates.py's `state(x).value` previously read `StateExpr`'s private
+`_entity_id` (a documented coupling / deviation, formerly noted here). The
+integration pass added a public read-only `StateExpr.entity_id` accessor and
+switched `.value`/`expr()` to use it; the private-attr coupling and its
+deviation note are gone.

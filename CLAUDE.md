@@ -25,6 +25,9 @@ If you were not told which milestone you're on, ask — do not pick one yourself
 - **Determinism**: no wall-clock, no randomness in core logic; compiler/decompiler output must
   be byte-stable.
 - Tooling: Python 3.12, `uv`, `ruff`, `pyright --strict` on hassle-core, `pytest`.
+- **One distribution = one top-level import package** (owner rule): internals are
+  subpackages (`hassle.ir`, `hassle.compiler`), never a sibling or facade package.
+  Distribution name ≠ import name is fine (`hassle-core` dist → `hassle` import).
 
 ## Hard invariants (never violate — from DESIGN.md §2)
 

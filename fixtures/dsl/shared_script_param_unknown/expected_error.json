@@ -1,0 +1,4 @@
+{
+  "error_type": "UnknownParamError",
+  "contains": ["param('brightness')", "scripts.py:9", "Its fields are: times"]
+}

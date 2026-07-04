@@ -1,0 +1,24 @@
+{
+  "automation:purpose_trigger_floor_each": {
+    "id": "purpose_trigger_floor_each",
+    "alias": "Purpose Trigger Floor Behavior Each",
+    "triggers": [
+      {
+        "trigger": "battery.became_low",
+        "target": {
+          "floor_id": "upstairs"
+        },
+        "behavior": "each"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "notify.mobile_app_keaton",
+        "data": {
+          "message": "Device event detected"
+        }
+      }
+    ]
+  }
+}

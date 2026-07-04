@@ -3,7 +3,12 @@
 This is the frozen contract every downstream workstream (M1–M5) builds against.
 Per R5, changing anything here requires updating MILESTONES.md in the same PR.
 
-Module: `hassle_core.ir` (package `hassle-core`). Public surface (`hassle_core.ir.__all__`):
+> **Module path renamed 2026-07-03 (owner decision):** `hassle_core.ir` is now
+> `hassle.ir` — the `hassle-core` distribution collapsed its two top-level
+> import packages (`hassle_core` + `hassle`) into one (`hassle`). This is a
+> pure rename; the frozen contract below is otherwise identical.
+
+Module: `hassle.ir` (package `hassle-core`). Public surface (`hassle.ir.__all__`):
 
 ## Object kinds and keys
 

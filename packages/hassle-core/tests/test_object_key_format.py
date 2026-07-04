@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hassle_core.ir import HELPER_DOMAINS, OBJECT_KINDS, object_key, parse
+from hassle.ir import HELPER_DOMAINS, OBJECT_KINDS, object_key, parse
 
 
 def test_object_key_string_format() -> None:

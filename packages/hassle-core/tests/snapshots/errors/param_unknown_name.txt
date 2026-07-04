@@ -1,0 +1,1 @@
+`param('brightness')` at scripts.py:9 does not match any parameter of this `@shared_script` function. Its fields are: times. Fix: correct the spelling, or add `brightness` as a parameter of the decorated function so it becomes a script field.

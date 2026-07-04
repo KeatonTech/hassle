@@ -113,7 +113,7 @@ implementing agents).
 
 | Component | Language / stack | Purpose |
 |---|---|---|
-| `hassle-core` | Python 3.12, pydantic v2, jinja2, LibCST | IR, compiler, decompiler, validator, simulator, sync engine, `Backend` protocol + `DirectBackend` (REST/WS client for HA Core) |
+| `hassle-core` (import package: `hassle`) | Python 3.12, pydantic v2, jinja2, LibCST | IR, compiler, decompiler, validator, simulator, sync engine, `Backend` protocol + `DirectBackend` (REST/WS client for HA Core) |
 | `hassle-cli` | Python (click or typer), rich, keyring | `pull/plan/push/validate/test/run/fmt/stubs/explain/mirror/doctor` |
 | VS Code extension | TypeScript (thin) + pyright | Commands, diagnostics from `hassle validate`, entity hovers (stretch) |
 | Docs generator | part of `hassle-core` | Emits `AGENTS.md`, entity inventory, DSL reference into every bundle |
@@ -378,19 +378,22 @@ Any construct the DSL/decompiler doesn't model round-trips as verbatim JSON:
 
 ```python
 @raw_automation(id="1687201958261")
-LEGACY_DEVICE_AUTOMATION = {
-    "alias": "Weird device trigger thing",
-    "trigger": [{"platform": "device", "device_id": "abc123", ...}],
-    ...
-}
+def legacy_device_automation():          # decorator wraps a function RETURNING the dict
+    return {
+        "alias": "Weird device trigger thing",
+        "trigger": [{"platform": "device", "device_id": "abc123", ...}],  # legacy keys fine:
+        ...                                # normalized to the plural schema exactly as HA does
+    }
 ```
 
 Also granular: `raw_trigger({...})`, `raw_action({...})` inside normal DSL automations.
 Blueprint-based automations decompile to a structured form, not raw:
 
 ```python
-@blueprint_automation(id="...", use_blueprint="hassle/motion_light.yaml",  # author-qualified path
-                      inputs={"motion_entity": e.binary_sensor.hall_motion})
+hall_motion = blueprint_automation(       # call form: it declares an object, no body to trace
+    id="...", use_blueprint="hassle/motion_light.yaml",   # author-qualified path
+    inputs={"motion_entity": e.binary_sensor.hall_motion},
+)
 ```
 
 (DSL keeps the ergonomic `inputs=`; the stored JSON key is `use_blueprint.input` — singular —

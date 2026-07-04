@@ -1,0 +1,71 @@
+{
+  "automation:climate_elseif": {
+    "id": "climate_elseif",
+    "alias": "Climate if/elif/else",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "sensor.temperature",
+        "to": "changed"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "choose": [
+          {
+            "conditions": [
+              {
+                "condition": "state",
+                "entity_id": "sensor.temperature",
+                "state": "hot"
+              }
+            ],
+            "sequence": [
+              {
+                "action": "climate.set_temperature",
+                "target": {
+                  "entity_id": "climate.living_room"
+                },
+                "data": {
+                  "temperature": 18
+                }
+              }
+            ]
+          },
+          {
+            "conditions": [
+              {
+                "condition": "state",
+                "entity_id": "sensor.temperature",
+                "state": "cold"
+              }
+            ],
+            "sequence": [
+              {
+                "action": "climate.set_temperature",
+                "target": {
+                  "entity_id": "climate.living_room"
+                },
+                "data": {
+                  "temperature": 24
+                }
+              }
+            ]
+          }
+        ],
+        "default": [
+          {
+            "action": "climate.set_temperature",
+            "target": {
+              "entity_id": "climate.living_room"
+            },
+            "data": {
+              "temperature": 21
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

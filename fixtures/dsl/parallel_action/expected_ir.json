@@ -1,0 +1,47 @@
+{
+  "automation:guest_parallel": {
+    "id": "guest_parallel",
+    "alias": "Guest parallel",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.guest_arrived",
+        "to": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "parallel": [
+          {
+            "sequence": [
+              {
+                "action": "light.turn_on",
+                "target": {
+                  "entity_id": "light.hallway"
+                }
+              }
+            ]
+          },
+          {
+            "sequence": [
+              {
+                "action": "light.turn_on",
+                "target": {
+                  "entity_id": "light.living_room"
+                }
+              }
+            ]
+          },
+          {
+            "sequence": [
+              {
+                "action": "script.greet_guest"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

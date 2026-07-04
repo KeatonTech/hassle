@@ -1,0 +1,34 @@
+{
+  "automation:repeat_while_counter": {
+    "id": "repeat_while_counter",
+    "alias": "Repeat while counter",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "sensor.counter",
+        "to": "changed"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "repeat": {
+          "while": [
+            {
+              "condition": "template",
+              "value_template": "{{ states('input_number.counter') | int < 10 }}"
+            }
+          ],
+          "sequence": [
+            {
+              "action": "input_number.increment",
+              "target": {
+                "entity_id": "input_number.counter"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

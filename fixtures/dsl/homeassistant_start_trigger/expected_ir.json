@@ -1,0 +1,18 @@
+{
+  "automation:homeassistant_start_trigger": {
+    "id": "homeassistant_start_trigger",
+    "alias": "HA Start Trigger",
+    "triggers": [
+      {
+        "trigger": "homeassistant",
+        "event": "start"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "automation.reload"
+      }
+    ]
+  }
+}

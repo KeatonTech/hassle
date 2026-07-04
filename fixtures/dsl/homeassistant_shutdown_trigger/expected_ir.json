@@ -1,0 +1,21 @@
+{
+  "automation:homeassistant_shutdown_trigger": {
+    "id": "homeassistant_shutdown_trigger",
+    "alias": "HA Shutdown Trigger",
+    "triggers": [
+      {
+        "trigger": "homeassistant",
+        "event": "shutdown"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "light.turn_off",
+        "target": {
+          "entity_id": "light.all"
+        }
+      }
+    ]
+  }
+}

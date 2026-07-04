@@ -1,0 +1,23 @@
+{
+  "automation:purpose_trigger_device": {
+    "id": "purpose_trigger_device",
+    "alias": "Purpose Trigger Device Target",
+    "triggers": [
+      {
+        "trigger": "vacuum.returned_to_dock",
+        "target": {
+          "device_id": "aaaabbbbccccdddd1111222233334444"
+        }
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "notify.mobile_app_keaton",
+        "data": {
+          "message": "Device event detected"
+        }
+      }
+    ]
+  }
+}

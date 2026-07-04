@@ -1,0 +1,29 @@
+{
+  "automation:purpose_condition": {
+    "id": "purpose_condition",
+    "alias": "Purpose-Specific Condition",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.living_room_motion",
+        "to": "on"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "climate.is_target_temperature",
+        "target": {
+          "entity_id": "climate.living_room"
+        }
+      }
+    ],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "target": {
+          "entity_id": "light.living_room"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "automation:legacy_device_automation": {
+    "id": "legacy_device_automation",
+    "alias": "Legacy Device Automation",
+    "mode": "single",
+    "triggers": [
+      {
+        "platform": "state",
+        "entity_id": "binary_sensor.motion",
+        "to": "on"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "state",
+        "entity_id": "input_boolean.guest_mode",
+        "state": "on"
+      }
+    ],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "target": {
+          "entity_id": "light.hallway"
+        }
+      }
+    ]
+  }
+}

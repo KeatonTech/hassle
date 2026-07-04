@@ -1,0 +1,25 @@
+{
+  "automation:sun_trigger": {
+    "id": "sun_trigger",
+    "alias": "Sun Trigger",
+    "triggers": [
+      {
+        "trigger": "sun",
+        "event": "sunset",
+        "offset": "-00:30:00"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "target": {
+          "entity_id": "light.porch"
+        },
+        "data": {
+          "brightness_pct": 75
+        }
+      }
+    ]
+  }
+}

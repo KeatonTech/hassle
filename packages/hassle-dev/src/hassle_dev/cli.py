@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from hassle_dev.corpus import analyze, find_configs_dir
+from hassle_dev.goldens import find_dsl_dir, run_goldens
 
 
 def _cmd_corpus_stats(args: argparse.Namespace) -> int:
@@ -44,15 +45,30 @@ def _cmd_corpus_stats(args: argparse.Namespace) -> int:
 
 
 def _cmd_goldens(args: argparse.Namespace) -> int:
-    # DSL↔IR golden pairs are introduced in M1 under fixtures/dsl/. M0 ships the
-    # command and its check so CI can gate on golden drift from M1 onward (R3).
-    root = find_configs_dir()
-    dsl_dir = (root.parent / "dsl") if root is not None else Path("fixtures/dsl")
-    pairs = sorted(dsl_dir.glob("*/expected_ir.json")) if dsl_dir.is_dir() else []
-    verb = "would update" if args.update else "checked"
-    print(f"goldens: {verb} {len(pairs)} golden pair(s) in {dsl_dir}")
-    if not pairs:
-        print("goldens: no golden pairs registered yet (introduced in M1)")
+    # DSL↔IR golden pairs live under fixtures/dsl/. Each pair is `compile(bundle) ==
+    # expected_ir.json`; --update recompiles and rewrites them (R3: goldens change
+    # only through this command, and the PR must show the diff).
+    dsl_dir: Path | None = args.dsl or find_dsl_dir()
+    if dsl_dir is None or not dsl_dir.is_dir():
+        print("goldens: could not locate fixtures/dsl/ (pass --dsl DIR)")
+        return 2
+
+    report = run_goldens(dsl_dir, update=args.update)
+    if args.update:
+        print(f"goldens: checked {report.checked} pair(s) in {dsl_dir}")
+        if report.updated:
+            print(f"  updated: {report.updated}")
+        else:
+            print("  all goldens already up to date")
+        return 0
+
+    print(f"goldens: checked {report.checked} pair(s) in {dsl_dir}")
+    if report.drifted:
+        print("\nGOLDEN DRIFT (run `hassle-dev goldens --update` and review the diff):")
+        for name in report.drifted:
+            print(f"  {name}")
+        return 1
+    print("goldens up to date ✓")
     return 0
 
 
@@ -64,8 +80,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_stats.add_argument("--configs", type=Path, default=None, help="path to fixtures/configs")
     p_stats.set_defaults(func=_cmd_corpus_stats)
 
-    p_gold = sub.add_parser("goldens", help="check or update golden files")
+    p_gold = sub.add_parser("goldens", help="check or update DSL↔IR golden pairs")
     p_gold.add_argument("--update", action="store_true", help="regenerate goldens in place")
+    p_gold.add_argument("--dsl", type=Path, default=None, help="path to fixtures/dsl")
     p_gold.set_defaults(func=_cmd_goldens)
 
     args = parser.parse_args(argv)

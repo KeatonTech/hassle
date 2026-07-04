@@ -1,0 +1,78 @@
+{
+  "_note": "M1 test 9 golden. Real POST->GET normalization pairs captured against HA 2026.2.3 (M0.V). Excerpted from rest-ws-core.json (sections automation_create / automation_read_normalized / script_create / script_read_normalized) into a focused pair so `normalize_ha(sent) == read_back` can be asserted directly. HA's 2024.10+ storage normalization: outer trigger/condition/action -> triggers/conditions/actions; service: -> action: (recursively, incl. script sequences); inner platform: is preserved.",
+  "pairs": [
+    {
+      "kind": "automation",
+      "sent": {
+        "alias": "Hassle Demo Automation",
+        "description": "created by M0.V harness",
+        "mode": "single",
+        "trigger": [
+          {
+            "platform": "state",
+            "entity_id": "input_boolean.hassle_flag_2",
+            "to": "on"
+          }
+        ],
+        "condition": [],
+        "action": [
+          {
+            "service": "input_boolean.turn_off",
+            "target": {
+              "entity_id": "input_boolean.hassle_flag_2"
+            }
+          }
+        ]
+      },
+      "read_back": {
+        "id": "hassle_auto_demo",
+        "alias": "Hassle Demo Automation",
+        "description": "created by M0.V harness",
+        "triggers": [
+          {
+            "platform": "state",
+            "entity_id": "input_boolean.hassle_flag_2",
+            "to": "on"
+          }
+        ],
+        "conditions": [],
+        "actions": [
+          {
+            "target": {
+              "entity_id": "input_boolean.hassle_flag_2"
+            },
+            "action": "input_boolean.turn_off"
+          }
+        ],
+        "mode": "single"
+      }
+    },
+    {
+      "kind": "script",
+      "sent": {
+        "alias": "Hassle Demo Script",
+        "mode": "single",
+        "sequence": [
+          {
+            "service": "input_boolean.toggle",
+            "target": {
+              "entity_id": "input_boolean.hassle_flag_2"
+            }
+          }
+        ]
+      },
+      "read_back": {
+        "alias": "Hassle Demo Script",
+        "mode": "single",
+        "sequence": [
+          {
+            "target": {
+              "entity_id": "input_boolean.hassle_flag_2"
+            },
+            "action": "input_boolean.toggle"
+          }
+        ]
+      }
+    }
+  ]
+}

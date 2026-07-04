@@ -1,0 +1,50 @@
+{
+  "script:flash_lights": {
+    "alias": "Flash lights",
+    "icon": "mdi:alarm-light",
+    "fields": {
+      "times": {
+        "default": 3
+      },
+      "brightness": {
+        "default": 255
+      }
+    },
+    "sequence": [
+      {
+        "action": "light.turn_on",
+        "data": {
+          "entity_id": "light.all_downstairs",
+          "brightness": "{{ brightness }}"
+        }
+      },
+      {
+        "action": "light.turn_off",
+        "data": {
+          "entity_id": "light.all_downstairs"
+        }
+      }
+    ]
+  },
+  "automation:guest_arrived": {
+    "id": "guest_arrived",
+    "alias": "Guest arrived",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.guest_sensor",
+        "to": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "script.flash_lights",
+        "data": {
+          "times": 5,
+          "brightness": 128
+        }
+      }
+    ]
+  }
+}

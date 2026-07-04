@@ -6,7 +6,7 @@ import copy
 import json
 from typing import Any
 
-from hassle_core.ir import canonical_json, sha256_hash
+from hassle.ir import canonical_json, sha256_hash
 
 BASE: dict[str, Any] = {
     "id": "hash_me",

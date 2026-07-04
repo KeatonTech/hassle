@@ -1,0 +1,64 @@
+{
+  "automation:classic_conditions": {
+    "id": "classic_conditions",
+    "alias": "Classic Conditions",
+    "triggers": [
+      {
+        "trigger": "numeric_state",
+        "entity_id": "sensor.humidity",
+        "above": 0,
+        "id": "motion"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "state",
+        "entity_id": "input_boolean.enable_automation",
+        "state": "on"
+      },
+      {
+        "condition": "numeric_state",
+        "entity_id": "sensor.humidity",
+        "above": 60
+      },
+      {
+        "condition": "sun",
+        "after": "sunset",
+        "after_offset": "-01:00:00"
+      },
+      {
+        "condition": "time",
+        "after": "22:00:00",
+        "before": "06:00:00",
+        "weekday": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri"
+        ]
+      },
+      {
+        "condition": "zone",
+        "entity_id": "device_tracker.john",
+        "zone": "zone.work"
+      },
+      {
+        "condition": "template",
+        "value_template": "{{ now().hour >= 6 and now().hour < 22 }}"
+      },
+      {
+        "condition": "trigger",
+        "id": "motion"
+      }
+    ],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "target": {
+          "entity_id": "light.hallway"
+        }
+      }
+    ]
+  }
+}

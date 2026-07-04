@@ -1,0 +1,25 @@
+{
+  "automation:numeric_state_trigger": {
+    "id": "numeric_state_trigger",
+    "alias": "Numeric State Trigger",
+    "triggers": [
+      {
+        "trigger": "numeric_state",
+        "entity_id": "sensor.outdoor_temperature",
+        "above": 25
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "climate.set_temperature",
+        "target": {
+          "entity_id": "climate.living_room"
+        },
+        "data": {
+          "temperature": 20
+        }
+      }
+    ]
+  }
+}

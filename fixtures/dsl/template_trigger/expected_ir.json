@@ -1,0 +1,21 @@
+{
+  "automation:template_trigger": {
+    "id": "template_trigger",
+    "alias": "Template Trigger",
+    "triggers": [
+      {
+        "trigger": "template",
+        "value_template": "{{ state_attr('light.hallway', 'brightness') > 100 }}"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "automation.turn_off",
+        "target": {
+          "entity_id": "automation.template_trigger"
+        }
+      }
+    ]
+  }
+}

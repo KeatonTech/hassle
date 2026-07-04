@@ -1,0 +1,24 @@
+{
+  "automation:event_trigger": {
+    "id": "event_trigger",
+    "alias": "Event Trigger",
+    "triggers": [
+      {
+        "trigger": "event",
+        "event_type": "custom_event",
+        "event_data": {
+          "action": "test"
+        }
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "notify.mobile_app",
+        "data": {
+          "message": "Custom event triggered"
+        }
+      }
+    ]
+  }
+}

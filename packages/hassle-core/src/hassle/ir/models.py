@@ -1,0 +1,149 @@
+"""IR pydantic models + parse/serialize (F1).
+
+The IR mirrors Home Assistant's stored config for each managed object kind. Two
+hard requirements (DESIGN §7.1) drive the design:
+
+- **Unknown-field preservation (I3):** every model allows and preserves extra
+  fields at every nesting level (``extra="allow"``), and serialization emits
+  exactly the keys that were parsed (``exclude_unset=True``) — no defaults are
+  ever materialized into the output, so ``serialize(parse(x)) == x``.
+- **Canonical serialization + hashing:** see :mod:`hassle.ir.canonical`.
+
+Structural blocks (``trigger``/``condition``/``action``/``sequence``/``fields``/…)
+pass through verbatim as native JSON in M0; the typed compiler that interprets
+them is built in M1. What is frozen here at F1 is the object-level model schema,
+the identity/key derivation, and the serialization contract.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, PrivateAttr
+
+from hassle.ir.canonical import canonical_json, sha256_hash
+from hassle.ir.keys import HELPER_DOMAINS, object_key
+
+
+class IRObject(BaseModel):
+    """Base class for every managed HA object (automation, script, helper)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    # Extrinsic identity: an object_id/id supplied at parse time when it is not
+    # part of the config body (e.g. a script's object_id). Never serialized.
+    _key_id: str | None = PrivateAttr(default=None)
+
+    def kind(self) -> str:
+        """The object kind (``"automation"``, ``"script"``, a helper domain)."""
+        raise NotImplementedError
+
+    def attach_key(self, key_id: str) -> None:
+        """Attach an extrinsic identity (used by :func:`parse`)."""
+        self._key_id = key_id
+
+    @property
+    def identity(self) -> str | None:
+        """The identity used in the object key (id / object_id)."""
+        return self._key_id
+
+    def object_key(self) -> str:
+        """``"<kind>:<identity>"`` — the stable manifest/plan key (F1)."""
+        ident = self.identity
+        if ident is None:
+            raise ValueError(f"{type(self).__name__} has no identity; pass key_hint= at parse time")
+        return object_key(self.kind(), ident)
+
+    def to_ha(self) -> dict[str, Any]:
+        """Serialize back to the exact HA config body (lossless, I3)."""
+        return self.model_dump(mode="json", exclude_unset=True)
+
+    def canonical_json(self) -> str:
+        return canonical_json(self.to_ha())
+
+    def sha256(self) -> str:
+        return sha256_hash(self.to_ha())
+
+
+class AutomationConfig(IRObject):
+    """A single automation config (``automations.yaml`` entry, keyed by ``id``)."""
+
+    # `id` is typed Any (not str) so that a non-string id round-trips verbatim
+    # rather than raising — I3 is "for ANY config". HA stores ids as strings.
+    id: Any = None
+    alias: Any = None
+    description: Any = None
+    mode: Any = None
+    max: Any = None
+    max_exceeded: Any = None
+    initial_state: Any = None
+
+    def kind(self) -> str:
+        return "automation"
+
+    @property
+    def identity(self) -> str | None:
+        return self.id if self.id is not None else self._key_id
+
+
+class ScriptConfig(IRObject):
+    """A single script config (``scripts.yaml`` entry, keyed by extrinsic object_id)."""
+
+    alias: Any = None
+    mode: Any = None
+    icon: Any = None
+    fields: Any = None
+
+    def kind(self) -> str:
+        return "script"
+
+
+class HelperConfig(IRObject):
+    """A storage-collection helper item (one of the nine domains, keyed by ``id``)."""
+
+    # See AutomationConfig.id — typed Any to preserve any id value verbatim (I3).
+    id: Any = None
+    name: Any = None
+    icon: Any = None
+
+    _domain: str = PrivateAttr(default="")
+
+    def attach_domain(self, domain: str) -> None:
+        """Attach the helper domain (used by :func:`parse`)."""
+        self._domain = domain
+
+    def kind(self) -> str:
+        if not self._domain:
+            raise ValueError("HelperConfig has no domain; parse it with kind=<helper domain>")
+        return self._domain
+
+    @property
+    def identity(self) -> str | None:
+        return self.id if self.id is not None else self._key_id
+
+
+def parse(config: dict[str, Any], *, kind: str, key_hint: str | None = None) -> IRObject:
+    """Parse an HA config body into the IR model for ``kind``.
+
+    ``key_hint`` supplies an extrinsic identity (a script's object_id, or a
+    helper/automation id absent from the body) used for the object key.
+    """
+    obj: IRObject
+    if kind == "automation":
+        obj = AutomationConfig.model_validate(config)
+    elif kind == "script":
+        obj = ScriptConfig.model_validate(config)
+    elif kind in HELPER_DOMAINS:
+        helper = HelperConfig.model_validate(config)
+        helper.attach_domain(kind)
+        obj = helper
+    else:
+        raise ValueError(f"unknown object kind {kind!r}")
+    if key_hint is not None:
+        obj.attach_key(key_hint)
+    return obj
+
+
+def serialize(obj: IRObject) -> dict[str, Any]:
+    """Serialize an IR object back to its exact HA config body (lossless, I3)."""
+    return obj.to_ha()
