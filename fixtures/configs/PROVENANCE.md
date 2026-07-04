@@ -43,6 +43,9 @@ This file documents the source and purpose of each fixture in the corpus. All fi
 | automation_delay_hh_mm_ss.json | HA docs, delay example | delay with hh:mm:ss format |
 | automation_service_call_longhand.json | HA docs, service example | service call with full data structure |
 | automation_condition_state.json | HA docs, condition example | automation-level state condition |
+| automation_math_shade_sun.json | https://www.home-assistant.io/docs/configuration/templating/ (math section) + https://www.home-assistant.io/integrations/sun/ | time_pattern trigger with math template (cos) in service call |
+| automation_math_variables_chain.json | https://www.home-assistant.io/docs/configuration/templating/ (math section) | variables with nested template evaluation (sin) consumed by later templates |
+| automation_math_template_trigger.json | https://www.home-assistant.io/docs/configuration/templating/ (math section) | template trigger using math functions (atan2, sqrt) |
 
 ## Condition Type Automations
 
@@ -102,7 +105,8 @@ This file documents the source and purpose of each fixture in the corpus. All fi
 
 - **Trigger types:** state, numeric_state, time, time_pattern, sun, event, zone, template, webhook, device, mqtt, calendar, persistent_notification, geo_location, homeassistant (start/shutdown), tag (17 types)
 - **Condition types:** state, numeric_state, time, sun, zone, template, device, and (2), or (2), not (1), trigger (all 8 types)
-- **Action constructs:** choose, if/then/else_then, repeat (count/while/until/for_each), parallel, wait_template, wait_for_trigger, stop, variables, delay (numeric and hh:mm:ss), service call (longhand and shorthand)
+- **Action constructs:** choose, if/then/else_then, repeat (count/while/until/for_each), parallel, wait_template, wait_for_trigger, stop, variables (with nested template chains), delay (numeric and hh:mm:ss), service call (longhand and shorthand)
+- **Math functions in templates:** cos, sin, atan2, sqrt, pi constant (in triggers, conditions, and action data)
 - **Modes:** single, restart, queued, parallel (all 4)
 - **Blueprints:** use_blueprint with inputs
 - **Helpers:** input_boolean, input_number, input_select, input_text, input_datetime, input_button, counter, timer, schedule (all 9 storage-collection types)

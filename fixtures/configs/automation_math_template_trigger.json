@@ -1,0 +1,19 @@
+{
+  "alias": "Math Template Trigger",
+  "description": "Template trigger using math functions for wind direction and gust detection",
+  "trigger": [
+    {
+      "platform": "template",
+      "value_template": "{{ atan2(states('sensor.wind_north')|float, states('sensor.wind_east')|float) > 0.5 and sqrt(states('sensor.gust')|float) > 3 }}"
+    }
+  ],
+  "action": [
+    {
+      "service": "notify.notify",
+      "data": {
+        "message": "High wind alert triggered"
+      }
+    }
+  ],
+  "mode": "single"
+}
