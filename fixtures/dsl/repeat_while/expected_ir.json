@@ -15,9 +15,8 @@
         "repeat": {
           "while": [
             {
-              "condition": "state",
-              "entity_id": "input_boolean.counting",
-              "state": "on"
+              "condition": "template",
+              "value_template": "{{ states('input_number.counter') | int < 10 }}"
             }
           ],
           "sequence": [

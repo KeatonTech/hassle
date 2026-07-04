@@ -15,9 +15,8 @@
         "repeat": {
           "until": [
             {
-              "condition": "state",
-              "entity_id": "input_boolean.done",
-              "state": "on"
+              "condition": "template",
+              "value_template": "{{ is_state('input_boolean.done', 'on') }}"
             }
           ],
           "sequence": [
