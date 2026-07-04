@@ -112,7 +112,9 @@ def test_state_trigger_options_folded_in() -> None:
         "entity_id": "binary_sensor.motion",
         "to": "on",
         "id": "motion_on",
-        "for": {"minutes": 5},
+        # for_ normalizes to the canonical full-unit dict (matches every other
+        # trigger builder's `for` emission — see fixtures/dsl/*/expected_ir.json).
+        "for": {"hours": 0, "minutes": 5, "seconds": 0},
     }
 
 

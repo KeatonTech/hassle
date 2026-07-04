@@ -41,44 +41,15 @@ def variables(**kwargs: Any) -> None:
     record_action(_RawAction({"variables": dict(kwargs)}), span=capture_span(depth=0))
 
 
-def event(event_type: str, **event_data: Any) -> None:
+def fire_event(event_type: str, **event_data: Any) -> None:
     """Record an ``event`` (fire-event) action.
 
-    Emits ``{"event": "<type>", "event_data": {...}}`` (omitting ``event_data``
-    when there is none), matching HA's fire-event action schema.
+    Named ``fire_event`` (not ``event``) so it never collides with the ``event``
+    *trigger* builder (DESIGN §5.4); both are public. Emits
+    ``{"event": "<type>", "event_data": {...}}`` (omitting ``event_data`` when
+    there is none), matching HA's fire-event action schema.
     """
     body: dict[str, Any] = {"event": event_type}
     if event_data:
         body["event_data"] = event_data
-    record_action(_RawAction(body), span=capture_span(depth=0))
-
-
-def service_ext(
-    action: str,
-    *,
-    target: dict[str, Any] | None = None,
-    data: dict[str, Any] | None = None,
-    response_variable: str | None = None,
-    continue_on_error: bool | None = None,
-    **fields: Any,
-) -> None:
-    """Service-call action with the corpus fields the core ``service()`` lacks.
-
-    Same ``data``/kwargs merge behavior as the core builder, plus top-level
-    ``response_variable``/``continue_on_error`` (HA action fields, not ``data``
-    fields — they must not be merged into ``data``).
-    """
-    merged: dict[str, Any] = {}
-    if data:
-        merged.update(data)
-    merged.update(fields)
-    body: dict[str, Any] = {"action": action}
-    if target is not None:
-        body["target"] = target
-    if merged:
-        body["data"] = merged
-    if response_variable is not None:
-        body["response_variable"] = response_variable
-    if continue_on_error is not None:
-        body["continue_on_error"] = continue_on_error
     record_action(_RawAction(body), span=capture_span(depth=0))

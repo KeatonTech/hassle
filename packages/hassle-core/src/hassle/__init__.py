@@ -30,6 +30,7 @@ from hassle_core.compiler import (
     else_then,
     event,
     expr,
+    fire_event,
     floor,
     geo_location,
     homeassistant_shutdown,
@@ -58,7 +59,6 @@ from hassle_core.compiler import (
     script,
     seconds,
     service,
-    service_ext,
     shared_script,
     state,
     stop,
@@ -73,7 +73,6 @@ from hassle_core.compiler import (
     wait_template,
     webhook,
     when,
-    with_trigger_options,
     zone,
 )
 
@@ -95,6 +94,7 @@ __all__ = [
     "else_then",
     "event",
     "expr",
+    "fire_event",
     "floor",
     "geo_location",
     "homeassistant_shutdown",
@@ -123,7 +123,6 @@ __all__ = [
     "script",
     "seconds",
     "service",
-    "service_ext",
     "shared_script",
     "state",
     "stop",
@@ -138,6 +137,5 @@ __all__ = [
     "wait_template",
     "webhook",
     "when",
-    "with_trigger_options",
     "zone",
 ]

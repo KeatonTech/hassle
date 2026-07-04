@@ -89,55 +89,6 @@ class _TriggerBase:
         raise CompileTimeBranchError(self._branch_repr(), capture_span(depth=0))
 
 
-class TriggerWithOptions:
-    """Wraps *any* ``to_trigger()``-capable builder to attach the common options
-    (DESIGN §5.4: ``for_=``, ``id=``, ``enabled=``, ``variables=``).
-
-    This is how the core ``state()`` builder (frozen, ``builders.py``) gains
-    ``id=``/``enabled=``/``variables=``/``for_=`` without editing that file:
-    ``with_trigger_options(state(...), id="motion")`` wraps it. Every builder
-    defined in this module already inherits the same options via
-    :meth:`_TriggerBase.with_options`; this wrapper exists for builders outside
-    this module (e.g. the core M1 ``state()``).
-    """
-
-    def __init__(self, inner: Any, **options: Any) -> None:
-        self._inner = inner
-        self._options = options
-
-    def to_trigger(self) -> dict[str, Any]:
-        body = dict(self._inner.to_trigger())
-        if "id" in self._options and self._options["id"] is not None:
-            body["id"] = self._options["id"]
-        if "enabled" in self._options and self._options["enabled"] is not None:
-            body["enabled"] = self._options["enabled"]
-        if "variables" in self._options and self._options["variables"] is not None:
-            body["variables"] = self._options["variables"]
-        if "for_" in self._options and self._options["for_"] is not None:
-            body["for"] = normalize_duration(self._options["for_"])
-        return body
-
-    def to_condition(self) -> dict[str, Any]:
-        # Pass-through: options wrapping only ever applies to the trigger form.
-        return self._inner.to_condition()  # type: ignore[no-any-return]
-
-
-def with_trigger_options(
-    trigger: Any,
-    *,
-    id: str | None = None,
-    enabled: bool | None = None,
-    variables: dict[str, Any] | None = None,
-    for_: Any = None,
-) -> TriggerWithOptions:
-    """Attach common trigger options (DESIGN §5.4) to any trigger builder.
-
-    Use this for builders that don't already have ``with_options`` (e.g. the
-    frozen core ``state()``): ``with_trigger_options(state(...).to("on"), id="motion")``.
-    """
-    return TriggerWithOptions(trigger, id=id, enabled=enabled, variables=variables, for_=for_)
-
-
 # ---------------------------------------------------------------------------
 # numeric_state — also a condition (dual-purpose, like the core `state()`).
 # ---------------------------------------------------------------------------
@@ -427,27 +378,10 @@ def zone(entity_id: str, *, zone: str, event: str | None = None) -> ZoneExpr:
 # ---------------------------------------------------------------------------
 # template — raw Jinja string; also a condition.
 # ---------------------------------------------------------------------------
-class TemplateExpr(_TriggerBase):
-    def __init__(self, value_template: str) -> None:
-        super().__init__()
-        self._value_template = value_template
-
-    def _trigger_type(self) -> str:
-        return "template"
-
-    def _trigger_fields(self) -> dict[str, Any]:
-        return {"value_template": self._value_template}
-
-    def to_condition(self) -> dict[str, Any]:
-        return {"condition": "template", "value_template": self._value_template}
-
-    def _branch_repr(self) -> str:
-        return f"template({self._value_template!r})"
-
-
-def template(value_template: str) -> TemplateExpr:
-    """Build a ``template`` trigger/condition from a raw Jinja string (DESIGN §5.4)."""
-    return TemplateExpr(value_template)
+# `template()` (trigger/condition) is the single str-subclass builder in
+# `templates.py` — it implements `to_trigger`/`to_condition` there, so the
+# template trigger and the raw-Jinja value are one object (DESIGN §5.4). This
+# module deliberately does not define its own `template`/`TemplateExpr`.
 
 
 # ---------------------------------------------------------------------------

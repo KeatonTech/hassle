@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from hassle_core.compiler.durations import normalize_duration
 from hassle_core.compiler.errors import CompileTimeBranchError
 from hassle_core.compiler.spans import capture_span
 
@@ -36,6 +37,10 @@ class StateExpr(_NoBool):
     ``state`` trigger; via ``only_if(...)`` as a ``state`` condition. ``.to(v)`` sets
     the trigger ``to``; ``.is_(v)`` sets the trigger ``from`` and the condition
     ``state``. Chaining returns ``self`` so ``.is_("on").to("off")`` reads naturally.
+
+    The common trigger options (``id=`` / ``enabled=`` / ``variables=`` / ``for_=``,
+    DESIGN §5.4) are accepted directly on ``.to()`` / ``.is_()`` / ``.with_options()``
+    — there is no separate ``with_trigger_options`` wrapper.
     """
 
     def __init__(self, entity_id: str) -> None:
@@ -43,16 +48,57 @@ class StateExpr(_NoBool):
         self._from: Any = _UNSET
         self._to: Any = _UNSET
         self._state: Any = _UNSET
+        self._options: dict[str, Any] = {}
 
-    def to(self, value: Any) -> StateExpr:
-        self._to = value
+    @property
+    def entity_id(self) -> str:
+        """The entity id this expression reads (public accessor, DESIGN §5.4)."""
+        return self._entity_id
+
+    def with_options(
+        self,
+        *,
+        id: str | None = None,
+        enabled: bool | None = None,
+        variables: dict[str, Any] | None = None,
+        for_: Any = None,
+    ) -> StateExpr:
+        """Attach common trigger options (DESIGN §5.4). Returns ``self`` for chaining."""
+        if id is not None:
+            self._options["id"] = id
+        if enabled is not None:
+            self._options["enabled"] = enabled
+        if variables is not None:
+            self._options["variables"] = variables
+        if for_ is not None:
+            self._options["for"] = normalize_duration(for_)
         return self
 
-    def is_(self, value: Any) -> StateExpr:
+    def to(
+        self,
+        value: Any,
+        *,
+        id: str | None = None,
+        enabled: bool | None = None,
+        variables: dict[str, Any] | None = None,
+        for_: Any = None,
+    ) -> StateExpr:
+        self._to = value
+        return self.with_options(id=id, enabled=enabled, variables=variables, for_=for_)
+
+    def is_(
+        self,
+        value: Any,
+        *,
+        id: str | None = None,
+        enabled: bool | None = None,
+        variables: dict[str, Any] | None = None,
+        for_: Any = None,
+    ) -> StateExpr:
         # `is_` means the trigger `from` and the condition `state` (see class doc).
         self._from = value
         self._state = value
-        return self
+        return self.with_options(id=id, enabled=enabled, variables=variables, for_=for_)
 
     def to_trigger(self) -> dict[str, Any]:
         body: dict[str, Any] = {"trigger": "state", "entity_id": self._entity_id}
@@ -60,6 +106,7 @@ class StateExpr(_NoBool):
             body["from"] = self._from
         if self._to is not _UNSET:
             body["to"] = self._to
+        body.update(self._options)
         return body
 
     def to_condition(self) -> dict[str, Any]:
@@ -91,6 +138,9 @@ class ServiceAction:
     """A service-call action. Bare kwargs land in ``data``; ``target=`` is explicit.
 
     Emits canonical ``{"action": "<domain.service>", ...}`` (never ``service:``).
+    ``response_variable`` and ``continue_on_error`` are HA *action* fields (they
+    live at the top level, not inside ``data``); passing them keeps this the one
+    service-call builder (no separate ``service_ext``).
     """
 
     def __init__(
@@ -99,10 +149,14 @@ class ServiceAction:
         *,
         target: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
+        response_variable: str | None = None,
+        continue_on_error: bool | None = None,
         **fields: Any,
     ) -> None:
         self._action = action
         self._target = target
+        self._response_variable = response_variable
+        self._continue_on_error = continue_on_error
         merged: dict[str, Any] = {}
         if data:
             merged.update(data)
@@ -115,6 +169,10 @@ class ServiceAction:
             body["target"] = self._target
         if self._data:
             body["data"] = self._data
+        if self._response_variable is not None:
+            body["response_variable"] = self._response_variable
+        if self._continue_on_error is not None:
+            body["continue_on_error"] = self._continue_on_error
         return body
 
 

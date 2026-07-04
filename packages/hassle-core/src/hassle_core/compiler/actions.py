@@ -21,11 +21,25 @@ def service(
     *,
     target: dict[str, Any] | None = None,
     data: dict[str, Any] | None = None,
+    response_variable: str | None = None,
+    continue_on_error: bool | None = None,
     **fields: Any,
 ) -> None:
-    """Record a service-call action (DESIGN §5.3). Bare kwargs go into ``data``."""
+    """Record a service-call action (DESIGN §5.3). Bare kwargs go into ``data``.
+
+    ``response_variable`` and ``continue_on_error`` are emitted as top-level HA
+    action fields (not merged into ``data``) — folded in here so ``service()`` is
+    the single service-call verb.
+    """
     record_action(
-        ServiceAction(action, target=target, data=data, **fields),
+        ServiceAction(
+            action,
+            target=target,
+            data=data,
+            response_variable=response_variable,
+            continue_on_error=continue_on_error,
+            **fields,
+        ),
         span=capture_span(depth=0),
     )
 

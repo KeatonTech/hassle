@@ -62,27 +62,18 @@ from typing import Any
 # private-access check is silenced here for that one documented reason.
 from hassle_core.compiler.builders import StateExpr, _NoBool  # pyright: ignore[reportPrivateUsage]
 
-# ---------------------------------------------------------------------------
-# Deviation from DESIGN §5.4 (recorded in docs/ha-api-notes.md): the DESIGN
-# example calls `.value` directly on `state(x)` (the same dual trigger/condition
-# builder in builders.py). That module is frozen for this workstream (core
-# compiler internals) and StateExpr exposes no public entity-id accessor, so
-# `.value` here reads StateExpr's private `_entity_id` rather than a public API,
-# and is attached to the class as an additive property from this sibling module
-# (see the bottom of this file). This is a narrow, documented coupling, not a
-# rewrite of builders.py; promoting `_entity_id` to a public read-only property
-# on StateExpr (a one-line, additive change) would remove the need for it.
-# ---------------------------------------------------------------------------
+# `.value` reads the entity id through StateExpr's public `entity_id` accessor
+# (added in the M1 integration pass; the earlier private-`_entity_id` coupling
+# is gone). `.value` itself is attached to StateExpr as an additive property
+# from this sibling module (see the bottom of this file) — a purely additive
+# extension, not a rewrite of builders.py.
 
 
 def _entity_ref_str(value: Any) -> str:
     """Coerce an entity reference (a plain entity_id string, or a StateExpr) to
     its ``domain.object_id`` string."""
     if isinstance(value, StateExpr):
-        entity_id = getattr(value, "_entity_id", None)
-        if isinstance(entity_id, str):
-            return entity_id
-        raise TypeError(f"expected a StateExpr with an entity id, got {value!r}")
+        return value.entity_id
     if isinstance(value, str):
         return value
     raise TypeError(
@@ -121,6 +112,16 @@ class TemplateExpr(_NoBool, str):
     def to_template(self) -> str:
         """The full ``{{ ... }}`` Jinja template string (same as ``str(self)``)."""
         return str(self)
+
+    # A raw-Jinja ``template(...)`` is also usable as a template trigger/condition
+    # (DESIGN §5.4 lists ``template()`` among the trigger builders). One name, one
+    # object: inside ``when``/``only_if`` it serializes to the template block; as a
+    # bare value it IS the ``{{ ... }}`` string.
+    def to_trigger(self) -> dict[str, str]:
+        return {"trigger": "template", "value_template": self.to_template()}
+
+    def to_condition(self) -> dict[str, str]:
+        return {"condition": "template", "value_template": self.to_template()}
 
     def __repr__(self) -> str:
         return f"TemplateExpr({self._inner!r})"

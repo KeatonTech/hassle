@@ -12,15 +12,14 @@ from hassle import (
     template,
     time,
     when,
-    with_trigger_options,
 )
 
 
 @automation(id="mixed_triggers_conditions", alias="Mixed Triggers and Conditions")
 def mixed_triggers_conditions():
     when(
-        with_trigger_options(state("binary_sensor.motion"), id="motion"),
-        with_trigger_options(state("binary_sensor.door"), id="door"),
+        state("binary_sensor.motion").with_options(id="motion"),
+        state("binary_sensor.door").with_options(id="door"),
         time(at="06:00:00").with_options(id="morning"),
     )
     only_if(

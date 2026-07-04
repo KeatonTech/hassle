@@ -17,7 +17,7 @@ this module is the implementation home.
 
 from __future__ import annotations
 
-from hassle_core.compiler.action_verbs import event, service_ext, stop, variables
+from hassle_core.compiler.action_verbs import fire_event, stop, variables
 from hassle_core.compiler.actions import delay, service
 from hassle_core.compiler.builders import (
     DelayAction,
@@ -113,7 +113,7 @@ from hassle_core.compiler.scripts import (
     shared_script,
 )
 from hassle_core.compiler.spans import SourceSpan, capture_span
-from hassle_core.compiler.templates import expr
+from hassle_core.compiler.templates import TemplateExpr, expr, template
 from hassle_core.compiler.triggers import (
     CalendarTrigger,
     DeviceTrigger,
@@ -125,14 +125,13 @@ from hassle_core.compiler.triggers import (
     PersistentNotificationTrigger,
     SunExpr,
     TagTrigger,
-    TemplateExpr,
     TimeExpr,
     TimePatternTrigger,
-    TriggerWithOptions,
     WebhookTrigger,
     ZoneExpr,
     calendar,
     device,
+    event,
     geo_location,
     homeassistant_shutdown,
     homeassistant_start,
@@ -141,11 +140,9 @@ from hassle_core.compiler.triggers import (
     persistent_notification,
     sun,
     tag,
-    template,
     time,
     time_pattern,
     webhook,
-    with_trigger_options,
     zone,
 )
 
@@ -192,7 +189,6 @@ __all__ = [
     "TimePatternTrigger",
     "TriggerBuilder",
     "TriggerConditionExpr",
-    "TriggerWithOptions",
     "UnknownAutomationOptionError",
     "UnknownParamError",
     "WebhookTrigger",
@@ -214,6 +210,7 @@ __all__ = [
     "else_then",
     "event",
     "expr",
+    "fire_event",
     "floor",
     "fresh",
     "geo_location",
@@ -248,7 +245,6 @@ __all__ = [
     "script",
     "seconds",
     "service",
-    "service_ext",
     "shared_script",
     "state",
     "stop",
@@ -263,6 +259,5 @@ __all__ = [
     "wait_template",
     "webhook",
     "when",
-    "with_trigger_options",
     "zone",
 ]
