@@ -15,10 +15,9 @@ import math
 from pathlib import Path
 
 import pytest
-
 from _sim_helpers import build_sim
-from hassle.testing import UnsupportedTemplateError
 
+from hassle.testing import UnsupportedTemplateError
 
 # ---------------------------------------------------------------------------
 # core HA extensions: states() / is_state() / state_attr() / iif
@@ -270,7 +269,9 @@ def test_template_min_max_abs_round_builtins(tmp_path: Path) -> None:
             when(state("button.go").to("on"))
             service(
                 "notify.mobile_app",
-                message=template("{{ min(3, 1, 2) }}|{{ max(3, 1, 2) }}|{{ abs(-5) }}|{{ round(3.14159, 2) }}"),
+                message=template(
+                    "{{ min(3, 1, 2) }}|{{ max(3, 1, 2) }}|{{ abs(-5) }}|{{ round(3.14159, 2) }}"
+                ),
             )
         """,
     )
@@ -293,7 +294,9 @@ def test_template_sun_angle_math_expression(tmp_path: Path) -> None:
             when(state("button.go").to("on"))
             service(
                 "notify.mobile_app",
-                message=template("{{ (states('sensor.sun_angle') | float / 360 * 2 * pi) | round(4) }}"),
+                message=template(
+                    "{{ (states('sensor.sun_angle') | float / 360 * 2 * pi) | round(4) }}"
+                ),
             )
         """,
     )

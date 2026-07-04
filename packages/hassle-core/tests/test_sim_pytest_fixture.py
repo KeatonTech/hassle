@@ -6,7 +6,8 @@ rootdir" -- overridable per test module with the `hassle_bundle(path)` marker
 not next to this tests directory). The fixture itself is
 `hassle.testing.plugin`'s pytest11 entry point, registered on the
 `hassle-core` distribution so plain `pytest` picks it up automatically once
-hassle-core is installed (DESIGN §10.2: "plain `pytest` works too").
+hassle-core is installed (DESIGN §10.2: "plain `pytest` works too") -- no
+`pytest_plugins =` needed in this file, it's already active workspace-wide.
 """
 
 from __future__ import annotations
@@ -16,8 +17,6 @@ from pathlib import Path
 import pytest
 
 from hassle.testing import Simulator
-
-pytest_plugins = ["hassle.testing.plugin"]
 
 _BUNDLE = Path(__file__).resolve().parents[3] / "fixtures" / "sim" / "hallway_bundle"
 
