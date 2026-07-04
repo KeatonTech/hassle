@@ -1,0 +1,22 @@
+{
+  "automation:mqtt_trigger": {
+    "id": "mqtt_trigger",
+    "alias": "MQTT Trigger",
+    "triggers": [
+      {
+        "trigger": "mqtt",
+        "topic": "home/bedroom/motion",
+        "payload": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "switch.turn_on",
+        "target": {
+          "entity_id": "switch.bedroom_fan"
+        }
+      }
+    ]
+  }
+}

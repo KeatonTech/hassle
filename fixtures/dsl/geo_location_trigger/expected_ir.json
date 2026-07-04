@@ -1,0 +1,23 @@
+{
+  "automation:geo_location_trigger": {
+    "id": "geo_location_trigger",
+    "alias": "Geo Location Trigger",
+    "triggers": [
+      {
+        "trigger": "geo_location",
+        "source": "nsw_rural_fire_service_feed",
+        "zone": "zone.home",
+        "event": "enter"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "notify.mobile_app",
+        "data": {
+          "message": "Geolocation event"
+        }
+      }
+    ]
+  }
+}

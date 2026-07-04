@@ -1,0 +1,23 @@
+{
+  "automation:zone_trigger": {
+    "id": "zone_trigger",
+    "alias": "Zone Trigger",
+    "triggers": [
+      {
+        "trigger": "zone",
+        "entity_id": "device_tracker.john",
+        "zone": "zone.work",
+        "event": "enter"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "target": {
+          "entity_id": "light.office"
+        }
+      }
+    ]
+  }
+}

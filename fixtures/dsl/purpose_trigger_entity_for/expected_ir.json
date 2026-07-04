@@ -1,0 +1,30 @@
+{
+  "automation:purpose_trigger_entity_for": {
+    "id": "purpose_trigger_entity_for",
+    "alias": "Purpose Trigger Entity Target",
+    "triggers": [
+      {
+        "trigger": "motion.detected",
+        "target": {
+          "entity_id": "binary_sensor.hall_motion"
+        },
+        "options": {
+          "for": {
+            "hours": 0,
+            "minutes": 5,
+            "seconds": 0
+          }
+        }
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "target": {
+          "entity_id": "light.hallway"
+        }
+      }
+    ]
+  }
+}

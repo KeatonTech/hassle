@@ -1,0 +1,21 @@
+{
+  "automation:tag_trigger": {
+    "id": "tag_trigger",
+    "alias": "Tag Trigger",
+    "triggers": [
+      {
+        "trigger": "tag",
+        "tag_id": "tag_abc123"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "target": {
+          "entity_id": "light.entryway"
+        }
+      }
+    ]
+  }
+}
