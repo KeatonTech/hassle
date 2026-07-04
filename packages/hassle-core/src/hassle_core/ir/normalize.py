@@ -84,7 +84,8 @@ def _normalize_action(action: Any) -> Any:
     out: dict[str, Any] = {}
     for key, value in action.items():  # type: ignore[misc]
         if key == "service":
-            # service: -> action: (only when there is no explicit action: already).
+            # service: -> action:, unconditionally - mirrors HA's storage rewrite
+            # (a body with both keys is malformed; last-write-wins like HA).
             out["action"] = _deep_copy(value)
             continue
         if key in _ACTION_LIST_KEYS:

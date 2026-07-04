@@ -38,8 +38,10 @@ def _compiled_ir(bundle_dir: Path) -> dict[str, Any]:
 
 
 def _dump(ir: dict[str, Any]) -> str:
-    # Human-readable, stable: 2-space indent, key-sorted, trailing newline.
-    return json.dumps(ir, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    # Human-readable, stable: 2-space indent, compiler emission order (NOT
+    # key-sorted - must byte-match what the compiler emits so `--update` never
+    # reformats goldens it did not semantically change), trailing newline.
+    return json.dumps(ir, indent=2, ensure_ascii=False) + "\n"
 
 
 @dataclass

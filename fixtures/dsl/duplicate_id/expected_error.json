@@ -1,4 +1,4 @@
 {
   "error_type": "DuplicateObjectError",
-  "contains": ["automation:shared", "First", "Second"]
+  "contains": ["automation:shared", "dupes.py:6", "dupes.py:11"]
 }

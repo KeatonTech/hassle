@@ -9,12 +9,13 @@ exact HA JSON the compile must reproduce.
 from __future__ import annotations
 
 import pytest
-from _dsl_cases import DslCase, ir_cases
+from _dsl_cases import DslCase, error_cases, ir_cases
 
 from hassle_core.compiler import compile_bundle
 from hassle_core.ir import canonical_json
 
 CASES: list[DslCase] = ir_cases()
+ERROR_CASES: list[DslCase] = error_cases()
 
 
 def test_dsl_cases_present() -> None:
@@ -29,6 +30,19 @@ def test_dsl_golden_pair(case: DslCase) -> None:
     result = compile_bundle(case.bundle_dir)
     emitted = {key: obj.to_ha() for key, obj in result.objects.items()}
     assert emitted == case.expected_ir
+
+
+@pytest.mark.parametrize("case", ERROR_CASES, ids=[c.name for c in ERROR_CASES])
+def test_dsl_error_case(case: DslCase) -> None:
+    # Error cases declare {error_type, contains}; compile must raise that type
+    # with a message containing every fragment.
+    assert case.expected_error is not None
+    with pytest.raises(Exception) as excinfo:
+        compile_bundle(case.bundle_dir)
+    assert type(excinfo.value).__name__ == case.expected_error["error_type"]
+    message = str(excinfo.value)
+    for fragment in case.expected_error["contains"]:
+        assert fragment in message
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c.name for c in CASES])
