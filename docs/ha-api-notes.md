@@ -529,6 +529,18 @@ default live run mirrors a real trigger — exactly as the design states.
 ## 12. M1 internal-api contract gap: helpers / raw_automation / @blueprint_automation
 not wired into `compile_bundle` (found by the templates/macros/object-types work item)
 
+> **RESOLVED in the M1 integration pass (branch `m1/dsl-compiler`).** The
+> minimal fix sketched below was implemented as-is: `Registry.add_object(obj,
+> span)` (registry.py) registers a pre-built `IRObject` with no `func`;
+> `compile_registered` (bundle.py) drains a `prebuilt` stream and calls
+> `result.add(...)` directly, before the function-shaped registrations.
+> `helpers.py` and `raw_automation.py` builders now register into the active
+> bundle registry; `compile_bundle` resets their process-wide `_DECLARED` lists
+> per compile (R8). Public names (`input_boolean`…`schedule`, `raw_automation`,
+> `blueprint_automation`) are in `hassle.__all__`. Goldens:
+> `fixtures/dsl/{helper_declarations,raw_automation_legacy,blueprint_automation}`.
+> The rest of this section is retained as the original gap report.
+
 **Not an HA-behavior finding — an internal extension-contract gap in
 docs/m1-internal-api.md**, flagged here per CLAUDE.md's "if the internal-api
 contract is insufficient, stop and report rather than modifying core."
@@ -583,3 +595,45 @@ calls `result.add(obj, spans={}, decl_span=reg.span, duplicate_of=reg.span)`
 directly. Both `helpers.py`'s and `raw_automation.py`'s constructor functions
 already produce the exact `IRObject` this would need — only the last
 "register it" step is missing.
+
+---
+
+## 13. M1 integration-pass DSL-surface decisions (branch `m1/dsl-compiler`)
+
+Merging the three M1 workstreams (triggers, actions, templates) onto the core
+surfaced two public-name collisions and required API smoothing before the F3
+freeze. These are DSL-surface facts (not HA-behavior findings), recorded here
+per CLAUDE.md and backed by `packages/hassle-core/tests/test_integration_api.py`.
+
+### 13.1 `event` is the trigger; the fire-event action is `fire_event`
+Both the triggers workstream (event **trigger**, DESIGN §5.4) and the actions
+workstream (fire-event **action**) exported a public `event`. They are different
+functions and cannot share a name. Resolution: `event` = the trigger builder
+(DESIGN §5.4 lists it among triggers); the fire-event action was renamed
+`fire_event`. Both are public.
+
+### 13.2 `template()` is one builder serving both contexts
+The triggers workstream exported `template()` → a template **trigger/condition**;
+the templates workstream exported `template()` → a raw-Jinja **value** string.
+DESIGN §5.4 sanctions both spellings of `template()`. Resolution: a single
+`str`-subclass `TemplateExpr` (templates.py) that also implements
+`to_trigger`/`to_condition`, so `template("{{…}}")` is a Jinja value as a bare
+expression and a template trigger/condition inside `when`/`only_if`. The
+triggers-module duplicate was deleted.
+
+### 13.3 API smoothing folded two wrapper functions away (pre-F3)
+The workstreams honored the core freeze by shipping wrappers instead of editing
+`builders.py`/`actions.py`. The integration pass (which has core-edit rights)
+folded them in and deleted the wrappers so the public surface has one way to do
+each thing:
+- `with_trigger_options(state(...), id=, enabled=, variables=, for_=)` →
+  folded into `state().to(...)`/`.is_(...)`/`.with_options(...)`; wrapper deleted.
+- `service_ext(..., response_variable=, continue_on_error=)` → folded into
+  `service(...)`; `service_ext` deleted.
+
+### 13.4 `StateExpr.entity_id` is now public (deviation note retired)
+templates.py's `state(x).value` previously read `StateExpr`'s private
+`_entity_id` (a documented coupling / deviation, formerly noted here). The
+integration pass added a public read-only `StateExpr.entity_id` accessor and
+switched `.value`/`expr()` to use it; the private-attr coupling and its
+deviation note are gone.
