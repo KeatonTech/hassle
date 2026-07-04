@@ -323,6 +323,10 @@ check via `get_config` with a tested-range warning.
    apply aborts before writing anything. Include the CREATE-collision case (M5 review
    finding): an object appearing under a planned-create identity between plan and apply is
    drift too — DirectBackend must detect it and abort rather than overwrite.
+   Also verify (M4 finding): does HA rewrite inner legacy `platform:` → `trigger:` on
+   storage? `normalize_ha` currently preserves inner `platform:` verbatim; if HA rewrites
+   it, legacy-authored objects would hash-drift and normalize_ha needs the extra rule
+   (frozen-interface-compatible extension + capture evidence in docs/ha-api-notes.md).
 6. UI-editability check: after apply, `GET /api/config/automation/config/{id}` returns the
    config and the automation entity exists with correct unique_id (I2 proxy for "UI can edit it").
 7. Auth: bad token → clean 401 error surfaced with fix hint; `hassle login` validation path.
