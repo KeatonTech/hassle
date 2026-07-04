@@ -188,7 +188,13 @@ def _extract_entity_ids_from_jinja(text: str) -> set[str]:
 
 
 def _target_refs(target: dict[str, Any]) -> list[tuple[str, str]]:
-    """``target: {...}`` -> list of (key, value) pairs, list-values expanded."""
+    """``target: {...}`` -> list of (key, value) pairs, list-values expanded.
+
+    A template-valued entry (e.g. ``target={"entity_id": "{{ repeat.item }}"}``)
+    is never a literal id, so it is excluded here -- but (coordinator
+    fix-forward) it is not simply dropped: the caller still scans it for
+    embedded ``states(...)``-style calls via ``_literal_or_scanned_ids``.
+    """
     out: list[tuple[str, str]] = []
     for key in _TARGET_KEYS:
         if key not in target:
@@ -196,6 +202,20 @@ def _target_refs(target: dict[str, Any]) -> list[tuple[str, str]]:
         for value in _as_list(target[key]):
             if isinstance(value, str) and not _is_template_string(value):
                 out.append((key, value))
+    return out
+
+
+def _target_template_strings(target: dict[str, Any]) -> list[str]:
+    """The template-valued strings `_target_refs` excluded, for embedded-Jinja
+    scanning (coordinator fix-forward: uniform scan coverage across positions).
+    """
+    out: list[str] = []
+    for key in _TARGET_KEYS:
+        if key not in target:
+            continue
+        for value in _as_list(target[key]):
+            if isinstance(value, str) and _is_template_string(value):
+                out.append(value)
     return out
 
 
@@ -221,6 +241,31 @@ def _make_ref(
     )
 
 
+def _scanned_template_refs(
+    text: str, *, object_key: str, section: str, span: SourceSpan | None, source: str
+) -> list[Reference]:
+    """Scan a template-valued string (one `_is_template_string` excluded from
+    literal-id treatment) for embedded `states(...)`/`state_attr(...)`/
+    `is_state(...)` entity references (coordinator fix-forward: every
+    guard-skipped template string -- target values, top-level entity_id/
+    device_id/zone, repeat.for_each items -- gets the same scan coverage
+    `data`/`service_data` values and the generic any-other-field pass already
+    had; a placeholder with no embedded call, e.g. `{{ repeat.item }}`,
+    legitimately yields nothing here).
+    """
+    return [
+        _make_ref(
+            key="entity_id",
+            value=eid,
+            object_key=object_key,
+            section=section,
+            span=span,
+            source=source,
+        )
+        for eid in _extract_entity_ids_from_jinja(text)
+    ]
+
+
 def _walk_block(
     block: dict[str, Any],
     *,
@@ -235,7 +280,19 @@ def _walk_block(
     # {"service": "...", "entity_id": "..."} legacy longhand.
     if "entity_id" in block:
         for value in _as_list(block["entity_id"]):
-            if isinstance(value, str) and not _is_template_string(value):
+            if not isinstance(value, str):
+                continue
+            if _is_template_string(value):
+                refs.extend(
+                    _scanned_template_refs(
+                        value,
+                        object_key=object_key,
+                        section=section,
+                        span=span,
+                        source="entity_id",
+                    )
+                )
+            else:
                 refs.append(
                     _make_ref(
                         key="entity_id",
@@ -249,40 +306,73 @@ def _walk_block(
 
     # Top-level device_id (classic `device` trigger/condition raw shape),
     # e.g. {"platform": "device", "device_id": "abc123", ...}.
-    if isinstance(block.get("device_id"), str) and not _is_template_string(block["device_id"]):
-        refs.append(
-            _make_ref(
-                key="device_id",
-                value=block["device_id"],
-                object_key=object_key,
-                section=section,
-                span=span,
-                source="device_id",
+    device_id_value = block.get("device_id")
+    if isinstance(device_id_value, str):
+        if _is_template_string(device_id_value):
+            refs.extend(
+                _scanned_template_refs(
+                    device_id_value,
+                    object_key=object_key,
+                    section=section,
+                    span=span,
+                    source="device_id",
+                )
             )
-        )
+        else:
+            refs.append(
+                _make_ref(
+                    key="device_id",
+                    value=device_id_value,
+                    object_key=object_key,
+                    section=section,
+                    span=span,
+                    source="device_id",
+                )
+            )
 
     # A bare `zone` field referencing a zone entity (zone/geo_location triggers).
     zone_value = block.get("zone")
-    if isinstance(zone_value, str) and "." in zone_value and not _is_template_string(zone_value):
-        refs.append(
-            _make_ref(
-                key="entity_id",
-                value=zone_value,
-                object_key=object_key,
-                section=section,
-                span=span,
-                source="zone",
+    if isinstance(zone_value, str):
+        if _is_template_string(zone_value):
+            refs.extend(
+                _scanned_template_refs(
+                    zone_value, object_key=object_key, section=section, span=span, source="zone"
+                )
             )
-        )
+        elif "." in zone_value:
+            refs.append(
+                _make_ref(
+                    key="entity_id",
+                    value=zone_value,
+                    object_key=object_key,
+                    section=section,
+                    span=span,
+                    source="zone",
+                )
+            )
 
     # `target: {...}` block (purpose triggers/conditions AND service-call actions).
     target = block.get("target")
     if isinstance(target, dict):
-        for key, value in _target_refs(cast(dict[str, Any], target)):
+        target_dict = cast(dict[str, Any], target)
+        for key, value in _target_refs(target_dict):
             refs.append(
                 _make_ref(
                     key=key,
                     value=value,
+                    object_key=object_key,
+                    section=section,
+                    span=span,
+                    source="target",
+                )
+            )
+        # Template-valued target entries (e.g. `{"entity_id": "{{ states(...) }}"}`)
+        # were excluded above as literal ids -- scan them for embedded refs too
+        # (coordinator fix-forward), same as any other template-shaped string.
+        for template_value in _target_template_strings(target_dict):
+            refs.extend(
+                _scanned_template_refs(
+                    template_value,
                     object_key=object_key,
                     section=section,
                     span=span,
@@ -311,18 +401,16 @@ def _walk_block(
                             )
                         )
             for value in data.values():
-                if isinstance(value, str) and "{{" in value:
-                    for eid in _extract_entity_ids_from_jinja(value):
-                        refs.append(
-                            _make_ref(
-                                key="entity_id",
-                                value=eid,
-                                object_key=object_key,
-                                section=section,
-                                span=span,
-                                source="template",
-                            )
+                if isinstance(value, str) and _is_template_string(value):
+                    refs.extend(
+                        _scanned_template_refs(
+                            value,
+                            object_key=object_key,
+                            section=section,
+                            span=span,
+                            source="template",
                         )
+                    )
 
     # Any other top-level string field that looks like a Jinja template
     # (value_template, condition template, wait_template, etc.) or itself
@@ -331,18 +419,12 @@ def _walk_block(
     for key, value in block.items():
         if key in ("data", "service_data", "target"):
             continue  # handled above
-        if isinstance(value, str) and "{{" in value:
-            for eid in _extract_entity_ids_from_jinja(value):
-                refs.append(
-                    _make_ref(
-                        key="entity_id",
-                        value=eid,
-                        object_key=object_key,
-                        section=section,
-                        span=span,
-                        source="template",
-                    )
+        if isinstance(value, str) and _is_template_string(value):
+            refs.extend(
+                _scanned_template_refs(
+                    value, object_key=object_key, section=section, span=span, source="template"
                 )
+            )
 
     refs.extend(_walk_nested_containers(block, object_key=object_key, span=span))
 
@@ -398,7 +480,19 @@ def _walk_nested_containers(
         # DSL's own goldens (e.g. `repeat_for_each(["light.bedroom", ...])`),
         # not dicts -- catch them here since `as_dict_list` would drop them.
         for item in _as_list(repeat_body.get("for_each")):
-            if isinstance(item, str) and "." in item and not _is_template_string(item):
+            if not isinstance(item, str):
+                continue
+            if _is_template_string(item):
+                refs.extend(
+                    _scanned_template_refs(
+                        item,
+                        object_key=object_key,
+                        section="actions",
+                        span=span,
+                        source="repeat_for_each",
+                    )
+                )
+            elif "." in item:
                 refs.append(
                     _make_ref(
                         key="entity_id",

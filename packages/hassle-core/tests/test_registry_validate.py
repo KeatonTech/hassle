@@ -342,8 +342,7 @@ def a():
     result = compile_bundle(bundle)
     findings = validate_bundle(result, snapshot)
     assert any(
-        f.code == "unknown-entity" and "sensor.definitely_missing" in f.message
-        for f in findings
+        f.code == "unknown-entity" and "sensor.definitely_missing" in f.message for f in findings
     )
 
 
