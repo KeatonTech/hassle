@@ -1,0 +1,65 @@
+{
+  "script:basic_greet": {
+    "alias": "Basic Greet",
+    "sequence": [
+      {
+        "action": "notify.mobile_app",
+        "data": {
+          "message": "hello"
+        }
+      }
+    ]
+  },
+  "script:queued_worker": {
+    "alias": "Queued Worker",
+    "mode": "queued",
+    "max": 10,
+    "sequence": [
+      {
+        "action": "switch.turn_on",
+        "target": {
+          "entity_id": "switch.pump"
+        }
+      },
+      {
+        "delay": {
+          "seconds": 5
+        }
+      },
+      {
+        "action": "switch.turn_off",
+        "target": {
+          "entity_id": "switch.pump"
+        }
+      }
+    ]
+  },
+  "script:script_with_fields": {
+    "alias": "Script With Fields",
+    "fields": {
+      "light_entity": {
+        "name": "Light Entity",
+        "description": "The light to control",
+        "example": "light.bedroom"
+      },
+      "brightness": {
+        "name": "Brightness",
+        "description": "Brightness level 0-255",
+        "example": 200,
+        "default": 255
+      }
+    },
+    "description": "A script with input fields for parameters",
+    "sequence": [
+      {
+        "action": "light.turn_on",
+        "target": {
+          "entity_id": "{{ light_entity }}"
+        },
+        "data": {
+          "brightness": "{{ brightness }}"
+        }
+      }
+    ]
+  }
+}
