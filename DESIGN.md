@@ -147,7 +147,7 @@ behaviorally in M0.V against a live HA instance** (see MILESTONES); HA versions 
 | Automations | `automations.yaml`, keyed by `id` | Enumerate: list states for domain `automation`, read `attributes.id`; fetch: `GET /api/config/automation/config/{id}` | `POST/DELETE /api/config/automation/config/{id}` (auto-reloads) |
 | Scripts | `scripts.yaml`, keyed by object_id | object_id from `entity_id`; `GET /api/config/script/config/{object_id}` | `POST/DELETE` same path |
 | Helpers (storage-collection): `input_boolean`, `input_number`, `input_select`, `input_text`, `input_datetime`, `input_button`, `counter`, `timer`, `schedule` | `.storage/{domain}` | WS `{domain}/list` (also `{domain}/subscribe`) | WS `{domain}/create`, `{domain}/update`, `{domain}/delete` — update/delete take the item id as `{domain}_id` (e.g. `input_boolean_id`). Storage items are `editable: true`; YAML-defined helpers coexist as `editable: false` and are out of scope (I1) |
-| Entity/device/area/label registries | `.storage/*` | WS `config/entity_registry/list`, `config/device_registry/list`, `config/area_registry/list`, `config/label_registry/list` | (read-only for Hassle v1) |
+| Entity/device/area/floor/label registries | `.storage/*` | WS `config/entity_registry/list`, `config/device_registry/list`, `config/area_registry/list`, `config/floor_registry/list`, `config/label_registry/list` | (read-only for Hassle v1) |
 | Services + schemas | — | WS `get_services` | — |
 | Validation | — | WS `validate_config` (trigger/condition/action blocks); `POST /api/config/core/check_config` | — |
 | Traces | — | WS `trace/list` (domain [+ item_id]); `trace/get` requires domain + item_id + **run_id**; admin-only | — |
@@ -164,6 +164,19 @@ verified against a live instance in M0.V — details and raw captures in
   outright. Hassle's compiled and canonical-hashed form is therefore always plural (§7.1).
 - **Automation `entity_id` derives from the alias, not the id** (`slug(alias)`). Never construct
   `automation.<id>`; resolve entity_ids by matching `attributes.id` from `/api/states`.
+- **Purpose-specific triggers/conditions (HA 2026.7+, web-verified July 2026).** HA 2026.7 made
+  a new trigger/condition vocabulary the UI default: 200+ namespaced types stored as
+  `trigger: <domain>.<event>` (e.g. `motion.detected`, `battery.became_low`,
+  `vacuum.returned_to_dock`) with a `target:` block (`entity_id`/`device_id`/`area_id`/
+  `floor_id`/`label_id`), a `behavior:` key (`first`/`each`/`all` multi-target semantics), and
+  an `options:` block (e.g. `for:`). Same plural storage schema, same config API — the UI will
+  generate these constantly from 2026.7 on, so Hassle must treat them as first-class (§5.4),
+  not `raw`. Caution: HA renamed several of these keys between their Labs debut and 2026.7
+  (e.g. `battery.low` → `battery.became_low`, `schedule.turned_on` → `schedule.block_started`)
+  **without migration — old keys simply stop working** — so the vocabulary must be treated as
+  data (enumerated from the instance, validated with rename hints), never hard-coded. M6 must
+  find and capture the WS API the UI uses to enumerate available purpose types (M0.V ran on
+  2026.2.3 and could not).
 - `automation.trigger`'s `skip_condition` **defaults to `true`** — live runs must pass
   `skip_condition: false` explicitly unless the user asked for `--skip-conditions` (§10.4).
 - The automation `id` attribute has moved into `capability_attributes` in recent HA — it still
@@ -263,10 +276,24 @@ append actions. The body is a *description*, not runtime code (§5.5).
 
 ### 5.4 Triggers, conditions, templates
 
-Every HA trigger/condition type has a typed builder: `state()`, `numeric_state()`, `time()`,
-`time_pattern()`, `sun()`, `event()`, `zone()`, `template()`, `webhook()`, `device()` (raw
-passthrough), `mqtt()`, `calendar()`, `persistent_notification()`, plus `for_=` durations,
+Every classic HA trigger/condition type has a typed builder: `state()`, `numeric_state()`,
+`time()`, `time_pattern()`, `sun()`, `event()`, `zone()`, `template()`, `webhook()`, `device()`
+(raw passthrough), `mqtt()`, `calendar()`, `persistent_notification()`, plus `for_=` durations,
 trigger `id=`s, `not_(...)`, `any_of(...)`, `all_of(...)`.
+
+**Purpose-specific triggers/conditions (2026.7+, §4)** get one *generic* typed builder rather
+than 200+ hand-written ones — the vocabulary is instance data, not code:
+
+```python
+when(on("motion.detected", target=area("office"), behavior="first", for_=minutes(5)))
+only_if(met("climate.is_target_temperature", target=e.climate.living))
+# targets: e.<domain>.<object_id> | area("office") | floor("upstairs") | label("security") | device_id("…")
+```
+
+The type string is validated against the vocabulary enumerated from the instance (tier 2, §9),
+with rename hints for HA's known Labs→2026.7 renames; target ids are validated against the
+registries. Decompilation of UI-authored purpose triggers produces exactly this form — never
+`raw`.
 
 Templates are built with operator overloading and compile to Jinja:
 
@@ -567,7 +594,7 @@ toggle). Explicitly best-effort:
 |---|---|---|---|
 | 0. pyright on stubs | editor / CI | entity typos, wrong service params, type errors | as you type |
 | 1. Compile | CLI | DSL misuse (incl. `CompileTimeBranchError`), duplicate ids, bad options | `hassle validate`, pre-plan |
-| 2. Registry | CLI, offline | references to nonexistent entities/services/areas/devices/labels — including inside `raw_*` blocks and Jinja strings (entity-id extraction lint); "did you mean `light.hallway`?" suggestions; bundle-declared helpers count as existing | `hassle validate` |
+| 2. Registry | CLI, offline | references to nonexistent entities/services/areas/floors/devices/labels — including inside `raw_*` blocks and Jinja strings (entity-id extraction lint); unknown purpose-trigger/condition type strings (validated against the instance's enumerated vocabulary, with rename hints for HA's known Labs→2026.7 renames); "did you mean `light.hallway`?" suggestions; bundle-declared helpers count as existing | `hassle validate` |
 | 3. Template lint | CLI, offline | Jinja syntax errors; unknown entities inside templates | `hassle validate` |
 | 4. Server-side | CLI → HA, pre-apply | anything HA itself rejects: WS `validate_config` per object + `check_config` | automatic during plan/apply; `hassle validate --live` |
 
@@ -592,9 +619,12 @@ fake clock + trigger evaluator + action executor.
   `stop`, mode semantics (`single/restart/queued/parallel` — including the classic
   "restart cancels my delay" behaviors, which are exactly what people need tests for).
 - **Triggers (v1 set):** state (incl. `for_`), numeric_state, time, time_pattern, sun
-  (configurable sunrise/sunset), event, template (subset), zone. Anything else: the test fires
-  the automation manually — `sim.fire(automation, trigger_ctx={...})` — so *no automation is
-  untestable*, some just skip trigger evaluation.
+  (configurable sunrise/sunset), event, template (subset), zone. Anything else — including the
+  2026.7 purpose-specific vocabulary (§4), which is semantically defined per-type by HA and too
+  large to reimplement faithfully — the test fires the automation manually:
+  `sim.fire(automation, trigger_ctx={...})`. So *no automation is untestable*, some just skip
+  trigger evaluation. (Mapping the most common purpose triggers onto state-trigger semantics is
+  a designed-for v2 simulator extension.)
 - **Templates:** real jinja2 plus reimplementations of the most-used HA extensions (`states()`,
   `is_state()`, `state_attr()`, `now()`, `today_at()`, `as_timestamp`, `float/int/round`,
   timedelta arithmetic, `iif`). Unsupported constructs raise
