@@ -1,0 +1,1 @@
+Unknown automation option `flibbertigibbet` at test_compile_errors.py:86. `@automation` accepts only HA's automation options: alias, description, id, initial_state, max, max_exceeded, mode, trigger_variables, variables. Fix: remove `flibbertigibbet=` or correct its spelling; per-object runtime data belongs in `variables=`/`trigger_variables=`, not as a decorator keyword.

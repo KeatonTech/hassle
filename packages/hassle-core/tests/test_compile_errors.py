@@ -63,8 +63,9 @@ def test_compile_time_branch_error_has_location_and_fix() -> None:
     with recording(alias="x", id="x"):
         expr = state("light.hallway").is_("on")
         with pytest.raises(CompileTimeBranchError) as excinfo:
-            if expr:  # noqa: SIM103  (intentional: triggers __bool__)
-                pass
+            # Native Python `if` on a runtime state expression must trap (§5.5).
+            if expr:
+                _ = 1
     msg = str(excinfo.value)
     assert "if_then" in msg  # the rewrite hint
     assert "test_compile_errors.py" in msg  # where (file)
@@ -78,7 +79,7 @@ def test_duplicate_id_error_message() -> None:
 
 
 def test_unknown_automation_option_message() -> None:
-    from hassle_core.compiler.recording import automation
+    from hassle_core.compiler import automation
 
     with pytest.raises(UnknownAutomationOptionError) as excinfo:
 

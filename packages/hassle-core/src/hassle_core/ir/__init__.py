@@ -18,6 +18,7 @@ from hassle_core.ir.models import (
     parse,
     serialize,
 )
+from hassle_core.ir.normalize import normalize_ha
 
 __all__ = [
     "HELPER_DOMAINS",
@@ -27,6 +28,7 @@ __all__ = [
     "IRObject",
     "ScriptConfig",
     "canonical_json",
+    "normalize_ha",
     "object_key",
     "parse",
     "serialize",

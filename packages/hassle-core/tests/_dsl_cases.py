@@ -48,9 +48,7 @@ def load_cases() -> list[DslCase]:
             continue
         ir_path = case_dir / "expected_ir.json"
         err_path = case_dir / "expected_error.json"
-        expected_ir = (
-            json.loads(ir_path.read_text(encoding="utf-8")) if ir_path.is_file() else None
-        )
+        expected_ir = json.loads(ir_path.read_text(encoding="utf-8")) if ir_path.is_file() else None
         expected_error = (
             json.loads(err_path.read_text(encoding="utf-8")) if err_path.is_file() else None
         )

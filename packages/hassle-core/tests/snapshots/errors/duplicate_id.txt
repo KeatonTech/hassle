@@ -1,0 +1,1 @@
+Duplicate object key `automation:shared`: two objects in this bundle claim the same id, first at dupes.py:6 and again at dupes.py:11. An object's id is its HA identity and must be unique bundle-wide. Fix: give one of them a distinct `id=` (or rename the function, whose name is the default id).
