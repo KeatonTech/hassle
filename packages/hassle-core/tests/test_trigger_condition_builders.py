@@ -40,8 +40,8 @@ from hassle import (
     webhook,
     zone,
 )
-from hassle_core.compiler import CompileTimeBranchError
-from hassle_core.compiler.builders import state
+from hassle.compiler import CompileTimeBranchError
+from hassle.compiler.builders import state
 
 
 # ---------------------------------------------------------------------------

@@ -25,11 +25,13 @@ class SourceSpan:
         return f"{self.file}:{self.line}"
 
 
-# Top-level packages that are Hassle machinery (compiler + user-facing DSL shims).
-# A frame belonging to one of these is "internal" and is skipped when walking
-# outward to the user's DSL line. Matched on the frame's module ``__name__`` so it
-# is robust to the repository/checkout path (never on the filename).
-_INTERNAL_ROOTS: tuple[str, ...] = ("hassle_core", "hassle")
+# The top-level package that is Hassle machinery (compiler + user-facing DSL
+# surface: a single package, ``hassle``, since the 2026-07-03 layout merge —
+# previously two, ``hassle`` + ``hassle_core``). A frame belonging to it is
+# "internal" and is skipped when walking outward to the user's DSL line.
+# Matched on the frame's module ``__name__`` so it is robust to the
+# repository/checkout path (never on the filename).
+_INTERNAL_ROOT = "hassle"
 
 
 def _module_name(frame: FrameType) -> str:
@@ -39,7 +41,7 @@ def _module_name(frame: FrameType) -> str:
 
 def _is_internal(frame: FrameType) -> bool:
     root = _module_name(frame).split(".", 1)[0]
-    return root in _INTERNAL_ROOTS
+    return root == _INTERNAL_ROOT
 
 
 def capture_span(depth: int = 0) -> SourceSpan | None:

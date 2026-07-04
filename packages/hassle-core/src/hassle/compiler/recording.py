@@ -25,16 +25,16 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
-from hassle_core.compiler.errors import (
+from hassle.compiler.errors import (
     NoRecordingContextError,
     UnknownAutomationOptionError,
 )
-from hassle_core.compiler.protocols import (
+from hassle.compiler.protocols import (
     ActionBuilder,
     ConditionBuilder,
     TriggerBuilder,
 )
-from hassle_core.compiler.spans import SourceSpan, capture_span
+from hassle.compiler.spans import SourceSpan, capture_span
 
 # ---------------------------------------------------------------------------
 # HA automation/script option allow-lists (DESIGN §5.3/§5.7). `id`/`alias` are

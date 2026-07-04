@@ -117,7 +117,8 @@ node; `CompileTimeBranchError` trap; bundle loader (imports bundle in isolation,
 registered objects, rejects duplicate ids); entity indexing form (`e.sensor["3d_printer"]`);
 **`normalize_ha`** — the singular→plural / `service:`→`action:` normalization HA itself applies
 on storage (docs/ha-api-notes.md §10.1), applied by the compiler to everything it emits,
-including legacy-form `raw_*` bodies (added to `hassle_core.ir` as an F1-compatible extension).
+including legacy-form `raw_*` bodies (added to `hassle.ir` as an F1-compatible extension;
+module renamed from `hassle_core.ir` 2026-07-03, owner decision — see docs/ir-f1.md).
 
 **Write these tests first**
 1. **Golden pairs** `fixtures/dsl/{case}/bundle/…py` → `expected_ir.json`: one case per DSL

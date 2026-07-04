@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from hassle_core.compiler import UnknownParamError, compile_bundle
+from hassle.compiler import UnknownParamError, compile_bundle
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "dsl"
 
@@ -63,8 +63,8 @@ def test_param_unknown_name_raises() -> None:
 
 
 def test_param_outside_shared_script_raises() -> None:
-    from hassle_core.compiler import NoParamContextError
-    from hassle_core.compiler.scripts import param
+    from hassle.compiler import NoParamContextError
+    from hassle.compiler.scripts import param
 
     with pytest.raises(NoParamContextError):
         param("anything")

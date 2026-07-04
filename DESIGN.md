@@ -113,7 +113,7 @@ implementing agents).
 
 | Component | Language / stack | Purpose |
 |---|---|---|
-| `hassle-core` | Python 3.12, pydantic v2, jinja2, LibCST | IR, compiler, decompiler, validator, simulator, sync engine, `Backend` protocol + `DirectBackend` (REST/WS client for HA Core) |
+| `hassle-core` (import package: `hassle`) | Python 3.12, pydantic v2, jinja2, LibCST | IR, compiler, decompiler, validator, simulator, sync engine, `Backend` protocol + `DirectBackend` (REST/WS client for HA Core) |
 | `hassle-cli` | Python (click or typer), rich, keyring | `pull/plan/push/validate/test/run/fmt/stubs/explain/mirror/doctor` |
 | VS Code extension | TypeScript (thin) + pyright | Commands, diagnostics from `hassle validate`, entity hovers (stretch) |
 | Docs generator | part of `hassle-core` | Emits `AGENTS.md`, entity inventory, DSL reference into every bundle |

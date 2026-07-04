@@ -1,7 +1,7 @@
 """``@shared_script`` + ``param()`` (DESIGN §5.6/§5.7, MILESTONES M1 test 3).
 
 ``@shared_script`` builds on the core's existing ``script()`` registration
-(``hassle_core.compiler.registry.script`` -- already handled end-to-end by
+(``hassle.compiler.registry.script`` -- already handled end-to-end by
 ``compile_registered``/``compile_bundle``, docs/m1-internal-api.md's table does
 not list ``registry.py`` as off-limits and ``script()`` is exactly the seam:
 "a new builder family is just ... expose thin constructor functions"). It adds:
@@ -35,11 +35,11 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Any
 
-from hassle_core.compiler.errors import CompileError
-from hassle_core.compiler.recording import record_action
-from hassle_core.compiler.registry import script as _register_script
-from hassle_core.compiler.spans import SourceSpan, capture_span
-from hassle_core.compiler.templates import TemplateExpr
+from hassle.compiler.errors import CompileError
+from hassle.compiler.recording import record_action
+from hassle.compiler.registry import script as _register_script
+from hassle.compiler.spans import SourceSpan, capture_span
+from hassle.compiler.templates import TemplateExpr
 
 # ---------------------------------------------------------------------------
 # param()

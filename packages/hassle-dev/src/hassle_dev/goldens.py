@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from hassle_core.compiler import compile_bundle
+from hassle.compiler import compile_bundle
 
 
 def find_dsl_dir(start: Path | None = None) -> Path | None:

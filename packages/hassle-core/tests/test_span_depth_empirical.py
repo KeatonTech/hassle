@@ -12,7 +12,7 @@ Frame chain verified (see module docstring in control_flow.py): from inside a
 frame 0 is the generator's own body, frame 1 is contextlib's
 `_GeneratorContextManager.__enter__` trampoline (NOT filtered as "internal" by
 `_is_internal`, since its module root is `contextlib`, not `hassle`/
-`hassle_core`), and frame 2 is the user's `with construct(...):` call site.
+`hassle`), and frame 2 is the user's `with construct(...):` call site.
 This holds independent of nesting depth, because each construct's own
 `capture_span(depth=2)` call is one contextlib trampoline away from its own
 call site regardless of how many other constructs are active above it.
@@ -28,7 +28,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Generator
 
-from hassle_core.compiler.spans import SourceSpan, capture_span
+from hassle.compiler.spans import SourceSpan, capture_span
 
 
 @contextlib.contextmanager

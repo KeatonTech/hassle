@@ -21,7 +21,7 @@ The rules, verified against the real POST->GET capture pair
   does not rewrite the trigger discriminator on read-back.
 
 This is an F1-compatible *extension*: it adds a new public function to
-``hassle_core.ir`` and touches no existing F1 surface. It never mutates its input.
+``hassle.ir`` and touches no existing F1 surface. It never mutates its input.
 """
 
 from __future__ import annotations

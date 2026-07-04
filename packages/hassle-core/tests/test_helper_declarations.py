@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from hassle_core.compiler.helpers import (
+from hassle.compiler.helpers import (
     EntityRef,
     counter,
     declared_helpers,
@@ -76,7 +76,7 @@ def test_input_number_all_fields() -> None:
 def test_entity_ref_usable_as_entity_id_string() -> None:
     # DESIGN §5.7: "referenced by import elsewhere" -- the returned ref is a
     # plain string wherever the DSL expects an entity id.
-    from hassle_core.compiler.builders import state
+    from hassle.compiler.builders import state
 
     guest_mode = input_boolean(id="guest_mode", name="Guest Mode")
     trig = state(guest_mode).to("on")

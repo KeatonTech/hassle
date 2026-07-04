@@ -20,12 +20,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from hassle_core.compiler.errors import DuplicateObjectError
-from hassle_core.compiler.recording import RecordedNode, Recorder, recording
-from hassle_core.compiler.registry import PrebuiltObject, RegisteredObject, fresh
-from hassle_core.compiler.spans import SourceSpan
-from hassle_core.ir import normalize_ha
-from hassle_core.ir.models import AutomationConfig, IRObject, ScriptConfig
+from hassle.compiler.errors import DuplicateObjectError
+from hassle.compiler.recording import RecordedNode, Recorder, recording
+from hassle.compiler.registry import PrebuiltObject, RegisteredObject, fresh
+from hassle.compiler.spans import SourceSpan
+from hassle.ir import normalize_ha
+from hassle.ir.models import AutomationConfig, IRObject, ScriptConfig
 
 # object_key -> {"triggers"|"conditions"|"actions": [SourceSpan | None, ...]}
 _SectionSpans = dict[str, list["SourceSpan | None"]]
@@ -173,8 +173,8 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
     # bundle import in the same process) never bleeds objects into this one (R8).
     # These modules track declarations in module globals in addition to the
     # per-compile registry, so both must be cleared.
-    from hassle_core.compiler.helpers import reset_declared_helpers
-    from hassle_core.compiler.raw_automation import reset_declared_raw_automations
+    from hassle.compiler.helpers import reset_declared_helpers
+    from hassle.compiler.raw_automation import reset_declared_raw_automations
 
     reset_declared_helpers()
     reset_declared_raw_automations()

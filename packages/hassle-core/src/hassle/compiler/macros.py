@@ -2,7 +2,7 @@
 
 A macro is *just a Python function* that calls DSL recording verbs
 (``when``/``only_if``/``service``/``delay``/...) in its body. Those verbs
-always record into whichever :class:`~hassle_core.compiler.recording.Recorder`
+always record into whichever :class:`~hassle.compiler.recording.Recorder`
 is active (a `ContextVar` stack, `docs/m1-internal-api.md` §4) -- so calling a
 plain function from inside an ``@automation``/``@script`` body already splices
 its recorded actions into the caller, with zero extra machinery: nested Python
@@ -30,9 +30,9 @@ from typing import Any
 
 # `_require_active` is private to recording.py, but docs/m1-internal-api.md §2
 # explicitly sanctions importing it ("import it from
-# `hassle_core.compiler.recording`"): pyright's cross-module private-access
+# `hassle.compiler.recording`"): pyright's cross-module private-access
 # check is silenced here for that one documented reason.
-from hassle_core.compiler.recording import _require_active  # pyright: ignore[reportPrivateUsage]
+from hassle.compiler.recording import _require_active  # pyright: ignore[reportPrivateUsage]
 
 
 def macro[F: Callable[..., Any]](func: F) -> F:

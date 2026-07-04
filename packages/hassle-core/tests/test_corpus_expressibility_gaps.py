@@ -17,9 +17,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hassle_core.compiler import compile_bundle
-from hassle_core.compiler.raw import raw_action
-from hassle_core.compiler.recording import recording
+from hassle.compiler import compile_bundle
+from hassle.compiler.raw import raw_action
+from hassle.compiler.recording import recording
 
 _DSL = Path(__file__).resolve().parents[3] / "fixtures" / "dsl"
 

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from hassle_core.compiler import NoRecordingContextError, compile_bundle
+from hassle.compiler import NoRecordingContextError, compile_bundle
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "dsl"
 

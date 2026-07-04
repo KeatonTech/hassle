@@ -7,7 +7,7 @@ depend on them and they are snapshot-tested (tests/snapshots/errors/).
 
 from __future__ import annotations
 
-from hassle_core.compiler.spans import SourceSpan
+from hassle.compiler.spans import SourceSpan
 
 
 class CompileError(Exception):

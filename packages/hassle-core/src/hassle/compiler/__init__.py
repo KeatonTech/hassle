@@ -17,27 +17,27 @@ this module is the implementation home.
 
 from __future__ import annotations
 
-from hassle_core.compiler.action_verbs import fire_event, stop, variables
-from hassle_core.compiler.actions import delay, service
-from hassle_core.compiler.builders import (
+from hassle.compiler.action_verbs import fire_event, stop, variables
+from hassle.compiler.actions import delay, service
+from hassle.compiler.builders import (
     DelayAction,
     ServiceAction,
     StateExpr,
     state,
 )
-from hassle_core.compiler.bundle import (
+from hassle.compiler.bundle import (
     CompileResult,
     compile_bundle,
     compile_registered,
 )
-from hassle_core.compiler.conditions import (
+from hassle.compiler.conditions import (
     TriggerConditionExpr,
     all_of,
     any_of,
     not_,
     trigger_condition,
 )
-from hassle_core.compiler.control_flow import (
+from hassle.compiler.control_flow import (
     choose,
     else_if,
     else_then,
@@ -50,8 +50,8 @@ from hassle_core.compiler.control_flow import (
     wait_for,
     wait_template,
 )
-from hassle_core.compiler.durations import hours, minutes, normalize_duration, seconds
-from hassle_core.compiler.errors import (
+from hassle.compiler.durations import hours, minutes, normalize_duration, seconds
+from hassle.compiler.errors import (
     CompileError,
     CompileTimeBranchError,
     DuplicateObjectError,
@@ -59,7 +59,7 @@ from hassle_core.compiler.errors import (
     NoRecordingContextError,
     UnknownAutomationOptionError,
 )
-from hassle_core.compiler.helpers import (
+from hassle.compiler.helpers import (
     EntityRef,
     counter,
     declared_helpers,
@@ -72,13 +72,13 @@ from hassle_core.compiler.helpers import (
     schedule,
     timer,
 )
-from hassle_core.compiler.macros import macro
-from hassle_core.compiler.protocols import (
+from hassle.compiler.macros import macro
+from hassle.compiler.protocols import (
     ActionBuilder,
     ConditionBuilder,
     TriggerBuilder,
 )
-from hassle_core.compiler.purpose import (
+from hassle.compiler.purpose import (
     AreaTarget,
     DeviceIdTarget,
     FloorTarget,
@@ -92,7 +92,7 @@ from hassle_core.compiler.purpose import (
     met,
     on,
 )
-from hassle_core.compiler.raw import (
+from hassle.compiler.raw import (
     RawAction,
     RawCondition,
     RawTrigger,
@@ -100,13 +100,13 @@ from hassle_core.compiler.raw import (
     raw_condition,
     raw_trigger,
 )
-from hassle_core.compiler.raw_automation import (
+from hassle.compiler.raw_automation import (
     blueprint_automation,
     build_raw_automation,
     declared_raw_automations,
     raw_automation,
 )
-from hassle_core.compiler.recording import (
+from hassle.compiler.recording import (
     RecordedNode,
     Recorder,
     only_if,
@@ -116,7 +116,7 @@ from hassle_core.compiler.recording import (
     recording,
     when,
 )
-from hassle_core.compiler.registry import (
+from hassle.compiler.registry import (
     RegisteredObject,
     Registry,
     automation,
@@ -124,16 +124,16 @@ from hassle_core.compiler.registry import (
     fresh,
     script,
 )
-from hassle_core.compiler.scripts import (
+from hassle.compiler.scripts import (
     NoParamContextError,
     ScriptCallAction,
     UnknownParamError,
     param,
     shared_script,
 )
-from hassle_core.compiler.spans import SourceSpan, capture_span
-from hassle_core.compiler.templates import TemplateExpr, expr, template
-from hassle_core.compiler.triggers import (
+from hassle.compiler.spans import SourceSpan, capture_span
+from hassle.compiler.templates import TemplateExpr, expr, template
+from hassle.compiler.triggers import (
     CalendarTrigger,
     DeviceTrigger,
     EventTrigger,

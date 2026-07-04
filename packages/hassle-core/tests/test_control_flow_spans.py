@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hassle_core.compiler import compile_bundle
+from hassle.compiler import compile_bundle
 
 DSL_DIR = Path(__file__).resolve().parents[3] / "fixtures" / "dsl"
 
@@ -42,7 +42,7 @@ def test_deep_nesting_top_level_span_points_at_with_choose_line() -> None:
 
 def test_nested_container_spans_never_leak_compiler_internals() -> None:
     # Every construct's own span must land in the user's bundle file, never in
-    # contextlib or hassle_core -- the exact bug the depth=2 empirical check
+    # contextlib or hassle -- the exact bug the depth=2 empirical check
     # guards against.
     cases = ("if_then_else", "choose_action", "repeat_count", "parallel_action", "deep_nesting")
     for case in cases:
@@ -50,5 +50,5 @@ def test_nested_container_spans_never_leak_compiler_internals() -> None:
         for obj in result.objects.values():
             for span in result.spans_for(obj, "actions"):
                 assert "contextlib" not in span.file
-                assert "hassle_core" not in span.file
+                assert "hassle" not in span.file
                 assert span.file.endswith(".py")

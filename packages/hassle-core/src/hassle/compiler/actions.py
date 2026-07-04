@@ -2,8 +2,8 @@
 
 ``service(...)`` and ``delay(...)`` build an action and append it to the active
 recorder's current action list, capturing the DSL call-site span. Kept separate
-from :mod:`hassle_core.compiler.recording` (which must not depend on builders) and
-from :mod:`hassle_core.compiler.builders` (which must not depend on the recorder):
+from :mod:`hassle.compiler.recording` (which must not depend on builders) and
+from :mod:`hassle.compiler.builders` (which must not depend on the recorder):
 this module is the thin verb layer that ties the two together.
 """
 
@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from hassle_core.compiler.builders import DelayAction, ServiceAction
-from hassle_core.compiler.recording import record_action
-from hassle_core.compiler.spans import capture_span
+from hassle.compiler.builders import DelayAction, ServiceAction
+from hassle.compiler.recording import record_action
+from hassle.compiler.spans import capture_span
 
 
 def service(

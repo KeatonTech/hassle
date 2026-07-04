@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hassle_core.compiler import compile_bundle
+from hassle.compiler import compile_bundle
 
 _FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "dsl"
 

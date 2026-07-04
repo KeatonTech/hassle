@@ -17,7 +17,7 @@ builders get for free by not touching the dict at all.
 object) and ``@blueprint_automation`` are *not* in this module -- they are
 whole top-level objects (a different registration shape than "run a function,
 record trigger/condition/action calls into it") and live in
-``hassle_core.compiler.raw_automation`` instead, alongside the ``Registry.
+``hassle.compiler.raw_automation`` instead, alongside the ``Registry.
 add_object`` path (registry.py) that lands them in ``CompileResult.objects``.
 This was originally a reported contract gap (docs/ha-api-notes.md §12);
 resolved in the M1 integration pass -- see that module's docstring.
@@ -27,8 +27,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from hassle_core.compiler.recording import record_action, record_condition, record_trigger
-from hassle_core.compiler.spans import capture_span
+from hassle.compiler.recording import record_action, record_condition, record_trigger
+from hassle.compiler.spans import capture_span
 
 
 class RawTrigger:

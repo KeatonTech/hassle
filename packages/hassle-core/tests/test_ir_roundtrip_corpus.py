@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from _corpus import Fixture, load_corpus
 
-from hassle_core.ir import parse, serialize
+from hassle.ir import parse, serialize
 
 CORPUS: list[Fixture] = load_corpus()
 

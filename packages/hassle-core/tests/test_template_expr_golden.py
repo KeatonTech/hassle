@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from hassle_core.compiler import CompileTimeBranchError, compile_bundle
-from hassle_core.compiler.builders import state
-from hassle_core.compiler.templates import TemplateExpr, expr, template
+from hassle.compiler import CompileTimeBranchError, compile_bundle
+from hassle.compiler.builders import state
+from hassle.compiler.templates import TemplateExpr, expr, template
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "dsl"
 

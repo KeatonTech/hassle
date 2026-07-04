@@ -2,7 +2,7 @@
 
 This is the *proof of the pattern*, not the full builder catalog. The
 triggers/conditions and actions/control-flow workstreams add the rest by
-implementing the protocols in :mod:`hassle_core.compiler.protocols` — they do not
+implementing the protocols in :mod:`hassle.compiler.protocols` — they do not
 edit this file. Every builder here emits canonical (already plural / ``action:``)
 HA dicts so compiler output is byte-stable (R8).
 """
@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from hassle_core.compiler.durations import normalize_duration
-from hassle_core.compiler.errors import CompileTimeBranchError
-from hassle_core.compiler.spans import capture_span
+from hassle.compiler.durations import normalize_duration
+from hassle.compiler.errors import CompileTimeBranchError
+from hassle.compiler.spans import capture_span
 
 
 class _NoBool:

@@ -33,10 +33,10 @@ import json
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from hassle_core.compiler.errors import CompileError
-from hassle_core.compiler.spans import SourceSpan, capture_span
-from hassle_core.ir import normalize_ha
-from hassle_core.ir.models import AutomationConfig
+from hassle.compiler.errors import CompileError
+from hassle.compiler.spans import SourceSpan, capture_span
+from hassle.ir import normalize_ha
+from hassle.ir.models import AutomationConfig
 
 F = TypeVar("F", bound=Callable[[], dict[str, Any]])
 
@@ -90,7 +90,7 @@ def _build(automation_id: str, body: dict[str, Any], span: SourceSpan | None) ->
     # compiler lands this automation in CompileResult.objects under
     # "automation:<id>" (bundle.py drains the prebuilt stream). Lazy import to
     # avoid a registry<->raw_automation import cycle at module load.
-    from hassle_core.compiler.registry import current_registry
+    from hassle.compiler.registry import current_registry
 
     current_registry().add_object(obj, span)
     return obj

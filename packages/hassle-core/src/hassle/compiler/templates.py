@@ -7,7 +7,7 @@ is the raw-Jinja passthrough (validated later by tier-3 lint, §9 -- out of
 scope here).
 
 This is a **sibling builder module** (docs/m1-internal-api.md's "may you edit"
-column): it does not modify ``hassle_core.compiler.builders``. It reuses the
+column): it does not modify ``hassle.compiler.builders``. It reuses the
 documented extension seam for the ``__bool__`` trap -- subclassing
 ``builders._NoBool`` and overriding ``_branch_repr`` is explicitly sanctioned by
 docs/m1-internal-api.md section 5. Comparison results (``TemplateExpr``
@@ -60,7 +60,7 @@ from typing import Any
 # explicitly sanctions subclassing it for the `__bool__` trap ("subclass
 # `builders._NoBool`, override `_branch_repr`"): pyright's cross-module
 # private-access check is silenced here for that one documented reason.
-from hassle_core.compiler.builders import StateExpr, _NoBool  # pyright: ignore[reportPrivateUsage]
+from hassle.compiler.builders import StateExpr, _NoBool  # pyright: ignore[reportPrivateUsage]
 
 # `.value` reads the entity id through StateExpr's public `entity_id` accessor
 # (added in the M1 integration pass; the earlier private-`_entity_id` coupling

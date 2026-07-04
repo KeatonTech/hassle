@@ -16,9 +16,9 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
-from hassle_core.compiler.recording import check_options
-from hassle_core.compiler.spans import SourceSpan, capture_span
-from hassle_core.ir.models import IRObject
+from hassle.compiler.recording import check_options
+from hassle.compiler.spans import SourceSpan, capture_span
+from hassle.ir.models import IRObject
 
 
 @dataclass

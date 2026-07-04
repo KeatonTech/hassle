@@ -15,7 +15,7 @@ outward, is:
 
     0: this generator's own frame (the ``def foo(): ...`` body)      -- internal, skip
     1: contextlib's ``_GeneratorContextManager.__enter__`` trampoline  -- NOT skipped by
-       ``_is_internal`` (module root is ``contextlib``, not ``hassle``/``hassle_core``),
+       ``_is_internal`` (module root is ``contextlib``, not ``hassle``/``hassle``),
        but it is a frame we must still walk past
     2: the user's ``with foo(...):`` call site                        -- correct target
 
@@ -33,15 +33,15 @@ import contextlib
 from collections.abc import Generator, Iterable
 from typing import Any
 
-from hassle_core.compiler.action_verbs import _RawAction  # pyright: ignore[reportPrivateUsage]
-from hassle_core.compiler.errors import ElseWithoutIfError
-from hassle_core.compiler.protocols import ConditionBuilder, TriggerBuilder
-from hassle_core.compiler.recording import (
+from hassle.compiler.action_verbs import _RawAction  # pyright: ignore[reportPrivateUsage]
+from hassle.compiler.errors import ElseWithoutIfError
+from hassle.compiler.protocols import ConditionBuilder, TriggerBuilder
+from hassle.compiler.recording import (
     RecordedNode,
     _require_active,  # pyright: ignore[reportPrivateUsage]
     record_action,
 )
-from hassle_core.compiler.spans import capture_span
+from hassle.compiler.spans import capture_span
 
 # The depth verified empirically for every context manager in this module (see
 # module docstring). Kept as one named constant so the reasoning lives in one
@@ -49,7 +49,7 @@ from hassle_core.compiler.spans import capture_span
 _CM_DEPTH = 2
 
 # ``_require_active`` is the extension seam's sanctioned cross-module name
-# (docs/m1-internal-api.md §2: "import it from hassle_core.compiler.recording"),
+# (docs/m1-internal-api.md §2: "import it from hassle.compiler.recording"),
 # underscore-prefixed by module-internal convention rather than by true
 # privacy; ``_RawAction`` is this workstream's own adapter, shared between its
 # two sibling modules. Both trip pyright's reportPrivateUsage in --strict

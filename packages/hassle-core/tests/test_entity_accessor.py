@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from hassle_core.compiler import compile_bundle
-from hassle_core.compiler.helpers import EntityRef
-from hassle_core.registry import entities
+from hassle.compiler import compile_bundle
+from hassle.compiler.helpers import EntityRef
+from hassle.registry import entities
 
 _DSL = Path(__file__).resolve().parents[3] / "fixtures" / "dsl"
 

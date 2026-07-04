@@ -1,5 +1,11 @@
 # M1 internal API — the compiler-core contract for the follow-on workstreams
 
+> **Module paths renamed 2026-07-03 (owner decision):** the `hassle-core`
+> distribution collapsed its two top-level import packages (`hassle_core` +
+> a thin `hassle` facade) into one, `hassle`. Every `hassle_core.*` path below
+> (written when the workstreams this doc addresses were active) is now
+> `hassle.*` — a pure rename; the seams and rules described are unchanged.
+
 **Audience:** the two M1 workstreams that build on the compiler core —
 **triggers/conditions** and **actions/control-flow** (and, adjacent, templates/macros).
 This is the seam you extend. The core (branch `m1/core`) is done; you add builder
@@ -11,24 +17,24 @@ Physical layout (all under `packages/hassle-core/src/`):
 | Module | What it is | May you edit it? |
 |---|---|---|
 | `hassle/` | user-facing import surface (`from hassle import …`) — F3 candidate | **Yes**: add your new public names to `hassle.__all__` (additions only, R5) |
-| `hassle_core/compiler/protocols.py` | the three builder protocols | No (implement them) |
-| `hassle_core/compiler/recording.py` | context stack, `record_*`, `when`/`only_if`, option allow-lists | Add new options to the allow-lists; otherwise no |
-| `hassle_core/compiler/builders.py` | the M1-core builders (`state`, `service`, `delay`) — the *proof of pattern* | Add sibling builder files; don't rewrite these |
-| `hassle_core/compiler/actions.py` | the action verbs (`service`, `delay`) | Add sibling verb modules |
-| `hassle_core/compiler/bundle.py` | isolated import + compile pipeline + `CompileResult` | No |
-| `hassle_core/compiler/spans.py` | `SourceSpan` + frame capture | No |
-| `hassle_core/ir/normalize.py` | `normalize_ha` (F1 extension) | No |
+| `hassle/compiler/protocols.py` | the three builder protocols | No (implement them) |
+| `hassle/compiler/recording.py` | context stack, `record_*`, `when`/`only_if`, option allow-lists | Add new options to the allow-lists; otherwise no |
+| `hassle/compiler/builders.py` | the M1-core builders (`state`, `service`, `delay`) — the *proof of pattern* | Add sibling builder files; don't rewrite these |
+| `hassle/compiler/actions.py` | the action verbs (`service`, `delay`) | Add sibling verb modules |
+| `hassle/compiler/bundle.py` | isolated import + compile pipeline + `CompileResult` | No |
+| `hassle/compiler/spans.py` | `SourceSpan` + frame capture | No |
+| `hassle/ir/normalize.py` | `normalize_ha` (F1 extension) | No |
 
 ## 1. How a trigger/condition builder registers itself
 
 A trigger builder is **any object with `to_trigger() -> dict`**; a condition builder
-has `to_condition() -> dict` (`hassle_core.compiler.protocols`). Nothing more — no
+has `to_condition() -> dict` (`hassle.compiler.protocols`). Nothing more — no
 base class required (they are `runtime_checkable` Protocols).
 
 The user-facing verbs already exist and do the registration for you:
 
 ```python
-from hassle_core.compiler.recording import when, only_if
+from hassle.compiler.recording import when, only_if
 when(my_trigger_builder, another_trigger_builder)   # appends triggers
 only_if(my_condition_builder)                        # appends conditions
 ```
@@ -58,8 +64,8 @@ A simple action builder has **`to_action() -> dict`** and is recorded by a verb 
 calls `record_action`:
 
 ```python
-from hassle_core.compiler.recording import record_action
-from hassle_core.compiler.spans import capture_span
+from hassle.compiler.recording import record_action
+from hassle.compiler.spans import capture_span
 
 def notify(message: str) -> None:
     record_action(MyNotifyAction(message), span=capture_span(depth=0))
@@ -76,8 +82,8 @@ sub-list:
 
 ```python
 import contextlib
-from hassle_core.compiler.recording import _require_active, RecordedNode
-from hassle_core.compiler.spans import capture_span
+from hassle.compiler.recording import _require_active, RecordedNode
+from hassle.compiler.spans import capture_span
 
 @contextlib.contextmanager
 def if_then(condition):
@@ -106,7 +112,7 @@ Key facts for nesting:
   (it's the one place you may touch the pipeline, and it needs a test).
 
 `_require_active(call)` is the internal helper that returns the active recorder or
-raises `NoRecordingContextError`; import it from `hassle_core.compiler.recording`.
+raises `NoRecordingContextError`; import it from `hassle.compiler.recording`.
 
 ### `else_then`
 
@@ -119,7 +125,7 @@ raise a what/where/fix error if not (snapshot-test it, R6).
 
 - Every `record_trigger`/`record_condition`/`record_action` captures a `SourceSpan`
   (`file`, `line`) at the DSL call site via `capture_span`. `capture_span(depth=N)`
-  walks outward past `N` inner frames, then past all `hassle`/`hassle_core` frames,
+  walks outward past `N` inner frames, then past all `hassle` (internal) frames,
   to the first user frame. If a helper sits between the DSL call and the record call,
   pass a larger `depth`.
 - Spans live in `CompileResult._spans` (per object, per section) — **never** in the
@@ -141,7 +147,7 @@ raise a what/where/fix error if not (snapshot-test it, R6).
 
 Every user-facing error you add follows *what / where (file:line) / fix*, one
 paragraph, and gets a snapshot under `packages/hassle-core/tests/snapshots/errors/`.
-Reuse the pattern in `hassle_core/compiler/errors.py`; capture the span with
+Reuse the pattern in `hassle/compiler/errors.py`; capture the span with
 `capture_span`. The trap `__bool__` on any runtime expression must raise
 `CompileTimeBranchError` (subclass `builders._NoBool`, override `_branch_repr`).
 

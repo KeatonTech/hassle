@@ -540,13 +540,20 @@ not wired into `compile_bundle` (found by the templates/macros/object-types work
 > `blueprint_automation`) are in `hassle.__all__`. Goldens:
 > `fixtures/dsl/{helper_declarations,raw_automation_legacy,blueprint_automation}`.
 > The rest of this section is retained as the original gap report.
+>
+> **Also renamed 2026-07-03 (owner decision, same integration pass):** the
+> `hassle-core` distribution collapsed its two top-level import packages
+> (`hassle_core` + a thin `hassle` facade) into one, `hassle`. Every
+> `hassle_core.*` path in the retained report below is now `hassle.*`; see
+> docs/ir-f1.md and docs/dsl-f3.md for the full rename note.
 
 **Not an HA-behavior finding — an internal extension-contract gap in
 docs/m1-internal-api.md**, flagged here per CLAUDE.md's "if the internal-api
 contract is insufficient, stop and report rather than modifying core."
 
-`compile_bundle`/`compile_registered` (`packages/hassle-core/src/hassle_core/compiler/bundle.py`,
-frozen for follow-on M1 workstreams) only drain `registry.Registry` -- a list of
+`compile_bundle`/`compile_registered` (`packages/hassle-core/src/hassle/compiler/bundle.py`
+-- path renamed 2026-07-03 from `hassle_core/compiler/bundle.py`, owner decision, see
+docs/ir-f1.md; frozen for follow-on M1 workstreams) only drain `registry.Registry` -- a list of
 `RegisteredObject`, each of which is compiled by opening a `Recorder` and calling
 `reg.func()` once, i.e. "run a function, record trigger/condition/action calls
 into it." That model fits automations, scripts, and (via a caller-side wrapper)
@@ -574,8 +581,9 @@ two files the m1/templates work item was told not to edit:
   `CompileResult.add()` directly with a pre-built `HelperConfig`/
   `AutomationConfig`.
 
-**What was built instead:** `hassle_core.compiler.helpers` and
-`hassle_core.compiler.raw_automation` implement the full model/builder layer
+**What was built instead:** `hassle.compiler.helpers` and
+`hassle.compiler.raw_automation` (paths renamed 2026-07-03 from
+`hassle_core.compiler.*`) implement the full model/builder layer
 correctly and with test coverage (`HelperConfig`/`AutomationConfig`
 construction, the nine helper domains, JSON-serializability validation for raw
 bodies, the DESIGN §5.8 `inputs=` -> stored `use_blueprint.input` singular-key

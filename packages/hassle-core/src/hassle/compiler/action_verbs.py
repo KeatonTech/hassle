@@ -2,7 +2,7 @@
 
 Sibling verb module (docs/m1-internal-api.md §2: "Add sibling builder files;
 don't rewrite these"). Builds directly on ``record_action``/``capture_span``;
-never imports or edits ``hassle_core.compiler.builders``/``actions``/``recording``
+never imports or edits ``hassle.compiler.builders``/``actions``/``recording``
 beyond their public seam.
 """
 
@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from hassle_core.compiler.recording import record_action
-from hassle_core.compiler.spans import capture_span
+from hassle.compiler.recording import record_action
+from hassle.compiler.spans import capture_span
 
 
 class _RawAction:

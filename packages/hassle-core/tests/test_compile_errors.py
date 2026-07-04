@@ -20,15 +20,15 @@ from pathlib import Path
 
 import pytest
 
-from hassle_core.compiler import (
+from hassle import state
+from hassle.compiler import (
     CompileTimeBranchError,
     DuplicateObjectError,
     NoRecordingContextError,
     UnknownAutomationOptionError,
     compile_bundle,
 )
-from hassle_core.compiler.recording import recording, when
-from hassle_core.dsl_builtins import state
+from hassle.compiler.recording import recording, when
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 
@@ -79,7 +79,7 @@ def test_duplicate_id_error_message() -> None:
 
 
 def test_unknown_automation_option_message() -> None:
-    from hassle_core.compiler import automation
+    from hassle.compiler import automation
 
     with pytest.raises(UnknownAutomationOptionError) as excinfo:
 

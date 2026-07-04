@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import pytest
 
-from hassle_core.compiler import CompileTimeBranchError
-from hassle_core.compiler.control_flow import choose, if_then, parallel, repeat_count
-from hassle_core.compiler.recording import recording
-from hassle_core.dsl_builtins import service, state
+from hassle import service, state
+from hassle.compiler import CompileTimeBranchError
+from hassle.compiler.control_flow import choose, if_then, parallel, repeat_count
+from hassle.compiler.recording import recording
 
 
 def test_native_if_traps_inside_if_then_body() -> None:

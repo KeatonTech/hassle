@@ -1,6 +1,6 @@
 """M1 test 9 — `normalize_ha` matches HA's real POST->GET normalization.
 
-`normalize_ha` (an F1-compatible extension in `hassle_core.ir`) applies HA's
+`normalize_ha` (an F1-compatible extension in `hassle.ir`) applies HA's
 2024.10+ storage normalization: outer singular ``trigger/condition/action`` ->
 plural ``triggers/conditions/actions``; ``service:`` -> ``action:`` recursively
 (including inside script ``sequence`` and nested actions). Inner ``platform:`` is
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from hassle_core.ir import normalize_ha
+from hassle.ir import normalize_ha
 
 
 def _repo_root() -> Path:

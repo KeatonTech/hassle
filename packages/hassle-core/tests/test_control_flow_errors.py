@@ -4,7 +4,7 @@ Covers `ElseWithoutIfError` -- `with else_then():`/`with else_if(...):` used
 where the immediately-preceding action in the current list is not an
 `if_then`/`choose` container. This is the actions/control-flow workstream's
 own error class (docs/m1-internal-api.md §5), added alongside the M1-core
-errors in `hassle_core/compiler/errors.py`.
+errors in `hassle/compiler/errors.py`.
 """
 
 from __future__ import annotations
@@ -15,10 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from hassle_core.compiler import ElseWithoutIfError
-from hassle_core.compiler.control_flow import else_if, else_then, if_then
-from hassle_core.compiler.recording import recording
-from hassle_core.dsl_builtins import service, state
+from hassle import service, state
+from hassle.compiler import ElseWithoutIfError
+from hassle.compiler.control_flow import else_if, else_then, if_then
+from hassle.compiler.recording import recording
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 

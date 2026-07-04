@@ -1,7 +1,7 @@
 """``hassle`` — the user-facing DSL import surface (DESIGN §5.3).
 
 Bundle files write ``from hassle import automation, when, ...``. This package is
-the *public* face of the DSL; the machinery lives in :mod:`hassle_core`. Physical
+the *public* face of the DSL; the machinery lives in :mod:`hassle`. Physical
 home (decision, M1): a second top-level package shipped inside the ``hassle-core``
 distribution (``packages/hassle-core/src/hassle``), so there is exactly one wheel
 to install and the public surface and its implementation version together.
@@ -12,7 +12,7 @@ are allowed in later milestones, changes are not (R5). See ``docs/dsl-f3.md``.
 
 from __future__ import annotations
 
-from hassle_core.compiler import (
+from hassle.compiler import (
     CompileTimeBranchError,
     ElseWithoutIfError,
     NoParamContextError,

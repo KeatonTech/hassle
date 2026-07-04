@@ -25,9 +25,9 @@ from hassle import (
     template,
     when,
 )
-from hassle_core.compiler import compile_registered
-from hassle_core.compiler.recording import recording
-from hassle_core.compiler.registry import RegisteredObject
+from hassle.compiler import compile_registered
+from hassle.compiler.recording import recording
+from hassle.compiler.registry import RegisteredObject
 
 
 def _compile_one(func: object, *, kind: str = "automation", **options: object) -> dict:
@@ -172,18 +172,3 @@ def test_state_expr_public_entity_id() -> None:
     assert expr_state.entity_id == "sensor.outdoor_temp"
     # .value uses the public accessor, not the private field.
     assert expr_state.value == "{{ states('sensor.outdoor_temp') | float }}"
-
-
-# --------------------------------------------------------------------------- #
-# hassle_core.dsl_builtins must re-export the *identical* F3 surface as
-# hassle.__all__ (reviewer finding: it silently carried only 41 of 72 names).
-# --------------------------------------------------------------------------- #
-def test_dsl_builtins_parity_with_hassle_all() -> None:
-    import hassle_core.dsl_builtins as dsl_builtins
-
-    assert set(dsl_builtins.__all__) == set(hassle.__all__)
-    # Every name must also be the *same object* (not a name that merely
-    # coincides), so the two modules can never drift into re-exporting
-    # different implementations under the same name.
-    for name in hassle.__all__:
-        assert getattr(dsl_builtins, name) is getattr(hassle, name), name

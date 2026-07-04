@@ -6,15 +6,20 @@
 > Per R5, changing anything frozen here requires updating MILESTONES.md in the
 > same PR. **Additions are allowed; changes and removals are not.**
 
+> **Renamed 2026-07-03 (owner decision):** the `hassle-core` distribution now
+> ships exactly one top-level import package, `hassle` (previously two:
+> `hassle_core` + a thin `hassle` facade). `hassle_core.dsl_builtins` — a
+> second re-export of this same surface, kept only so tools could import it
+> without depending on the `hassle` package layout — is deleted along with
+> `hassle_core` itself; there is now only one module to import this surface
+> from, so the parity concern it existed to guard against (and its test,
+> `test_dsl_builtins_parity_with_hassle_all`) is moot by construction. All
+> module paths below (`hassle_core.compiler.*`, `hassle_core.ir`, …) are now
+> `hassle.compiler.*` / `hassle.ir`; the frozen contract itself is unchanged.
+
 The public surface is exactly `hassle.__all__` (module
 `packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.
-The identical set is re-exported from `hassle_core.dsl_builtins` for tools/tests
-that want a layout-independent import — that module tracks `hassle.__all__` and
-is not itself a second public surface. `test_dsl_builtins_parity_with_hassle_all`
-(`packages/hassle-core/tests/test_integration_api.py`) pins the two lists as
-identical, name-for-name and object-for-object, so they cannot silently
-diverge again.
 
 Current surface: **72 names**, plus one dedicated entry point (`hassle.registry`,
 below) that is deliberately *not* folded into `hassle.__all__` because DESIGN
@@ -37,9 +42,9 @@ the helper-declaration builders return — accepted anywhere the DSL expects an
 entity id). The digit-leading rule (DESIGN §5.2: object_ids match
 `(?!_)[\da-z_]+(?<!_)`, so they may start with a digit but a Python identifier
 can't) strips exactly one leading underscore when the next character is a
-digit; any other name passes through unchanged. This module (`hassle_core.
-registry`, re-exported as `hassle.registry`) is the M1 *runtime* shape and is
-domain-open (no registry snapshot backs it); M3 layers generated, typed `.pyi`
+digit; any other name passes through unchanged. This module (`hassle.registry`)
+is the M1 *runtime* shape and is domain-open (no registry snapshot backs it);
+M3 layers generated, typed `.pyi`
 stub classes with the identical attribute/index shape on top, so a bad
 attribute name becomes a pyright error in the editor without changing how
 bundles are written.
@@ -149,27 +154,27 @@ bundles are written.
 These are how new builder families are added; they are **not** in
 `hassle.__all__` and downstream bundles must not import them:
 
-- `hassle_core.compiler.protocols` — `TriggerBuilder` / `ConditionBuilder` /
+- `hassle.compiler.protocols` — `TriggerBuilder` / `ConditionBuilder` /
   `ActionBuilder` (`runtime_checkable` Protocols: `to_trigger`/`to_condition`/
   `to_action`). A new builder implements one of these.
-- `hassle_core.compiler.recording` — `record_trigger`/`record_condition`/
+- `hassle.compiler.recording` — `record_trigger`/`record_condition`/
   `record_action`, `recording(...)`, `push_actions`, `_require_active`,
   `RecordedNode`, `Recorder`. The recording machinery a control-flow construct
   drives.
-- `hassle_core.compiler.spans` — `SourceSpan`, `capture_span` (span capture).
-- `hassle_core.compiler.registry` — `Registry`, `RegisteredObject`,
+- `hassle.compiler.spans` — `SourceSpan`, `capture_span` (span capture).
+- `hassle.compiler.registry` — `Registry`, `RegisteredObject`,
   `PrebuiltObject`, `current_registry`, `fresh`, `Registry.add_object` (the §12
   pre-built-object registration path).
-- `hassle_core.compiler.bundle` — `CompileResult` (`.objects`, `.spans_for`),
+- `hassle.compiler.bundle` — `CompileResult` (`.objects`, `.spans_for`),
   `compile_bundle`, `compile_registered`. The pipeline output the compiler,
   validator, and simulator consume.
-- `hassle_core.ir` — the F1 IR surface (frozen separately).
+- `hassle.ir` — the F1 IR surface (frozen separately).
 - Module-internal helpers exposed only for the builder modules and their unit
   tests: `EntityRef`, `declared_helpers`, `declared_raw_automations`,
   `build_raw_automation`, `TemplateExpr`, `StateExpr`, `NumericStateExpr`, the
   other `*Trigger`/`*Expr` builder classes, `normalize_duration`,
   `ScriptCallAction`, `Raw{Trigger,Condition,Action}`, `capture_span`. These are
-  importable from `hassle_core.compiler` for tooling but are **not** part of the
+  importable from `hassle.compiler` for tooling but are **not** part of the
   frozen bundle-facing surface.
 
 ## Acceptance
@@ -180,4 +185,4 @@ construct expressible in the DSL with a backing golden (the M1 done-gate
 expressibility checklist, in the integration report); `test_entity_attr_and_
 index_equivalent` (MILESTONES M1 test 8, `test_entity_accessor.py`) green —
 `e.sensor.hall_motion` and `e.sensor["hall_motion"]` compile to byte-identical
-IR; `test_dsl_builtins_parity_with_hassle_all` green.
+IR.

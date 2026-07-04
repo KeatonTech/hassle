@@ -1,8 +1,8 @@
 """Helper declarations (DESIGN §5.7) -- the model/builder layer.
 
 ``input_boolean(id="guest_mode", name="Guest Mode", ...)`` builds a
-:class:`~hassle_core.ir.models.HelperConfig` for one of the nine storage-
-collection helper domains (``hassle_core.ir.HELPER_DOMAINS``, F1) and returns
+:class:`~hassle.ir.models.HelperConfig` for one of the nine storage-
+collection helper domains (``hassle.ir.HELPER_DOMAINS``, F1) and returns
 an :class:`EntityRef` usable as an entity id wherever the DSL expects one
 (triggers, templates, service calls) -- the "import-and-reference pattern"
 (DESIGN §5.7: "referenced by import elsewhere").
@@ -20,9 +20,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from hassle_core.compiler.spans import capture_span
-from hassle_core.ir import HELPER_DOMAINS
-from hassle_core.ir.models import HelperConfig
+from hassle.compiler.spans import capture_span
+from hassle.ir import HELPER_DOMAINS
+from hassle.ir.models import HelperConfig
 
 # All HelperConfig instances built by this module's constructor functions, in
 # declaration order, for the lifetime of the process (or since the last
@@ -75,7 +75,7 @@ def _declare_helper(domain: str, id: str, **fields: Any) -> EntityRef:
     # §12 registration path: also register into the active bundle registry so the
     # compiler lands this helper in CompileResult.objects (bundle.py drains it).
     # Imported lazily to avoid a registry<->helpers import cycle at module load.
-    from hassle_core.compiler.registry import current_registry
+    from hassle.compiler.registry import current_registry
 
     current_registry().add_object(helper, capture_span(depth=1))
     return EntityRef(domain, id)

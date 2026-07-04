@@ -11,8 +11,8 @@ from __future__ import annotations
 import pytest
 from _dsl_cases import DslCase, error_cases, ir_cases
 
-from hassle_core.compiler import compile_bundle
-from hassle_core.ir import canonical_json
+from hassle.compiler import compile_bundle
+from hassle.ir import canonical_json
 
 CASES: list[DslCase] = ir_cases()
 ERROR_CASES: list[DslCase] = error_cases()

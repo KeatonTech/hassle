@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from hassle_core.compiler.errors import CompileTimeBranchError
-from hassle_core.compiler.spans import capture_span
+from hassle.compiler.errors import CompileTimeBranchError
+from hassle.compiler.spans import capture_span
 
 
 @runtime_checkable

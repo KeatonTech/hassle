@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from hassle_core.compiler.raw_automation import (
+from hassle.compiler.raw_automation import (
     RawAutomationNotJSONSerializableError,
     blueprint_automation,
     build_raw_automation,

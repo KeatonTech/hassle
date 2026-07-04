@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from hassle_core.compiler import NoRecordingContextError, UnknownParamError, compile_bundle
+from hassle.compiler import NoRecordingContextError, UnknownParamError, compile_bundle
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "dsl"
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
@@ -46,9 +46,9 @@ def test_param_unknown_name_error_message() -> None:
 
 
 def test_param_outside_context_error_message() -> None:
-    from hassle_core.compiler import NoParamContextError
-    from hassle_core.compiler.recording import recording
-    from hassle_core.compiler.scripts import param
+    from hassle.compiler import NoParamContextError
+    from hassle.compiler.recording import recording
+    from hassle.compiler.scripts import param
 
     with recording(alias="x", id="x"), pytest.raises(NoParamContextError) as excinfo:
         param("times")
@@ -56,7 +56,7 @@ def test_param_outside_context_error_message() -> None:
 
 
 def test_raw_automation_non_json_serializable_error_message() -> None:
-    from hassle_core.compiler.raw_automation import (
+    from hassle.compiler.raw_automation import (
         RawAutomationNotJSONSerializableError,
         build_raw_automation,
     )

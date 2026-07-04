@@ -7,7 +7,7 @@ hard requirements (DESIGN §7.1) drive the design:
   fields at every nesting level (``extra="allow"``), and serialization emits
   exactly the keys that were parsed (``exclude_unset=True``) — no defaults are
   ever materialized into the output, so ``serialize(parse(x)) == x``.
-- **Canonical serialization + hashing:** see :mod:`hassle_core.ir.canonical`.
+- **Canonical serialization + hashing:** see :mod:`hassle.ir.canonical`.
 
 Structural blocks (``trigger``/``condition``/``action``/``sequence``/``fields``/…)
 pass through verbatim as native JSON in M0; the typed compiler that interprets
@@ -21,8 +21,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr
 
-from hassle_core.ir.canonical import canonical_json, sha256_hash
-from hassle_core.ir.keys import HELPER_DOMAINS, object_key
+from hassle.ir.canonical import canonical_json, sha256_hash
+from hassle.ir.keys import HELPER_DOMAINS, object_key
 
 
 class IRObject(BaseModel):
