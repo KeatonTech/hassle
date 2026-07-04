@@ -21,7 +21,9 @@ from hassle.sync import ApplyOutcome, Manifest, ManifestEntry, Plan, PlanAction,
 from hassle.sync.apply import apply_plan
 
 
-def _plan_entry_update(object_key: str, kind: str, local: dict[str, Any], plan_hash: str) -> PlanEntry:
+def _plan_entry_update(
+    object_key: str, kind: str, local: dict[str, Any], plan_hash: str
+) -> PlanEntry:
     return PlanEntry(
         object_key=object_key,
         kind=kind,
@@ -92,15 +94,21 @@ def test_apply_order_is_helpers_then_scripts_then_automations() -> None:
     plan = Plan(
         entries=[
             PlanEntry(
-                object_key="automation:a1", kind="automation", action=PlanAction.CREATE,
+                object_key="automation:a1",
+                kind="automation",
+                action=PlanAction.CREATE,
                 local={"id": "a1", "alias": "A"},
             ),
             PlanEntry(
-                object_key="script:s1", kind="script", action=PlanAction.CREATE,
+                object_key="script:s1",
+                kind="script",
+                action=PlanAction.CREATE,
                 local={"alias": "S"},
             ),
             PlanEntry(
-                object_key="input_boolean:b1", kind="input_boolean", action=PlanAction.CREATE,
+                object_key="input_boolean:b1",
+                kind="input_boolean",
+                action=PlanAction.CREATE,
                 local={"name": "B"},
             ),
         ]

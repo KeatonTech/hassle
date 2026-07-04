@@ -145,7 +145,6 @@ def test_pull_never_writes_to_backend() -> None:
 
 def test_pull_skips_noop_and_update_entries() -> None:
     # update/create are push-side actions; pull must not act on them.
-    manifest_config = {"id": "a1", "alias": "same"}
     plan = Plan(
         entries=[
             PlanEntry(object_key="automation:a1", kind="automation", action=PlanAction.NOOP),

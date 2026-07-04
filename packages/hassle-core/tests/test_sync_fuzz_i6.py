@@ -37,7 +37,7 @@ import pytest
 
 from hassle.backend.fake import FakeBackend
 from hassle.ir.canonical import sha256_hash
-from hassle.sync import Manifest, ManifestEntry, PlanAction
+from hassle.sync import Manifest, ManifestEntry, PlanAction, PlanEntry
 from hassle.sync.apply import apply_plan
 from hassle.sync.plan import compute_plan
 from hassle.sync.pull import apply_pull
@@ -47,6 +47,11 @@ OBJECT_KEY = "automation:fuzz"
 KIND = "automation"
 
 STEPS = ["local_edit", "ui_edit", "local_delete", "ui_delete", "pull", "push"]
+
+# Push-side actions the plan can produce; pull ignores these entirely.
+_PUSH_ACTIONS = (PlanAction.UPDATE, PlanAction.DELETE, PlanAction.CREATE)
+# Pull-side actions that advance the bundle to match remote.
+_PULL_ADOPTS_REMOTE = (PlanAction.REFRESH, PlanAction.ADOPT)
 
 
 class _FuzzState:
@@ -74,11 +79,45 @@ class _FuzzState:
 def _make_manifest(state: _FuzzState) -> Manifest:
     if state.base is None:
         return Manifest(synced_at="t", ha_version="v", objects={})
-    return Manifest(
-        synced_at="t",
-        ha_version="v",
-        objects={OBJECT_KEY: ManifestEntry(source="a.py", compiled_hash=sha256_hash(state.base), kind="dsl")},
+    entry = ManifestEntry(source="a.py", compiled_hash=sha256_hash(state.base), kind="dsl")
+    return Manifest(synced_at="t", ha_version="v", objects={OBJECT_KEY: entry})
+
+
+def _compute_entry(state: _FuzzState) -> tuple[PlanEntry | None, dict[str, object] | None]:
+    local_objects = {} if state.local is None else {OBJECT_KEY: (KIND, state.local)}
+    remote_val = state.remote()
+    remote_objects = {} if remote_val is None else {OBJECT_KEY: (KIND, remote_val)}
+    manifest = _make_manifest(state)
+    plan = compute_plan(
+        manifest=manifest, local_objects=local_objects, remote_objects=remote_objects
     )
+    return plan.entry_for(OBJECT_KEY), remote_val
+
+
+def _assert_no_silent_loss(
+    seed: int,
+    step_num: int,
+    phase: str,
+    state: _FuzzState,
+    remote_val: dict[str, object] | None,
+    entry: PlanEntry | None,
+) -> None:
+    # Determine independently whether this step *would* lose information if
+    # silently resolved one way. Information is at risk exactly when
+    # base-vs-local and base-vs-remote both changed (both edited, or one
+    # edited + other deleted) AND local != remote (i.e. they actually
+    # disagree, not converged on the same new value).
+    if entry is None:
+        return
+    base_vs_local_same = _same(state.base, state.local)
+    base_vs_remote_same = _same(state.base, remote_val)
+    local_vs_remote_same = _same(state.local, remote_val)
+    at_risk = not base_vs_local_same and not base_vs_remote_same and not local_vs_remote_same
+    if at_risk:
+        assert entry.action is PlanAction.CONFLICT, (
+            f"seed={seed} step={step_num} ({phase}): both sides diverged from base and "
+            f"from each other but action was {entry.action}, not conflict -- I6 violated"
+        )
 
 
 def _run_sequence(seed: int, num_steps: int = 40) -> None:
@@ -100,13 +139,11 @@ def _run_sequence(seed: int, num_steps: int = 40) -> None:
             state.local = state.next_value("local")
 
         elif step == "ui_edit":
-            current_remote = state.remote()
-            if current_remote is None:
-                # Recreate first (a delete happened) — simulate the UI adding
-                # a new object under a fresh id instead; simplest: skip.
+            if state.remote() is None:
+                # A delete already happened; simplest handling is to skip this
+                # step rather than model the UI recreating under a fresh id.
                 continue
-            new_value = state.next_value("ui")
-            backend.update(KIND, identity, new_value)
+            backend.update(KIND, identity, state.next_value("ui"))
 
         elif step == "local_delete":
             state.local = None
@@ -116,93 +153,68 @@ def _run_sequence(seed: int, num_steps: int = 40) -> None:
                 backend.delete(KIND, identity)
 
         elif step == "pull":
-            local_objects = {} if state.local is None else {OBJECT_KEY: (KIND, state.local)}
-            remote_val = state.remote()
-            remote_objects = {} if remote_val is None else {OBJECT_KEY: (KIND, remote_val)}
-            manifest = _make_manifest(state)
-            plan = compute_plan(manifest=manifest, local_objects=local_objects, remote_objects=remote_objects)
-            entry = plan.entry_for(OBJECT_KEY)
-
-            # ---- THE INVARIANT (I6) ----
-            # Determine independently whether this step *would* lose information
-            # if silently resolved one way. Information is at risk exactly when
-            # base-vs-local and base-vs-remote both changed (both edited, or one
-            # edited + other deleted) AND local != remote (i.e. they actually
-            # disagree, not converged on the same new value).
-            base = state.base
-            base_vs_local_same = _same(base, state.local)
-            base_vs_remote_same = _same(base, remote_val)
-            local_vs_remote_same = _same(state.local, remote_val)
-
-            if entry is not None:
-                if not base_vs_local_same and not base_vs_remote_same and not local_vs_remote_same:
-                    assert entry.action is PlanAction.CONFLICT, (
-                        f"seed={seed} step={step_num}: both sides diverged from base and from "
-                        f"each other but action was {entry.action}, not conflict -- I6 violated"
-                    )
-
-            # Apply the bundle-side actions; must never write to backend.
-            writes_before = backend.writes_since_reset()
-            writer = RecordingSourceWriter()
-            pull_result = apply_pull(plan, writer)
-            assert backend.writes_since_reset() == writes_before, "pull must never write to Backend"
-
-            if entry is not None and entry.action is PlanAction.CONFLICT:
-                # Conflict: both versions must be surfaced, neither silently
-                # dropped. Local/base state is left untouched for the user to
-                # resolve (we don't auto-advance local here).
-                assert pull_result.conflicts
-            elif entry is not None and entry.action in (PlanAction.REFRESH, PlanAction.ADOPT):
-                # Bundle adopts remote's value.
-                state.local = remote_val
-                state.base = remote_val
-            elif entry is not None and entry.action is PlanAction.DROP:
-                state.local = None
-                state.base = None
-            elif entry is not None and entry.action is PlanAction.NOOP:
-                pass
-            elif entry is not None and entry.action in (PlanAction.UPDATE, PlanAction.DELETE, PlanAction.CREATE):
-                # These are push-side actions; pull leaves local as-is.
-                pass
+            _do_pull_step(seed, step_num, backend, state)
 
         elif step == "push":
-            local_objects = {} if state.local is None else {OBJECT_KEY: (KIND, state.local)}
-            remote_val = state.remote()
-            remote_objects = {} if remote_val is None else {OBJECT_KEY: (KIND, remote_val)}
-            manifest = _make_manifest(state)
-            plan = compute_plan(manifest=manifest, local_objects=local_objects, remote_objects=remote_objects)
-            entry = plan.entry_for(OBJECT_KEY)
+            _do_push_step(seed, step_num, backend, state)
 
-            base = state.base
-            base_vs_local_same = _same(base, state.local)
-            base_vs_remote_same = _same(base, remote_val)
-            local_vs_remote_same = _same(state.local, remote_val)
-            if entry is not None:
-                if not base_vs_local_same and not base_vs_remote_same and not local_vs_remote_same:
-                    assert entry.action is PlanAction.CONFLICT, (
-                        f"seed={seed} step={step_num}: I6 violated on push (action={entry.action})"
-                    )
 
-            apply_result = apply_plan(plan, backend, manifest, synced_at="t2")
+def _do_pull_step(seed: int, step_num: int, backend: FakeBackend, state: _FuzzState) -> None:
+    entry, remote_val = _compute_entry(state)
+    _assert_no_silent_loss(seed, step_num, "pull", state, remote_val, entry)
 
-            if entry is not None and entry.action is PlanAction.CONFLICT:
-                # Conflict blocks apply for this object entirely: remote must be
-                # untouched, nothing lost.
-                pass
-            elif entry is not None and entry.action is PlanAction.UPDATE:
-                if apply_result.succeeded:
-                    state.base = state.local
-            elif entry is not None and entry.action is PlanAction.CREATE:
-                if apply_result.succeeded:
-                    state.base = state.local
-            elif entry is not None and entry.action is PlanAction.DELETE:
-                if apply_result.succeeded:
-                    state.base = None
-            elif entry is not None and entry.action in (PlanAction.REFRESH, PlanAction.ADOPT, PlanAction.DROP):
-                # Pull-side actions; push leaves remote as-is for this object.
-                pass
-            elif entry is not None and entry.action is PlanAction.NOOP:
-                pass
+    manifest = _make_manifest(state)
+    local_objects = {} if state.local is None else {OBJECT_KEY: (KIND, state.local)}
+    remote_objects = {} if remote_val is None else {OBJECT_KEY: (KIND, remote_val)}
+    plan = compute_plan(
+        manifest=manifest, local_objects=local_objects, remote_objects=remote_objects
+    )
+
+    # Apply the bundle-side actions; must never write to backend.
+    writes_before = backend.writes_since_reset()
+    writer = RecordingSourceWriter()
+    pull_result = apply_pull(plan, writer)
+    assert backend.writes_since_reset() == writes_before, "pull must never write to Backend"
+
+    if entry is None:
+        return
+    if entry.action is PlanAction.CONFLICT:
+        # Conflict: both versions must be surfaced, neither silently dropped.
+        # Local/base state is left untouched for the user to resolve.
+        assert pull_result.conflicts
+    elif entry.action in _PULL_ADOPTS_REMOTE:
+        state.local = remote_val
+        state.base = remote_val
+    elif entry.action is PlanAction.DROP:
+        state.local = None
+        state.base = None
+    # NOOP, and the push-side actions (UPDATE/DELETE/CREATE): pull leaves
+    # local/base as-is.
+
+
+def _do_push_step(seed: int, step_num: int, backend: FakeBackend, state: _FuzzState) -> None:
+    entry, remote_val = _compute_entry(state)
+    _assert_no_silent_loss(seed, step_num, "push", state, remote_val, entry)
+
+    manifest = _make_manifest(state)
+    local_objects = {} if state.local is None else {OBJECT_KEY: (KIND, state.local)}
+    remote_objects = {} if remote_val is None else {OBJECT_KEY: (KIND, remote_val)}
+    plan = compute_plan(
+        manifest=manifest, local_objects=local_objects, remote_objects=remote_objects
+    )
+    apply_result = apply_plan(plan, backend, manifest, synced_at="t2")
+
+    if entry is None:
+        return
+    if entry.action is PlanAction.CONFLICT:
+        # Conflict blocks apply for this object entirely: remote is untouched.
+        return
+    if entry.action in (PlanAction.UPDATE, PlanAction.CREATE) and apply_result.succeeded:
+        state.base = state.local
+    elif entry.action is PlanAction.DELETE and apply_result.succeeded:
+        state.base = None
+    # REFRESH/ADOPT/DROP (pull-side) and NOOP: push leaves remote/base as-is
+    # for this object.
 
 
 def _same(a: dict[str, object] | None, b: dict[str, object] | None) -> bool:

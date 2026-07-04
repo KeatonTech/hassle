@@ -60,4 +60,5 @@ def test_backend_protocol_excludes_trace_and_template_ops() -> None:
 
     members = {name for name, _ in inspect.getmembers(Backend) if not name.startswith("_")}
     for forbidden in ("trace", "render_template", "media", "validate_config"):
-        assert not any(forbidden in m for m in members), f"unexpected Backend member matching {forbidden!r}"
+        message = f"unexpected Backend member matching {forbidden!r}"
+        assert not any(forbidden in m for m in members), message

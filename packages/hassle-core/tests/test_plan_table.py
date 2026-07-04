@@ -108,6 +108,7 @@ def test_plan_both_edited_is_conflict() -> None:
         manifest=manifest,
         local_objects={OBJECT_KEY: ("automation", LOCAL_EDIT)},
         remote_objects={OBJECT_KEY: ("automation", REMOTE_EDIT)},
+        base_objects={OBJECT_KEY: BASE_CONFIG},
     )
     entry = plan.entry_for(OBJECT_KEY)
     assert entry is not None

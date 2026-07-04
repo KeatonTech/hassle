@@ -113,9 +113,7 @@ def test_plan_entries_by_action_helper() -> None:
     entries = [
         PlanEntry(object_key="automation:a", kind="automation", action=PlanAction.NOOP),
         PlanEntry(object_key="script:b", kind="script", action=PlanAction.UPDATE, local={"x": 1}),
-        PlanEntry(
-            object_key="script:c", kind="script", action=PlanAction.DELETE, base={"x": 1}
-        ),
+        PlanEntry(object_key="script:c", kind="script", action=PlanAction.DELETE, base={"x": 1}),
     ]
     plan = Plan(entries=entries)
     updates = plan.entries_with_action(PlanAction.UPDATE)
