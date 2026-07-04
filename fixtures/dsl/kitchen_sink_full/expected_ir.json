@@ -1,0 +1,199 @@
+{
+  "input_boolean:guest_mode": {
+    "id": "guest_mode",
+    "name": "Guest Mode"
+  },
+  "input_number:target_brightness": {
+    "id": "target_brightness",
+    "name": "Target Brightness",
+    "min": 0,
+    "max": 255
+  },
+  "script:flash_lights": {
+    "alias": "Flash Lights",
+    "fields": {
+      "count": {
+        "default": 3
+      }
+    },
+    "sequence": [
+      {
+        "action": "light.toggle",
+        "target": {
+          "entity_id": "light.hallway"
+        },
+        "data": {
+          "count": "{{ count }}"
+        }
+      },
+      {
+        "action": "light.toggle",
+        "target": {
+          "entity_id": "light.hallway"
+        }
+      }
+    ]
+  },
+  "automation:kitchen_sink": {
+    "id": "kitchen_sink",
+    "alias": "Kitchen sink integration",
+    "mode": "restart",
+    "triggers": [
+      {
+        "trigger": "motion.detected",
+        "target": {
+          "area_id": "living_room"
+        },
+        "behavior": "first",
+        "options": {
+          "for": {
+            "hours": 0,
+            "minutes": 1,
+            "seconds": 0
+          }
+        }
+      },
+      {
+        "trigger": "numeric_state",
+        "entity_id": "sensor.temperature",
+        "above": 25
+      },
+      {
+        "trigger": "state",
+        "entity_id": "input_boolean.guest_mode",
+        "to": "on",
+        "id": "guest_on"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "and",
+        "conditions": [
+          {
+            "condition": "not",
+            "conditions": [
+              {
+                "condition": "state",
+                "entity_id": "input_boolean.away",
+                "state": "on"
+              }
+            ]
+          },
+          {
+            "condition": "template",
+            "value_template": "{{ now().hour >= 6 and now().hour < 23 }}"
+          }
+        ]
+      }
+    ],
+    "actions": [
+      {
+        "variables": {
+          "brightness_expr": "{{ states('input_number.target_brightness') | float }}"
+        }
+      },
+      {
+        "if": [
+          {
+            "condition": "template",
+            "value_template": "{{ states('sensor.temperature') | float > 30 }}"
+          }
+        ],
+        "then": [
+          {
+            "action": "notify.mobile_app",
+            "data": {
+              "message": "It is hot"
+            }
+          },
+          {
+            "event": "hassle_announced",
+            "event_data": {
+              "text": "It is hot"
+            }
+          },
+          {
+            "repeat": {
+              "count": 2,
+              "sequence": [
+                {
+                  "action": "fan.turn_on",
+                  "target": {
+                    "entity_id": "fan.living_room"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "else": [
+          {
+            "action": "script.flash_lights",
+            "data": {
+              "count": 2
+            }
+          }
+        ]
+      },
+      {
+        "choose": [
+          {
+            "conditions": [
+              {
+                "condition": "state",
+                "entity_id": "input_select.house_mode",
+                "state": "night"
+              }
+            ],
+            "sequence": [
+              {
+                "action": "light.turn_off",
+                "target": {
+                  "entity_id": "light.all"
+                }
+              }
+            ]
+          }
+        ],
+        "default": [
+          {
+            "action": "climate.get_forecast",
+            "target": {
+              "entity_id": "climate.living_room"
+            },
+            "response_variable": "forecast"
+          }
+        ]
+      },
+      {
+        "parallel": [
+          {
+            "sequence": [
+              {
+                "action": "switch.turn_on",
+                "target": {
+                  "entity_id": "switch.porch"
+                }
+              }
+            ]
+          },
+          {
+            "sequence": [
+              {
+                "wait_template": "{{ is_state('binary_sensor.door', 'off') }}"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "delay": {
+          "seconds": 5
+        }
+      },
+      {
+        "stop": "done"
+      }
+    ]
+  }
+}
