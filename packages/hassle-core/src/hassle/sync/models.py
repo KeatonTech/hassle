@@ -1,0 +1,167 @@
+"""The plan/apply data model (F2) — DESIGN §8.1, §8.2.
+
+`PlanAction` is the exact set of outcomes in the DESIGN §8.2 table. `Plan` is
+one `PlanEntry` per object key, produced by :func:`hassle.sync.plan.compute_plan`
+and consumed by :func:`hassle.sync.apply.apply_plan` (push-side actions) and
+:func:`hassle.sync.pull.apply_pull` (bundle-side actions). `Manifest` is the
+`manifest.lock` model (DESIGN §8.1) — a plain data model with no wall-clock or
+other side effects; `synced_at` is always caller-supplied (R8).
+
+Style note: pydantic `BaseModel`, matching `hassle.ir.models` for consistency
+within the codebase. Unlike the IR models, these are *not* meant to preserve
+arbitrary unknown fields forever (they aren't an HA wire format) — but they do
+store full config dicts (never lossy summaries), keeping with I3's spirit: nothing
+the sync engine looks at is ever thrown away before a human/M7 can see it.
+"""
+
+from __future__ import annotations
+
+from enum import StrEnum
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict
+
+from hassle.ir.canonical import canonical_json
+
+
+class PlanAction(StrEnum):
+    """The exact action set of the DESIGN §8.2 table."""
+
+    NOOP = "noop"
+    UPDATE = "update"
+    DELETE = "delete"
+    REFRESH = "refresh"
+    CONFLICT = "conflict"
+    DROP = "drop"
+    CREATE = "create"
+    ADOPT = "adopt"
+
+
+class ConflictKind(StrEnum):
+    """The three distinct conflict subtypes named in DESIGN §8.2's table rows."""
+
+    # "different | different" row: both base-vs-local and base-vs-remote changed,
+    # to different values.
+    BOTH_EDITED = "both_edited"
+    # "different (UI edit) | local deleted" row.
+    DELETED_LOCALLY_EDITED_REMOTELY = "deleted_locally_edited_remotely"
+    # "remote deleted | different" row.
+    EDITED_LOCALLY_DELETED_REMOTELY = "edited_locally_deleted_remotely"
+
+
+class Conflict(BaseModel):
+    """Structured conflict data (DESIGN §8.2). Rendering (3-way diff) is M7's job."""
+
+    model_config = ConfigDict(frozen=True)
+
+    object_key: str
+    kind: ConflictKind
+    base: dict[str, Any] | None
+    local: dict[str, Any] | None
+    remote: dict[str, Any] | None
+
+
+class PlanEntry(BaseModel):
+    """One object key's plan outcome."""
+
+    model_config = ConfigDict(frozen=True)
+
+    object_key: str
+    kind: str
+    action: PlanAction
+
+    # Full config payloads (never summarized — see module docstring). Present
+    # depending on `action`; `None` where not applicable (e.g. no `local` for a
+    # pure `adopt`/`drop`).
+    base: dict[str, Any] | None = None
+    local: dict[str, Any] | None = None
+    remote: dict[str, Any] | None = None
+
+    # The canonical hash of the remote object *at plan time* — apply.py
+    # re-verifies against this immediately before writing (test_apply_reverifies_hashes).
+    remote_hash_at_plan: str | None = None
+
+    # Where the bundle source for this object lives (or should be created);
+    # used by the pull engine to route SourceWriter calls. `None` is valid for
+    # push-only entries in tests that don't exercise pull.
+    source_path: str | None = None
+
+    # Present only when action is CONFLICT.
+    conflict: Conflict | None = None
+
+
+class Plan(BaseModel):
+    """A full plan: one `PlanEntry` per object key."""
+
+    model_config = ConfigDict(frozen=True)
+
+    entries: list[PlanEntry] = []
+
+    def __len__(self) -> int:
+        return len(self.entries)
+
+    def __getitem__(self, index: int) -> PlanEntry:
+        return self.entries[index]
+
+    def __iter__(self):  # type: ignore[override]
+        return iter(self.entries)
+
+    def entry_for(self, object_key: str) -> PlanEntry | None:
+        for entry in self.entries:
+            if entry.object_key == object_key:
+                return entry
+        return None
+
+    def entries_with_action(self, action: PlanAction) -> list[PlanEntry]:
+        return [entry for entry in self.entries if entry.action is action]
+
+
+class ManifestEntry(BaseModel):
+    """One object's entry in `manifest.lock` (DESIGN §8.1)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    source: str | None
+    compiled_hash: str
+    kind: str = "dsl"  # dsl | raw | blueprint
+
+
+class Manifest(BaseModel):
+    """The `manifest.lock` model (DESIGN §8.1).
+
+    `synced_at` is always supplied by the caller (the CLI layer in M7 supplies
+    wall-clock); core logic never calls `datetime.now()` or similar (R8).
+    """
+
+    synced_at: str
+    ha_version: str
+    objects: dict[str, ManifestEntry] = {}
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_json_dict(cls, data: dict[str, Any]) -> Manifest:
+        return cls.model_validate(data)
+
+    def canonical_json(self) -> str:
+        return canonical_json(self.to_json_dict())
+
+
+class ApplyOutcome(StrEnum):
+    """Per-object outcome of an apply attempt."""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    ROLLED_BACK = "rolled_back"
+    ABORTED = "aborted"  # never attempted because an earlier hash re-verify failed
+
+
+class ApplyResult(BaseModel):
+    """The result of a full `apply_plan` run."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    outcomes: dict[str, ApplyOutcome] = {}
+    succeeded: bool
+    manifest: Manifest | None = None
