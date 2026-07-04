@@ -1,6 +1,6 @@
-# F3 — Frozen DSL public API surface (end of M1) — DRAFT
+# F3 — Frozen DSL public API surface (end of M1)
 
-> **DRAFT** — the orchestrator finalizes this after review. Once declared, this
+> **DECLARED 2026-07-03** (post final review + fixes, 338 tests green). This
 > is the frozen contract every bundle and downstream milestone (M2 decompiler,
 > M3 stubs/validation, M4 simulator, M7 CLI, M9 docs) builds against.
 > Per R5, changing anything frozen here requires updating MILESTONES.md in the

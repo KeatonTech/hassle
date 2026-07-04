@@ -378,19 +378,22 @@ Any construct the DSL/decompiler doesn't model round-trips as verbatim JSON:
 
 ```python
 @raw_automation(id="1687201958261")
-LEGACY_DEVICE_AUTOMATION = {
-    "alias": "Weird device trigger thing",
-    "trigger": [{"platform": "device", "device_id": "abc123", ...}],
-    ...
-}
+def legacy_device_automation():          # decorator wraps a function RETURNING the dict
+    return {
+        "alias": "Weird device trigger thing",
+        "trigger": [{"platform": "device", "device_id": "abc123", ...}],  # legacy keys fine:
+        ...                                # normalized to the plural schema exactly as HA does
+    }
 ```
 
 Also granular: `raw_trigger({...})`, `raw_action({...})` inside normal DSL automations.
 Blueprint-based automations decompile to a structured form, not raw:
 
 ```python
-@blueprint_automation(id="...", use_blueprint="hassle/motion_light.yaml",  # author-qualified path
-                      inputs={"motion_entity": e.binary_sensor.hall_motion})
+hall_motion = blueprint_automation(       # call form: it declares an object, no body to trace
+    id="...", use_blueprint="hassle/motion_light.yaml",   # author-qualified path
+    inputs={"motion_entity": e.binary_sensor.hall_motion},
+)
 ```
 
 (DSL keeps the ergonomic `inputs=`; the stored JSON key is `use_blueprint.input` — singular —

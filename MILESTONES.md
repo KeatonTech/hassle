@@ -43,7 +43,9 @@ the frozen IR (F1). M8 (VS Code) and M9 (docs) can start early in stub form but 
 - **F2** (start of M5): the `Backend` protocol (Python `Protocol` in `hassle-core`, spec'd in
   `docs/backend.md`) + the plan/apply data model. M5 builds the sync engine against `FakeBackend`;
   M6 builds `DirectBackend` against the same protocol — independently.
-- **F3** (end of M1): DSL public API surface (`hassle.__all__`) — additions allowed, changes are not.
+- **F3** (end of M1): DSL public API surface (`hassle.__all__`, 72 names, plus the
+  `hassle.registry.entities` entry point) — additions allowed, changes are not.
+  Declared in [docs/dsl-f3.md](docs/dsl-f3.md).
 
 ---
 
