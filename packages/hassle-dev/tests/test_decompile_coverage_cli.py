@@ -56,9 +56,7 @@ def test_decompile_coverage_fails_gate_when_forced_low(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     out_file = tmp_path / "coverage.json"
-    exit_code = main(
-        ["decompile-coverage", "--configs", str(configs_dir), "--out", str(out_file)]
-    )
+    exit_code = main(["decompile-coverage", "--configs", str(configs_dir), "--out", str(out_file)])
     assert exit_code == 1
     report = json.loads(out_file.read_text(encoding="utf-8"))
     assert report["clean_fraction"] < 0.90

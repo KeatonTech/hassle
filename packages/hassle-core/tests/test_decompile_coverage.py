@@ -53,9 +53,7 @@ def test_legacy_device_trigger_is_a_known_exception() -> None:
     report = analyze_coverage(_objects())
     exception_keys = {e.object_key for e in report.exceptions}
     device_trigger_keys = {
-        key
-        for key in _objects()
-        if "device_trigger" in key or "condition_device" in key
+        key for key in _objects() if "device_trigger" in key or "condition_device" in key
     }
     # At least one device-shaped fixture is present and is (correctly) not clean.
     assert device_trigger_keys

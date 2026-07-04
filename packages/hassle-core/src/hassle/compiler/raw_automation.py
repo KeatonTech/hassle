@@ -125,7 +125,12 @@ def raw_automation(*, id: str) -> Callable[[F], F]:
 
 
 def blueprint_automation(
-    *, id: str, use_blueprint: str, inputs: dict[str, Any] | None = None
+    *,
+    id: str,
+    use_blueprint: str,
+    inputs: dict[str, Any] | None = None,
+    alias: str | None = None,
+    description: str | None = None,
 ) -> AutomationConfig:
     """``@blueprint_automation(id=..., use_blueprint="author/file.yaml", inputs={...})``
     (DESIGN §5.8).
@@ -133,10 +138,20 @@ def blueprint_automation(
     Maps the DSL's ergonomic ``inputs=`` to the stored JSON shape
     ``use_blueprint: {"path": ..., "input": ...}`` (singular ``input`` --
     docs/ha-api-notes.md §10.5, quirk #4). A blueprint automation stores only
-    ``use_blueprint``, no ``triggers/conditions/actions`` (the blueprint is
-    applied at runtime by HA). Wired into ``compile_bundle`` via the module
-    docstring's Registration note (``Registry.add_object``).
+    ``use_blueprint`` plus (optionally) the usual ``alias``/``description``
+    top-level fields HA still allows a blueprint-based automation to carry (a
+    real stored blueprint automation's ``alias``/``description`` sit alongside
+    ``use_blueprint``, not inside it) -- no ``triggers/conditions/actions``
+    (the blueprint is applied at runtime by HA). ``alias=``/``description=``
+    are an F3 *addition* (M2, widening this signature with new optional
+    keywords, docs/dsl-f3.md's stability contract). Wired into
+    ``compile_bundle`` via the module docstring's Registration note
+    (``Registry.add_object``).
     """
     span = capture_span(depth=0)
     body: dict[str, Any] = {"use_blueprint": {"path": use_blueprint, "input": dict(inputs or {})}}
+    if alias is not None:
+        body["alias"] = alias
+    if description is not None:
+        body["description"] = description
     return _build(id, body, span)

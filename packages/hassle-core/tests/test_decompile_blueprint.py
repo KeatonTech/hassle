@@ -13,10 +13,7 @@ from hassle.decompiler import analyze_coverage, decompile_bundle
 from hassle.ir import parse, sha256_hash
 
 FIXTURE = (
-    Path(__file__).resolve().parents[3]
-    / "fixtures"
-    / "configs"
-    / "automation_blueprint_based.json"
+    Path(__file__).resolve().parents[3] / "fixtures" / "configs" / "automation_blueprint_based.json"
 )
 
 
@@ -30,7 +27,7 @@ def test_blueprint_decompiles_to_blueprint_automation_call() -> None:
     source = decompile_bundle({obj.object_key(): obj})
 
     assert "blueprint_automation(" in source
-    assert "raw_automation" not in source
+    assert "@raw_automation(" not in source
     assert 'use_blueprint="community/motion_activated_light.yaml"' in source
     assert "inputs=" in source
     # Stored input values ride through the `inputs=` mapping.

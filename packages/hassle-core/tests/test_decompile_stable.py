@@ -37,9 +37,7 @@ def test_decompile_stable_across_runs(fx: Fixture) -> None:
 
 
 @pytest.mark.parametrize("fx", CORPUS, ids=[f.name for f in CORPUS])
-def test_decompile_is_a_fixed_point(
-    fx: Fixture, tmp_path_factory: pytest.TempPathFactory
-) -> None:
+def test_decompile_is_a_fixed_point(fx: Fixture, tmp_path_factory: pytest.TempPathFactory) -> None:
     obj = _ir_object(fx)
     objects = {obj.object_key(): obj}  # type: ignore[attr-defined]
     first = decompile_bundle(objects)
