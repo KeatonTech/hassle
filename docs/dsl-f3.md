@@ -11,9 +11,38 @@ The public surface is exactly `hassle.__all__` (module
 `from hassle import automation, when, ...`; nothing outside this list is public.
 The identical set is re-exported from `hassle_core.dsl_builtins` for tools/tests
 that want a layout-independent import — that module tracks `hassle.__all__` and
-is not itself a second public surface.
+is not itself a second public surface. `test_dsl_builtins_parity_with_hassle_all`
+(`packages/hassle-core/tests/test_integration_api.py`) pins the two lists as
+identical, name-for-name and object-for-object, so they cannot silently
+diverge again.
 
-Current surface: **72 names.**
+Current surface: **72 names**, plus one dedicated entry point (`hassle.registry`,
+below) that is deliberately *not* folded into `hassle.__all__` because DESIGN
+§5.3 imports it under its own alias (`from hassle.registry import entities as e`).
+
+### Entity indexing form — `hassle.registry.entities` (DESIGN §5.2/§5.3, M1 test 8)
+
+```python
+from hassle.registry import entities as e
+
+when(state(e.sensor.hall_motion).to("on"))     # attribute form
+when(state(e.sensor["hall_motion"]).to("on"))   # index form — identical EntityRef
+when(state(e.sensor._3d_printer).to("on"))      # digit-leading id: strip one leading `_`
+when(state(e.sensor["3d_printer"]).to("on"))    # index form never needs the prefix
+```
+
+`entities.<domain>` returns a domain accessor; both attribute access and
+indexing resolve to the same `EntityRef` (a `str` subclass, identical to what
+the helper-declaration builders return — accepted anywhere the DSL expects an
+entity id). The digit-leading rule (DESIGN §5.2: object_ids match
+`(?!_)[\da-z_]+(?<!_)`, so they may start with a digit but a Python identifier
+can't) strips exactly one leading underscore when the next character is a
+digit; any other name passes through unchanged. This module (`hassle_core.
+registry`, re-exported as `hassle.registry`) is the M1 *runtime* shape and is
+domain-open (no registry snapshot backs it); M3 layers generated, typed `.pyi`
+stub classes with the identical attribute/index shape on top, so a bad
+attribute name becomes a pyright error in the editor without changing how
+bundles are written.
 
 ## The frozen surface, grouped by role
 
@@ -148,4 +177,7 @@ These are how new builder families are added; they are **not** in
 All M1 golden pairs green (`fixtures/dsl/`, checked by
 `test_dsl_golden_pairs.py` and `hassle-dev goldens`); every fixture-corpus
 construct expressible in the DSL with a backing golden (the M1 done-gate
-expressibility checklist, in the integration report).
+expressibility checklist, in the integration report); `test_entity_attr_and_
+index_equivalent` (MILESTONES M1 test 8, `test_entity_accessor.py`) green —
+`e.sensor.hall_motion` and `e.sensor["hall_motion"]` compile to byte-identical
+IR; `test_dsl_builtins_parity_with_hassle_all` green.

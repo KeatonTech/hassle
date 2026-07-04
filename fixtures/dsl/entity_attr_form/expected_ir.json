@@ -1,0 +1,15 @@
+{
+  "automation:entity_attr_form": {
+    "id": "entity_attr_form",
+    "alias": "Entity attr form",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "sensor.hall_motion",
+        "to": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": []
+  }
+}

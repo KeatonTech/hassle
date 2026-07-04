@@ -86,3 +86,26 @@ def test_compile_is_deterministic_for_prebuilt() -> None:
     first = _compile("helper_declarations")
     second = _compile("helper_declarations")
     assert first == second
+
+
+def test_no_prebuilt_leakage_across_bundles_in_one_process() -> None:
+    # R8 isolation: compiling a bundle with prebuilt objects (helpers) must not
+    # leak them into a later compile of an unrelated bundle in the same process
+    # — both compile_bundle's reset of the declared-* lists (helpers.py /
+    # raw_automation.py) and fresh()'s per-compile Registry must actually take
+    # effect, not just on repeated compiles of the *same* bundle (the case
+    # test_compile_is_deterministic_for_prebuilt covers) but across *different*
+    # bundles compiled back-to-back.
+    helper_objects = _compile("helper_declarations")
+    assert any(k.startswith("input_boolean:") for k in helper_objects)
+
+    minimal_objects = _compile("minimal")
+    # Zero helper keys (or any other object from the first bundle) leaked in.
+    assert not any(k.startswith("input_boolean:") for k in minimal_objects)
+    assert not any(k.startswith("input_number:") for k in minimal_objects)
+    assert set(minimal_objects).isdisjoint(set(helper_objects))
+
+    # And compiling helper_declarations again afterward is still exactly itself
+    # (no accumulation from the interleaved unrelated compile either).
+    helper_objects_again = _compile("helper_declarations")
+    assert helper_objects_again == helper_objects

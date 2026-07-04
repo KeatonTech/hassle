@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from hassle_core.compiler import compile_bundle
 from hassle_core.compiler.helpers import EntityRef
 from hassle_core.registry import entities
@@ -74,9 +75,7 @@ def test_attr_and_index_forms_compile_to_identical_ir(case: str) -> None:
     result = compile_bundle(_DSL / case / "bundle")
     (obj,) = result.objects.values()
     body = obj.to_ha()
-    assert body["triggers"] == [
-        {"trigger": "state", "entity_id": "sensor.hall_motion", "to": "on"}
-    ]
+    assert body["triggers"] == [{"trigger": "state", "entity_id": "sensor.hall_motion", "to": "on"}]
 
 
 def test_attr_and_index_forms_produce_byte_identical_ir() -> None:

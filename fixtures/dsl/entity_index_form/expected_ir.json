@@ -1,0 +1,15 @@
+{
+  "automation:entity_index_form": {
+    "id": "entity_index_form",
+    "alias": "Entity index form",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "sensor.hall_motion",
+        "to": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": []
+  }
+}

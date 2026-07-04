@@ -1,12 +1,12 @@
 """Helper declarations (DESIGN §5.7) -- the model/builder layer.
 
-**Contract gap (see hassle_core/compiler/helpers.py's module docstring and the
-implementer's final report):** these constructor functions build correct
-``HelperConfig`` IR objects and a usable :class:`EntityRef`, but nothing wires
-them into ``compile_bundle(...).objects`` today -- that requires a change to
-``bundle.py``/``registry.py`` outside this workstream's editable files. These
-tests exercise the builder layer directly (:func:`declared_helpers`), not
-through ``compile_bundle``.
+These constructor functions build correct ``HelperConfig`` IR objects and a
+usable :class:`EntityRef`. The §12 registration path (M1 integration pass,
+``Registry.add_object`` + ``compile_registered``'s prebuilt stream) wires them
+into ``compile_bundle(...).objects``; see
+``packages/hassle-core/tests/test_prebuilt_registration.py`` for the
+end-to-end golden coverage. These tests exercise the builder layer directly
+(:func:`declared_helpers`), not through ``compile_bundle``.
 """
 
 from __future__ import annotations

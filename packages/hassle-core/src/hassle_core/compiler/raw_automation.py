@@ -1,5 +1,6 @@
 """``@raw_automation`` / ``@blueprint_automation`` (DESIGN §5.8) -- model/builder
-layer only; see the contract-gap note below for what is NOT wired up.
+layer, wired into ``compile_bundle(...).objects`` (see the Registration note
+below).
 
 **Deviation from DESIGN §5.8 (recorded in docs/ha-api-notes.md):** the design
 text shows::
@@ -12,8 +13,8 @@ syntax (``@x`` only applies to a following ``def``/``class``); the design's
 own paragraph after it calls this the "raw dict assignment form", implying two
 forms were intended. This module implements both as valid Python: a decorator
 over a zero-arg function returning the dict (mirroring ``@automation``'s own
-shape, so it would slot into the same registration model if the pipeline gap
-below were closed), and a plain-call form taking the dict directly.
+shape, so it slots into the same registration model below), and a plain-call
+form taking the dict directly.
 
 **Registration (§12 fix, M1 integration) -- same path as ``helpers.py``:** a
 raw/blueprint automation is a whole bundle-level *object* (it appears in
@@ -101,8 +102,8 @@ def build_raw_automation(*, id: str, **body: Any) -> AutomationConfig:
 
     Legacy singular keys (``trigger``/``condition``/``action``, ``service:``)
     are normalized exactly as HA itself would on storage (``normalize_ha``,
-    already applied here). Not yet wired into ``compile_bundle`` -- see the
-    module docstring's contract-gap note.
+    already applied here). Wired into ``compile_bundle`` via the module
+    docstring's Registration note (``Registry.add_object``).
     """
     span = capture_span(depth=0)
     return _build(id, body, span)
@@ -133,8 +134,8 @@ def blueprint_automation(
     ``use_blueprint: {"path": ..., "input": ...}`` (singular ``input`` --
     docs/ha-api-notes.md §10.5, quirk #4). A blueprint automation stores only
     ``use_blueprint``, no ``triggers/conditions/actions`` (the blueprint is
-    applied at runtime by HA). Not yet wired into ``compile_bundle`` -- see
-    the module docstring's contract-gap note.
+    applied at runtime by HA). Wired into ``compile_bundle`` via the module
+    docstring's Registration note (``Registry.add_object``).
     """
     span = capture_span(depth=0)
     body: dict[str, Any] = {"use_blueprint": {"path": use_blueprint, "input": dict(inputs or {})}}

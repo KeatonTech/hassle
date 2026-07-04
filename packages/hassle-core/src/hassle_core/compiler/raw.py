@@ -13,21 +13,14 @@ trigger's inner ``platform:`` discriminator is preserved verbatim (HA does not
 rewrite it on storage, docs/ha-api-notes.md §10.1), which these passthrough
 builders get for free by not touching the dict at all.
 
-**Scope note (contract gap, reported to the orchestrator/human):**
-``@raw_automation`` (a whole raw automation as a bundle-level object) and
-``@blueprint_automation`` need a *new top-level object kind* to enter
-``CompileResult.objects`` -- something other than "run a function, record
-trigger/condition/action calls into it". That requires either a new
-``Registry``/``RegisteredObject`` registration path (registry.py) or a new
-branch in ``compile_registered`` (bundle.py) that skips the recorder and
-calls ``CompileResult.add()`` directly with a pre-built IR object. Both files
-are off-limits to this workstream (docs/m1-internal-api.md marks ``bundle.py``
-"No", and ``registry.py`` -- while not listed in that table at all -- has no
-seam for a non-function registration today). Per the instruction to "stop and
-report rather than modifying core" when the internal-api contract is
-insufficient, ``raw_automation``/``@blueprint_automation`` are NOT implemented
-here; see docs/ha-api-notes.md for the recorded finding and the final report
-for the exact minimal change needed.
+**Scope note:** ``@raw_automation`` (a whole raw automation as a bundle-level
+object) and ``@blueprint_automation`` are *not* in this module -- they are
+whole top-level objects (a different registration shape than "run a function,
+record trigger/condition/action calls into it") and live in
+``hassle_core.compiler.raw_automation`` instead, alongside the ``Registry.
+add_object`` path (registry.py) that lands them in ``CompileResult.objects``.
+This was originally a reported contract gap (docs/ha-api-notes.md §12);
+resolved in the M1 integration pass -- see that module's docstring.
 """
 
 from __future__ import annotations
