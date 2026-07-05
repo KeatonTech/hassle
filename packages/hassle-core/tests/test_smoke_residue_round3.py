@@ -244,3 +244,27 @@ def test_decompile_choose_branch_numeric_state_attribute_condition() -> None:
     src = "\n".join(decompile_action(body))
     assert "raw_action" not in src
     assert "numeric_state('cover.garage', attribute='current_position', above=0)" in src
+
+
+def test_choose_branch_with_empty_conditions_round_trips() -> None:
+    # Owner bundle, the last straggler: the UI expresses an unconditional
+    # final branch as `"conditions": []` (distinct from `default:` -- must be
+    # preserved exactly, not converted). when_() with zero conditions compiles
+    # to conditions: []; the decompiler emits `c.when_()` for it.
+    from hassle.decompiler.actions import decompile_action
+
+    block = {
+        "choose": [
+            {
+                "conditions": [
+                    {"condition": "state", "entity_id": "input_boolean.x", "state": "on"}
+                ],
+                "sequence": [{"action": "light.turn_on", "metadata": {}, "data": {}}],
+            },
+            {"conditions": [], "sequence": [{"stop": "Fully Closed"}]},
+        ]
+    }
+    src = decompile_action(block)
+    joined = "\n".join(src)
+    assert "raw_action" not in joined, joined
+    assert "when_()" in joined, joined
