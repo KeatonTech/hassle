@@ -68,12 +68,16 @@ def _check_snapshot(name: str, actual: str) -> None:
 def test_helper_id_mismatched_with_name_slug_flagged(
     tmp_path: Path, snapshot: RegistrySnapshot
 ) -> None:
+    # `guest_room_mode` is NOT in the fixture registry snapshot -- this is a
+    # genuinely new declaration Hassle would create via the WS path, where
+    # the slug rule bites (see the scoping tests further below for the
+    # adopted/present-in-snapshot counterpart).
     bundle = _write_bundle(
         tmp_path,
         """
 from hassle import automation, input_boolean, service
 
-guest_flag = input_boolean(id="guest_mode", name="Guest Flag")
+guest_flag = input_boolean(id="guest_room_mode", name="Guest Room Flag")
 
 @automation(id="a", alias="A")
 def a():
@@ -84,8 +88,8 @@ def a():
     findings = validate_bundle(result, snapshot)
     matches = [f for f in findings if f.code == "helper-id-name-mismatch"]
     assert matches, f"expected a helper-id-name-mismatch finding, got: {findings}"
-    assert "guest_mode" in matches[0].message
-    assert "guest_flag" in matches[0].fix or "guest_flag" in matches[0].message
+    assert "guest_room_mode" in matches[0].message
+    assert "guest_room_flag" in matches[0].fix or "guest_room_flag" in matches[0].message
     _check_snapshot("helper_id_name_mismatch", _normalize(str(matches[0])))
 
 
@@ -163,20 +167,54 @@ def a():
     assert not [f for f in findings if f.code == "helper-id-name-mismatch"]
 
 
-def test_new_helper_with_mismatched_id_absent_from_snapshot_is_flagged(
+def test_same_mismatched_helper_absent_from_snapshot_is_flagged(tmp_path: Path) -> None:
+    """The exact same declaration as the "present in snapshot" test above
+    (same id, same name, same mismatch) -- but validated against a snapshot
+    that does NOT contain `input_text.material_you_image_url_6814bc`. Absent
+    from the snapshot means Hassle would `create` it fresh via the WS path,
+    where the slug rule bites -- so, unlike the adopted case, this must fire,
+    with fix text explaining the new-vs-adopted scoping.
+    """
+    empty_snapshot = RegistrySnapshot()
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, input_text, service
+
+img = input_text(
+    id="material_you_image_url_6814bc",
+    name="Material You Base Color Source Image Path/URL Keaton",
+)
+
+@automation(id="a", alias="A")
+def a():
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, empty_snapshot)
+    matches = [f for f in findings if f.code == "helper-id-name-mismatch"]
+    assert matches, f"expected a helper-id-name-mismatch finding, got: {findings}"
+    # An empty snapshot ("no snapshot available") can't distinguish new from
+    # adopted, so this is the softened "note" path, not "error".
+    assert matches[0].severity == "note"
+    _check_snapshot("helper_id_name_mismatch_no_snapshot", _normalize(str(matches[0])))
+
+
+def test_new_helper_with_mismatched_id_absent_from_real_snapshot_is_flagged(
     tmp_path: Path, snapshot: RegistrySnapshot
 ) -> None:
-    """The same kind of mismatch, but for an id/domain combination that is
-    NOT already in the registry snapshot -- a genuinely new declaration
-    Hassle would create via the WS path, where the slug rule bites -- must
-    still be flagged, with fix text explaining the new-vs-adopted scoping.
+    """A mismatch on an id/domain that is absent from a *real* (non-empty)
+    registry snapshot -- a genuinely new declaration Hassle would create via
+    the WS path, where the slug rule bites -- must fire at full "error"
+    severity, with fix text explaining the new-vs-adopted scoping.
     """
     bundle = _write_bundle(
         tmp_path,
         """
 from hassle import automation, input_boolean, service
 
-guest_flag = input_boolean(id="guest_mode", name="Guest Flag")
+guest_flag = input_boolean(id="guest_room_mode", name="Guest Room Flag")
 
 @automation(id="a", alias="A")
 def a():
@@ -187,4 +225,4 @@ def a():
     findings = validate_bundle(result, snapshot)
     matches = [f for f in findings if f.code == "helper-id-name-mismatch"]
     assert matches, f"expected a helper-id-name-mismatch finding, got: {findings}"
-    _check_snapshot("helper_id_name_mismatch_new", _normalize(str(matches[0])))
+    assert matches[0].severity == "error"

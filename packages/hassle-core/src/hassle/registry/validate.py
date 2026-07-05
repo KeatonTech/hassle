@@ -376,18 +376,38 @@ def _validate_service_params(result: CompileResult, snapshot: RegistrySnapshot) 
     return findings
 
 
-def _validate_helper_slugs(result: CompileResult) -> list[Finding]:
+def _validate_helper_slugs(result: CompileResult, snapshot: RegistrySnapshot) -> list[Finding]:
     """M7 addition (docs/ha-api-notes.md §17.5, owner UX): a helper whose
     ``id=`` does not match ``slugify(name)`` will silently get a *different*
-    identity from real HA, which derives the storage-collection item id by
-    slugifying ``name`` and ignores any caller-supplied ``id`` -- breaking the
-    id<->entity mapping the bundle (and the sync engine's object keys) assume.
+    identity from real HA's WS-API storage-collection ``create``, which
+    derives the item id by slugifying ``name`` and ignores any caller-supplied
+    ``id`` -- breaking the id<->entity mapping the bundle (and the sync
+    engine's object keys) assume.
 
     Only checked when ``name`` is present (nothing to slugify against
     otherwise); a `HelperConfig` with no `name` set is not this validator's
     concern.
+
+    **Scoped to NEW declarations (smoke #7 field evidence; §17.5 amended):**
+    the slug-derivation rule is a property of the WS-API *creation* path --
+    it says nothing about a helper that already exists. A live registry's
+    ``.storage`` can legitimately hold helpers created some other way (e.g. an
+    external integration writing ``.storage`` directly) whose id does not
+    equal ``slugify(name)``; those are adopted, already-live truth, and
+    telling the user to "fix" the id would break the bundle's mapping to a
+    real, pre-existing entity (I2). So: if ``<domain>.<supplied_id>`` is
+    already present in the registry snapshot, this is an adopted helper, not
+    a fresh `create` -- the slug rule never fires for it, so no Finding.
+
+    If the snapshot itself is empty (no entities at all -- e.g. no
+    `.hassle/registry.json` was ever pulled), we cannot distinguish "new" from
+    "adopted" by lookup; keep firing (current behavior -- silence-by-default
+    would hide a real new-declaration bug) but soften to a ``"note"``
+    severity and say so in the fix, since we can't confirm this is new.
     """
     findings: list[Finding] = []
+    known_entities = snapshot.entity_ids()
+    snapshot_available = bool(snapshot.entities)
     for key, obj in result.objects.items():
         if not isinstance(obj, HelperConfig):
             continue
@@ -400,26 +420,61 @@ def _validate_helper_slugs(result: CompileResult) -> list[Finding]:
         expected_id = slugify(name)
         if supplied_id == expected_id:
             continue
+        entity_id = f"{obj.kind()}.{supplied_id}"
+        if entity_id in known_entities:
+            # Adopted helper: this id already exists in HA under this exact
+            # domain, so nothing will be freshly `create`d and the slug rule
+            # does not apply -- it's live truth, not a new declaration.
+            continue
         span = result.decl_span_for(key)
         file, line = _where(span)
-        findings.append(
-            Finding(
-                code="helper-id-name-mismatch",
-                severity="error",
-                file=file,
-                line=line,
-                message=(
-                    f'Helper `{key}` declares `id="{supplied_id}"`, but Home Assistant '
-                    f"derives a helper's real identity by slugifying its `name` "
-                    f'("{name}" -> `{expected_id}`), ignoring the supplied id.'
-                ),
-                fix=(
-                    f'Change `id="{supplied_id}"` to `id="{expected_id}"` (or rename the '
-                    f"helper to a `name` that slugifies to `{supplied_id}`), so the bundle's "
-                    f"id matches what HA will actually assign."
-                ),
+        if snapshot_available:
+            findings.append(
+                Finding(
+                    code="helper-id-name-mismatch",
+                    severity="error",
+                    file=file,
+                    line=line,
+                    message=(
+                        f'Helper `{key}` declares `id="{supplied_id}"`, but `{entity_id}` is '
+                        f"not in the registry snapshot -- Home Assistant will create it fresh "
+                        f"via the WS API, which derives a new helper's real identity by "
+                        f'slugifying its `name` ("{name}" -> `{expected_id}`), ignoring the '
+                        f"supplied id."
+                    ),
+                    fix=(
+                        f'Change `id="{supplied_id}"` to `id="{expected_id}"` (or rename the '
+                        f"helper to a `name` that slugifies to `{supplied_id}`), so the bundle's "
+                        f"id matches what HA will actually assign. (This only applies to new "
+                        f"helpers Hassle creates; an already-existing helper with this id is "
+                        f"exempt -- see docs/ha-api-notes.md §17.5.)"
+                    ),
+                )
             )
-        )
+        else:
+            findings.append(
+                Finding(
+                    code="helper-id-name-mismatch",
+                    severity="note",
+                    file=file,
+                    line=line,
+                    message=(
+                        f'Helper `{key}` declares `id="{supplied_id}"`, which does not match '
+                        f'`slugify(name)` ("{name}" -> `{expected_id}`); if this is a NEW '
+                        f"helper, Home Assistant's WS API will derive its real identity from "
+                        f"the name slug and ignore the supplied id. No registry snapshot was "
+                        f"available, so it's unknown whether `{entity_id}` already exists "
+                        f"(in which case this would not apply -- see docs/ha-api-notes.md "
+                        f"§17.5)."
+                    ),
+                    fix=(
+                        f'If this helper is new, change `id="{supplied_id}"` to '
+                        f'`id="{expected_id}"` (or rename to a `name` that slugifies to '
+                        f"`{supplied_id}`). Run `hassle pull` or `hassle stubs --refresh` to "
+                        f"get a registry snapshot so this check can tell new from adopted."
+                    ),
+                )
+            )
     return findings
 
 
@@ -429,5 +484,5 @@ def validate_bundle(result: CompileResult, snapshot: RegistrySnapshot) -> list[F
     findings.extend(_validate_references(result, snapshot))
     findings.extend(_validate_purpose_vocabulary(result, snapshot))
     findings.extend(_validate_service_params(result, snapshot))
-    findings.extend(_validate_helper_slugs(result))
+    findings.extend(_validate_helper_slugs(result, snapshot))
     return findings
