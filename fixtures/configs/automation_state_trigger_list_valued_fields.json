@@ -1,0 +1,38 @@
+{
+  "id": "state_trigger_list_valued_fields",
+  "alias": "State Trigger List Valued Fields",
+  "description": "Shape observed in a real 2026.7 UI-authored config: the HA UI stores entity_id/to/from as lists even for a single entity/value; a singleton list must round-trip as a list, never normalized to a scalar",
+  "triggers": [
+    {
+      "trigger": "state",
+      "entity_id": ["binary_sensor.x"],
+      "to": ["on"],
+      "from": ["off"]
+    },
+    {
+      "trigger": "state",
+      "entity_id": ["binary_sensor.hall_motion", "binary_sensor.kitchen_motion"],
+      "to": ["on", "detected"]
+    },
+    {
+      "trigger": "numeric_state",
+      "entity_id": ["sensor.outdoor_temperature"],
+      "above": 25
+    },
+    {
+      "trigger": "numeric_state",
+      "entity_id": ["sensor.living_room_temp", "sensor.bedroom_temp"],
+      "above": 20
+    }
+  ],
+  "conditions": [],
+  "actions": [
+    {
+      "action": "light.turn_on",
+      "target": {
+        "entity_id": "light.hallway"
+      }
+    }
+  ],
+  "mode": "single"
+}

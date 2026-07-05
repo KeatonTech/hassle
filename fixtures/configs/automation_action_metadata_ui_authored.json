@@ -1,0 +1,34 @@
+{
+  "id": "action_metadata_ui_authored",
+  "alias": "Action Metadata UI Authored",
+  "description": "Shape observed in a real 2026.7 UI-authored config: the HA UI stamps metadata: {} on every action it saves, alongside target+data",
+  "triggers": [
+    {
+      "trigger": "state",
+      "entity_id": "binary_sensor.hall_motion",
+      "to": "on"
+    }
+  ],
+  "conditions": [],
+  "actions": [
+    {
+      "action": "light.turn_on",
+      "metadata": {},
+      "data": {
+        "brightness_pct": 50,
+        "transition": 4
+      },
+      "target": {
+        "entity_id": "light.x"
+      }
+    },
+    {
+      "action": "notify.mobile_app",
+      "metadata": {},
+      "data": {
+        "message": "Hallway light adjusted"
+      }
+    }
+  ],
+  "mode": "single"
+}

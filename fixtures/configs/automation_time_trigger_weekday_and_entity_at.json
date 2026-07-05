@@ -1,0 +1,26 @@
+{
+  "id": "time_trigger_weekday_and_entity_at",
+  "alias": "Time Trigger Weekday And Entity At",
+  "description": "Shape observed in a real 2026.7 UI-authored config: a weekday-scoped fixed-time trigger, plus a second time trigger whose at references an input_datetime entity (schedule-driven wakeup) instead of a literal HH:MM:SS",
+  "triggers": [
+    {
+      "trigger": "time",
+      "at": "18:30:00",
+      "weekday": ["mon", "tue", "wed", "thu", "fri"]
+    },
+    {
+      "trigger": "time",
+      "at": "input_datetime.wakeup"
+    }
+  ],
+  "conditions": [],
+  "actions": [
+    {
+      "action": "light.turn_on",
+      "target": {
+        "entity_id": "light.bedroom"
+      }
+    }
+  ],
+  "mode": "single"
+}
