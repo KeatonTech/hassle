@@ -1,0 +1,84 @@
+{
+  "script:notify_all": {
+    "alias": "Notify all",
+    "fields": {
+      "title": {
+        "name": "Title",
+        "description": "Notification title",
+        "selector": {
+          "text": {}
+        }
+      },
+      "message": {
+        "name": "Message",
+        "description": "Notification message",
+        "selector": {
+          "text": {}
+        }
+      },
+      "action_button": {
+        "name": "Action button",
+        "description": "Label for the notification's action button",
+        "selector": {
+          "text": {}
+        }
+      },
+      "action_button_icon": {
+        "name": "Action button icon",
+        "description": "mdi icon for the action button",
+        "selector": {
+          "text": {}
+        }
+      },
+      "tag": {
+        "name": "Tag",
+        "description": "Notification tag (dedupes repeat notifications)",
+        "selector": {
+          "text": {}
+        }
+      }
+    },
+    "sequence": [
+      {
+        "action": "notify.mobile_app_keaton",
+        "data": {
+          "actions": [
+            {
+              "action": "VIEW",
+              "title": "{{ action_button }}",
+              "icon": "{{ action_button_icon }}"
+            }
+          ],
+          "tag": "{{ tag }}",
+          "title": "{{ title }}",
+          "message": "{{ message }}"
+        }
+      }
+    ]
+  },
+  "automation:garage_door_opened": {
+    "id": "garage_door_opened",
+    "alias": "Garage door opened",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "cover.garage_door",
+        "to": "open"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "script.notify_all",
+        "data": {
+          "title": "Garage",
+          "message": "Door opened",
+          "action_button": "view",
+          "action_button_icon": "mdi:garage-open",
+          "tag": "garage_door"
+        },
+        "metadata": {}
+      }
+    ]
+  }
+}

@@ -150,6 +150,7 @@ from hassle.compiler.registry import (
 from hassle.compiler.scripts import (
     NoParamContextError,
     ScriptCallAction,
+    UnknownFieldError,
     UnknownParamError,
     param,
     shared_script,
@@ -237,6 +238,7 @@ __all__ = [
     "TriggerBuilder",
     "TriggerConditionExpr",
     "UnknownAutomationOptionError",
+    "UnknownFieldError",
     "UnknownParamError",
     "WebhookTrigger",
     "ZoneExpr",

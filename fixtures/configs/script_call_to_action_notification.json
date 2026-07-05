@@ -1,0 +1,53 @@
+{
+  "alias": "Call to action notification",
+  "description": "Shape observed in a real UI-authored script (ux/shared-script-rich-fields, owner feedback): every field carries selector/name/description metadata, the way the HA UI's script field editor always saves them -- mirrors fixtures/configs/automation_parallel_multistep_branch_composite.json's script.notify_all caller shape (title/message/action_button/action_button_icon/tag).",
+  "fields": {
+    "title": {
+      "name": "Title",
+      "description": "Notification title",
+      "selector": {
+        "text": {}
+      }
+    },
+    "message": {
+      "name": "Message",
+      "description": "Notification message",
+      "selector": {
+        "text": {}
+      }
+    },
+    "action_button": {
+      "name": "Action button label",
+      "description": "Label shown on the notification's action button",
+      "selector": {
+        "text": {}
+      }
+    },
+    "action_button_icon": {
+      "name": "Action button icon",
+      "description": "mdi icon for the action button",
+      "selector": {
+        "text": {}
+      }
+    },
+    "tag": {
+      "name": "Tag",
+      "description": "Notification tag (dedupes repeat notifications)",
+      "selector": {
+        "text": {}
+      }
+    }
+  },
+  "sequence": [
+    {
+      "service": "notify.mobile_app_keaton",
+      "data": {
+        "title": "{{ title }}",
+        "message": "{{ message }}",
+        "tag": "{{ tag }}",
+        "action_button": "{{ action_button }}",
+        "action_button_icon": "{{ action_button_icon }}"
+      }
+    }
+  ]
+}
