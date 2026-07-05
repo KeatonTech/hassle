@@ -122,7 +122,7 @@ def _script_and_caller(call_action: dict[str, object]) -> dict[str, object]:
     script_obj = parse(
         {
             "alias": "Dismiss Notification",
-            "fields": {"notification_id": {}},
+            "fields": {"notification_id": {"default": ""}},
             "sequence": [
                 {
                     "action": "persistent_notification.dismiss",
@@ -251,15 +251,10 @@ def test_call_to_unmanaged_script_stays_service() -> None:
 
 
 def test_cross_file_call_emits_import_from_script_module() -> None:
-    script_obj = parse(
-        {
-            "alias": "Dismiss Notification",
-            "fields": {"notification_id": {}},
-            "sequence": [],
-        },
-        kind="script",
-        key_hint="dismiss_notification",
-    )
+    # The callee script itself isn't in THIS decompile_bundle() call -- only
+    # the automation is; the cross-reference table (below) stands in for it,
+    # exactly as a real pull batch would supply it for a script decompiled
+    # into a different destination file.
     automation_obj = parse(
         {
             "id": "1",
@@ -278,7 +273,11 @@ def test_cross_file_call_emits_import_from_script_module() -> None:
     # The script lives in a DIFFERENT destination file than the caller: only
     # the automation is in this decompile_bundle() call; the cross-reference
     # table supplies where the script function actually lives.
-    refs = {"dismiss_notification": ScriptRef(module="scripts.notify", function_name="dismiss_notification")}
+    refs = {
+        "dismiss_notification": ScriptRef(
+            module="scripts.notify", function_name="dismiss_notification"
+        )
+    }
     source = decompile_bundle({automation_obj.object_key(): automation_obj}, script_refs=refs)
 
     assert "from scripts.notify import dismiss_notification" in source
@@ -311,7 +310,11 @@ def test_unknown_script_ref_stays_service_even_with_refs_table() -> None:
         },
         kind="automation",
     )
-    refs = {"dismiss_notification": ScriptRef(module="scripts.notify", function_name="dismiss_notification")}
+    refs = {
+        "dismiss_notification": ScriptRef(
+            module="scripts.notify", function_name="dismiss_notification"
+        )
+    }
     source = decompile_bundle({automation_obj.object_key(): automation_obj}, script_refs=refs)
 
     assert "script.ghost" in source
@@ -356,11 +359,17 @@ def test_corpus_fixture_pair_rewrite_round_trips_byte_identical() -> None:
         (Path(tmp) / "objects.py").write_text(source, encoding="utf-8")
         result = compile_bundle(tmp)
 
+    from hassle.ir import normalize_ha
+
+    # Compared against normalize_ha(x), exactly like test_roundtrip_corpus (I3
+    # promises compile(decompile(x)) == normalize_ha(x); these two corpus
+    # fixtures use the legacy `service:` key, which normalizes to `action:`
+    # regardless of this feature).
     assert sha256_hash(result.objects["automation:dismiss_reminder_automation"].to_ha()) == (
-        sha256_hash(automation_obj.to_ha())
+        sha256_hash(normalize_ha(automation_obj.to_ha(), kind="automation"))
     )
     assert sha256_hash(result.objects["script:dismiss_notification"].to_ha()) == sha256_hash(
-        script_obj.to_ha()
+        normalize_ha(script_obj.to_ha(), kind="script")
     )
 
 
@@ -388,8 +397,18 @@ def test_script_to_script_call_cycle_breaks_back_edge_to_service() -> None:
         key_hint="script_b",
     )
     refs = {
-        "script_a": ScriptRef(module="scripts.a", function_name="script_a"),
-        "script_b": ScriptRef(module="scripts.b", function_name="script_b"),
+        "script_a": ScriptRef(
+            module="scripts.a",
+            function_name="script_a",
+            known_fields=frozenset(),
+            calls=frozenset({"script_b"}),
+        ),
+        "script_b": ScriptRef(
+            module="scripts.b",
+            function_name="script_b",
+            known_fields=frozenset(),
+            calls=frozenset({"script_a"}),
+        ),
     }
     # Decompiled separately (different destination files) -- exactly the
     # cross-file shape that can cycle.

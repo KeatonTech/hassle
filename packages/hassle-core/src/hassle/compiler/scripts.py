@@ -124,16 +124,42 @@ class ScriptCallAction:
     ``normalize_ha``). Compile-time call args become ``data`` so HA passes
     them as the script's fields at runtime, matching the ``script.turn_on``
     call-with-variables shape.
+
+    F3-additive (``ux/shared-script-calls``, owner feedback): also carries
+    the same ``metadata``/``alias``/``enabled`` step options every other
+    action shape accepts, so the decompiler's function-call rewrite (a
+    caller's ``{"action": "script.<id>", "metadata": {...}}`` action becomes
+    ``<fn_name>(<data kwargs>, metadata={...})``) recompiles to the exact
+    same stored shape -- a UI-saved action's ``metadata: {}`` (even empty,
+    docs/ha-api-notes.md §19.1) and any step ``alias``/``enabled`` must
+    round-trip through the call, not just ``data``.
     """
 
-    def __init__(self, object_id: str, data: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        object_id: str,
+        data: dict[str, Any],
+        *,
+        metadata: dict[str, Any] | None = None,
+        alias: Any = None,
+        enabled: Any = None,
+    ) -> None:
         self._object_id = object_id
         self._data = data
+        self._metadata = metadata
+        self._alias = alias
+        self._enabled = enabled
 
     def to_action(self) -> dict[str, Any]:
         body: dict[str, Any] = {"action": f"script.{self._object_id}"}
         if self._data:
             body["data"] = dict(self._data)
+        if self._alias is not None:
+            body["alias"] = self._alias
+        if self._enabled is not None:
+            body["enabled"] = self._enabled
+        if self._metadata is not None:
+            body["metadata"] = dict(self._metadata)
         return body
 
 
@@ -182,9 +208,18 @@ def shared_script(**options: Any) -> Callable[[Callable[..., Any]], Callable[...
         _register_script(**script_options)(compiled_body)
 
         @functools.wraps(func)
-        def caller(*args: Any, **kwargs: Any) -> None:
+        def caller(
+            *args: Any,
+            metadata: dict[str, Any] | None = None,
+            alias: Any = None,
+            enabled: Any = None,
+            **kwargs: Any,
+        ) -> None:
             data = _bind_call_args(func, args, kwargs)
-            record_action(ScriptCallAction(object_id, data), span=capture_span(depth=0))
+            record_action(
+                ScriptCallAction(object_id, data, metadata=metadata, alias=alias, enabled=enabled),
+                span=capture_span(depth=0),
+            )
 
         return caller
 

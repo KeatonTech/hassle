@@ -17,6 +17,21 @@
 > module paths below (`hassle_core.compiler.*`, `hassle_core.ir`, …) are now
 > `hassle.compiler.*` / `hassle.ir`; the frozen contract itself is unchanged.
 
+> **Widened 2026-07-05 (`ux/shared-script-calls`, owner feedback, F3-additive):**
+> the module-internal `ScriptCallAction` (`hassle.compiler.scripts` — already
+> listed below as non-frozen tooling surface, not part of `hassle.__all__`)
+> gained three optional keyword-only constructor args, `metadata=`/`alias=`/
+> `enabled=`, mirroring every other action shape's step options. The
+> `@shared_script`-decorated caller wrapper it backs widened the same way:
+> `flash_lights(times=5, metadata={...}, alias="...", enabled=False)` is now
+> accepted alongside the script's own declared field kwargs. Purely additive —
+> no existing call site's signature changed, and `hassle.__all__` itself is
+> untouched (`shared_script` was already frozen there; only its returned
+> wrapper's accepted kwargs widened). Motivation: the decompiler's new
+> function-call rewrite for a caller's `script.<id>` action (DESIGN §7.3) needs
+> a way to round-trip a UI-saved action's `metadata: {}` / step `alias`/
+> `enabled` through the call site instead of falling back to `service()`.
+
 The public surface is exactly `hassle.__all__` (module
 `packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.

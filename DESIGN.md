@@ -534,6 +534,41 @@ for-byte, verified over the whole round-trip corpus):**
   on next pull/decompile, which shows up as a rename in the spliced diff (previously invisible,
   since the id-derived name never changed) — considered acceptable, since the alias visibly
   changed too and the diff is otherwise exactly the meaningful one-line edit.
+- **Scripts decompile as `@shared_script`, not `@script`** (owner feedback, `ux/shared-script-calls`):
+  since `@shared_script` compiles to the exact same `ScriptConfig` `@script` does (its `fields` come
+  from the function signature instead of a literal kwarg), every script decompiles to
+  `@shared_script` by default — a plain `@script` with a literal `fields=` kwarg is only the fallback
+  for a shape a Python signature genuinely can't express: a field carrying `name`/`description`/
+  `example`/... (not just `default`), or a field declared with **no** `default` at all (HA's own
+  schema allows this, but `@shared_script`'s underlying function is always invoked with zero
+  arguments to build its sequence — DESIGN §5.6 — so a required positional parameter would break
+  that call). A signature-expressible field gets a Python type annotation when one is inferable
+  from its default's Python type (`times: int = 3`); otherwise a bare `name=default`.
+- **Caller rewrite: a `script.<object_id>` call becomes a real function call** (owner feedback):
+  a stored action `{"action": "script.<id>", "data": {...}, "metadata": {...}}` decompiles to
+  `<fn_name>(<data as kwargs>, metadata={...})` when `<id>` is a MANAGED script in the same pull
+  batch, every `data` key is one of the script's declared fields, the action is the direct
+  `script.<id>` form (`script.turn_on` with `target`/`variables` is a different, generic-caller
+  shape and is never rewritten), and there's no `target`/`data_template`/`response_variable`/
+  `continue_on_error` beyond what the call reproduces — any of these falls back to today's
+  `service()` form (never `raw`). `ScriptCallAction` (compiler-internal, `hassle.compiler.scripts`)
+  widened additively to carry `metadata=`/`alias=`/`enabled=` so the rewritten call recompiles
+  byte-identical (docs/dsl-f3.md).
+- **Cross-file imports for the caller rewrite:** when the callee script lives in a different
+  destination file than its caller (category-based placement routinely splits them), the
+  decompiler emits `from scripts.<module> import <fn_name>` — built from a cross-reference table
+  (`{script_object_id: (module_path, function_name)}`) the pull layer supplies, since only it knows
+  every managed script's placement across the whole pull batch. A script the table doesn't know
+  about (not in this pull, or genuinely unmanaged) stays `service()`. Only whole-file writes
+  (`hassle pull`'s multi-object adopt batches, and a fresh from-scratch decompile) can gain this
+  rewrite: the LibCST single-object splice used for a drifted object's `refresh` replaces exactly
+  one top-level statement and cannot also inject a new top-level import line, so a refreshed
+  caller's CROSS-FILE script call stays `service()` on that path specifically (a same-file call
+  never arises there, since a splice always targets exactly one object). A script-to-script call
+  cycle across two files (A calls B, B calls A back) would require a circular import — one
+  direction's edge is deterministically dropped back to `service()`, with a one-line
+  `# hassle: ... cross-file script call cycle ...` comment, rather than ever emitting a mutually
+  importing pair of generated files.
 
 ---
 

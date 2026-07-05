@@ -9,13 +9,16 @@ declaration-site span (`CompileResult.decl_span_for`), for `PlanEntry.source_pat
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from hassle.compiler.bundle import CompileResult, compile_bundle
 from hassle.ir.keys import HELPER_DOMAINS
 from hassle.ir.keys import slugify as _slugify
 from hassle.registry.snapshot import RegistrySnapshot
 from hassle.sync.plan import ObjectMap
+
+if TYPE_CHECKING:
+    from hassle.decompiler.codegen import ScriptRef
 
 
 def compile_local_objects(bundle_root: Path) -> tuple[ObjectMap, CompileResult]:
@@ -113,3 +116,66 @@ def remote_objects_from_backend(backend: Any, kinds: list[str]) -> ObjectMap:
         for identity, config in backend.list_remote(kind).items():
             objects[make_object_key(kind, identity)] = (kind, config)
     return objects
+
+
+def _module_path_for(source_path: str) -> str:
+    """A bundle-relative ``.py`` file path -> the dotted module path an
+    ``import`` statement would use (``"scripts/notify.py"`` ->
+    ``"scripts.notify"``) -- the M7.1 loader imports every bundle file this
+    way (recursive PEP 420 namespace packages, no ``__init__.py`` needed,
+    docs/ha-api-notes.md §17.9 RESOLVED), so this is just that same mapping
+    run forward instead of backward."""
+    posix = Path(source_path).as_posix()
+    if posix.endswith(".py"):
+        posix = posix[: -len(".py")]
+    return posix.replace("/", ".")
+
+
+def build_script_refs(
+    scripts: dict[str, Any], source_paths: dict[str, str]
+) -> dict[str, ScriptRef]:
+    """Build the ``ux/shared-script-calls`` cross-reference table
+    (``{script_object_id: ScriptRef}``) for every MANAGED script in a pull
+    batch, from the same ``source_paths`` placement (DESIGN §7.3) the pull
+    loop already computes for every object.
+
+    ``scripts`` maps each script's object key to its HA config body (the
+    plan's ``remote`` value for that entry) -- used to derive the exact
+    function name :func:`hassle.decompiler.codegen.script_function_name`
+    would (alias-derived, not object_id-derived, DESIGN §7.3), the callee's
+    declared field names, and its own outgoing ``script.<id>`` call graph
+    (for cross-file cycle detection). Naming collisions are resolved
+    independently per destination file (a fresh ``used_names`` tracker per
+    module path), matching how each file is actually decompiled on its own in
+    `hassle_cli.pull_apply` (one `decompile_bundle` call per destination).
+    """
+    from hassle.decompiler.codegen import ScriptRef, called_script_ids, script_function_name
+    from hassle.ir.models import ScriptConfig, parse
+
+    # Group by destination file so alias-collision suffixing matches exactly
+    # what decompiling that one file for real would produce.
+    by_path: dict[str, list[tuple[str, ScriptConfig]]] = {}
+    for key, config in scripts.items():
+        kind, _, identity = key.partition(":")
+        if kind != "script":
+            continue
+        path = source_paths.get(key)
+        if path is None:
+            continue
+        obj = parse(config, kind="script", key_hint=identity)
+        assert isinstance(obj, ScriptConfig)
+        by_path.setdefault(path, []).append((identity, obj))
+
+    refs: dict[str, ScriptRef] = {}
+    for path, entries in by_path.items():
+        module = _module_path_for(path)
+        used_names: dict[str, int] = {}
+        for identity, obj in sorted(entries, key=lambda pair: pair[0]):
+            fn_name = script_function_name(obj, used_names)
+            fields = obj.to_ha().get("fields")
+            known_fields = frozenset(fields) if isinstance(fields, dict) else frozenset()
+            calls = frozenset(called_script_ids(obj.to_ha()))
+            refs[identity] = ScriptRef(
+                module=module, function_name=fn_name, known_fields=known_fields, calls=calls
+            )
+    return refs

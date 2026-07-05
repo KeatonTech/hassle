@@ -48,7 +48,9 @@ def test_pull_rewrites_cross_file_script_call_with_import(
         {
             "id": "dismiss_reminder_automation",
             "alias": "Dismiss guest reminder",
-            "triggers": [{"trigger": "state", "entity_id": ["input_boolean.guest_mode"], "to": "off"}],
+            "triggers": [
+                {"trigger": "state", "entity_id": ["input_boolean.guest_mode"], "to": "off"}
+            ],
             "conditions": [],
             "actions": [
                 {
@@ -108,7 +110,9 @@ def test_pull_rewrites_cross_file_script_call_with_import(
     compiled = compile_bundle(git_repo)
     assert "automation:dismiss_reminder_automation" in compiled.objects
     assert "script:dismiss_notification" in compiled.objects
-    recompiled_call = compiled.objects["automation:dismiss_reminder_automation"].to_ha()["actions"][0]
+    recompiled_call = compiled.objects["automation:dismiss_reminder_automation"].to_ha()["actions"][
+        0
+    ]
     assert recompiled_call["action"] == "script.dismiss_notification"
     assert recompiled_call["data"] == {"notification_id": "guest_reminder"}
     assert recompiled_call["metadata"] == {}
