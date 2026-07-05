@@ -92,7 +92,7 @@ def test_init_notes_enclosing_repo_when_nested(
     # AND must tell the user their bundle rides the enclosing repo.
     import subprocess
 
-    _backend, token = fake_backend
+    _backend, _token = fake_backend
     outer = tmp_path / "outer_project"
     outer.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=outer, check=True)

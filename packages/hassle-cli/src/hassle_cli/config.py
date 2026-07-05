@@ -17,9 +17,9 @@ Fields:
 
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass
-import re
 from pathlib import Path
 
 CONFIG_FILENAME = "hassle.toml"
