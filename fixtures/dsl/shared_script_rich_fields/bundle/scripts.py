@@ -53,7 +53,11 @@ def notify_all(title=None, message=None, action_button=None, action_button_icon=
         message=param("message"),
         data={
             "actions": [
-                {"action": "VIEW", "title": param("action_button"), "icon": param("action_button_icon")}
+                {
+                    "action": "VIEW",
+                    "title": param("action_button"),
+                    "icon": param("action_button_icon"),
+                }
             ],
             "tag": param("tag"),
         },

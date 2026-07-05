@@ -119,7 +119,9 @@ class UnknownFieldError(CompileError):
     declared field names (``fields=``'s keys are the superset source of
     truth when supplied -- ``ux/shared-script-rich-fields``)."""
 
-    def __init__(self, name: str, object_id: str, known: list[str], span: SourceSpan | None) -> None:
+    def __init__(
+        self, name: str, object_id: str, known: list[str], span: SourceSpan | None
+    ) -> None:
         where = f" at {span.file}:{span.line}" if span is not None else ""
         known_str = ", ".join(known) if known else "(none)"
         super().__init__(
@@ -247,6 +249,7 @@ def shared_script(**options: Any) -> Callable[[Callable[..., Any]], Callable[...
         explicit_fields = options.get("fields")
         signature_fields = _fields_from_signature(func)
         script_options = dict(options)
+        active_field_names: frozenset[str]
         if isinstance(explicit_fields, dict):
             # Verbatim wins (byte-stability by construction) -- never merged
             # with the signature-derived shape, so decompile -> recompile

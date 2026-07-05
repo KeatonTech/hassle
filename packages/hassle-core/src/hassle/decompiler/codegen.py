@@ -359,27 +359,43 @@ def _automation_source(
     return "\n".join(lines) + "\n"
 
 
-# A script `fields` entry is signature-expressible (DESIGN §5.6/§5.7 parity,
+# A script `fields` entry is *terse-signature*-expressible (the ORIGINAL,
+# narrower rule: DESIGN §5.6/§5.7 parity with
 # `hassle.compiler.scripts._fields_from_signature`) only if its own dict has
-# EXACTLY the key `default` (never more, and never fewer): more, and no other
-# HA field-metadata key (`name`/`description`/`example`/`selector`/`required`/
-# `advanced`/...) has a signature equivalent; fewer -- a field with no
-# `default` at all -- can't become a bare required Python parameter either,
-# even though HA's own schema allows it: `@shared_script`'s underlying
-# function is always invoked with ZERO arguments to build its sequence
-# (`hassle.compiler.bundle.compile_registered`'s `reg.func()`, matching plain
-# `@script` semantics) -- a required positional parameter would make that
-# call itself raise. Either shape falls back to plain `@script` with a
-# literal `fields=` kwarg (still lossless, I3) rather than silently dropping
-# metadata or breaking compilation.
+# EXACTLY the key `default` (never more, never fewer) -- in which case the
+# decompiler can omit an explicit `fields=` kwarg entirely: the signature
+# alone reproduces it. Any other shape (rich metadata, or no `default` at
+# all) still decompiles to `@shared_script`, now via the WIDENED rule below
+# (`ux/shared-script-rich-fields`, owner feedback: real HA-UI-authored
+# scripts carry `name`/`description`/`selector`/... on every field, making
+# the terse form rare in practice on real bundles) -- `fields=` is emitted
+# verbatim and every field still becomes a `None`-defaulted parameter.
 _SIGNATURE_EXPRESSIBLE_FIELD_KEYS = frozenset({"default"})
+
+
+def _fields_terse_signature_expressible(fields: Any) -> bool:
+    if not isinstance(fields, dict):
+        return False
+    fields_dict = cast("dict[str, Any]", fields)
+    for spec in fields_dict.values():
+        if not isinstance(spec, dict):
+            return False
+        spec_dict = cast("dict[str, Any]", spec)
+        if frozenset(spec_dict) != _SIGNATURE_EXPRESSIBLE_FIELD_KEYS:
+            return False
+    return True
 
 
 def fields_signature_expressible(fields: Any) -> bool:
     """Whether a script's ``fields`` block can become a ``@shared_script``
-    Python signature (DESIGN §7.3 fallback rule) -- see
-    :func:`_shared_script_signature`'s docstring for exactly which shapes
-    qualify. Public (``ux/shared-script-calls-fix``): this is THE
+    at all (widened, ``ux/shared-script-rich-fields``) -- the ONLY remaining
+    ``@script`` fallback triggers are a field name that isn't a valid Python
+    identifier (can't become a matching parameter name at all) or a
+    malformed ``fields`` value (not a dict of dicts) -- HA's UI never
+    produces either, so the ``@script`` fallback is now rare in practice on
+    real bundles, exactly the owner's ask.
+
+    Public (``ux/shared-script-calls-fix``, widened here): this is THE
     shared_script-vs-``@script``-fallback emit decision, and it must be the
     single source of truth for every caller that needs to know which one a
     given script decompiled to -- both same-batch (:func:`_build_resolver`
@@ -389,17 +405,17 @@ def fields_signature_expressible(fields: Any) -> bool:
     actually emitted with zero parameters (the field failure this function
     was made public to fix: a script whose fields forced the ``@script``
     fallback has NO call-site kwargs at all, regardless of what its stored
-    ``fields`` names are)."""
+    ``fields`` names are).
+    """
     if fields is None:
         return True  # no fields at all -- trivially expressible (empty signature)
     if not isinstance(fields, dict):
         return False
     fields_dict = cast("dict[str, Any]", fields)
-    for spec in fields_dict.values():
+    for name, spec in fields_dict.items():
         if not isinstance(spec, dict):
             return False
-        spec_dict = cast("dict[str, Any]", spec)
-        if frozenset(spec_dict) != _SIGNATURE_EXPRESSIBLE_FIELD_KEYS:
+        if not name.isidentifier():
             return False
     return True
 
@@ -431,15 +447,15 @@ def _python_type_name(value: Any) -> str | None:
 def _shared_script_signature(fields: Any) -> str:
     """Build the parameter list for a ``@shared_script`` function definition
     from its ``fields`` block: ``name: <Type> = default`` when a builtin type
-    is inferable from the default, else a bare ``name=default``.
+    is inferable from a present ``"default"`` metadata key, else a bare
+    ``name=None`` (``ux/shared-script-rich-fields``: a field with no
+    ``default`` at all is no longer a fallback cause -- its parameter is
+    ``None``-defaulted; HA-side requiredness lives in the metadata dict, not
+    in whether the compiler can invoke the body with zero arguments to build
+    its sequence).
 
     Only ever called when :func:`fields_signature_expressible` accepted
-    ``fields`` -- every field spec is guaranteed to carry exactly a
-    ``default`` (see that function's docstring for why a field WITHOUT one
-    isn't signature-expressible either, despite HA's own schema allowing it).
-    The "no default" branch below is unreachable through that gate; kept as
-    a defensive fallback rather than an assert, since a bare parameter is
-    still valid Python (just not one this codebase's gate ever produces).
+    ``fields``.
     """
     if not isinstance(fields, dict):
         return ""
@@ -448,7 +464,7 @@ def _shared_script_signature(fields: Any) -> str:
     for name, spec in fields_dict.items():
         spec_dict = cast("dict[str, Any]", spec) if isinstance(spec, dict) else {}
         if "default" not in spec_dict:
-            params.append(name)  # pragma: no cover - see docstring: unreachable via the gate
+            params.append(f"{name}=None")
             continue
         default = spec_dict["default"]
         type_name = _python_type_name(default)
@@ -464,10 +480,23 @@ def _script_source(obj: ScriptConfig, ident: str, resolver: CallResolver | None)
     object_id = obj.identity or ident
     fields = body.get("fields")
     as_shared_script = fields_signature_expressible(fields)
+    # The TERSE form (no explicit fields= kwarg -- DESIGN §5.6/§5.7 parity)
+    # only for the narrow original shape (every field spec is exactly
+    # {"default": ...}); any other shared_script-expressible shape (rich
+    # metadata, or a field with no default) emits fields= verbatim
+    # (`ux/shared-script-rich-fields`) so recompiling reproduces the exact
+    # stored metadata, not just its inferred defaults.
+    terse = as_shared_script and _fields_terse_signature_expressible(fields)
 
     decorator_kwargs: list[str] = []
     if str(object_id) != ident:
         decorator_kwargs.append(f"id={object_id!r}")
+    # fields stays in `decorator_keys` (so it's popped from `body` and
+    # rendered in the same alias/mode/icon/fields order) only for the
+    # @script fallback -- `@shared_script`'s own fields= (verbatim, non-terse
+    # case) is appended separately below, from the `fields` local captured
+    # above, not from `body` (which the shared_script branches strip it out
+    # of unconditionally either way).
     decorator_keys = (
         ("alias", "mode", "icon") if as_shared_script else ("alias", "mode", "icon", "fields")
     )
@@ -476,6 +505,8 @@ def _script_source(obj: ScriptConfig, ident: str, resolver: CallResolver | None)
             decorator_kwargs.append(f"{key}={render_literal(body.pop(key))}")
     if as_shared_script:
         body.pop("fields", None)
+        if not terse and fields is not None:
+            decorator_kwargs.append(f"fields={render_literal(fields)}")
     sequence = body.pop("sequence", [])
     for key, value in body.items():
         decorator_kwargs.append(f"{key}={render_literal(value)}")

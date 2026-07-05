@@ -534,16 +534,21 @@ for-byte, verified over the whole round-trip corpus):**
   on next pull/decompile, which shows up as a rename in the spliced diff (previously invisible,
   since the id-derived name never changed) — considered acceptable, since the alias visibly
   changed too and the diff is otherwise exactly the meaningful one-line edit.
-- **Scripts decompile as `@shared_script`, not `@script`** (owner feedback, `ux/shared-script-calls`):
-  since `@shared_script` compiles to the exact same `ScriptConfig` `@script` does (its `fields` come
-  from the function signature instead of a literal kwarg), every script decompiles to
-  `@shared_script` by default — a plain `@script` with a literal `fields=` kwarg is only the fallback
-  for a shape a Python signature genuinely can't express: a field carrying `name`/`description`/
-  `example`/... (not just `default`), or a field declared with **no** `default` at all (HA's own
-  schema allows this, but `@shared_script`'s underlying function is always invoked with zero
-  arguments to build its sequence — DESIGN §5.6 — so a required positional parameter would break
-  that call). A signature-expressible field gets a Python type annotation when one is inferable
-  from its default's Python type (`times: int = 3`); otherwise a bare `name=default`.
+- **Scripts decompile as `@shared_script`, not `@script`** (owner feedback, `ux/shared-script-calls`,
+  widened by `ux/shared-script-rich-fields`): since `@shared_script` compiles to the exact same
+  `ScriptConfig` `@script` does, every script decompiles to `@shared_script` by default. Fields whose
+  every spec is *exactly* `{"default": ...}` get the terse form (no explicit `fields=` kwarg — the
+  signature alone reproduces it, with a Python type annotation when one is inferable from the
+  default's Python type, e.g. `times: int = 3`). Any richer shape — `name`/`description`/`selector`/
+  `example`/... metadata, or a field declared with **no** `default` at all — ALSO decompiles to
+  `@shared_script`, now emitting `fields=` **verbatim** (byte-stability by construction: the stored
+  metadata a Python signature alone could never reconstruct) with every parameter `None`-defaulted
+  (HA-side requiredness lives in the metadata, not in whether `@shared_script`'s underlying function
+  — always invoked with zero arguments to build its sequence, DESIGN §5.6 — can be called). This
+  widening matters in practice: real HA-UI-authored scripts always carry the richer shape, so the
+  original signature-only rule made the `@script` fallback the common case, not the exception. The
+  `@script` fallback is now rare — only a field name that isn't a valid Python identifier, or a
+  malformed (non-dict) field spec, neither of which the HA UI ever produces.
 - **Caller rewrite: a `script.<object_id>` call becomes a real function call** (owner feedback):
   a stored action `{"action": "script.<id>", "data": {...}, "metadata": {...}}` decompiles to
   `<fn_name>(<data as kwargs>, metadata={...})` when `<id>` is a MANAGED script in the same pull

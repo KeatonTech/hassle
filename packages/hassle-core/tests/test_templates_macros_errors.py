@@ -13,7 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from hassle.compiler import NoRecordingContextError, UnknownFieldError, UnknownParamError, compile_bundle
+from hassle.compiler import (
+    NoRecordingContextError,
+    UnknownFieldError,
+    UnknownParamError,
+    compile_bundle,
+)
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "dsl"
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"

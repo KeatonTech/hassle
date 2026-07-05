@@ -10,10 +10,14 @@ Covers:
 1. `@shared_script` parity: a `ScriptConfig` whose `fields` are all
    signature-expressible (each field dict has no keys beyond `default`)
    decompiles to `@shared_script` with a typed function signature that
-   recompiles to the identical script IR. A `fields` shape carrying
-   `name`/`description`/`example`/... (not signature-expressible) falls back
-   to plain `@script` with a literal `fields=` kwarg (DESIGN §5.6/§5.7 parity
-   -- `@shared_script` only ever derives `default` from a signature).
+   recompiles to the identical script IR -- the terse form, no explicit
+   `fields=` kwarg (DESIGN §5.6/§5.7 parity). A richer `fields` shape (e.g.
+   `name`/`description`/`example`/`selector`) ALSO decompiles to
+   `@shared_script` (widened, `ux/shared-script-rich-fields`, owner
+   feedback), just with `fields=` emitted verbatim and every parameter
+   `None`-defaulted -- see `test_decompile_shared_script_rich_fields.py` for
+   that widened coverage. The `@script` fallback is now rare: only a field
+   name that isn't a valid Python identifier, or a malformed `fields` value.
 2. Caller rewrite conditions: every data key is a declared field, the action
    is the direct `script.<id>` form, and no extra keys beyond what the call
    reproduces (`target`/`data_template`/`response_variable`) -- otherwise
@@ -80,11 +84,11 @@ def test_shared_script_decompile_recompiles_to_identical_ir() -> None:
     assert sha256_hash(recompiled.to_ha()) == sha256_hash(obj.to_ha())
 
 
-def test_script_with_rich_field_metadata_falls_back_to_plain_script() -> None:
-    # A field carrying name/description/example (not just default) cannot be
-    # expressed via a Python signature (@shared_script only ever derives
-    # `default`) -- @script with a literal fields= kwarg is the only lossless
-    # option here.
+def test_script_with_rich_field_metadata_decompiles_as_shared_script() -> None:
+    # Widened (`ux/shared-script-rich-fields`, owner feedback): a field
+    # carrying name/description/example (not just default) now ALSO
+    # decompiles to @shared_script -- fields= is emitted verbatim (byte-
+    # stability by construction) and the parameter is None-defaulted.
     config = {
         "alias": "Script With Fields",
         "fields": {
@@ -97,6 +101,26 @@ def test_script_with_rich_field_metadata_falls_back_to_plain_script() -> None:
         "sequence": [],
     }
     obj = parse(config, kind="script", key_hint="script_with_fields")
+    source = decompile_bundle({obj.object_key(): obj})
+
+    assert "@shared_script(" in source
+    assert "@script(" not in source
+    assert "fields={" in source
+    assert '"light_entity"' in source
+    assert '"example": "light.bedroom"' in source
+    assert "def script_with_fields(light_entity=None):" in source
+
+
+def test_script_with_non_identifier_field_name_falls_back_to_plain_script() -> None:
+    # The one remaining genuine @script fallback trigger: a field name that
+    # cannot become a Python parameter at all (HA's UI never produces one,
+    # but the DSL must still round-trip it losslessly if it appears).
+    config = {
+        "alias": "Weird Field Name",
+        "fields": {"not-a-valid-identifier": {"name": "Weird"}},
+        "sequence": [],
+    }
+    obj = parse(config, kind="script", key_hint="weird_field_name")
     source = decompile_bundle({obj.object_key(): obj})
 
     assert "@script(" in source
@@ -371,6 +395,54 @@ def test_corpus_fixture_pair_rewrite_round_trips_byte_identical() -> None:
     assert sha256_hash(result.objects["script:dismiss_notification"].to_ha()) == sha256_hash(
         normalize_ha(script_obj.to_ha(), kind="script")
     )
+
+
+def test_rich_field_corpus_fixture_pair_rewrite_round_trips_byte_identical() -> None:
+    """`ux/shared-script-rich-fields`, task 3: the owner-shape fixture --
+    `fixtures/configs/script_call_to_action_notification.json` (every field
+    carries selector/name/description, mirroring `call_to_action_
+    notification`'s real shape) + `fixtures/configs/
+    automation_calls_call_to_action_notification.json` (calls it with
+    metadata:{}), decompiled TOGETHER so the caller rewrite actually fires --
+    round-trips byte-identically AND the caller rewrites to a function call
+    (not just falls back to service())."""
+    import json
+    import tempfile
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[3]
+    automation_config = json.loads(
+        (
+            repo_root / "fixtures/configs/automation_calls_call_to_action_notification.json"
+        ).read_text()
+    )
+    script_config = json.loads(
+        (repo_root / "fixtures/configs/script_call_to_action_notification.json").read_text()
+    )
+    automation_obj = parse(automation_config, kind="automation")
+    script_obj = parse(script_config, kind="script", key_hint="script_call_to_action_notification")
+    objects = {automation_obj.object_key(): automation_obj, script_obj.object_key(): script_obj}
+
+    source = decompile_bundle(objects)
+    # The script decompiles as @shared_script (widened rule), and the
+    # rewrite actually fires (else this test would be vacuous).
+    assert "@shared_script(" in source
+    assert "@script(" not in source
+    assert "call_to_action_notification(" in source
+    assert 'action="script.call_to_action_notification"' not in source
+
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "objects.py").write_text(source, encoding="utf-8")
+        result = compile_bundle(tmp)
+
+    from hassle.ir import normalize_ha
+
+    assert sha256_hash(result.objects["automation:garage_door_opened_notify"].to_ha()) == (
+        sha256_hash(normalize_ha(automation_obj.to_ha(), kind="automation"))
+    )
+    assert sha256_hash(
+        result.objects["script:script_call_to_action_notification"].to_ha()
+    ) == sha256_hash(normalize_ha(script_obj.to_ha(), kind="script"))
 
 
 def test_script_to_script_call_cycle_breaks_back_edge_to_service() -> None:
