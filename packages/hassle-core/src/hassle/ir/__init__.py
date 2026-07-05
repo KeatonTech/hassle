@@ -9,7 +9,7 @@ stable; changes require a MILESTONES.md update in the same PR (R5).
 from __future__ import annotations
 
 from hassle.ir.canonical import canonical_json, sha256_hash
-from hassle.ir.keys import HELPER_DOMAINS, OBJECT_KINDS, object_key
+from hassle.ir.keys import HELPER_DOMAINS, OBJECT_KINDS, object_key, slugify
 from hassle.ir.models import (
     AutomationConfig,
     HelperConfig,
@@ -33,4 +33,5 @@ __all__ = [
     "parse",
     "serialize",
     "sha256_hash",
+    "slugify",
 ]

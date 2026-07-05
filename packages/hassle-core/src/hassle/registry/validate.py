@@ -50,6 +50,8 @@ from typing import Any, cast
 
 from hassle.compiler.bundle import CompileResult
 from hassle.compiler.spans import SourceSpan
+from hassle.ir import slugify
+from hassle.ir.models import HelperConfig
 from hassle.registry.didyoumean import did_you_mean
 from hassle.registry.extract import as_dict_list, extract_references
 from hassle.registry.finding import Finding
@@ -374,10 +376,58 @@ def _validate_service_params(result: CompileResult, snapshot: RegistrySnapshot) 
     return findings
 
 
+def _validate_helper_slugs(result: CompileResult) -> list[Finding]:
+    """M7 addition (docs/ha-api-notes.md §17.5, owner UX): a helper whose
+    ``id=`` does not match ``slugify(name)`` will silently get a *different*
+    identity from real HA, which derives the storage-collection item id by
+    slugifying ``name`` and ignores any caller-supplied ``id`` -- breaking the
+    id<->entity mapping the bundle (and the sync engine's object keys) assume.
+
+    Only checked when ``name`` is present (nothing to slugify against
+    otherwise); a `HelperConfig` with no `name` set is not this validator's
+    concern.
+    """
+    findings: list[Finding] = []
+    for key, obj in result.objects.items():
+        if not isinstance(obj, HelperConfig):
+            continue
+        name = obj.name
+        if not isinstance(name, str) or not name:
+            continue
+        supplied_id = obj.identity
+        if supplied_id is None:
+            continue
+        expected_id = slugify(name)
+        if supplied_id == expected_id:
+            continue
+        span = result.decl_span_for(key)
+        file, line = _where(span)
+        findings.append(
+            Finding(
+                code="helper-id-name-mismatch",
+                severity="error",
+                file=file,
+                line=line,
+                message=(
+                    f"Helper `{key}` declares `id=\"{supplied_id}\"`, but Home Assistant "
+                    f"derives a helper's real identity by slugifying its `name` "
+                    f"(\"{name}\" -> `{expected_id}`), ignoring the supplied id."
+                ),
+                fix=(
+                    f"Change `id=\"{supplied_id}\"` to `id=\"{expected_id}\"` (or rename the "
+                    f"helper to a `name` that slugifies to `{supplied_id}`), so the bundle's "
+                    f"id matches what HA will actually assign."
+                ),
+            )
+        )
+    return findings
+
+
 def validate_bundle(result: CompileResult, snapshot: RegistrySnapshot) -> list[Finding]:
     """Run every M3 tier-2/3 check against a compiled bundle. Offline; no network."""
     findings: list[Finding] = []
     findings.extend(_validate_references(result, snapshot))
     findings.extend(_validate_purpose_vocabulary(result, snapshot))
     findings.extend(_validate_service_params(result, snapshot))
+    findings.extend(_validate_helper_slugs(result))
     return findings
