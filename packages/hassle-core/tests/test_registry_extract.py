@@ -322,15 +322,15 @@ def test_device_block_registry_uuid_entity_id_not_validated_as_entity_name(tmp_p
     bundle = tmp_path / "bundle"
     bundle.mkdir()
     (bundle / "a.py").write_text(
-        "from hassle import automation, when, raw_trigger, raw_action\n"
+        "from hassle import automation, raw_trigger, raw_action\n"
         "@automation(id='x', alias='X')\n"
         "def x():\n"
-        "    when(raw_trigger({\n"
+        "    raw_trigger({\n"
         "        'trigger': 'device',\n"
         "        'device_id': 'aaaabbbbccccdddd1111222233334444',\n"
         "        'entity_id': 'd457ce94e8ab259e6867b4fc918d1106',\n"
         "        'domain': 'binary_sensor', 'type': 'opened',\n"
-        "    }))\n"
+        "    })\n"
         "    raw_action({\n"
         "        'device_id': 'aaaabbbbccccdddd1111222233334444',\n"
         "        'entity_id': 'd457ce94e8ab259e6867b4fc918d1106',\n"
@@ -342,7 +342,7 @@ def test_device_block_registry_uuid_entity_id_not_validated_as_entity_name(tmp_p
     snapshot = RegistrySnapshot.model_validate(
         {
             "entities": [{"entity_id": "light.known", "name": "K"}],
-            "devices": [{"id": "aaaabbbbccccdddd1111222233334444", "name": "Lock"}],
+            "devices": [{"device_id": "aaaabbbbccccdddd1111222233334444", "name": "Lock"}],
         }
     )
     findings = validate_bundle(result, snapshot)

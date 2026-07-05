@@ -219,6 +219,9 @@ def _target_template_strings(target: dict[str, Any]) -> list[str]:
     return out
 
 
+_REGISTRY_UUID_RE = re.compile(r"[0-9a-f]{32}\Z")
+
+
 def _make_ref(
     *,
     key: str,
@@ -524,7 +527,16 @@ def extract_references(result: CompileResult) -> list[Reference]:
             for i, block in enumerate(blocks):
                 span = spans[i] if i < len(spans) else None
                 refs.extend(_walk_block(block, object_key=object_key, section=section, span=span))
-    return refs
+    # Modern HA device triggers/actions store ENTITY REGISTRY UUIDs (32-hex)
+    # in their entity_id field, not domain.object_id names (owner field
+    # evidence, 2026-07-05). Those are not entity-name references; drop them
+    # here, at the single exit, rather than plumbing Optionals through every
+    # _make_ref call site.
+    return [
+        r
+        for r in refs
+        if not (r.entity_id is not None and _REGISTRY_UUID_RE.fullmatch(r.entity_id))
+    ]
 
 
 def _spans_for_object(
