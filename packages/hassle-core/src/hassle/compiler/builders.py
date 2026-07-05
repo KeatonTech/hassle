@@ -197,6 +197,10 @@ class ServiceAction:
             merged.update(data)
         merged.update(fields)
         self._data = merged
+        # Presence, not truthiness (same rule as metadata): the UI stores
+        # `"data": {}` on field-less calls; eliding it on recompile would
+        # hash-drift the action and raw the containing block (I3).
+        self._data_present = data is not None or bool(fields)
 
     def to_action(self) -> dict[str, Any]:
         body: dict[str, Any] = {}
@@ -207,7 +211,7 @@ class ServiceAction:
             body["metadata"] = self._metadata
         if self._target is not None:
             body["target"] = self._target
-        if self._data:
+        if self._data_present:
             body["data"] = self._data
         if self._data_template is not None:
             body["data_template"] = self._data_template

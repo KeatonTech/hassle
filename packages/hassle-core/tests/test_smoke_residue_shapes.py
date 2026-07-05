@@ -391,6 +391,11 @@ def test_empty_data_dict_round_trips_exactly() -> None:
     assert compiled.get("data") == {}, compiled
 
     src = decompile_action(
-        {"action": "cover.close_cover", "metadata": {}, "target": {"entity_id": "cover.x"}, "data": {}}
+        {
+            "action": "cover.close_cover",
+            "metadata": {},
+            "target": {"entity_id": "cover.x"},
+            "data": {},
+        }
     )
     assert any("data={}" in line for line in src), src
