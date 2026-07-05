@@ -426,7 +426,9 @@ def validate() -> None:
     result = compile_bundle(root)
     if registry_path.is_file():
         snapshot = RegistrySnapshot.load(registry_path)
-        findings = validate_bundle(result, snapshot)
+        manifest = manifest_io.load_manifest(root)
+        adopted = frozenset(manifest.objects) if manifest else frozenset()
+        findings = validate_bundle(result, snapshot, adopted_helper_keys=adopted)
     else:
         findings = []
         console.print(

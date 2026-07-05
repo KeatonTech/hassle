@@ -240,17 +240,16 @@ def test_adopted_helper_exempt_via_manifest_keys_even_when_entity_renamed(tmp_pa
     bundle = _write_bundle(
         tmp_path,
         "from hassle import input_boolean\n"
-        'front_bedroom_occupied = input_boolean(id="front_bedroom_occupied", name="Office Occupied")\n',
+        "front_bedroom_occupied = input_boolean(\n"
+        '    id="front_bedroom_occupied", name="Office Occupied"\n'
+        ")\n",
     )
     result = compile_bundle(bundle)
     snapshot = RegistrySnapshot.model_validate(
         {"entities": [{"entity_id": "light.something_else", "name": "x"}]}
     )
     # Without the adopted set: fires (absent from snapshot, snapshot non-empty).
-    assert any(
-        f.code == "helper-id-name-mismatch"
-        for f in validate_bundle(result, snapshot)
-    )
+    assert any(f.code == "helper-id-name-mismatch" for f in validate_bundle(result, snapshot))
     # With the manifest-derived adopted set: exempt.
     findings = validate_bundle(
         result, snapshot, adopted_helper_keys=frozenset({"input_boolean:front_bedroom_occupied"})

@@ -376,7 +376,11 @@ def _validate_service_params(result: CompileResult, snapshot: RegistrySnapshot) 
     return findings
 
 
-def _validate_helper_slugs(result: CompileResult, snapshot: RegistrySnapshot) -> list[Finding]:
+def _validate_helper_slugs(
+    result: CompileResult,
+    snapshot: RegistrySnapshot,
+    adopted_helper_keys: frozenset[str] = frozenset(),
+) -> list[Finding]:
     """M7 addition (docs/ha-api-notes.md §17.5, owner UX): a helper whose
     ``id=`` does not match ``slugify(name)`` will silently get a *different*
     identity from real HA's WS-API storage-collection ``create``, which
@@ -419,6 +423,12 @@ def _validate_helper_slugs(result: CompileResult, snapshot: RegistrySnapshot) ->
             continue
         expected_id = slugify(name)
         if supplied_id == expected_id:
+            continue
+        # Manifest membership is the definitive "adopted" signal: entity-id
+        # inference fails when the entity was renamed after creation (field
+        # evidence: storage id front_bedroom_occupied, entity renamed after
+        # the room became an office -- §17.5, amended 2026-07-05).
+        if f"{obj.kind()}:{supplied_id}" in adopted_helper_keys:
             continue
         entity_id = f"{obj.kind()}.{supplied_id}"
         if entity_id in known_entities:
@@ -478,11 +488,21 @@ def _validate_helper_slugs(result: CompileResult, snapshot: RegistrySnapshot) ->
     return findings
 
 
-def validate_bundle(result: CompileResult, snapshot: RegistrySnapshot) -> list[Finding]:
-    """Run every M3 tier-2/3 check against a compiled bundle. Offline; no network."""
+def validate_bundle(
+    result: CompileResult,
+    snapshot: RegistrySnapshot,
+    adopted_helper_keys: frozenset[str] = frozenset(),
+) -> list[Finding]:
+    """Run every M3 tier-2/3 check against a compiled bundle. Offline; no network.
+
+    ``adopted_helper_keys``: object keys (``"input_boolean:x"``) known to be
+    adopted from a pull (typically the manifest's helper keys) -- the
+    definitive exemption source for the helper-slug check, robust against
+    post-creation entity renames that defeat entity-id inference.
+    """
     findings: list[Finding] = []
     findings.extend(_validate_references(result, snapshot))
     findings.extend(_validate_purpose_vocabulary(result, snapshot))
     findings.extend(_validate_service_params(result, snapshot))
-    findings.extend(_validate_helper_slugs(result, snapshot))
+    findings.extend(_validate_helper_slugs(result, snapshot, adopted_helper_keys))
     return findings
