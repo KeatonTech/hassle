@@ -244,7 +244,12 @@ def _choose(body: dict[str, Any]) -> list[str] | None:
         if not isinstance(branch, dict):
             return None
         branch_dict = cast("dict[str, Any]", branch)
-        if set(branch_dict) != {"conditions", "sequence"}:
+        # A `choose` branch may carry its own `alias`/`enabled` (residue-coverage
+        # round 3, docs/ha-api-notes.md §21): the HA UI names/toggles individual
+        # branches, distinct from the whole `choose` block's own alias/enabled
+        # (already handled below) and from any step's own alias/enabled inside
+        # the branch's sequence.
+        if set(branch_dict) - _STEP_OPTION_KEYS != {"conditions", "sequence"}:
             return None
         raw_conds = branch_dict["conditions"]
         if not isinstance(raw_conds, list):
@@ -259,12 +264,13 @@ def _choose(body: dict[str, Any]) -> list[str] | None:
         seq_lines = _actions_block(branch_dict["sequence"])
         if seq_lines is None:
             return None
-        branch_srcs.append((cond_src, _flatten(seq_lines)))
+        when_parts = [cond_src, *_step_option_kwargs_src(branch_dict)]
+        branch_srcs.append((", ".join(when_parts), _flatten(seq_lines)))
 
     choose_header_parts = _step_option_kwargs_src(body)
     out = [f"with choose({', '.join(choose_header_parts)}) as c:"]
-    for cond_src, seq_lines in branch_srcs:
-        out.extend(_indent_lines([f"with c.when_({cond_src}):"]))
+    for when_args, seq_lines in branch_srcs:
+        out.extend(_indent_lines([f"with c.when_({when_args}):"]))
         if not seq_lines:
             out.extend(_indent_lines(["pass"], levels=2))
         else:
@@ -336,30 +342,64 @@ def _parallel(body: dict[str, Any]) -> list[str] | None:
     if not isinstance(branches, list):
         return None
     branch_list = cast("list[Any]", branches)
-    flat: list[str] = []
+    # Two branch shapes decompile without an explicit `p.branch(...)`: a bare
+    # one-action sequence with no alias/enabled (the original "one action per
+    # branch" compiler-emitted shape, matching
+    # fixtures/configs/automation_parallel_action.json) becomes a top-level
+    # statement inside `with parallel():`. Any other branch shape -- more than
+    # one step in its sequence, or the branch itself carrying `alias`/`enabled`
+    # (residue-coverage round 3, docs/ha-api-notes.md §21: the HA UI can name/
+    # toggle a whole multi-step parallel branch, distinct from any one step's
+    # own alias/enabled) -- needs the explicit `with p.branch(...):` form, so
+    # `with parallel() as p:` is used instead of the bare `with parallel():`.
+    branch_plans: list[tuple[bool, dict[str, Any], list[str]]] = []
+    any_explicit = False
     for branch in branch_list:
         if not isinstance(branch, dict):
             return None
         branch_dict = cast("dict[str, Any]", branch)
-        if set(branch_dict) != {"sequence"}:
+        if set(branch_dict) - _STEP_OPTION_KEYS != {"sequence"}:
             return None
         raw_seq = branch_dict["sequence"]
         if not isinstance(raw_seq, list):
             return None
         seq = cast("list[Any]", raw_seq)
-        if len(seq) != 1 or not isinstance(seq[0], dict):
-            # Only the "one action per branch" shape (what the compiler emits,
-            # matching fixtures/configs/automation_parallel_action.json) is
-            # decompiled to `parallel()`; anything else falls back to raw.
+        if not all(isinstance(step, dict) for step in seq):
             return None
-        action_lines = decompile_action(seq[0])
-        flat.extend(action_lines)
+        seq_lines = _actions_block(seq)
+        if seq_lines is None:
+            return None
+        flat_seq = _flatten(seq_lines)
+        has_branch_options = bool(_STEP_OPTION_KEYS & set(branch_dict))
+        is_bare = len(seq) == 1 and not has_branch_options
+        if not is_bare:
+            any_explicit = True
+        branch_plans.append((is_bare, branch_dict, flat_seq))
+
     header_parts = _step_option_kwargs_src(body)
-    out = [f"with parallel({', '.join(header_parts)}):"]
-    if not flat:
-        out.extend(_indent_lines(["pass"]))
-    else:
-        out.extend(_indent_lines(flat))
+    if not any_explicit:
+        out = [f"with parallel({', '.join(header_parts)}):"]
+        flat: list[str] = []
+        for _, _, seq_lines in branch_plans:
+            flat.extend(seq_lines)
+        if not flat:
+            out.extend(_indent_lines(["pass"]))
+        else:
+            out.extend(_indent_lines(flat))
+        return out
+
+    p_args = ", ".join(header_parts)
+    out = [f"with parallel({p_args}) as p:"]
+    for is_bare, branch_dict, seq_lines in branch_plans:
+        if is_bare:
+            out.extend(_indent_lines(seq_lines))
+            continue
+        branch_kwargs = _step_option_kwargs_src(branch_dict)
+        out.extend(_indent_lines([f"with p.branch({', '.join(branch_kwargs)}):"]))
+        if not seq_lines:
+            out.extend(_indent_lines(["pass"], levels=2))
+        else:
+            out.extend(_indent_lines(seq_lines, levels=2))
     return out
 
 

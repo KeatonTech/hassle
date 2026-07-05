@@ -42,9 +42,12 @@ from hassle.decompiler.exprs import decompile_condition
 
 
 def test_choose_when_accepts_branch_alias_and_enabled_kwargs() -> None:
-    with recording() as rec, choose() as c:
-        with c.when_(template("{{ 1 == 1 }}"), alias="Cover open or opening", enabled=False):
-            service("cover.set_cover_position", target={"entity_id": "cover.garage"}, position=50)
+    with (
+        recording() as rec,
+        choose() as c,
+        c.when_(template("{{ 1 == 1 }}"), alias="Cover open or opening", enabled=False),
+    ):
+        service("cover.set_cover_position", target={"entity_id": "cover.garage"}, position=50)
     (action,) = rec.actions
     (branch,) = action.body["choose"]
     assert branch["alias"] == "Cover open or opening"
@@ -108,12 +111,12 @@ def test_parallel_yields_builder_with_branch_context_manager() -> None:
     (action,) = rec.actions
     branches = action.body["parallel"]
     assert len(branches) == 2
-    assert branches[0] == {"sequence": [{"action": "light.turn_on", "target": {"entity_id": "light.a"}}]}
+    assert branches[0] == {
+        "sequence": [{"action": "light.turn_on", "target": {"entity_id": "light.a"}}]
+    }
     assert branches[1]["alias"] == "Notify branch"
     assert branches[1]["enabled"] is True
-    assert branches[1]["sequence"] == [
-        {"action": "script.notify_all", "data": {"title": "t"}}
-    ]
+    assert branches[1]["sequence"] == [{"action": "script.notify_all", "data": {"title": "t"}}]
 
 
 def test_bare_parallel_with_no_as_binding_still_works_unchanged() -> None:
@@ -148,10 +151,9 @@ def test_decompile_parallel_branch_with_alias_uses_p_branch() -> None:
 
 
 def test_parallel_branch_context_manager_records_multiple_steps() -> None:
-    with recording() as rec, parallel() as p:
-        with p.branch():
-            service("script.notify_all", title="Garage", message="Door opened")
-            delay(hours=0, minutes=1, seconds=30, milliseconds=500)
+    with recording() as rec, parallel() as p, p.branch():
+        service("script.notify_all", title="Garage", message="Door opened")
+        delay(hours=0, minutes=1, seconds=30, milliseconds=500)
     (action,) = rec.actions
     (branch,) = action.body["parallel"]
     assert branch["sequence"] == [
