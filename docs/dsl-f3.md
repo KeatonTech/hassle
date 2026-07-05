@@ -74,13 +74,21 @@ bundles are written.
 - `only_if(*conditions)` — append conditions.
 
 ### Core action verbs
-- `service(action, *, target=, data=, response_variable=, continue_on_error=,
-  metadata=, **fields)` — the **single** service-call verb (bare kwargs → `data`;
-  `response_variable`/`continue_on_error`/`metadata` emit as top-level HA action
-  fields). `metadata=` is a real-world smoke-test ADDITION (docs/ha-api-notes.md
-  §19.1): the HA UI stamps `"metadata": {}` on every action it saves; passing
-  it (even as `{}`) round-trips that byte-stable. Omitted by default.
-- `delay(**units)` — dict-form delay.
+- `service(action, *, target=, data=, data_template=, response_variable=,
+  continue_on_error=, metadata=, alias=, enabled=, **fields)` — the **single**
+  service-call verb (bare kwargs → `data`; `response_variable`/
+  `continue_on_error`/`metadata`/`data_template`/`alias`/`enabled` emit as
+  top-level HA action fields). `metadata=` is a real-world smoke-test ADDITION
+  (docs/ha-api-notes.md §19.1): the HA UI stamps `"metadata": {}` on every
+  action it saves; passing it (even as `{}`) round-trips that byte-stable.
+  Omitted by default. `data_template=`/`alias=`/`enabled=` are residue-coverage
+  round-2 ADDITIONS (docs/ha-api-notes.md §20): `data_template=` is the legacy
+  templated-data key, a sibling of `data` never folded into it; `alias=`/
+  `enabled=` name/toggle the individual step (the HA UI does this on every
+  step). All three omitted by default.
+- `delay(*, alias=, enabled=, **units)` — dict-form delay. `alias=`/`enabled=`
+  are the same residue-coverage round-2 ADDITION, keyword-only so they never
+  collide with a duration unit.
 - `variables(**kwargs)` — a `variables` action.
 - `stop(message=None, *, error=None)` — a `stop` action.
 - `fire_event(event_type, **event_data)` — the fire-event **action** (distinct
@@ -105,7 +113,12 @@ bundles are written.
   `numeric_state(entity_id, ...)`'s `entity_id` accept `str | list[str]`
   (real-world smoke-test ADDITION, docs/ha-api-notes.md §19.2): the HA UI
   always stores these fields as a list, even for a single entity/value, and a
-  singleton list decompiles back to a list, never a scalar.
+  singleton list decompiles back to a list, never a scalar. Residue-coverage
+  round 2 (docs/ha-api-notes.md §20) extended the **decompiler** side of this
+  to the `state` **condition** path (`to_condition()`'s `entity_id`/`state`
+  were already list-capable at the builder level since round 1; only
+  `hassle.decompiler.exprs._cond_state` needed the matching widening) — no
+  further DSL surface change, since `state()` is the same dual-purpose builder.
 - `time(at=, after=, before=, weekday=)`: `weekday=` is now also emitted on the
   **trigger** side, not condition-only as originally documented (real-world
   smoke-test ADDITION, docs/ha-api-notes.md §19.3 — HA's `time` trigger schema
@@ -169,12 +182,22 @@ this is additive to `hassle.__all__`; nothing above changed.
   builder call chain (`cos(...)`, `.attr(...)`, …) that produced it.
 
 ### Control flow (DESIGN §5.5) — context managers
-- `if_then(condition)` / `else_then()` / `else_if(condition)`.
-- `choose()` → use `as c:` then `c.when_(condition)` / `c.default()`.
-- `repeat_count(n)` / `repeat_while(condition)` / `repeat_until(condition)` /
-  `repeat_for_each(items)`.
-- `parallel()`.
-- `wait_for(*triggers, ...)` / `wait_template(raw)`.
+- `if_then(condition, *, alias=, enabled=)` / `else_then()` / `else_if(condition)`.
+- `choose(*, alias=, enabled=)` → use `as c:` then `c.when_(condition)` /
+  `c.default()`.
+- `repeat_count(n, *, alias=, enabled=)` / `repeat_while(condition, *, alias=,
+  enabled=)` / `repeat_until(condition, *, alias=, enabled=)` /
+  `repeat_for_each(items, *, alias=, enabled=)`.
+- `parallel(*, alias=, enabled=)`.
+- `wait_for(*triggers, ..., alias=, enabled=)` / `wait_template(raw, ...,
+  alias=, enabled=)`.
+- `alias=`/`enabled=` on every construct above are residue-coverage round-2
+  ADDITIONS (docs/ha-api-notes.md §20): the HA UI names and toggles whole
+  containers (`if`/`choose`/`repeat`/`parallel`/`wait_for_trigger`/
+  `wait_template`) the same way it does leaf actions — `with if_then(cond,
+  alias="..."):` compiles the `alias` onto the assembled `if`-block body, not
+  onto a child step. Omitted by default (unchanged behavior for every
+  pre-existing caller).
 
 ### Raw escape hatches (DESIGN §5.8, I3)
 - `raw_trigger(dict)`, `raw_condition(dict)`, `raw_action(dict)` — verbatim

@@ -239,29 +239,30 @@ def test_decompile_service_call_disabled_step() -> None:
 
 
 def test_if_then_context_manager_accepts_alias_kwarg() -> None:
-    with recording() as rec:
-        with if_then(state("input_boolean.x").is_("on"), alias="Guard block"):
-            service("light.turn_on", target={"entity_id": "light.x"})
+    with recording() as rec, if_then(state("input_boolean.x").is_("on"), alias="Guard block"):
+        service("light.turn_on", target={"entity_id": "light.x"})
     (action,) = rec.actions
     assert action.body["alias"] == "Guard block"
-    assert action.body["if"] == [{"condition": "state", "entity_id": "input_boolean.x", "state": "on"}]
+    expected_if = [{"condition": "state", "entity_id": "input_boolean.x", "state": "on"}]
+    assert action.body["if"] == expected_if
 
 
 def test_choose_context_manager_accepts_alias_kwarg() -> None:
-    with recording() as rec:
-        with choose(alias="Pick a branch") as c:
-            with c.when_(state("input_boolean.x").is_("on")):
-                service("light.turn_on", target={"entity_id": "light.x"})
+    with (
+        recording() as rec,
+        choose(alias="Pick a branch") as c,
+        c.when_(state("input_boolean.x").is_("on")),
+    ):
+        service("light.turn_on", target={"entity_id": "light.x"})
     (action,) = rec.actions
     assert action.body["alias"] == "Pick a branch"
     assert "choose" in action.body
 
 
 def test_parallel_context_manager_accepts_alias_kwarg() -> None:
-    with recording() as rec:
-        with parallel(alias="Do both"):
-            service("light.turn_on", target={"entity_id": "light.a"})
-            service("light.turn_on", target={"entity_id": "light.b"})
+    with recording() as rec, parallel(alias="Do both"):
+        service("light.turn_on", target={"entity_id": "light.a"})
+        service("light.turn_on", target={"entity_id": "light.b"})
     (action,) = rec.actions
     assert action.body["alias"] == "Do both"
     assert "parallel" in action.body
@@ -364,7 +365,9 @@ def test_parallel_container_not_raw_when_branch_carries_alias_and_metadata() -> 
 
 def test_wait_for_trigger_container_not_raw_with_list_valued_state_trigger() -> None:
     body = {
-        "wait_for_trigger": [{"trigger": "state", "entity_id": ["binary_sensor.front_door"], "to": ["off"]}],
+        "wait_for_trigger": [
+            {"trigger": "state", "entity_id": ["binary_sensor.front_door"], "to": ["off"]}
+        ],
         "timeout": {"minutes": 5},
     }
     (src,) = decompile_action(body)
