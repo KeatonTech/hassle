@@ -21,12 +21,12 @@ def parse_target(target: str) -> tuple[str, str]:
 
 
 def find_object_key(sim: Simulator, function_name: str) -> str:
-    for key in sim._engines_by_key:
+    known = sim.automation_keys()
+    for key in known:
         if key.endswith(f":{function_name}"):
             return key
     raise KeyError(
-        f"no automation named {function_name!r} in the compiled bundle "
-        f"(known: {sorted(sim._engines_by_key)})"
+        f"no automation named {function_name!r} in the compiled bundle (known: {sorted(known)})"
     )
 
 

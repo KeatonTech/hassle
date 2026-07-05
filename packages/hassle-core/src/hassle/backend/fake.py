@@ -25,17 +25,12 @@ Two behaviors mirror real HA exactly (docs/ha-api-notes.md §10.1, §11):
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from hassle.ir.canonical import sha256_hash
 from hassle.ir.keys import HELPER_DOMAINS, OBJECT_KINDS
+from hassle.ir.keys import slugify as _slugify
 from hassle.ir.normalize import normalize_ha
-
-
-def _slugify(name: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
-    return slug or "item"
 
 
 class FakeBackend:

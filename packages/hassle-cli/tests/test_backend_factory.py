@@ -14,9 +14,11 @@ from hassle_cli.backend_factory import UnregisteredFakeBackendError, connect
 
 
 def test_unregistered_fake_url_raises_clean_error() -> None:
-    with pytest.raises(UnregisteredFakeBackendError) as excinfo:
-        with connect("fake://not-a-real-token", "unused-token"):
-            pass  # pragma: no cover - must not get here
+    with (
+        pytest.raises(UnregisteredFakeBackendError) as excinfo,
+        connect("fake://not-a-real-token", "unused-token"),
+    ):
+        pass  # pragma: no cover - must not get here
     message = str(excinfo.value)
     # what
     assert "fake://" in message
