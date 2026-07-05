@@ -250,6 +250,32 @@ def pull(allow_dirty: bool) -> None:
     writer = WholeFileSourceWriter()
     result = apply_pull_with_decompiler(plan, writer)
 
+    # Safety backstop (``ux/shared-script-calls-fix``): pull just wrote real
+    # DSL source from the decompiler -- recompile the bundle it produced
+    # before trusting it (manifest bookkeeping below establishes the new
+    # three-way-merge baseline, so it must not run against a bundle that
+    # doesn't even compile). A coordination bug in the decompiler (the field
+    # failure this fix addresses: a caller rewritten to call a script whose
+    # own emitted signature can't accept it) raises here instead of silently
+    # leaving the user with a broken bundle discovered only on their next
+    # `hassle test`/`hassle push`. Files are left in place (never rolled
+    # back) -- the user needs them to file a useful bug report, and the fix
+    # is always just a `hassle pull --allow-dirty` once it lands.
+    try:
+        bundle_ops.compile_local_objects(root)
+    except Exception as exc:  # noqa: BLE001 - any bundle-compile failure here is a Hassle bug
+        console.print(
+            f"[bold red]hassle pull: the bundle just written to {root} does not compile "
+            f"({type(exc).__name__}: {exc}). This is a bug in Hassle's decompiler, not a "
+            "mistake in your HA configuration -- the files just written are left in place "
+            "for you to inspect. Fix: please report this (include the error above and, if "
+            "possible, the object(s) involved) at "
+            "https://github.com/hassle-project/hassle/issues; once a fix lands, "
+            "`hassle pull --allow-dirty` is safe to re-run and will overwrite the broken "
+            "file(s).[/bold red]"
+        )
+        raise SystemExit(1) from exc
+
     from hassle.sync.models import ManifestEntry, PlanAction
 
     pull_actions = (PlanAction.REFRESH, PlanAction.ADOPT, PlanAction.DROP)

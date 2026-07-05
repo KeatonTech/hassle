@@ -55,6 +55,20 @@ class ScriptRef:
     information handy (e.g. a hand-built ``ScriptRef`` in a test) isn't forced
     to enumerate it; real pull-layer callers always supply it.
 
+    ``is_shared_script`` (``ux/shared-script-calls-fix``, field-failure fix):
+    whether the callee actually decompiled to ``@shared_script`` (a real
+    parameterized call site) rather than falling back to plain ``@script``
+    (DESIGN §7.3's fallback rule -- rich field metadata, or a field with no
+    ``default`` at all: :func:`fields_signature_expressible`). A ``@script``
+    fallback has NO call-site parameters at all, regardless of what
+    ``known_fields``/the raw ``fields`` block name -- rewriting a caller to
+    invoke it with kwargs raises ``TypeError`` at compile time (the exact bug
+    this field carries the fix for: a script whose fields forced the
+    fallback still had its caller rewritten, because the resolver only ever
+    consulted the raw field NAMES, never whether they became real
+    parameters). ``False`` here means the ref must never resolve a rewrite,
+    period -- checked before ``known_fields``, not instead of it.
+
     ``calls`` is this script's own outgoing call graph -- the object_ids of
     OTHER managed scripts its own sequence calls directly (``script.<id>``
     shorthand) -- used only for cross-file cycle detection (a script-to-script
@@ -66,6 +80,7 @@ class ScriptRef:
     module: str
     function_name: str
     known_fields: frozenset[str] | None = None
+    is_shared_script: bool = True
     calls: frozenset[str] = field(default_factory=lambda: cast("frozenset[str]", frozenset()))
 
 
@@ -360,7 +375,21 @@ def _automation_source(
 _SIGNATURE_EXPRESSIBLE_FIELD_KEYS = frozenset({"default"})
 
 
-def _fields_signature_expressible(fields: Any) -> bool:
+def fields_signature_expressible(fields: Any) -> bool:
+    """Whether a script's ``fields`` block can become a ``@shared_script``
+    Python signature (DESIGN §7.3 fallback rule) -- see
+    :func:`_shared_script_signature`'s docstring for exactly which shapes
+    qualify. Public (``ux/shared-script-calls-fix``): this is THE
+    shared_script-vs-``@script``-fallback emit decision, and it must be the
+    single source of truth for every caller that needs to know which one a
+    given script decompiled to -- both same-batch (:func:`_build_resolver`
+    below) and cross-file (`hassle_cli.bundle_ops.build_script_refs`) MUST
+    gate `CallTarget`/`ScriptRef` creation on this, not just consult the raw
+    field names, or a caller can be rewritten to call a function that was
+    actually emitted with zero parameters (the field failure this function
+    was made public to fix: a script whose fields forced the ``@script``
+    fallback has NO call-site kwargs at all, regardless of what its stored
+    ``fields`` names are)."""
     if fields is None:
         return True  # no fields at all -- trivially expressible (empty signature)
     if not isinstance(fields, dict):
@@ -373,6 +402,14 @@ def _fields_signature_expressible(fields: Any) -> bool:
         if frozenset(spec_dict) != _SIGNATURE_EXPRESSIBLE_FIELD_KEYS:
             return False
     return True
+
+
+def script_is_shared_script(obj: ScriptConfig) -> bool:
+    """Whether ``obj`` decompiles to ``@shared_script`` (vs. the ``@script``
+    fallback) -- the single source of truth for the emit decision, from the
+    IR object directly (``ux/shared-script-calls-fix``)."""
+    fields = obj.to_ha().get("fields")
+    return fields_signature_expressible(fields)
 
 
 def _python_type_name(value: Any) -> str | None:
@@ -396,7 +433,7 @@ def _shared_script_signature(fields: Any) -> str:
     from its ``fields`` block: ``name: <Type> = default`` when a builtin type
     is inferable from the default, else a bare ``name=default``.
 
-    Only ever called when :func:`_fields_signature_expressible` accepted
+    Only ever called when :func:`fields_signature_expressible` accepted
     ``fields`` -- every field spec is guaranteed to carry exactly a
     ``default`` (see that function's docstring for why a field WITHOUT one
     isn't signature-expressible either, despite HA's own schema allowing it).
@@ -426,7 +463,7 @@ def _script_source(obj: ScriptConfig, ident: str, resolver: CallResolver | None)
     body = dict(normalize_ha(obj.to_ha(), kind="script"))
     object_id = obj.identity or ident
     fields = body.get("fields")
-    as_shared_script = _fields_signature_expressible(fields)
+    as_shared_script = fields_signature_expressible(fields)
 
     decorator_kwargs: list[str] = []
     if str(object_id) != ident:
@@ -603,6 +640,20 @@ def _build_resolver(
     Only ``script_refs`` entries actually referenced by an object in
     ``objects`` (:func:`called_script_ids`) ever contribute a target/import
     -- an unused table entry must never surface as a dangling unused import.
+
+    **Field-failure fix (``ux/shared-script-calls-fix``):** a script that
+    fell back to plain ``@script`` (DESIGN §7.3's fallback rule -- rich field
+    metadata, or a field with no ``default`` at all) has NO call-site
+    parameters, whatever its ``fields`` block's key NAMES are -- it must
+    never get a ``CallTarget`` at all, same-batch or cross-file, or a caller
+    can be rewritten to invoke a function with kwargs it does not accept
+    (``TypeError`` at compile time; the exact bug reported from the owner's
+    real bundle: ``adjust_tdbu_blind`` fell back to ``@script``, but its
+    caller was still rewritten to ``adjust_tdbu_blind(cover_top=...)``).
+    :func:`script_is_shared_script` (same-batch) / ``ScriptRef.
+    is_shared_script`` (cross-file, since the callee isn't actually parsed in
+    THIS call) gate target creation -- checked before ``known_fields``, which
+    only matters once a script is confirmed callable at all.
     """
     script_ids_in_batch = {
         _script_object_id(key) for key, obj in objects.items() if isinstance(obj, ScriptConfig)
@@ -615,7 +666,10 @@ def _build_resolver(
     import_lines: set[str] = set()
     cycle_broken: set[str] = set()
     for object_id, fn_name in script_names.items():
-        known = _script_known_fields(cast("ScriptConfig", objects[f"script:{object_id}"]))
+        script_obj = cast("ScriptConfig", objects[f"script:{object_id}"])
+        if not script_is_shared_script(script_obj):
+            continue  # @script fallback -- no call-site parameters at all
+        known = _script_known_fields(script_obj)
         targets[object_id] = CallTarget(function_name=fn_name, import_line=None, known_fields=known)
 
     if script_refs:
@@ -624,6 +678,8 @@ def _build_resolver(
                 continue  # same-batch call already resolved, no import needed
             if object_id not in called_ids:
                 continue  # unused entry -- never surfaces an unused import
+            if not ref.is_shared_script:
+                continue  # @script fallback on the callee's side -- never a target
             # Cycle guard: the callee's own outgoing calls loop back into a
             # script THIS batch defines -> importing it would close a cross-
             # file circular import. Break this edge instead (stays service()).
