@@ -44,12 +44,12 @@ def test_validate_reports_findings_and_nonzero_exit(
 
     root = tmp_path / "broken-house"
     root.mkdir()
-    (root / "automations").mkdir()
     (root / ".hassle").mkdir()
     (root / ".hassle" / "registry.json").write_text(
         json.dumps(registry_snapshot_json), encoding="utf-8"
     )
-    (root / "automations" / "a.py").write_text(
+    (root / "hassle.toml").write_text("format_version = 1\nmirror = false\n", encoding="utf-8")
+    (root / "a.py").write_text(
         """
 from hassle import automation, service
 
@@ -93,10 +93,18 @@ def test_push_creates_object_in_backend(git_repo: Path, cli, fake_backend, toml_
 
 
 def test_pull_adopts_ui_created_object(git_repo: Path, cli, fake_backend, toml_writer) -> None:
+    import subprocess
+
     backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
-    # First push our local automation so the manifest has a baseline.
+    # First push our local automation so the manifest has a baseline, then
+    # commit push's own manifest.lock update (DESIGN §8.4: "your change + updated
+    # manifest.lock" lands in the same commit) so the tree is clean for pull.
     assert cli(["push", "--yes"], cwd=git_repo).exit_code == 0
+    subprocess.run(["git", "add", "-A"], cwd=git_repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-q", "-m", "push"], cwd=git_repo, check=True, capture_output=True
+    )
     # Simulate a UI-created automation.
     backend.create(
         "automation",
@@ -122,8 +130,10 @@ def test_fmt_runs_without_error(bundle_dir: Path, cli) -> None:
 def test_stubs_generates_pyi_files(bundle_dir: Path, cli) -> None:
     result = cli(["stubs"], cwd=bundle_dir)
     assert result.exit_code == 0, result.output
+    # `hassle.registry.stubs.generate_entities_stub` embeds typed service
+    # methods on each domain's entity class -- there is no separate
+    # services.pyi artifact (DESIGN §9.2/§5.2), just entities.pyi.
     assert (bundle_dir / ".hassle" / "entities.pyi").is_file()
-    assert (bundle_dir / ".hassle" / "services.pyi").is_file()
 
 
 def test_explain_renders_compiled_yaml_for_object(bundle_dir: Path, cli) -> None:

@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 from click.testing import CliRunner, Result
+
 from hassle_cli.cli import main
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -29,7 +30,15 @@ def registry_snapshot_json() -> dict[str, Any]:
 
 @pytest.fixture
 def bundle_dir(tmp_path: Path, registry_snapshot_json: dict[str, Any]) -> Path:
-    """A minimal, valid bundle dir with `.hassle/registry.json` seeded."""
+    """A minimal, valid bundle dir with `.hassle/registry.json` seeded.
+
+    DSL sources live directly at the bundle root (`hallway.py`, not
+    `automations/hallway.py`): `hassle.compiler.bundle.compile_bundle` only
+    globs top-level `*.py` files in the directory it's pointed at, not
+    subdirectories -- see docs/ha-api-notes.md §17.9 (a DESIGN §6 vs reality
+    mismatch found while building this fixture). `automations/` still exists
+    as an (currently unused by compile) organizational convenience.
+    """
     root = tmp_path / "my-house"
     root.mkdir()
     (root / "automations").mkdir()
@@ -38,7 +47,11 @@ def bundle_dir(tmp_path: Path, registry_snapshot_json: dict[str, Any]) -> Path:
     (root / ".hassle" / "registry.json").write_text(
         json.dumps(registry_snapshot_json), encoding="utf-8"
     )
-    (root / "automations" / "hallway.py").write_text(
+    (root / "hassle.toml").write_text(
+        '# ha_url = "http://homeassistant.local:8123"\nformat_version = 1\nmirror = false\n',
+        encoding="utf-8",
+    )
+    (root / "hallway.py").write_text(
         """
 from hassle import automation, service, state, when
 
@@ -105,9 +118,8 @@ def fake_backend():
     """A `FakeBackend`, registered so the CLI picks it up in-process instead of
     building a real `DirectBackend` (test-only seam; see `hassle_cli.backend_factory`:
     `HASSLE_TEST_BACKEND_ID` is never set in production)."""
-    from hassle_cli.backend_factory import register_fake_backend, unregister_fake_backend
-
     from hassle.backend.fake import FakeBackend
+    from hassle_cli.backend_factory import register_fake_backend, unregister_fake_backend
 
     backend = FakeBackend()
     token = register_fake_backend(backend)

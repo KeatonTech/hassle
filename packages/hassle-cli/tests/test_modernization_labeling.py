@@ -22,6 +22,7 @@ SNAP_DIR = Path(__file__).resolve().parent / "snapshots"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
+    actual = actual.rstrip("\n")
     path = SNAP_DIR / f"{name}.txt"
     if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
         path.parent.mkdir(parents=True, exist_ok=True)

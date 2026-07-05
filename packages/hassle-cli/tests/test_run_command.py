@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 def test_run_without_live_uses_simulator(bundle_dir: Path, cli) -> None:
-    result = cli(["run", "automations/hallway.py::hall_light_on_motion"], cwd=bundle_dir)
+    result = cli(["run", "hallway.py::hall_light_on_motion"], cwd=bundle_dir)
     assert result.exit_code == 0, result.output
     assert "light.turn_on" in result.output
 
@@ -25,7 +25,7 @@ def test_run_live_without_confirmation_flag_refuses(
     # --live requires an explicit confirmation (real service calls on real
     # devices, DESIGN §10.4) -- refuses without --yes and without a tty to
     # prompt against in CliRunner's non-interactive invocation.
-    result = cli(["run", "automations/hallway.py::hall_light_on_motion", "--live"], cwd=bundle_dir)
+    result = cli(["run", "hallway.py::hall_light_on_motion", "--live"], cwd=bundle_dir)
     assert result.exit_code != 0
     assert "real service calls" in result.output.lower() or "--yes" in result.output
 

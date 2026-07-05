@@ -852,3 +852,29 @@ delete aborted as spurious "drift". No prior test ran a `compute_plan` delete
 through `apply_plan`. Fixed in `plan.py` (populate `remote_hash_at_plan` on the
 `delete` entry, mirroring `update`); regression-tested by
 `tests/test_plan_apply_delete_roundtrip.py` (R4). No interface change.
+
+### 17.9 DESIGN §6 mismatch found in M7: `compile_bundle` does not recurse into subdirectories
+DESIGN §6's documented bundle layout has DSL sources split across
+`automations/`, `scripts/`, `helpers/`, `lib/` subdirectories under the
+bundle root. The real M1 implementation
+(`hassle.compiler.bundle._import_bundle_modules`) only globs **top-level**
+`*.py` files directly in the bundle directory (`bundle_path.glob("*.py")`,
+non-recursive) — every fixture from M0 through M6
+(`fixtures/dsl/*/bundle/`, `fixtures/registry/{clean,broken}_bundle/bundle/`)
+is in fact flat, one or more `.py` files directly at the bundle root, and
+every milestone's test suite was built and passed against that flat
+convention despite §6 showing subdirectories.
+
+Found while wiring M7's CLI test fixtures (nesting DSL sources under
+`automations/`, per §6) against `compile_bundle` and getting an empty
+`CompileResult.objects` with no error. **Not fixed as part of M7**: changing
+`_import_bundle_modules` to recurse is a behavior change to a frozen,
+heavily-tested M1 module with no M7 test-contract requirement forcing it, so
+per the "don't silently work around a DESIGN/reality mismatch" rule this is
+recorded here instead of patched. M7's own fixtures and the `hassle init`
+scaffold use the flat convention that matches actual `compile_bundle`
+behavior (`automations.py`, `scripts.py`, ... directly at the bundle root,
+matching every existing fixture) rather than the nested §6 tree. A follow-up
+milestone (or a dedicated M1 fix) should either implement recursive bundle
+loading to match §6, or §6 should be corrected to show the flat layout that
+is what every fixture and the CLI now actually rely on.

@@ -28,6 +28,16 @@ def _git(*args: str, cwd: Path) -> None:
     subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
 
 
+def _git_commit_if_dirty(message: str, *, cwd: Path) -> None:
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=cwd, check=True, capture_output=True, text=True
+    )
+    if not status.stdout.strip():
+        return  # nothing to commit (e.g. a first pull with no remote objects yet)
+    _git("add", "-A", cwd=cwd)
+    _git("commit", "-q", "-m", message, cwd=cwd)
+
+
 def test_full_daily_loop_in_under_ten_hassle_commands(
     tmp_path: Path, cli, fake_backend, toml_writer
 ) -> None:
@@ -52,19 +62,12 @@ def test_full_daily_loop_in_under_ten_hassle_commands(
 
     # 2. hassle pull (nothing remote yet -- first pull adopts everything; empty here)
     run_hassle(["pull"])
-    _git("add", "-A", cwd=project)
-    _git(
-        "commit",
-        "-q",
-        "-m",
-        "sync: UI changes",
-        cwd=project,
-    )
+    _git_commit_if_dirty("sync: UI changes", cwd=project)
 
     # Author a bundle file by hand (not a `hassle` command -- editing .py files
-    # is the human's job in the loop).
-    (project / "automations").mkdir(exist_ok=True)
-    (project / "automations" / "hallway.py").write_text(
+    # is the human's job in the loop). DSL sources live at the bundle root
+    # (docs/ha-api-notes.md §17.9: compile_bundle globs top-level *.py only).
+    (project / "hallway.py").write_text(
         """
 from hassle import automation, service, state, when
 
@@ -93,8 +96,7 @@ def test_motion_turns_on_light(sim):
     # 5. hassle push --yes
     run_hassle(["push", "--yes"])
 
-    _git("add", "-A", cwd=project)
-    _git("commit", "-q", "-m", "push: hallway automation", cwd=project)
+    _git_commit_if_dirty("push: hallway automation", cwd=project)
 
     assert len(hassle_commands) < 10, (
         f"used {len(hassle_commands)} hassle commands: {hassle_commands}"

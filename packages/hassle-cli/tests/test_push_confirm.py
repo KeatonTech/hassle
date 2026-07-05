@@ -26,7 +26,7 @@ def test_push_with_deletion_refuses_without_confirmation(
     assert cli(["push", "--yes"], cwd=git_repo).exit_code == 0
 
     # Remove the local source -> next plan shows a `delete`.
-    (git_repo / "automations" / "hallway.py").unlink()
+    (git_repo / "hallway.py").unlink()
 
     result = cli(["push"], cwd=git_repo, env={})  # no --yes, no piped confirmation
     assert result.exit_code != 0
@@ -41,7 +41,7 @@ def test_push_with_deletion_and_yes_flag_applies(
     toml_writer(git_repo, backend_token=token)
     assert cli(["push", "--yes"], cwd=git_repo).exit_code == 0
 
-    (git_repo / "automations" / "hallway.py").unlink()
+    (git_repo / "hallway.py").unlink()
 
     result = cli(["push", "--yes"], cwd=git_repo)
     assert result.exit_code == 0, result.output

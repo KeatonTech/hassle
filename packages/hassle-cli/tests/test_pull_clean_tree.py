@@ -12,7 +12,7 @@ def test_pull_refuses_on_dirty_tree(git_repo: Path, cli, fake_backend, toml_writ
     _backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
     # Dirty the tree (uncommitted change).
-    (git_repo / "automations" / "hallway.py").write_text("# dirty\n", encoding="utf-8")
+    (git_repo / "hallway.py").write_text("# dirty\n", encoding="utf-8")
 
     result = cli(["pull"], cwd=git_repo)
     assert result.exit_code != 0

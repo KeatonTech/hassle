@@ -9,6 +9,7 @@ SNAP_DIR = Path(__file__).resolve().parent / "snapshots"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
+    actual = actual.rstrip("\n")
     path = SNAP_DIR / f"{name}.txt"
     if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -30,7 +31,7 @@ def test_plan_renders_conflict_with_3way_dsl_diff(
     backend.update("automation", "hall_light_on_motion", remote_edited)
 
     # ... and locally, to a *different* value -> both_edited conflict.
-    (git_repo / "automations" / "hallway.py").write_text(
+    (git_repo / "hallway.py").write_text(
         """
 from hassle import automation, service, state, when
 
@@ -57,7 +58,7 @@ def test_push_aborts_on_unresolved_conflict(git_repo: Path, cli, fake_backend, t
 
     remote = backend.list_remote("automation")["hall_light_on_motion"]
     backend.update("automation", "hall_light_on_motion", {**remote, "alias": "UI edit"})
-    (git_repo / "automations" / "hallway.py").write_text(
+    (git_repo / "hallway.py").write_text(
         """
 from hassle import automation, service, state, when
 
@@ -85,7 +86,7 @@ def test_push_accept_local_resolves_conflict(
 
     remote = backend.list_remote("automation")["hall_light_on_motion"]
     backend.update("automation", "hall_light_on_motion", {**remote, "alias": "UI edit"})
-    (git_repo / "automations" / "hallway.py").write_text(
+    (git_repo / "hallway.py").write_text(
         """
 from hassle import automation, service, state, when
 

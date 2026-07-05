@@ -26,10 +26,11 @@ def _shadow_ids(ha: DirectBackend) -> list[str]:
 def _write_bundle(tmp_path: Path) -> Path:
     root = tmp_path / "live-bundle"
     root.mkdir()
-    (root / "automations").mkdir()
-    (root / "automations" / "a.py").write_text(
+    (root / "hassle.toml").write_text("format_version = 1\nmirror = false\n", encoding="utf-8")
+    # DSL sources live at the bundle root (docs/ha-api-notes.md §17.9).
+    (root / "a.py").write_text(
         """
-from hassle import automation, service, state, when
+from hassle import automation, only_if, service, state, when
 
 @automation(id="live_test_automation", alias="Live test automation")
 def live_test_automation():
@@ -47,6 +48,7 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     ha: DirectBackend, ha_url_token: tuple[str, str], tmp_path: Path
 ) -> None:
     from click.testing import CliRunner
+
     from hassle_cli.cli import main
 
     url, token = ha_url_token
@@ -57,7 +59,7 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["run", "automations/a.py::live_test_automation", "--live", "--yes"],
+        ["run", "a.py::live_test_automation", "--live", "--yes"],
         env={"NO_COLOR": "1", "HASSLE_HA_URL": url, "HASSLE_TOKEN": token},
         cwd=str(bundle),
     )
@@ -75,9 +77,9 @@ def test_run_live_cleans_up_shadow_on_trace_stream_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from click.testing import CliRunner
-    from hassle_cli.cli import main
 
     from hassle_cli import run_live
+    from hassle_cli.cli import main
 
     url, token = ha_url_token
     ha.create("input_boolean", {"name": "Hassle Flag", "icon": "mdi:flag"})
@@ -92,7 +94,7 @@ def test_run_live_cleans_up_shadow_on_trace_stream_failure(
     runner = CliRunner()
     result = runner.invoke(
         main,
-        ["run", "automations/a.py::live_test_automation", "--live", "--yes"],
+        ["run", "a.py::live_test_automation", "--live", "--yes"],
         env={"NO_COLOR": "1", "HASSLE_HA_URL": url, "HASSLE_TOKEN": token},
         cwd=str(bundle),
     )

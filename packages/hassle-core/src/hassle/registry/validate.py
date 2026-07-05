@@ -409,12 +409,12 @@ def _validate_helper_slugs(result: CompileResult) -> list[Finding]:
                 file=file,
                 line=line,
                 message=(
-                    f"Helper `{key}` declares `id=\"{supplied_id}\"`, but Home Assistant "
+                    f'Helper `{key}` declares `id="{supplied_id}"`, but Home Assistant '
                     f"derives a helper's real identity by slugifying its `name` "
-                    f"(\"{name}\" -> `{expected_id}`), ignoring the supplied id."
+                    f'("{name}" -> `{expected_id}`), ignoring the supplied id.'
                 ),
                 fix=(
-                    f"Change `id=\"{supplied_id}\"` to `id=\"{expected_id}\"` (or rename the "
+                    f'Change `id="{supplied_id}"` to `id="{expected_id}"` (or rename the '
                     f"helper to a `name` that slugifies to `{supplied_id}`), so the bundle's "
                     f"id matches what HA will actually assign."
                 ),
