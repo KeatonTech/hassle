@@ -196,6 +196,10 @@ def pull(allow_dirty: bool) -> None:
 
     with backend_factory.connect(ha_url, token) as backend:
         remote_objects = bundle_ops.remote_objects_from_backend(backend, list(OBJECT_KINDS))
+        # DESIGN §9.2: the registry snapshot is refreshed on every pull (tier-2/3
+        # validation and stubs depend on it). Best-effort: skipped when the
+        # backend lacks the registry surface.
+        _write_registry_snapshot(backend, root)
 
     plan = compute_plan(
         manifest=manifest, local_objects=local_objects, remote_objects=remote_objects
@@ -529,15 +533,21 @@ def stubs(refresh: bool) -> None:
     console.print(f"[green]hassle stubs: wrote {out_path}[/green]")
 
 
+def _write_registry_snapshot(backend: object, root: Path) -> None:
+    if not hasattr(backend, "fetch_registry_snapshot"):
+        return
+    snapshot = backend.fetch_registry_snapshot()  # type: ignore[attr-defined]
+    registry_path = root / ".hassle" / "registry.json"
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(snapshot.model_dump_json(indent=2), encoding="utf-8")
+
+
 def _refresh_registry_snapshot(root: Path, registry_path: Path) -> None:
     from hassle_cli import backend_factory
 
     ha_url, token = _require_backend_config(root)
     with backend_factory.connect(ha_url, token) as backend:
-        if hasattr(backend, "fetch_registry_snapshot"):
-            snapshot = backend.fetch_registry_snapshot()
-            registry_path.parent.mkdir(parents=True, exist_ok=True)
-            registry_path.write_text(snapshot.model_dump_json(indent=2), encoding="utf-8")
+        _write_registry_snapshot(backend, root)
 
 
 # ---------------------------------------------------------------------------

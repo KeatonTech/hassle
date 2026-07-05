@@ -42,6 +42,17 @@ class FakeBackend:
 
     # -- Backend protocol -------------------------------------------------
 
+    def fetch_registry_snapshot(self):  # additive test/registry surface, not part of F2
+        """Minimal registry snapshot (settable via `self.registry_snapshot`).
+
+        Mirrors DirectBackend's non-protocol registry surface so CLI flows that
+        refresh `.hassle/registry.json` on pull are exercisable offline.
+        """
+        from hassle.registry.snapshot import RegistrySnapshot
+
+        snapshot = getattr(self, "registry_snapshot", None)
+        return snapshot if snapshot is not None else RegistrySnapshot()
+
     def list_remote(self, kind: str) -> dict[str, dict[str, Any]]:
         self._require_kind(kind)
         return {identity: dict(config) for identity, config in self._store[kind].items()}
