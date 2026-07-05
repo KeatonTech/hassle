@@ -117,3 +117,69 @@ def test_token_falls_back_to_keyring(monkeypatch) -> None:
     monkeypatch.setattr(token_mod, "_keyring_get", lambda url: "keyring-token")
     resolved = token_mod.resolve_token("http://homeassistant.local:8123", env={})
     assert resolved == "keyring-token"
+
+
+def _patch_login_probe_and_keyring(monkeypatch) -> dict[str, str]:
+    import hassle_cli.token as token_mod
+
+    stored: dict[str, str] = {}
+    monkeypatch.setattr(token_mod, "_keyring_set", lambda url, tok: stored.__setitem__(url, tok))
+
+    class _FakeProbe:
+        def __init__(self, url: str, token: str) -> None: ...
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr("hassle_cli.commands.login.DirectBackend", _FakeProbe)
+    return stored
+
+
+def test_login_writes_ha_url_into_existing_toml(tmp_path: Path, cli, monkeypatch) -> None:
+    # The smoke-test-day regression: login succeeded (keyring only), then pull
+    # said "no ha_url configured ... run hassle login first" -- circular.
+    _patch_login_probe_and_keyring(monkeypatch)
+    bundle = tmp_path / "house"
+    bundle.mkdir()
+    (bundle / "hassle.toml").write_text(
+        '# hassle bundle settings\n# ha_url = "http://homeassistant.local:8123"\n',
+        encoding="utf-8",
+    )
+
+    result = cli(["login", "--url", "http://ha.lan:8123", "--token", "tok-secret"], cwd=bundle)
+    assert result.exit_code == 0, result.output
+    content = (bundle / "hassle.toml").read_text(encoding="utf-8")
+    assert 'ha_url = "http://ha.lan:8123"' in content
+    assert "tok-secret" not in content  # the token NEVER lands in the toml
+    assert "# hassle bundle settings" in content  # other lines preserved
+
+
+def test_login_creates_toml_when_missing(tmp_path: Path, cli, monkeypatch) -> None:
+    # login-before-init must also work: no hassle.toml yet -> login creates one.
+    _patch_login_probe_and_keyring(monkeypatch)
+    bundle = tmp_path / "house"
+    bundle.mkdir()
+
+    result = cli(["login", "--url", "http://ha.lan:8123", "--token", "tok-secret"], cwd=bundle)
+    assert result.exit_code == 0, result.output
+    content = (bundle / "hassle.toml").read_text(encoding="utf-8")
+    assert 'ha_url = "http://ha.lan:8123"' in content
+    assert "tok-secret" not in content
+
+
+def test_login_replaces_stale_ha_url(tmp_path: Path, cli, monkeypatch) -> None:
+    _patch_login_probe_and_keyring(monkeypatch)
+    bundle = tmp_path / "house"
+    bundle.mkdir()
+    (bundle / "hassle.toml").write_text(
+        'mirror = true\nha_url = "http://old-host:8123"\n', encoding="utf-8"
+    )
+
+    result = cli(["login", "--url", "http://new-host:8123", "--token", "t"], cwd=bundle)
+    assert result.exit_code == 0, result.output
+    content = (bundle / "hassle.toml").read_text(encoding="utf-8")
+    assert 'ha_url = "http://new-host:8123"' in content
+    assert "old-host" not in content
+    assert "mirror = true" in content  # unrelated settings preserved
