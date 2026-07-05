@@ -1,0 +1,41 @@
+{
+  "script:dismiss_notification": {
+    "alias": "Dismiss notification",
+    "fields": {
+      "notification_id": {
+        "default": ""
+      }
+    },
+    "sequence": [
+      {
+        "action": "persistent_notification.dismiss",
+        "data": {
+          "notification_id": "{{ notification_id }}"
+        }
+      }
+    ]
+  },
+  "automation:dismiss_reminder": {
+    "id": "dismiss_reminder",
+    "alias": "Dismiss reminder",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "input_boolean.guest_mode",
+        "to": "off"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "script.dismiss_notification",
+        "data": {
+          "notification_id": "guest_reminder"
+        },
+        "alias": "Dismiss the guest reminder",
+        "enabled": false,
+        "metadata": {}
+      }
+    ]
+  }
+}

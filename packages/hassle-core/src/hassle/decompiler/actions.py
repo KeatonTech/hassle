@@ -13,6 +13,7 @@ Falls back to ``raw_action({...})`` for any action shape not modeled here
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, cast
 
 from hassle.decompiler.exprs import decompile_condition, render_literal
@@ -36,32 +37,98 @@ def _raw_action(body: Any) -> list[str]:
 _STEP_OPTION_KEYS = frozenset({"alias", "enabled"})
 
 
-def decompile_action(body: Any) -> list[str]:
-    """Decompile one action dict to source lines, or the ``raw_action`` fallback."""
+@dataclass(frozen=True)
+class CallTarget:
+    """Where a MANAGED script's decompiled function call actually resolves
+    (``ux/shared-script-calls``): the function name, and the import line to
+    emit for it (``None`` when the callee is decompiled in the SAME module --
+    a plain same-file function call, no import needed).
+
+    ``known_fields`` is the callee's declared field names, used to check the
+    "every data key is a declared field" rewrite condition; ``None`` means
+    "not known here, don't gate on it" (accept any data keys)."""
+
+    function_name: str
+    import_line: str | None
+    known_fields: frozenset[str] | None
+
+
+class CallResolver:
+    """Resolves a ``script.<object_id>`` action's call target for the
+    function-call rewrite (``ux/shared-script-calls``, owner feedback).
+
+    Built once per :func:`~hassle.decompiler.codegen.decompile_bundle` call by
+    ``codegen.py`` (which knows both the objects in THIS batch -- no import
+    needed -- and the pull-supplied cross-file ``ScriptRef`` table), then
+    threaded down through every action-decompiling function so the rewrite can
+    fire at any nesting depth (inside ``if``/``choose``/``repeat``/``parallel``).
+
+    ``cycle_broken`` names object_ids whose call edge was deliberately NOT
+    resolved because doing so would have closed a cross-file import cycle
+    (``codegen._build_resolver``'s cycle guard) -- distinct from an ordinary
+    "unknown script" miss, this gets a one-line explanatory comment on the
+    `service()` fallback rather than silently looking like any other
+    not-yet-managed callee.
+    """
+
+    def __init__(
+        self, targets: dict[str, CallTarget], cycle_broken: frozenset[str] = frozenset()
+    ) -> None:
+        self._targets = targets
+        self._cycle_broken = cycle_broken
+
+    def resolve(self, object_id: str) -> CallTarget | None:
+        return self._targets.get(object_id)
+
+    def is_cycle_broken(self, object_id: str) -> bool:
+        return object_id in self._cycle_broken
+
+
+def decompile_action(body: Any, *, resolver: CallResolver | None = None) -> list[str]:
+    """Decompile one action dict to source lines, or the ``raw_action`` fallback.
+
+    ``resolver`` (``ux/shared-script-calls``): when supplied, a direct
+    ``{"action": "script.<id>", ...}`` call to a MANAGED script known to
+    ``resolver`` decompiles to a real function call instead of ``service()``
+    (see :func:`_service_call`'s docstring for the exact rewrite conditions).
+    """
     if not isinstance(body, dict):
         return _raw_action(body)
     action_body = cast("dict[str, Any]", body)
 
     if "action" in action_body and _is_plain_service_call(action_body):
-        return _service_call(action_body)
+        rewritten = _script_call(action_body, resolver) if resolver is not None else None
+        if rewritten is not None:
+            return rewritten
+        service_lines = _service_call(action_body)
+        if resolver is not None:
+            action = action_body.get("action")
+            if isinstance(action, str) and action.startswith("script."):
+                object_id = action[len("script.") :]
+                if resolver.is_cycle_broken(object_id):
+                    service_lines.append(
+                        f"# hassle: {object_id} import would create a cross-file script call "
+                        f"cycle -- kept as service() here to break it"
+                    )
+        return service_lines
     if "delay" in action_body and set(action_body) <= {"delay"} | _STEP_OPTION_KEYS:
         delay_src = _delay_source(action_body)
         if delay_src is not None:
             return [delay_src]
     if "if" in action_body:
-        result = _if_then(action_body)
+        result = _if_then(action_body, resolver)
         if result is not None:
             return result
     if "choose" in action_body:
-        result = _choose(action_body)
+        result = _choose(action_body, resolver)
         if result is not None:
             return result
     if "repeat" in action_body and set(action_body) <= {"repeat"} | _STEP_OPTION_KEYS:
-        result = _repeat(action_body)
+        result = _repeat(action_body, resolver)
         if result is not None:
             return result
     if "parallel" in action_body and set(action_body) <= {"parallel"} | _STEP_OPTION_KEYS:
-        result = _parallel(action_body)
+        result = _parallel(action_body, resolver)
         if result is not None:
             return result
     if "wait_for_trigger" in action_body:
@@ -78,6 +145,51 @@ def decompile_action(body: Any) -> list[str]:
         return _fire_event(action_body)
 
     return _raw_action(action_body)
+
+
+# A direct script call's own known keys (task spec: "the action is the direct
+# script.<id> form" -- only `data`/`metadata`/`alias`/`enabled` are
+# reproducible via the call; ANY other key -- `target`, `data_template`,
+# `response_variable`, `continue_on_error` -- falls back to service()).
+_SCRIPT_CALL_KNOWN_KEYS = frozenset({"action", "data", "metadata"}) | _STEP_OPTION_KEYS
+
+
+def _script_call(body: dict[str, Any], resolver: CallResolver) -> list[str] | None:
+    """Rewrite a direct ``{"action": "script.<id>", ...}`` call to
+    ``<fn_name>(<data as kwargs>, metadata={...})`` when every condition
+    holds; ``None`` falls back to :func:`_service_call` (``service()`` form,
+    never raw -- task spec: "unknown scripts stay service()").
+
+    Conditions (task spec): every ``data`` key is a declared field of the
+    target script; the action is the direct ``script.<id>`` form (not
+    ``script.turn_on``); no ``target``/``data_template``/``response_variable``/
+    ``continue_on_error`` extras beyond what the call reproduces.
+    """
+    action = body["action"]
+    if not isinstance(action, str) or not action.startswith("script."):
+        return None
+    object_id = action[len("script.") :]
+    if not object_id or object_id == "turn_on":
+        return None  # script.turn_on is the generic caller shape, never rewritten
+    if not set(body) <= _SCRIPT_CALL_KNOWN_KEYS:
+        return None
+    target = resolver.resolve(object_id)
+    if target is None:
+        return None
+    data = body.get("data")
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        return None
+    data_dict = cast("dict[str, Any]", data)
+    if target.known_fields is not None and not set(data_dict) <= target.known_fields:
+        return None
+
+    parts = [f"{k}={render_literal(v)}" for k, v in data_dict.items()]
+    if "metadata" in body:
+        parts.append(f"metadata={render_literal(body['metadata'])}")
+    parts.extend(_step_option_kwargs_src(body))
+    return [f"{target.function_name}({', '.join(parts)})"]
 
 
 def _is_plain_service_call(body: dict[str, Any]) -> bool:
@@ -176,7 +288,7 @@ def _service_call(body: dict[str, Any]) -> list[str]:
     return [f"service({', '.join(parts)})"]
 
 
-def _actions_block(items: Any) -> list[list[str]] | None:
+def _actions_block(items: Any, resolver: CallResolver | None) -> list[list[str]] | None:
     if not isinstance(items, list):
         return None
     item_list = cast("list[Any]", items)
@@ -184,7 +296,7 @@ def _actions_block(items: Any) -> list[list[str]] | None:
     for item in item_list:
         if not isinstance(item, dict):
             return None
-        result.append(decompile_action(item))
+        result.append(decompile_action(item, resolver=resolver))
     return result
 
 
@@ -195,7 +307,7 @@ def _flatten(blocks: list[list[str]]) -> list[str]:
     return out
 
 
-def _if_then(body: dict[str, Any]) -> list[str] | None:
+def _if_then(body: dict[str, Any], resolver: CallResolver | None) -> list[str] | None:
     known = {"if", "then", "else"} | _STEP_OPTION_KEYS
     if not set(body) <= known:
         return None
@@ -210,7 +322,7 @@ def _if_then(body: dict[str, Any]) -> list[str] | None:
     cond_src = decompile_condition(cond_dict)
     if cond_src is None:
         return None
-    then_lines = _actions_block(then)
+    then_lines = _actions_block(then, resolver)
     if then_lines is None:
         return None
     header_parts = [cond_src, *_step_option_kwargs_src(body)]
@@ -220,7 +332,7 @@ def _if_then(body: dict[str, Any]) -> list[str] | None:
     else:
         out.extend(_indent_lines(_flatten(then_lines)))
     if "else" in body:
-        else_lines = _actions_block(body["else"])
+        else_lines = _actions_block(body["else"], resolver)
         if else_lines is None:
             return None
         out.append("with else_then():")
@@ -231,7 +343,7 @@ def _if_then(body: dict[str, Any]) -> list[str] | None:
     return out
 
 
-def _choose(body: dict[str, Any]) -> list[str] | None:
+def _choose(body: dict[str, Any], resolver: CallResolver | None) -> list[str] | None:
     known = {"choose", "default"} | _STEP_OPTION_KEYS
     if not set(body) <= known:
         return None
@@ -265,7 +377,7 @@ def _choose(body: dict[str, Any]) -> list[str] | None:
             if cond_src is None:
                 return None
             cond_srcs.append(cond_src)
-        seq_lines = _actions_block(branch_dict["sequence"])
+        seq_lines = _actions_block(branch_dict["sequence"], resolver)
         if seq_lines is None:
             return None
         when_parts = [*cond_srcs, *_step_option_kwargs_src(branch_dict)]
@@ -280,7 +392,7 @@ def _choose(body: dict[str, Any]) -> list[str] | None:
         else:
             out.extend(_indent_lines(seq_lines, levels=2))
     if "default" in body:
-        default_lines = _actions_block(body["default"])
+        default_lines = _actions_block(body["default"], resolver)
         if default_lines is None:
             return None
         out.extend(_indent_lines(["with c.default():"]))
@@ -292,12 +404,12 @@ def _choose(body: dict[str, Any]) -> list[str] | None:
     return out
 
 
-def _repeat(body: dict[str, Any]) -> list[str] | None:
+def _repeat(body: dict[str, Any], resolver: CallResolver | None) -> list[str] | None:
     raw_repeat = body.get("repeat")
     if not isinstance(raw_repeat, dict) or "sequence" not in raw_repeat:
         return None
     repeat = cast("dict[str, Any]", raw_repeat)
-    seq_lines = _actions_block(repeat["sequence"])
+    seq_lines = _actions_block(repeat["sequence"], resolver)
     if seq_lines is None:
         return None
     flat_seq = _flatten(seq_lines)
@@ -341,7 +453,7 @@ def _repeat(body: dict[str, Any]) -> list[str] | None:
     return out
 
 
-def _parallel(body: dict[str, Any]) -> list[str] | None:
+def _parallel(body: dict[str, Any], resolver: CallResolver | None) -> list[str] | None:
     branches = body.get("parallel")
     if not isinstance(branches, list):
         return None
@@ -370,7 +482,7 @@ def _parallel(body: dict[str, Any]) -> list[str] | None:
         seq = cast("list[Any]", raw_seq)
         if not all(isinstance(step, dict) for step in seq):
             return None
-        seq_lines = _actions_block(seq)
+        seq_lines = _actions_block(seq, resolver)
         if seq_lines is None:
             return None
         flat_seq = _flatten(seq_lines)
