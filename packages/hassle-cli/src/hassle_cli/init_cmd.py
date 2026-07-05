@@ -29,7 +29,14 @@ def init_bundle(root: Path) -> list[str]:
     Returns a list of human-readable steps taken, for the CLI to print."""
     steps: list[str] = []
 
-    (root / "automations").mkdir(exist_ok=True)
+    # DESIGN §6's tree layout (docs/ha-api-notes.md §17.9 RESOLVED: the loader
+    # recurses, so these are real importable packages, not just organizational
+    # convenience). No `__init__.py` in any of them -- the bundle loader
+    # relies on PEP 420 namespace packages (the bundle root is put on
+    # `sys.path` at compile time), so none is needed for
+    # `from helpers.modes import guest_mode`-style cross-file imports to work.
+    for name in ("automations", "scripts", "helpers", "lib"):
+        (root / name).mkdir(exist_ok=True)
     (root / "tests").mkdir(exist_ok=True)
     (root / ".hassle").mkdir(exist_ok=True)
 

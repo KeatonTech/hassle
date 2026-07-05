@@ -2,10 +2,11 @@
 worked example verbatim -- imports a helper from `helpers/` and a macro from
 `lib/`, both one subdirectory below the bundle root."""
 
-from hassle import automation, delay, only_if, service, state, sun, when
-from hassle.registry import entities as e
 from helpers.modes import guest_mode
 from lib.notify import notify_adults
+
+from hassle import automation, delay, only_if, service, state, sun, when
+from hassle.registry import entities as e
 
 
 @automation(

@@ -220,6 +220,12 @@ class _sandboxed_import:
     Isolation (§7.2/§14): only the bundle dir is added to the import path, and every
     module imported from it is removed from ``sys.modules`` on exit so a second
     compile re-imports fresh (no cross-compile bleed, R8). No network is involved.
+
+    M7.1: the bundle is now a package tree (subdirectories are importable as
+    namespace packages, §17.9), so cleanup must also catch namespace-package
+    module objects, which carry no ``__file__`` (only a ``__path__``) --
+    ``getattr(mod, "__file__", None)`` alone would leave e.g. ``sys.modules
+    ["helpers"]`` behind across compiles.
     """
 
     def __init__(self, bundle_path: Path) -> None:
@@ -240,17 +246,83 @@ class _sandboxed_import:
             if name in self._preexisting:
                 continue
             mod = sys.modules.get(name)
-            file = getattr(mod, "__file__", None)
-            if file and Path(file).resolve().is_relative_to(self._bundle_path):
+            if _module_belongs_to_bundle(mod, self._bundle_path):
                 del sys.modules[name]
 
 
+def _module_belongs_to_bundle(mod: Any, bundle_path: Path) -> bool:
+    """True if ``mod`` (a regular module OR a PEP 420 namespace package) was
+    loaded from inside ``bundle_path``."""
+    file = getattr(mod, "__file__", None)
+    if file and Path(file).resolve().is_relative_to(bundle_path):
+        return True
+    # Namespace packages (e.g. ``helpers`` with no ``__init__.py``) have no
+    # __file__, only a __path__ iterable of the directories that make it up.
+    paths = getattr(mod, "__path__", None)
+    if paths:
+        with contextlib.suppress(TypeError, OSError, ValueError):
+            return any(Path(p).resolve().is_relative_to(bundle_path) for p in paths)
+    return False
+
+
+# Directories never treated as importable bundle packages, at any depth
+# (DESIGN §6: tests/ is the user's pytest tree, .hassle/ is machine state,
+# stubs/ is generated .pyi -- none of these are DSL sources). Dot-directories
+# (.git, .vscode, ...) and __pycache__ are skipped unconditionally.
+_RESERVED_DIR_NAMES = frozenset({"tests", ".hassle", "stubs"})
+
+
+def _is_skipped_dir(name: str) -> bool:
+    return name in _RESERVED_DIR_NAMES or name.startswith(".") or name == "__pycache__"
+
+
+def _iter_bundle_source_files(bundle_path: Path) -> list[Path]:
+    """Every ``*.py`` file in the bundle tree, at any depth, skipping reserved
+    directories (sorted, stable -- so import order never depends on OS
+    directory-listing order, R8)."""
+    out: list[Path] = []
+    stack = [bundle_path]
+    while stack:
+        current = stack.pop()
+        children = sorted(current.iterdir())
+        for child in children:
+            if child.is_dir():
+                if not _is_skipped_dir(child.name):
+                    stack.append(child)
+            elif child.suffix == ".py" and not child.name.startswith("_"):
+                out.append(child)
+    out.sort()
+    return out
+
+
+def _dotted_module_name(bundle_path: Path, py: Path) -> str:
+    """``automations/hallway.py`` (relative to the bundle root) -> ``"automations.hallway"``."""
+    rel = py.relative_to(bundle_path).with_suffix("")
+    return ".".join(rel.parts)
+
+
 def _import_bundle_modules(bundle_path: Path) -> None:
-    """Import every top-level ``*.py`` module in the bundle dir (sorted, stable)."""
-    for py in sorted(bundle_path.glob("*.py")):
-        if py.name.startswith("_"):
-            continue
-        module_name = py.stem
+    """Import every ``*.py`` module in the bundle tree (sorted, stable), at
+    any depth under a subdirectory (M7.1, DESIGN §6/§7.3, docs/ha-api-notes.md
+    §17.9 RESOLVED).
+
+    Each file is imported under its dotted package-relative module name
+    (``automations.hallway``, not just ``hallway``) so a cross-file
+    ``from helpers.modes import guest_mode`` elsewhere in the tree resolves to
+    the *same* module object real Python import machinery would use --
+    subdirectories need no ``__init__.py`` (PEP 420 namespace packages; the
+    bundle root is already on ``sys.path``, see ``_sandboxed_import``).
+
+    Every file is checked against ``sys.modules`` before executing: a prior
+    file's own ``from package.module import name`` may have already triggered
+    the normal import system to load it (registering the *same* dotted name),
+    and re-executing it under a fresh module object here would run the user's
+    module body twice (double side effects, duplicate registry entries).
+    """
+    for py in _iter_bundle_source_files(bundle_path):
+        module_name = _dotted_module_name(bundle_path, py)
+        if module_name in sys.modules:
+            continue  # already imported via a cross-file `from X import Y`
         spec = importlib.util.spec_from_file_location(module_name, py)
         if spec is None or spec.loader is None:  # pragma: no cover - defensive
             raise ImportError(f"cannot load bundle module {py}")

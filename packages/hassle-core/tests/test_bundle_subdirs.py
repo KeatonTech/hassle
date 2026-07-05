@@ -145,7 +145,7 @@ def test_source_spans_carry_relative_tree_paths() -> None:
     trig_spans = result.spans_for(obj, "triggers")
     assert len(trig_spans) == 1
     assert trig_spans[0].file.endswith("automations/hallway.py")
-    assert trig_spans[0].line == 17
+    assert trig_spans[0].line == 18
 
 
 def test_sandboxed_import_cleans_up_package_modules() -> None:

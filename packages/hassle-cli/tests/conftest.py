@@ -33,11 +33,12 @@ def bundle_dir(tmp_path: Path, registry_snapshot_json: dict[str, Any]) -> Path:
     """A minimal, valid bundle dir with `.hassle/registry.json` seeded.
 
     DSL sources live directly at the bundle root (`hallway.py`, not
-    `automations/hallway.py`): `hassle.compiler.bundle.compile_bundle` only
-    globs top-level `*.py` files in the directory it's pointed at, not
-    subdirectories -- see docs/ha-api-notes.md §17.9 (a DESIGN §6 vs reality
-    mismatch found while building this fixture). `automations/` still exists
-    as an (currently unused by compile) organizational convenience.
+    `automations/hallway.py`) -- a flat bundle is still fully supported
+    (docs/ha-api-notes.md §17.9 RESOLVED: the loader recurses into
+    subdirectories too, but never requires them). Kept flat here because many
+    tests in this suite reference `bundle_dir / "hallway.py"` directly; an
+    empty `automations/` dir sits alongside it, matching what a real
+    `hassle init` scaffolds.
     """
     root = tmp_path / "my-house"
     root.mkdir()
@@ -116,8 +117,9 @@ def output_normalizer():
 @pytest.fixture
 def fake_backend():
     """A `FakeBackend`, registered so the CLI picks it up in-process instead of
-    building a real `DirectBackend` (test-only seam; see `hassle_cli.backend_factory`:
-    `HASSLE_TEST_BACKEND_ID` is never set in production)."""
+    building a real `DirectBackend` (test-only seam; see `hassle_cli.backend_factory`
+    module docstring -- `ha_url = "fake://<token>"` is never written by production
+    code, only by this fixture / `write_hassle_toml`)."""
     from hassle.backend.fake import FakeBackend
     from hassle_cli.backend_factory import register_fake_backend, unregister_fake_backend
 
