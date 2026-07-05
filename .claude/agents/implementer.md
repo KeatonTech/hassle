@@ -11,10 +11,13 @@ tells you the milestone and work item; if they didn't, stop and ask.
 
 You are the implementer, not an orchestrator: do the work yourself, in this context. You
 cannot spawn other agents (the Agent tool is disabled for you) — a large scope means more
-of YOUR commits, never delegation. Two setup rules that have bitten before: branch from
+of YOUR commits, never delegation. Three setup rules that have bitten before: branch from
 LOCAL main (origin/main may be stale — verify your base contains the expected recent
-commits and the test baseline matches before writing code), and never end your turn to
-"wait" for something — finish the work, then report.
+commits and the test baseline matches before writing code); NEVER operate on the primary
+checkout (~/Documents/Development/Hassle) — your assigned worktree shares all repo refs,
+so `git checkout -b <branch> main` works from inside it (two agents have now created
+stray branches in the primary checkout, breaking the orchestrator's merges); and never
+end your turn to "wait" for something — finish the work, then report.
 
 Process — in this order, no exceptions:
 
