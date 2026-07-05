@@ -8,6 +8,24 @@ drains the registry of ``@automation``/``@script`` objects, runs each inside a
 The result carries the IR objects keyed by object key, plus a span map so every
 downstream error (validation, plan conflict, simulator failure) can point at the
 user's Python line (M1 test 6). Duplicate object keys are rejected (M1 test 5).
+
+The bundle is a package tree (M7.1, DESIGN §6/§7.3, docs/ha-api-notes.md §17.9
+RESOLVED): subdirectories are recursively imported as PEP 420 namespace
+packages, no ``__init__.py`` required anywhere.
+
+**Symlink policy (review finding F1): every symlink under the bundle
+directory is skipped, silently, whether it points at a directory or a
+``.py`` file.** Following one would let a file inside the bundle actually
+execute code living outside it -- a sandbox escape (§14) -- and would also
+break the loader's cleanup/re-import bookkeeping (the target's ``__file__``/
+``__path__`` resolves outside ``bundle_path``, so it would never be cleaned
+up between compiles, then get silently served stale on the next one). See
+``_iter_bundle_source_files`` (skips any symlinked child during the walk) and
+``_import_bundle_modules`` (belt-and-suspenders: re-resolves and re-checks
+each accepted path is still under the bundle root immediately before
+import, catching a symlinked *intermediate* directory a leaf-only check
+would miss). Nothing is emitted for a skipped symlink in v1 -- symlinks are
+simply outside this loader's contract.
 """
 
 from __future__ import annotations
@@ -279,13 +297,29 @@ def _is_skipped_dir(name: str) -> bool:
 def _iter_bundle_source_files(bundle_path: Path) -> list[Path]:
     """Every ``*.py`` file in the bundle tree, at any depth, skipping reserved
     directories (sorted, stable -- so import order never depends on OS
-    directory-listing order, R8)."""
+    directory-listing order, R8).
+
+    Symlink policy (review finding F1, docs/ha-api-notes.md §17.9): **every
+    symlink is skipped, silently, whether it points at a directory or a
+    ``.py`` file.** Following one would let a child inside the bundle
+    resolve to code living *outside* it -- a sandbox escape (§7.2/§14: "the
+    compiler executes only the user's own Python"). It also breaks cleanup
+    and re-import bookkeeping: a followed symlink's target module's
+    ``__file__``/``__path__`` resolves outside ``bundle_path``, so
+    ``_module_belongs_to_bundle`` would never clean it up, leaking it into
+    ``sys.modules`` forever -- and the next compile's double-import guard
+    would then silently serve that stale leaked module instead of
+    re-importing (or correctly excluding) it. Symlinks are simply outside
+    this loader's contract in v1; nothing is emitted for a skipped one.
+    """
     out: list[Path] = []
     stack = [bundle_path]
     while stack:
         current = stack.pop()
         children = sorted(current.iterdir())
         for child in children:
+            if child.is_symlink():
+                continue
             if child.is_dir():
                 if not _is_skipped_dir(child.name):
                     stack.append(child)
@@ -318,8 +352,19 @@ def _import_bundle_modules(bundle_path: Path) -> None:
     the normal import system to load it (registering the *same* dotted name),
     and re-executing it under a fresh module object here would run the user's
     module body twice (double side effects, duplicate registry entries).
+
+    Belt-and-suspenders (review finding F1): even though
+    ``_iter_bundle_source_files`` already skips any symlinked directory or
+    file, each accepted path is re-resolved and re-checked against
+    ``bundle_path.resolve()`` immediately before import -- defends against a
+    symlinked *intermediate* path component (e.g. a non-symlink leaf file
+    reached through a symlinked grandparent directory two levels up), which
+    ``child.is_symlink()`` on the leaf alone would not catch.
     """
+    resolved_bundle_path = bundle_path.resolve()
     for py in _iter_bundle_source_files(bundle_path):
+        if not py.resolve().is_relative_to(resolved_bundle_path):
+            continue  # defensive: escaped the bundle via some path component
         module_name = _dotted_module_name(bundle_path, py)
         if module_name in sys.modules:
             continue  # already imported via a cross-file `from X import Y`

@@ -893,3 +893,17 @@ objects (`hassle_cli.bundle_ops.default_source_path`) now land under
 `automations/misc.py` / `scripts/misc.py` / `helpers/misc.py` per DESIGN
 §7.3, instead of the flat one-file-per-object fallback this finding
 previously documented as the workaround.
+
+**Review finding (M7.1 review, fixed same branch): the recursive walk
+followed symlinks.** A symlinked directory or `.py` file inside the bundle,
+pointing outside it, was imported and executed — a sandbox escape (§14) —
+and because the target's `__file__`/`__path__` resolves outside
+`bundle_path`, the cleanup pass never removed it from `sys.modules`; the
+next compile's double-import guard then served that stale leaked module
+instead of re-importing anything, silently dropping the escaped object from
+the second compile onward. **Policy: every symlink under the bundle is
+skipped, silently, whether it targets a directory or a file** — see
+`_iter_bundle_source_files`'s and `_import_bundle_modules`'s docstrings in
+`hassle.compiler.bundle` for the mechanism (walk-time `is_symlink()` check
+plus a belt-and-suspenders resolve-under-`bundle_path` re-check immediately
+before import, to also catch a symlinked intermediate directory).
