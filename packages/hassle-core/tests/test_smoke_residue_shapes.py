@@ -374,3 +374,23 @@ def test_wait_for_trigger_container_not_raw_with_list_valued_state_trigger() -> 
     assert "raw_action" not in src
     assert src.startswith("wait_for(")
     assert "state(['binary_sensor.front_door']).to(['off'])" in src
+
+
+def test_empty_data_dict_round_trips_exactly() -> None:
+    # Owner bundle final straggler: the UI stores `"data": {}` on service calls
+    # it saves with no fields. Compile elided it (truthiness) and decompile
+    # exploded it to nothing -- the decompiler's round-trip self-check then
+    # correctly bailed the whole containing block to raw. Presence, not
+    # truthiness, on both sides (same rule as metadata).
+    from hassle.compiler.actions import ServiceAction
+    from hassle.decompiler.actions import decompile_action
+
+    compiled = ServiceAction(
+        "cover.close_cover", target={"entity_id": "cover.x"}, data={}, metadata={}
+    ).to_action()
+    assert compiled.get("data") == {}, compiled
+
+    src = decompile_action(
+        {"action": "cover.close_cover", "metadata": {}, "target": {"entity_id": "cover.x"}, "data": {}}
+    )
+    assert any("data={}" in line for line in src), src
