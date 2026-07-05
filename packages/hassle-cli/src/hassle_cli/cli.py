@@ -136,7 +136,14 @@ def login(url: str, token: str) -> None:
         raise SystemExit(1) from exc
 
     store_token(url, token)
-    console.print(f"[green]hassle login: token verified and stored for {url}[/green]")
+    from hassle_cli.config import find_bundle_root, persist_ha_url
+
+    root = find_bundle_root(Path.cwd()) or Path.cwd()
+    persist_ha_url(root, url)
+    console.print(
+        f"[green]hassle login: token verified and stored for {url}[/green]\n"
+        f"[dim]ha_url written to {root / 'hassle.toml'} (token stays in the keyring)[/dim]"
+    )
 
 
 # ---------------------------------------------------------------------------

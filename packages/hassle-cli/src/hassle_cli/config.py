@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass
+import re
 from pathlib import Path
 
 CONFIG_FILENAME = "hassle.toml"
@@ -56,6 +57,33 @@ def load_config(bundle_root: Path) -> BundleConfig:
         mirror=bool(data.get("mirror", False)),
         token=data.get("token"),
     )
+
+
+def persist_ha_url(bundle_root: Path, ha_url: str) -> None:
+    """Write/replace `ha_url` in the bundle's hassle.toml, creating the file if
+    missing. Line-surgical on purpose: every other line (comments, user
+    settings) is preserved byte-for-byte. The token is NEVER written here --
+    it lives in the keyring (DESIGN §14)."""
+    toml_path = bundle_root / "hassle.toml"
+    new_line = f'ha_url = "{ha_url}"'
+    if not toml_path.is_file():
+        toml_path.write_text(new_line + "\n", encoding="utf-8")
+        return
+    lines = toml_path.read_text(encoding="utf-8").splitlines()
+    live = re.compile(r"^\s*ha_url\s*=")
+    placeholder = re.compile(r"^\s*#\s*ha_url\s*=")
+    for i, line in enumerate(lines):
+        if live.match(line):
+            lines[i] = new_line
+            break
+    else:
+        for i, line in enumerate(lines):
+            if placeholder.match(line):
+                lines[i] = new_line
+                break
+        else:
+            lines.append(new_line)
+    toml_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def write_default_config(bundle_root: Path, *, ha_url: str | None = None) -> None:
