@@ -42,13 +42,22 @@ def test_deep_nesting_top_level_span_points_at_with_choose_line() -> None:
 
 def test_nested_container_spans_never_leak_compiler_internals() -> None:
     # Every construct's own span must land in the user's bundle file, never in
-    # contextlib or hassle -- the exact bug the depth=2 empirical check
-    # guards against.
+    # contextlib or the hassle package itself -- the exact bug the depth=2
+    # empirical check guards against. Compare against the real package/stdlib
+    # directories, NOT substrings: the repo may live at a path that itself
+    # contains "hassle" (e.g. /home/runner/work/hassle/hassle in CI).
+    import contextlib as _contextlib
+
+    import hassle as _hassle
+
+    hassle_pkg = Path(_hassle.__file__).resolve().parent
+    contextlib_file = Path(_contextlib.__file__).resolve()
     cases = ("if_then_else", "choose_action", "repeat_count", "parallel_action", "deep_nesting")
     for case in cases:
         result = compile_bundle(DSL_DIR / case / "bundle")
         for obj in result.objects.values():
             for span in result.spans_for(obj, "actions"):
-                assert "contextlib" not in span.file
-                assert "hassle" not in span.file
+                span_path = Path(span.file).resolve()
+                assert span_path != contextlib_file
+                assert hassle_pkg not in span_path.parents
                 assert span.file.endswith(".py")
