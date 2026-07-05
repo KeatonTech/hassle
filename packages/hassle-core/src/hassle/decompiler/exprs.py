@@ -496,9 +496,14 @@ def _cond_state(body: dict[str, Any]) -> str | None:
     if not set(body) <= known or "entity_id" not in body:
         return None
     entity_id = body["entity_id"]
-    if not isinstance(entity_id, str):
+    # `entity_id` (and `state`) accept a list too (residue-coverage round 2,
+    # docs/ha-api-notes.md §20): the HA UI stores a state CONDITION's fields as
+    # lists even for a single entity/value, mirroring round 1's trigger fix
+    # (`_is_entity_id_shape`) -- a singleton list must stay a list, never
+    # normalized to a scalar (I3).
+    if not _is_entity_id_shape(entity_id):
         return None
-    call = f"state({entity_id!r})"
+    call = f"state({render_literal(entity_id)})"
     if "state" in body:
         call += f".is_({render_literal(body['state'])})"
     return call

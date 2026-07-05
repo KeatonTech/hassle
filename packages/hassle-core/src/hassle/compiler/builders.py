@@ -151,12 +151,23 @@ class ServiceAction:
     live at the top level, not inside ``data``); passing them keeps this the one
     service-call builder (no separate ``service_ext``).
 
-    ``metadata=`` (real-world smoke-test addition, docs/ha-api-notes.md): the HA
-    UI stamps ``"metadata": {}`` on every action it saves. It is emitted whenever
-    passed, **including when empty** — a real UI-authored config always carries
-    it, so eliding an empty ``metadata`` would hash-drift every such action on
-    every decompile+recompile cycle (I3). ``None`` (the default) omits the field
-    entirely, for DSL-authored actions that never had one.
+    ``metadata=`` (real-world smoke-test addition, docs/ha-api-notes.md §19): the
+    HA UI stamps ``"metadata": {}`` on every action it saves. It is emitted
+    whenever passed, **including when empty** — a real UI-authored config always
+    carries it, so eliding an empty ``metadata`` would hash-drift every such
+    action on every decompile+recompile cycle (I3). ``None`` (the default) omits
+    the field entirely, for DSL-authored actions that never had one.
+
+    ``data_template=`` (residue-coverage round 2, docs/ha-api-notes.md §20): the
+    legacy templated-data key. HA still stores it verbatim on a real UI-authored
+    action; it is a *sibling* of ``data``, never folded into it — a real config
+    may carry ``data_template`` alone, ``data`` alone, or (rarely) both, and each
+    round-trips exactly as stored (I3).
+
+    ``alias=``/``enabled=`` (residue-coverage round 2): the UI names and toggles
+    individual steps. Both are additive, top-level action fields, same treatment
+    as ``metadata=``/``data_template=`` — omitted by default, emitted verbatim
+    when passed (including ``enabled=False``).
     """
 
     def __init__(
@@ -165,16 +176,22 @@ class ServiceAction:
         *,
         target: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
+        data_template: dict[str, Any] | None = None,
         response_variable: str | None = None,
         continue_on_error: bool | None = None,
         metadata: dict[str, Any] | None = None,
+        alias: str | None = None,
+        enabled: bool | None = None,
         **fields: Any,
     ) -> None:
         self._action = action
         self._target = target
+        self._data_template = data_template
         self._response_variable = response_variable
         self._continue_on_error = continue_on_error
         self._metadata = metadata
+        self._alias = alias
+        self._enabled = enabled
         merged: dict[str, Any] = {}
         if data:
             merged.update(data)
@@ -182,17 +199,24 @@ class ServiceAction:
         self._data = merged
 
     def to_action(self) -> dict[str, Any]:
-        body: dict[str, Any] = {"action": self._action}
+        body: dict[str, Any] = {}
+        if self._alias is not None:
+            body["alias"] = self._alias
+        body["action"] = self._action
         if self._metadata is not None:
             body["metadata"] = self._metadata
         if self._target is not None:
             body["target"] = self._target
         if self._data:
             body["data"] = self._data
+        if self._data_template is not None:
+            body["data_template"] = self._data_template
         if self._response_variable is not None:
             body["response_variable"] = self._response_variable
         if self._continue_on_error is not None:
             body["continue_on_error"] = self._continue_on_error
+        if self._enabled is not None:
+            body["enabled"] = self._enabled
         return body
 
 
@@ -201,11 +225,18 @@ class DelayAction:
 
     The dict form (rather than an ``HH:MM:SS`` string) is deterministic and is what
     HA accepts natively; it round-trips without ambiguity.
+
+    ``alias=``/``enabled=`` (residue-coverage round 2, docs/ha-api-notes.md §20):
+    the UI names and toggles individual steps, including a bare ``delay``. Same
+    additive treatment as :class:`ServiceAction`'s — keyword-only so they never
+    collide with a duration unit passed via ``**duration``.
     """
 
     _UNITS = ("hours", "minutes", "seconds", "milliseconds")
 
-    def __init__(self, **duration: Any) -> None:
+    def __init__(
+        self, *, alias: str | None = None, enabled: bool | None = None, **duration: Any
+    ) -> None:
         unknown = [k for k in duration if k not in self._UNITS]
         if unknown:
             raise TypeError(
@@ -213,6 +244,14 @@ class DelayAction:
             )
         # Preserve a stable key order (largest unit first) for byte-determinism.
         self._duration = {u: duration[u] for u in self._UNITS if u in duration}
+        self._alias = alias
+        self._enabled = enabled
 
     def to_action(self) -> dict[str, Any]:
-        return {"delay": dict(self._duration)}
+        body: dict[str, Any] = {}
+        if self._alias is not None:
+            body["alias"] = self._alias
+        body["delay"] = dict(self._duration)
+        if self._enabled is not None:
+            body["enabled"] = self._enabled
+        return body

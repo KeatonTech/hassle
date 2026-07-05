@@ -1000,3 +1000,99 @@ flows through unchanged) but is recorded because it wasn't called out. **Fix:**
 condition-only before); the decompiler's `_trig_time` accepts and emits
 `weekday` alongside `at`. `time(at="input_datetime.wakeup")` already worked and
 needed no code change, only this note.
+
+## 20. Residue coverage, round 2 (task #8): four more UI-authored shapes DESIGN §5.4/§5.5 missed
+
+> Source: a second live smoke test against the owner's real 2026.7 Home
+> Assistant bundle (101 objects) surfaced 12 more granular `raw_action`
+> decompiler fallbacks, tracing to four root causes below — extending the
+> round-1 pattern (§19) directly. All four are ordinary shapes the HA UI
+> writes on every save; none are exotic. Fixtures:
+> `fixtures/configs/automation_action_data_template_ui_authored.json`,
+> `fixtures/configs/automation_condition_state_list_valued_fields.json`,
+> `fixtures/configs/automation_action_step_alias_and_enabled.json`,
+> `fixtures/configs/automation_container_recursion_ui_shapes.json`.
+
+### 20.1 A service action's legacy `data_template` key is a sibling of `data`, never folded into it
+Not mentioned in DESIGN. A real 2026.7 UI-authored `climate.set_temperature`
+action carried `data_template: {"temperature": "{{ ... }}"}` alongside
+`target`, with no `data` key at all. HA still accepts and stores this legacy
+key verbatim (it predates the `data`/`data_template` unification in newer HA
+versions, but the *storage* layer never migrates an already-saved config's key
+spelling on its own — only re-saving through the UI would). Folding it into
+`data` would drop the distinction and hash-drift on every recompile (I3), so
+it must round-trip as its own field. **Fix:** `service()`/`ServiceAction`
+gained an optional `data_template=` kwarg (F3-additive, docs/dsl-f3.md's
+"widening a signature with a new optional keyword is an addition, not a
+change") — the least-surface option, mirroring `metadata=`'s existing
+treatment rather than inventing a new builder. The decompiler emits
+`data_template={...}` whenever the key is present, as a sibling `service()`
+kwarg alongside (never merged with) any `data=`/bare-kwarg data fields, and
+omits it entirely when absent.
+
+### 20.2 List-valued `state` **condition** fields — the condition-side mirror of round 1's trigger fix
+Round 1 (§19.2) fixed `state`/`numeric_state` **trigger** `entity_id`/`to`/
+`from` being stored as singleton lists. The same real bundle showed the
+identical shape on the **condition** side: `{"condition": "state",
+"entity_id": ["input_boolean.x"], "state": ["on"]}`, including nested inside
+`if`/`then` action blocks and `choose` branch conditions. The **compiler**
+side needed no change — `StateExpr.to_condition()` already emitted whatever
+`entity_id`/`state` it was constructed with (`str | list[str]` since round 1),
+so `state(["input_boolean.x"]).is_(["on"]).to_condition()` already produced
+the list-valued shape. The gap was purely in the **decompiler**:
+`hassle.decompiler.exprs._cond_state` required `entity_id` to be a bare `str`
+and fell back to `raw_condition` for a list, tanking coverage on every such
+condition and, transitively, forcing any container (`if`/`choose`) with one
+nested inside to fall back to whole-block `raw_action` too (§20.4). **Fix:**
+`_cond_state` now uses the same `_is_entity_id_shape` check round 1 added for
+triggers, rendering via `render_literal` so a singleton list decompiles back
+to a list, never a scalar (I3). No DSL surface change — `state()` is the same
+dual-purpose builder already documented as list-capable.
+
+### 20.3 Per-step `alias`/`enabled` — the UI names and toggles individual steps
+Not mentioned in DESIGN. A real 2026.7 UI-authored automation named steps
+(`{"alias": "Turn on bedroom", "action": "light.turn_on", ...}`) and toggled
+them off (`{"delay": {...}, "enabled": false}`) — both are ordinary UI
+affordances (the automation editor's step-options menu) exercised on nearly
+every hand-edited step, on both leaf actions (service calls, delays) and
+whole containers (`if`/`choose`/`repeat`/`parallel`/`wait_for_trigger`/
+`wait_template` all accept the same two fields on the assembled container
+body, not just on a child step). Eliding either would drop UI-authored
+metadata and hash-drift on recompile (I3). **Fix (F3-additive on every
+listed builder):** `service()`/`ServiceAction`, `delay()`/`DelayAction`, and
+every control-flow context manager in `hassle.compiler.control_flow`
+(`if_then`, `choose`, `repeat_count`/`repeat_while`/`repeat_until`/
+`repeat_for_each`, `parallel`, `wait_for`, `wait_template`) gained optional
+`alias=`/`enabled=` keyword-only kwargs, each emitting the corresponding
+top-level `alias`/`enabled` key on the assembled body when passed (omitted
+entirely by default, so no pre-existing caller's compiled output changes).
+`with if_then(cond, alias="Guard block"):` compiles `alias` onto the
+assembled `{"if": [...], "then": [...], "alias": ...}` body — the *block's*
+name, not a child step's — matching how the HA UI actually applies a
+container's own alias. The decompiler emits `alias=`/`enabled=` on any action
+or container shape that carries them, everywhere `_step_option_kwargs_src`
+is threaded through (every handler in `hassle.decompiler.actions`).
+
+### 20.4 Container recursion tolerance — a container must not raw itself merely because a child carries any of the above
+This is a consequence of §20.1–§20.3 rather than an independent HA-behavior
+finding, but it was the largest single coverage loss in the smoke sample: an
+`if`/`else`, `choose`, or `parallel` action whose **inner** steps carried
+`metadata`/`data_template`, a list-valued `state` condition, or `alias`/
+`enabled` fell back to a whole-block `raw_action` even before this round's
+fixes, in the pattern established by round 1 — `decompile_action`'s handlers
+for `if`/`choose`/`repeat`/`parallel`/`wait_for_trigger` already recurse into
+their children via `decompile_action`/`decompile_condition` (so nothing new
+was needed for the recursion *itself*), but each of those handlers'
+`set(body) <= known` guard has to also tolerate `alias`/`enabled` appearing on
+the **container's own** body (a container can carry the option too, §20.3),
+or the container itself falls back to raw before ever reaching its children.
+**Fix:** every container handler's `known` set in
+`hassle.decompiler.actions` (`_if_then`, `_choose`, `_repeat`, `_parallel`,
+`_wait_for`, `_wait_template`) now includes `alias`/`enabled` alongside its
+existing keys (`_STEP_OPTION_KEYS`), and §20.1/§20.2's fixes mean a child
+carrying `data_template`/list-valued conditions no longer forces a fallback
+either — so a container is never raw'd merely because a descendant (at any
+nesting depth) carries one of these ordinary UI shapes.
+
+*Verified 2026-07-05 against the owner's real 2026.7 Home Assistant bundle
+(101 objects, 12 raw_action fallbacks traced to these four causes).*

@@ -67,17 +67,27 @@ def _condition_body(condition: ConditionBuilder) -> dict[str, Any]:
 
 
 @contextlib.contextmanager
-def if_then(condition: ConditionBuilder) -> Generator[None]:
-    """``with if_then(cond): ...`` -> HA ``{"if": [...], "then": [...]}``."""
+def if_then(
+    condition: ConditionBuilder, *, alias: str | None = None, enabled: bool | None = None
+) -> Generator[None]:
+    """``with if_then(cond): ...`` -> HA ``{"if": [...], "then": [...]}``.
+
+    ``alias=``/``enabled=`` (residue-coverage round 2, docs/ha-api-notes.md
+    §20): the UI names/toggles the whole ``if`` block, not just leaf actions.
+    Both land on the assembled container body, same key names HA stores.
+    """
     rec = _require_active("if_then")
     span = capture_span(depth=_CM_DEPTH)
     then_nodes: list[RecordedNode] = []
     with rec.push_actions(then_nodes):
         yield
-    body: dict[str, Any] = {
-        "if": [_condition_body(condition)],
-        "then": [n.body for n in then_nodes],
-    }
+    body: dict[str, Any] = {}
+    if alias is not None:
+        body["alias"] = alias
+    body["if"] = [_condition_body(condition)]
+    body["then"] = [n.body for n in then_nodes]
+    if enabled is not None:
+        body["enabled"] = enabled
     rec.current_actions.append(RecordedNode(body, span))
 
 
@@ -184,33 +194,47 @@ class _ChooseBuilder:
             yield
         self._default = [n.body for n in nodes]
 
-    def build_action_body(self) -> dict[str, Any]:
+    def build_action_body(
+        self, *, alias: str | None = None, enabled: bool | None = None
+    ) -> dict[str, Any]:
         """Assemble the ``{"choose": [...], "default": [...]}`` action body.
 
         Not part of the DSL surface a bundle author calls directly (the
         ``choose()`` context manager calls it at ``with`` exit) but not
         underscore-private either, since it is used from the same module just
         outside the class body.
+
+        ``alias=``/``enabled=`` (residue-coverage round 2): forwarded by
+        ``choose()``'s own kwargs of the same name.
         """
-        body: dict[str, Any] = {"choose": self._branches}
+        body: dict[str, Any] = {}
+        if alias is not None:
+            body["alias"] = alias
+        body["choose"] = self._branches
         if self._default is not None:
             body["default"] = self._default
+        if enabled is not None:
+            body["enabled"] = enabled
         return body
 
 
 @contextlib.contextmanager
-def choose() -> Generator[_ChooseBuilder]:
+def choose(*, alias: str | None = None, enabled: bool | None = None) -> Generator[_ChooseBuilder]:
     """``with choose() as c:`` -> HA ``{"choose": [...], "default": [...]}``.
 
     Matches fixtures/configs/automation_choose_action.json's stored shape
     exactly: a list of ``{conditions, sequence}`` branches plus an optional
     trailing ``default`` sequence.
+
+    ``alias=``/``enabled=`` (residue-coverage round 2, docs/ha-api-notes.md
+    §20): names/toggles the whole ``choose`` block.
     """
     rec = _require_active("choose")
     span = capture_span(depth=_CM_DEPTH)
     builder = _ChooseBuilder()
     yield builder
-    rec.current_actions.append(RecordedNode(builder.build_action_body(), span))
+    body = builder.build_action_body(alias=alias, enabled=enabled)
+    rec.current_actions.append(RecordedNode(body, span))
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +242,9 @@ def choose() -> Generator[_ChooseBuilder]:
 # ---------------------------------------------------------------------------
 
 
-def _repeat_cm(key: str, value: Any) -> Any:
+def _repeat_cm(
+    key: str, value: Any, *, alias: str | None = None, enabled: bool | None = None
+) -> Any:
     @contextlib.contextmanager
     def _cm() -> Generator[None]:
         rec = _require_active(f"repeat_{key}")
@@ -226,30 +252,45 @@ def _repeat_cm(key: str, value: Any) -> Any:
         nodes: list[RecordedNode] = []
         with rec.push_actions(nodes):
             yield
-        body: dict[str, Any] = {"repeat": {key: value, "sequence": [n.body for n in nodes]}}
+        body: dict[str, Any] = {}
+        if alias is not None:
+            body["alias"] = alias
+        body["repeat"] = {key: value, "sequence": [n.body for n in nodes]}
+        if enabled is not None:
+            body["enabled"] = enabled
         rec.current_actions.append(RecordedNode(body, span))
 
     return _cm()
 
 
-def repeat_count(n: int) -> Any:
-    """``with repeat_count(3): ...`` -> ``{"repeat": {"count": 3, "sequence": [...]}}``."""
-    return _repeat_cm("count", n)
+def repeat_count(n: int, *, alias: str | None = None, enabled: bool | None = None) -> Any:
+    """``with repeat_count(3): ...`` -> ``{"repeat": {"count": 3, "sequence": [...]}}``.
+
+    ``alias=``/``enabled=`` (residue-coverage round 2): names/toggles the
+    whole ``repeat`` block.
+    """
+    return _repeat_cm("count", n, alias=alias, enabled=enabled)
 
 
-def repeat_while(condition: ConditionBuilder) -> Any:
+def repeat_while(
+    condition: ConditionBuilder, *, alias: str | None = None, enabled: bool | None = None
+) -> Any:
     """``with repeat_while(cond): ...`` -> HA ``repeat.while`` (list of one condition)."""
-    return _repeat_cm("while", [_condition_body(condition)])
+    return _repeat_cm("while", [_condition_body(condition)], alias=alias, enabled=enabled)
 
 
-def repeat_until(condition: ConditionBuilder) -> Any:
+def repeat_until(
+    condition: ConditionBuilder, *, alias: str | None = None, enabled: bool | None = None
+) -> Any:
     """``with repeat_until(cond): ...`` -> HA ``repeat.until`` (list of one condition)."""
-    return _repeat_cm("until", [_condition_body(condition)])
+    return _repeat_cm("until", [_condition_body(condition)], alias=alias, enabled=enabled)
 
 
-def repeat_for_each(items: Iterable[Any]) -> Any:
+def repeat_for_each(
+    items: Iterable[Any], *, alias: str | None = None, enabled: bool | None = None
+) -> Any:
     """``with repeat_for_each([...]): ...`` -> HA ``repeat.for_each``."""
-    return _repeat_cm("for_each", list(items))
+    return _repeat_cm("for_each", list(items), alias=alias, enabled=enabled)
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +299,7 @@ def repeat_for_each(items: Iterable[Any]) -> Any:
 
 
 @contextlib.contextmanager
-def parallel() -> Generator[None]:
+def parallel(*, alias: str | None = None, enabled: bool | None = None) -> Generator[None]:
     """``with parallel(): ...`` -> HA ``{"parallel": [{"sequence": [...]}, ...]}``.
 
     Each *top-level* action recorded directly in the body becomes its own
@@ -266,6 +307,9 @@ def parallel() -> Generator[None]:
     concurrently) — matching
     fixtures/configs/automation_parallel_action.json, where each parallel
     branch is a one-action ``sequence``.
+
+    ``alias=``/``enabled=`` (residue-coverage round 2, docs/ha-api-notes.md
+    §20): names/toggles the whole ``parallel`` block.
     """
     rec = _require_active("parallel")
     span = capture_span(depth=_CM_DEPTH)
@@ -273,7 +317,13 @@ def parallel() -> Generator[None]:
     with rec.push_actions(nodes):
         yield
     branches = [{"sequence": [n.body]} for n in nodes]
-    rec.current_actions.append(RecordedNode({"parallel": branches}, span))
+    body: dict[str, Any] = {}
+    if alias is not None:
+        body["alias"] = alias
+    body["parallel"] = branches
+    if enabled is not None:
+        body["enabled"] = enabled
+    rec.current_actions.append(RecordedNode(body, span))
 
 
 # ---------------------------------------------------------------------------
@@ -285,23 +335,48 @@ def wait_for(
     *triggers: TriggerBuilder,
     timeout: Any = None,
     continue_on_timeout: bool | None = None,
+    alias: str | None = None,
+    enabled: bool | None = None,
 ) -> None:
-    """Record a ``wait_for_trigger`` action (DESIGN §5.5)."""
-    body: dict[str, Any] = {"wait_for_trigger": [t.to_trigger() for t in triggers]}
+    """Record a ``wait_for_trigger`` action (DESIGN §5.5).
+
+    ``alias=``/``enabled=`` (residue-coverage round 2, docs/ha-api-notes.md
+    §20): names/toggles the whole ``wait_for_trigger`` step.
+    """
+    body: dict[str, Any] = {}
+    if alias is not None:
+        body["alias"] = alias
+    body["wait_for_trigger"] = [t.to_trigger() for t in triggers]
     if timeout is not None:
         body["timeout"] = timeout
     if continue_on_timeout is not None:
         body["continue_on_timeout"] = continue_on_timeout
+    if enabled is not None:
+        body["enabled"] = enabled
     record_action(_RawAction(body), span=capture_span(depth=0))
 
 
 def wait_template(
-    template: str, *, timeout: Any = None, continue_on_timeout: bool | None = None
+    template: str,
+    *,
+    timeout: Any = None,
+    continue_on_timeout: bool | None = None,
+    alias: str | None = None,
+    enabled: bool | None = None,
 ) -> None:
-    """Record a ``wait_template`` action (DESIGN §5.5)."""
-    body: dict[str, Any] = {"wait_template": template}
+    """Record a ``wait_template`` action (DESIGN §5.5).
+
+    ``alias=``/``enabled=`` (residue-coverage round 2): names/toggles the
+    whole ``wait_template`` step.
+    """
+    body: dict[str, Any] = {}
+    if alias is not None:
+        body["alias"] = alias
+    body["wait_template"] = template
     if timeout is not None:
         body["timeout"] = timeout
     if continue_on_timeout is not None:
         body["continue_on_timeout"] = continue_on_timeout
+    if enabled is not None:
+        body["enabled"] = enabled
     record_action(_RawAction(body), span=capture_span(depth=0))

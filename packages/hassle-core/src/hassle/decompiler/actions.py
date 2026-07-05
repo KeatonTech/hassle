@@ -29,6 +29,13 @@ def _raw_action(body: Any) -> list[str]:
     return [f"raw_action({render_literal(body)})"]
 
 
+# Per-step `alias`/`enabled` (residue-coverage round 2, docs/ha-api-notes.md
+# §20): the UI names and toggles individual steps. Every action shape below
+# accepts both, layered onto its own `known` set, so a step carrying them is
+# never forced to `raw_action` merely for that reason.
+_STEP_OPTION_KEYS = frozenset({"alias", "enabled"})
+
+
 def decompile_action(body: Any) -> list[str]:
     """Decompile one action dict to source lines, or the ``raw_action`` fallback."""
     if not isinstance(body, dict):
@@ -37,8 +44,8 @@ def decompile_action(body: Any) -> list[str]:
 
     if "action" in action_body and _is_plain_service_call(action_body):
         return _service_call(action_body)
-    if "delay" in action_body and set(action_body) == {"delay"}:
-        delay_src = _delay_source(action_body["delay"])
+    if "delay" in action_body and set(action_body) <= {"delay"} | _STEP_OPTION_KEYS:
+        delay_src = _delay_source(action_body)
         if delay_src is not None:
             return [delay_src]
     if "if" in action_body:
@@ -49,11 +56,11 @@ def decompile_action(body: Any) -> list[str]:
         result = _choose(action_body)
         if result is not None:
             return result
-    if "repeat" in action_body and set(action_body) == {"repeat"}:
+    if "repeat" in action_body and set(action_body) <= {"repeat"} | _STEP_OPTION_KEYS:
         result = _repeat(action_body)
         if result is not None:
             return result
-    if "parallel" in action_body and set(action_body) == {"parallel"}:
+    if "parallel" in action_body and set(action_body) <= {"parallel"} | _STEP_OPTION_KEYS:
         result = _parallel(action_body)
         if result is not None:
             return result
@@ -74,15 +81,34 @@ def decompile_action(body: Any) -> list[str]:
 
 
 def _is_plain_service_call(body: dict[str, Any]) -> bool:
-    known = {"action", "target", "data", "response_variable", "continue_on_error", "metadata"}
+    known = {
+        "action",
+        "target",
+        "data",
+        "data_template",
+        "response_variable",
+        "continue_on_error",
+        "metadata",
+    } | _STEP_OPTION_KEYS
     return set(body) <= known and isinstance(body.get("action"), str)
+
+
+def _step_option_kwargs_src(body: dict[str, Any]) -> list[str]:
+    """Render `alias=`/`enabled=` present in ``body`` (residue-coverage round 2,
+    docs/ha-api-notes.md §20) as ``key=value`` source fragments."""
+    parts: list[str] = []
+    if "alias" in body:
+        parts.append(f"alias={render_literal(body['alias'])}")
+    if "enabled" in body:
+        parts.append(f"enabled={render_literal(body['enabled'])}")
+    return parts
 
 
 _DURATION_UNIT_KEYS = frozenset({"hours", "minutes", "seconds", "milliseconds"})
 
 
-def _delay_source(value: Any) -> str | None:
-    """Build a ``delay(...)`` call for any of HA's three duration forms.
+def _delay_duration_kwargs(value: Any) -> list[str] | None:
+    """Render any of HA's three delay duration forms as ``delay()`` kwargs.
 
     HA accepts a delay as a dict of units, an ``"HH:MM:SS"`` string, or a bare
     number of seconds -- all functionally equivalent. The typed ``delay()``
@@ -95,12 +121,12 @@ def _delay_source(value: Any) -> str | None:
     if isinstance(value, dict):
         duration = cast("dict[str, Any]", value)
         if set(duration) <= _DURATION_UNIT_KEYS:
-            parts = [f"{k}={v!r}" for k, v in duration.items()]
-            return f"delay({', '.join(parts)})"
+            return [f"{k}={v!r}" for k, v in duration.items()]
+        return None
     if isinstance(value, bool):
         return None
     if isinstance(value, int | float):
-        return f"delay(seconds={value!r})"
+        return [f"seconds={value!r}"]
     if isinstance(value, str):
         pieces = value.split(":")
         if len(pieces) == 3 and all(p.isdigit() for p in pieces):
@@ -108,9 +134,17 @@ def _delay_source(value: Any) -> str | None:
             units: list[tuple[str, int]] = [
                 (k, v) for k, v in (("hours", h), ("minutes", m), ("seconds", s)) if v
             ]
-            kwargs = [f"{k}={v!r}" for k, v in units]
-            return f"delay({', '.join(kwargs) or 'seconds=0'})"
+            return [f"{k}={v!r}" for k, v in units] or ["seconds=0"]
     return None
+
+
+def _delay_source(body: dict[str, Any]) -> str | None:
+    """Build a ``delay(...)`` call, including any ``alias``/``enabled`` step options."""
+    duration_kwargs = _delay_duration_kwargs(body["delay"])
+    if duration_kwargs is None:
+        return None
+    parts = duration_kwargs + _step_option_kwargs_src(body)
+    return f"delay({', '.join(parts)})"
 
 
 def _service_call(body: dict[str, Any]) -> list[str]:
@@ -125,6 +159,10 @@ def _service_call(body: dict[str, Any]) -> list[str]:
             parts.append(f"{k}={render_literal(v)}")
     elif data is not None:
         parts.append(f"data={render_literal(data)}")
+    if "data_template" in body:
+        # Legacy templated-data key (residue-coverage round 2): a sibling of
+        # `data`, never folded into it -- round-trips exactly as HA stores it.
+        parts.append(f"data_template={render_literal(body['data_template'])}")
     if "response_variable" in body:
         parts.append(f"response_variable={render_literal(body['response_variable'])}")
     if "continue_on_error" in body:
@@ -134,6 +172,7 @@ def _service_call(body: dict[str, Any]) -> list[str]:
         # every action the HA UI saves carries this key, so eliding an empty
         # metadata would hash-drift every UI-authored action on recompile (I3).
         parts.append(f"metadata={render_literal(body['metadata'])}")
+    parts.extend(_step_option_kwargs_src(body))
     return [f"service({', '.join(parts)})"]
 
 
@@ -157,7 +196,7 @@ def _flatten(blocks: list[list[str]]) -> list[str]:
 
 
 def _if_then(body: dict[str, Any]) -> list[str] | None:
-    known = {"if", "then", "else"}
+    known = {"if", "then", "else"} | _STEP_OPTION_KEYS
     if not set(body) <= known:
         return None
     raw_conds = body.get("if")
@@ -174,7 +213,8 @@ def _if_then(body: dict[str, Any]) -> list[str] | None:
     then_lines = _actions_block(then)
     if then_lines is None:
         return None
-    out = [f"with if_then({cond_src}):"]
+    header_parts = [cond_src, *_step_option_kwargs_src(body)]
+    out = [f"with if_then({', '.join(header_parts)}):"]
     if not then_lines:
         out.extend(_indent_lines(["pass"]))
     else:
@@ -192,7 +232,7 @@ def _if_then(body: dict[str, Any]) -> list[str] | None:
 
 
 def _choose(body: dict[str, Any]) -> list[str] | None:
-    known = {"choose", "default"}
+    known = {"choose", "default"} | _STEP_OPTION_KEYS
     if not set(body) <= known:
         return None
     branches = body.get("choose")
@@ -221,7 +261,8 @@ def _choose(body: dict[str, Any]) -> list[str] | None:
             return None
         branch_srcs.append((cond_src, _flatten(seq_lines)))
 
-    out = ["with choose() as c:"]
+    choose_header_parts = _step_option_kwargs_src(body)
+    out = [f"with choose({', '.join(choose_header_parts)}) as c:"]
     for cond_src, seq_lines in branch_srcs:
         out.extend(_indent_lines([f"with c.when_({cond_src}):"]))
         if not seq_lines:
@@ -242,7 +283,7 @@ def _choose(body: dict[str, Any]) -> list[str] | None:
 
 
 def _repeat(body: dict[str, Any]) -> list[str] | None:
-    raw_repeat = body["repeat"]
+    raw_repeat = body.get("repeat")
     if not isinstance(raw_repeat, dict) or "sequence" not in raw_repeat:
         return None
     repeat = cast("dict[str, Any]", raw_repeat)
@@ -250,10 +291,12 @@ def _repeat(body: dict[str, Any]) -> list[str] | None:
     if seq_lines is None:
         return None
     flat_seq = _flatten(seq_lines)
+    step_kwargs = _step_option_kwargs_src(body)
 
     header: str | None = None
     if "count" in repeat and set(repeat) == {"count", "sequence"}:
-        header = f"with repeat_count({render_literal(repeat['count'])}):"
+        args = ", ".join([render_literal(repeat["count"]), *step_kwargs])
+        header = f"with repeat_count({args}):"
     elif "while" in repeat and set(repeat) == {"while", "sequence"}:
         raw_conds = repeat["while"]
         if isinstance(raw_conds, list):
@@ -262,7 +305,8 @@ def _repeat(body: dict[str, Any]) -> list[str] | None:
                 cond_dict = cast("dict[str, Any]", conds[0])
                 cond_src = decompile_condition(cond_dict)
                 if cond_src is not None:
-                    header = f"with repeat_while({cond_src}):"
+                    args = ", ".join([cond_src, *step_kwargs])
+                    header = f"with repeat_while({args}):"
     elif "until" in repeat and set(repeat) == {"until", "sequence"}:
         raw_conds = repeat["until"]
         if isinstance(raw_conds, list):
@@ -271,9 +315,11 @@ def _repeat(body: dict[str, Any]) -> list[str] | None:
                 cond_dict = cast("dict[str, Any]", conds[0])
                 cond_src = decompile_condition(cond_dict)
                 if cond_src is not None:
-                    header = f"with repeat_until({cond_src}):"
+                    args = ", ".join([cond_src, *step_kwargs])
+                    header = f"with repeat_until({args}):"
     elif "for_each" in repeat and set(repeat) == {"for_each", "sequence"}:
-        header = f"with repeat_for_each({render_literal(repeat['for_each'])}):"
+        args = ", ".join([render_literal(repeat["for_each"]), *step_kwargs])
+        header = f"with repeat_for_each({args}):"
 
     if header is None:
         return None
@@ -286,7 +332,7 @@ def _repeat(body: dict[str, Any]) -> list[str] | None:
 
 
 def _parallel(body: dict[str, Any]) -> list[str] | None:
-    branches = body["parallel"]
+    branches = body.get("parallel")
     if not isinstance(branches, list):
         return None
     branch_list = cast("list[Any]", branches)
@@ -308,7 +354,8 @@ def _parallel(body: dict[str, Any]) -> list[str] | None:
             return None
         action_lines = decompile_action(seq[0])
         flat.extend(action_lines)
-    out = ["with parallel():"]
+    header_parts = _step_option_kwargs_src(body)
+    out = [f"with parallel({', '.join(header_parts)}):"]
     if not flat:
         out.extend(_indent_lines(["pass"]))
     else:
@@ -319,7 +366,7 @@ def _parallel(body: dict[str, Any]) -> list[str] | None:
 def _wait_for(body: dict[str, Any]) -> list[str] | None:
     from hassle.decompiler.exprs import decompile_trigger
 
-    known = {"wait_for_trigger", "timeout", "continue_on_timeout"}
+    known = {"wait_for_trigger", "timeout", "continue_on_timeout"} | _STEP_OPTION_KEYS
     if not set(body) <= known:
         return None
     triggers = body["wait_for_trigger"]
@@ -340,11 +387,12 @@ def _wait_for(body: dict[str, Any]) -> list[str] | None:
         parts.append(f"timeout={render_literal(body['timeout'])}")
     if "continue_on_timeout" in body:
         parts.append(f"continue_on_timeout={render_literal(body['continue_on_timeout'])}")
+    parts.extend(_step_option_kwargs_src(body))
     return [f"wait_for({', '.join(parts)})"]
 
 
 def _wait_template(body: dict[str, Any]) -> list[str]:
-    known = {"wait_template", "timeout", "continue_on_timeout"}
+    known = {"wait_template", "timeout", "continue_on_timeout"} | _STEP_OPTION_KEYS
     if not set(body) <= known:
         return _raw_action(body)
     parts = [repr(body["wait_template"])]
@@ -352,6 +400,7 @@ def _wait_template(body: dict[str, Any]) -> list[str]:
         parts.append(f"timeout={render_literal(body['timeout'])}")
     if "continue_on_timeout" in body:
         parts.append(f"continue_on_timeout={render_literal(body['continue_on_timeout'])}")
+    parts.extend(_step_option_kwargs_src(body))
     return [f"wait_template({', '.join(parts)})"]
 
 

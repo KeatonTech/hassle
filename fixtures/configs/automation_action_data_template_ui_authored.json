@@ -1,0 +1,25 @@
+{
+  "id": "action_data_template_ui_authored",
+  "alias": "Action Data Template UI Authored",
+  "description": "Shape observed in a real 2026.7 UI-authored config: a service action carries the legacy data_template key (HA still stores it verbatim, distinct from data) alongside target",
+  "triggers": [
+    {
+      "trigger": "state",
+      "entity_id": ["climate.living_room"],
+      "to": ["heat"]
+    }
+  ],
+  "conditions": [],
+  "actions": [
+    {
+      "action": "climate.set_temperature",
+      "target": {
+        "entity_id": "climate.living_room"
+      },
+      "data_template": {
+        "temperature": "{{ states('input_number.target_temp') | float }}"
+      }
+    }
+  ],
+  "mode": "single"
+}
