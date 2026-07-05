@@ -300,7 +300,11 @@ def status(ctx: click.Context) -> None:
     render_plan(console, the_plan)
     if git_support.is_git_repo(root):
         result = subprocess.run(
-            ["git", "status", "--short"], cwd=root, capture_output=True, text=True, check=True
+            ["git", "status", "--short", "--", "."],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         console.print("[bold]git status:[/bold]")
         console.print(result.stdout or "[dim](clean)[/dim]")

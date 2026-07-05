@@ -24,15 +24,31 @@ def is_git_repo(path: Path) -> bool:
 
 def is_clean(path: Path) -> bool:
     """True if the working tree has no uncommitted changes (tracked or
-    untracked). Only meaningful when `is_git_repo(path)`."""
+    untracked) UNDER ``path``. Scoped with ``-- .`` on purpose: a bundle
+    nested inside an unrelated project repo must not inherit the enclosing
+    repo's dirtiness (DESIGN §8.4's contract is about the bundle's own files
+    landing as their own commit). Only meaningful when `is_git_repo(path)`."""
     result = subprocess.run(
-        ["git", "status", "--porcelain"],
+        ["git", "status", "--porcelain", "--", "."],
         cwd=path,
         capture_output=True,
         text=True,
         check=True,
     )
     return result.stdout.strip() == ""
+
+
+def repo_toplevel(path: Path) -> Path | None:
+    """The enclosing repo's toplevel, or None when not in a work tree."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return Path(result.stdout.strip()).resolve()
 
 
 def git_init(path: Path) -> None:

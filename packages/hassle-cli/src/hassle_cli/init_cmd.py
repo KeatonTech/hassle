@@ -55,6 +55,14 @@ def init_bundle(root: Path) -> list[str]:
     if not git_support.is_git_repo(root):
         git_support.git_init(root)
         steps.append("ran `git init`")
+    else:
+        toplevel = git_support.repo_toplevel(root)
+        if toplevel is not None and toplevel != root.resolve():
+            steps.append(
+                f"nested inside the enclosing repo at {toplevel} -- your bundle "
+                "rides that repo's history (no nested repo created); clean-tree "
+                "checks only consider files under the bundle"
+            )
 
     if not (root / ".gitignore").is_file():
         git_support.write_gitignore(root)
