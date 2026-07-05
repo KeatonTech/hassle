@@ -115,15 +115,21 @@ def output_normalizer():
 
 
 @pytest.fixture
-def fake_backend():
+def fake_backend(registry_snapshot_json):
     """A `FakeBackend`, registered so the CLI picks it up in-process instead of
     building a real `DirectBackend` (test-only seam; see `hassle_cli.backend_factory`
     module docstring -- `ha_url = "fake://<token>"` is never written by production
-    code, only by this fixture / `write_hassle_toml`)."""
+    code, only by this fixture / `write_hassle_toml`).
+
+    Serves the SAME registry snapshot the bundle fixtures seed on disk, so
+    pull's refresh-on-every-pull (DESIGN §9.2) is a content no-op in tests --
+    exactly like a real HA whose registry hasn't changed since the last pull."""
     from hassle.backend.fake import FakeBackend
+    from hassle.registry.snapshot import RegistrySnapshot
     from hassle_cli.backend_factory import register_fake_backend, unregister_fake_backend
 
     backend = FakeBackend()
+    backend.registry_snapshot = RegistrySnapshot.model_validate(registry_snapshot_json)
     token = register_fake_backend(backend)
     try:
         yield backend, token

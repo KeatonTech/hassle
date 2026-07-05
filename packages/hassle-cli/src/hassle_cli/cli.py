@@ -539,7 +539,12 @@ def _write_registry_snapshot(backend: object, root: Path) -> None:
     snapshot = backend.fetch_registry_snapshot()  # type: ignore[attr-defined]
     registry_path = root / ".hassle" / "registry.json"
     registry_path.parent.mkdir(parents=True, exist_ok=True)
-    registry_path.write_text(snapshot.model_dump_json(indent=2), encoding="utf-8")
+    content = snapshot.model_dump_json(indent=2)
+    # Write-if-changed: an unchanged registry must not dirty the tree (the
+    # daily loop ends with a no-op pull on a clean tree, DESIGN §8.4).
+    if registry_path.is_file() and registry_path.read_text(encoding="utf-8") == content:
+        return
+    registry_path.write_text(content, encoding="utf-8")
 
 
 def _refresh_registry_snapshot(root: Path, registry_path: Path) -> None:

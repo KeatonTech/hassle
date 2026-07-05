@@ -212,8 +212,11 @@ def test_pull_writes_registry_snapshot(git_repo, cli, fake_backend, toml_writer)
     subprocess.run(["git", "commit", "-qm", "scaffold"], cwd=git_repo, check=True)
 
     # The fixture pre-seeds registry.json; the refresh contract is that pull
-    # RE-fetches it from the backend, so remove the seed first.
+    # RE-fetches it from the backend, so remove the seed first (and commit the
+    # removal -- pull requires a clean tree).
     (git_repo / ".hassle" / "registry.json").unlink()
+    subprocess.run(["git", "add", "-A"], cwd=git_repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "drop seeded registry"], cwd=git_repo, check=True)
 
     result = cli(["pull"], cwd=git_repo)
     assert result.exit_code == 0, result.output
