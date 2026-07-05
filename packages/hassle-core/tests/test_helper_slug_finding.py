@@ -226,3 +226,33 @@ def a():
     matches = [f for f in findings if f.code == "helper-id-name-mismatch"]
     assert matches, f"expected a helper-id-name-mismatch finding, got: {findings}"
     assert matches[0].severity == "error"
+
+
+def test_adopted_helper_exempt_via_manifest_keys_even_when_entity_renamed(tmp_path) -> None:
+    # Field evidence (owner bundle): a helper's storage id can have NO matching
+    # entity in the registry (the entity was renamed -- "front_bedroom_occupied"
+    # became "Office Occupied" with a renamed entity_id). Entity-id inference
+    # cannot identify such adopted helpers; manifest membership can: if the key
+    # was pulled, it is live truth.
+    from hassle.registry.snapshot import RegistrySnapshot
+    from hassle.registry.validate import validate_bundle
+
+    bundle = _write_bundle(
+        tmp_path,
+        "from hassle import input_boolean\n"
+        'front_bedroom_occupied = input_boolean(id="front_bedroom_occupied", name="Office Occupied")\n',
+    )
+    result = compile_bundle(bundle)
+    snapshot = RegistrySnapshot.model_validate(
+        {"entities": [{"entity_id": "light.something_else", "name": "x"}]}
+    )
+    # Without the adopted set: fires (absent from snapshot, snapshot non-empty).
+    assert any(
+        f.code == "helper-id-name-mismatch"
+        for f in validate_bundle(result, snapshot)
+    )
+    # With the manifest-derived adopted set: exempt.
+    findings = validate_bundle(
+        result, snapshot, adopted_helper_keys=frozenset({"input_boolean:front_bedroom_occupied"})
+    )
+    assert not [f for f in findings if f.code == "helper-id-name-mismatch"], findings
