@@ -15,9 +15,7 @@ def _seed(backend, kind: str, ident: str, config: dict) -> None:
     backend.create(kind, dict(config, id=ident) if kind != "script" else config)
 
 
-def test_pull_adopts_all_objects_of_a_kind(
-    git_repo: Path, cli, fake_backend, toml_writer
-) -> None:
+def test_pull_adopts_all_objects_of_a_kind(git_repo: Path, cli, fake_backend, toml_writer) -> None:
     backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
     import subprocess

@@ -25,40 +25,51 @@ from hassle.sync.pull import PullResult
 from hassle.sync.source_writer import SourceWriter
 
 
-def _decompiled_source(object_key: str, config: dict[str, Any]) -> str:
+def _entry_path(entry: PlanEntry) -> Path:
+    return Path(entry.source_path or f"{entry.object_key.replace(':', '_')}.py")
+
+
+def _parsed(object_key: str, config: dict[str, Any]) -> Any:
     kind = object_key.partition(":")[0]
     identity = object_key.partition(":")[2]
-    obj = parse(config, kind=kind, key_hint=identity)
-    return decompile_bundle({object_key: obj})
+    return parse(config, kind=kind, key_hint=identity)
+
+
+def _decompiled_source(object_key: str, config: dict[str, Any]) -> str:
+    return decompile_bundle({object_key: _parsed(object_key, config)})
 
 
 def _refresh(entry: PlanEntry, source_writer: SourceWriter) -> None:
     assert entry.remote is not None
-    path = Path(entry.source_path or f"{entry.object_key.replace(':', '_')}.py")
     source_writer.splice_object(
-        path, entry.object_key, _decompiled_source(entry.object_key, entry.remote)
+        _entry_path(entry), entry.object_key, _decompiled_source(entry.object_key, entry.remote)
     )
 
 
-def _adopt(entry: PlanEntry, source_writer: SourceWriter) -> None:
-    assert entry.remote is not None
-    path = Path(entry.source_path or f"{entry.object_key.replace(':', '_')}.py")
-    source_writer.write_whole_file(path, _decompiled_source(entry.object_key, entry.remote))
+def _adopt_batch(entries: list[PlanEntry], source_writer: SourceWriter) -> None:
+    """All ADOPTs destined for one file become ONE multi-object module write.
+
+    Per-object whole-file writes were last-writer-wins: adopting N new objects
+    of a kind left only the final one on disk (the owner-smoke-test clobber --
+    101 adopted, 3 persisted). ``decompile_bundle`` natively emits multi-object
+    modules, so batching is also the natural codegen shape.
+    """
+    path = _entry_path(entries[0])
+    objs = {e.object_key: _parsed(e.object_key, e.remote) for e in entries if e.remote is not None}
+    source_writer.write_whole_file(path, decompile_bundle(objs))
 
 
 def _drop(entry: PlanEntry, source_writer: SourceWriter) -> None:
-    path = Path(entry.source_path or f"{entry.object_key.replace(':', '_')}.py")
-    source_writer.delete_object(path, entry.object_key)
+    source_writer.delete_object(_entry_path(entry), entry.object_key)
 
 
-def _write_conflict(entry: PlanEntry, source_writer: SourceWriter) -> None:
-    path = Path(entry.source_path or f"{entry.object_key.replace(':', '_')}.py")
+def _conflict_block(entry: PlanEntry) -> str:
     conflict = entry.conflict
     local_value = conflict.local if conflict else entry.local
     remote_value = conflict.remote if conflict else entry.remote
     local_body = json.dumps(local_value, indent=2, sort_keys=True)
     remote_body = json.dumps(remote_value, indent=2, sort_keys=True)
-    content = (
+    return (
         f"# hassle: CONFLICT on {entry.object_key} -- resolve with "
         f"--accept-local/--accept-remote or edit and re-run `hassle push`\n"
         "<<<<<<< local\n"
@@ -67,22 +78,31 @@ def _write_conflict(entry: PlanEntry, source_writer: SourceWriter) -> None:
         f"{remote_body}\n"
         ">>>>>>> remote\n"
     )
-    source_writer.write_whole_file(path, content)
 
 
 def apply_pull_with_decompiler(plan: Plan, source_writer: SourceWriter) -> PullResult:
     """Same action dispatch as `hassle.sync.pull.apply_pull`, but real
     decompiled DSL content for `refresh`/`adopt` instead of the M5 placeholder."""
     conflicts: list[Conflict] = []
+    adopts_by_path: dict[Path, list[PlanEntry]] = {}
+    conflict_blocks_by_path: dict[Path, list[str]] = {}
     for entry in plan.entries:
         if entry.action is PlanAction.REFRESH:
             _refresh(entry, source_writer)
         elif entry.action is PlanAction.ADOPT:
-            _adopt(entry, source_writer)
+            adopts_by_path.setdefault(_entry_path(entry), []).append(entry)
         elif entry.action is PlanAction.DROP:
             _drop(entry, source_writer)
         elif entry.action is PlanAction.CONFLICT:
-            _write_conflict(entry, source_writer)
+            # Conflicts sharing a destination are concatenated, same
+            # rationale as _adopt_batch (never last-writer-wins).
+            conflict_blocks_by_path.setdefault(_entry_path(entry), []).append(
+                _conflict_block(entry)
+            )
             if entry.conflict is not None:
                 conflicts.append(entry.conflict)
+    for _path, entries in adopts_by_path.items():
+        _adopt_batch(entries, source_writer)
+    for path, blocks in conflict_blocks_by_path.items():
+        source_writer.write_whole_file(path, "\n".join(blocks))
     return PullResult(conflicts=conflicts)
