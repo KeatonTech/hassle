@@ -1,0 +1,8 @@
+{
+  "error_type": "DuplicateObjectError",
+  "contains": [
+    "automation:shared",
+    "automations/hallway.py:8",
+    "scripts/night_mode.py:7"
+  ]
+}

@@ -1,0 +1,3 @@
+{
+  "_placeholder": "populated by `hassle-dev goldens --update` once the M7.1 loader recurses into subdirectories -- see docs/ha-api-notes.md §17.9"
+}
