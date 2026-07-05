@@ -29,6 +29,28 @@ _FAKE_BACKENDS: dict[str, Backend] = {}
 _FAKE_URL_PREFIX = "fake://"
 
 
+class UnregisteredFakeBackendError(Exception):
+    """A `fake://<token>` URL was used but no `FakeBackend` is registered for
+    that token (M7 review cleanup).
+
+    Without this check, `connect()` would fall through to building a real
+    `DirectBackend` against the literal string `fake://<token>` as if it were
+    an HA base URL -- producing a confusing stack trace deep in the HTTP/WS
+    client instead of a clean error naming the actual mistake.
+    """
+
+    def __init__(self, ha_url: str) -> None:
+        self.ha_url = ha_url
+        super().__init__(
+            f"no FakeBackend is registered for the test URL {ha_url!r}. This URL only "
+            "makes sense in a test process that called `register_fake_backend(...)` "
+            "first (see hassle_cli.backend_factory / packages/hassle-cli/tests/"
+            "conftest.py's `fake_backend` fixture) -- a bare `fake://` scheme is never "
+            "valid outside tests. Fix: register the backend before connecting (or, if "
+            "this is a real bundle, use a real `ha_url` in hassle.toml)."
+        )
+
+
 def register_fake_backend(backend: Backend) -> str:
     """Register `backend` for test-only lookup; returns a token to embed in
     a test `hassle.toml`'s `ha_url = "fake://<token>"`."""
@@ -61,9 +83,16 @@ def connect(ha_url: str, token: str) -> Iterator[Backend]:
     manage); any other URL builds a real `DirectBackend`, whose `__enter__`
     probes auth (`GET /api/config`) and whose `__exit__` tears down its
     background event loop.
+
+    Raises `UnregisteredFakeBackendError` for a `fake://` URL with no
+    registered backend, rather than falling through to `DirectBackend` (which
+    would try -- and fail confusingly -- to treat the literal `fake://...`
+    string as a real HA base URL).
     """
-    fake = fake_backend_for_url(ha_url)
-    if fake is not None:
+    if is_fake_url(ha_url):
+        fake = fake_backend_for_url(ha_url)
+        if fake is None:
+            raise UnregisteredFakeBackendError(ha_url)
         yield fake
         return
     from hassle.backend import DirectBackend

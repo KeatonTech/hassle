@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from hassle.compiler.bundle import CompileResult, compile_bundle
+from hassle.ir.keys import HELPER_DOMAINS
 from hassle.sync.plan import ObjectMap
 
 
@@ -39,18 +40,23 @@ def source_path_for(bundle_root: Path, result: CompileResult, object_key: str) -
 def default_source_path(object_key: str) -> str:
     """Fallback path for a brand-new (adopted) object with no existing file.
 
-    Directly at the bundle root, one file per object
-    (``<identity>.py``) -- **not** nested under an
-    ``automations/``/``scripts/``/``helpers/`` subdirectory as DESIGN §6's
-    bundle-format tree shows. `hassle.compiler.bundle.compile_bundle` only
-    globs top-level ``*.py`` files in the directory it's pointed at; a file
-    written into a subdirectory is invisible to the next compile, silently
-    "losing" the object on the very next pull/plan (found while building
-    this command -- docs/ha-api-notes.md §17.9 records the DESIGN/reality
-    mismatch this works around).
+    DESIGN §7.3's placement default: "one file per HA category/label if set,
+    else ``automations/misc.py``" -- one ``misc.py`` per kind's tree
+    subdirectory (``automations/``, ``scripts/``, ``helpers/``), matching
+    what `hassle init` scaffolds and what the M7.1 loader (which now recurses,
+    docs/ha-api-notes.md §17.9 RESOLVED) actually imports. After this first
+    placement the object stays wherever the user moves it (tracked by the
+    manifest); this is only the *initial* landing spot for an object nobody
+    has ever pulled before.
     """
-    _kind, _, identity = object_key.partition(":")
-    return f"{identity}.py"
+    kind, _, _identity = object_key.partition(":")
+    if kind == "automation":
+        return "automations/misc.py"
+    if kind == "script":
+        return "scripts/misc.py"
+    if kind in HELPER_DOMAINS:
+        return "helpers/misc.py"
+    return f"{kind}s/misc.py"  # pragma: no cover - defensive, all OBJECT_KINDS covered above
 
 
 def build_source_paths(

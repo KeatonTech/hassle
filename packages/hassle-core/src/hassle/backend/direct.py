@@ -25,7 +25,6 @@ Per-kind mapping to HA's APIs (DESIGN §4, docs/ha-api-notes.md):
 from __future__ import annotations
 
 import asyncio
-import re
 import threading
 from types import TracebackType
 from typing import Any, cast
@@ -34,12 +33,8 @@ from hassle.backend.client import HaClient
 from hassle.backend.errors import HaApiError
 from hassle.backend.version import version_warning
 from hassle.ir.keys import HELPER_DOMAINS, OBJECT_KINDS
+from hassle.ir.keys import slugify as _slugify
 from hassle.registry.snapshot import PurposeVocabulary, RegistrySnapshot
-
-
-def _slugify(name: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
-    return slug or "item"
 
 
 class DirectBackend:

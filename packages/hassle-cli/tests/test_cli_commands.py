@@ -24,6 +24,22 @@ def test_init_creates_bundle_scaffolding(tmp_path: Path, cli) -> None:
     assert (project / ".git").is_dir()
 
 
+def test_init_scaffolds_the_full_design_section_6_tree(tmp_path: Path, cli) -> None:
+    """M7.1: `hassle init` follows the tree layout (DESIGN §6), not just a
+    bare `automations/` -- scripts/helpers/lib are scaffolded too, and no
+    `__init__.py` is written (the loader uses PEP 420 namespace packages,
+    docs/ha-api-notes.md §17.9 RESOLVED)."""
+    project = tmp_path / "new-house"
+    project.mkdir()
+    result = cli(["init"], cwd=project)
+    assert result.exit_code == 0, result.output
+    for name in ("automations", "scripts", "helpers", "lib", "tests"):
+        assert (project / name).is_dir(), f"missing {name}/"
+        assert not (project / name / "__init__.py").exists(), (
+            f"{name}/__init__.py should not be scaffolded -- namespace packages need none"
+        )
+
+
 def test_init_is_idempotent(tmp_path: Path, cli) -> None:
     project = tmp_path / "new-house"
     project.mkdir()

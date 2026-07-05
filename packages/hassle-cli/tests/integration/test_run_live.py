@@ -27,7 +27,9 @@ def _write_bundle(tmp_path: Path) -> Path:
     root = tmp_path / "live-bundle"
     root.mkdir()
     (root / "hassle.toml").write_text("format_version = 1\nmirror = false\n", encoding="utf-8")
-    # DSL sources live at the bundle root (docs/ha-api-notes.md §17.9).
+    # A flat bundle (DSL sources directly at the bundle root) is still fully
+    # supported (docs/ha-api-notes.md §17.9 RESOLVED: the loader also
+    # recurses into subdirectories now, but never requires them).
     (root / "a.py").write_text(
         """
 from hassle import automation, only_if, service, state, when

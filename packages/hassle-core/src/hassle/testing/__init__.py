@@ -209,6 +209,18 @@ class Simulator:
             )
         engine.fire(trigger_ctx)
 
+    # -- introspection (M7 review cleanup: public accessors so callers outside
+    # this module never reach into `_calls`/`_engines_by_key` directly) -------
+
+    def all_calls(self) -> list[ServiceCall]:
+        """Every recorded service call, across all actions, in order."""
+        return list(self._calls)
+
+    def automation_keys(self) -> list[str]:
+        """Every automation object key (``"automation:<id>"``) known to this
+        simulator -- the same keys :meth:`fire` accepts."""
+        return list(self._engines_by_key)
+
     # -- assertions --------------------------------------------------------------
 
     def calls(self, action: str) -> list[ServiceCall]:

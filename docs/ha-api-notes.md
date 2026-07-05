@@ -853,7 +853,7 @@ through `apply_plan`. Fixed in `plan.py` (populate `remote_hash_at_plan` on the
 `delete` entry, mirroring `update`); regression-tested by
 `tests/test_plan_apply_delete_roundtrip.py` (R4). No interface change.
 
-### 17.9 DESIGN §6 mismatch found in M7: `compile_bundle` does not recurse into subdirectories
+### 17.9 DESIGN §6 mismatch found in M7: `compile_bundle` does not recurse into subdirectories — RESOLVED 2026-07-04 (M7.1)
 DESIGN §6's documented bundle layout has DSL sources split across
 `automations/`, `scripts/`, `helpers/`, `lib/` subdirectories under the
 bundle root. The real M1 implementation
@@ -867,14 +867,43 @@ convention despite §6 showing subdirectories.
 
 Found while wiring M7's CLI test fixtures (nesting DSL sources under
 `automations/`, per §6) against `compile_bundle` and getting an empty
-`CompileResult.objects` with no error. **Not fixed as part of M7**: changing
-`_import_bundle_modules` to recurse is a behavior change to a frozen,
-heavily-tested M1 module with no M7 test-contract requirement forcing it, so
-per the "don't silently work around a DESIGN/reality mismatch" rule this is
-recorded here instead of patched. M7's own fixtures and the `hassle init`
-scaffold use the flat convention that matches actual `compile_bundle`
-behavior (`automations.py`, `scripts.py`, ... directly at the bundle root,
-matching every existing fixture) rather than the nested §6 tree. A follow-up
-milestone (or a dedicated M1 fix) should either implement recursive bundle
-loading to match §6, or §6 should be corrected to show the flat layout that
-is what every fixture and the CLI now actually rely on.
+`CompileResult.objects` with no error. Not fixed as part of M7 itself
+(changing `_import_bundle_modules` to recurse was a behavior change to a
+frozen, heavily-tested M1 module with no M7 test-contract requirement forcing
+it); M7's own fixtures and the `hassle init` scaffold used the flat
+convention that matched actual `compile_bundle` behavior at the time.
+
+**Decision (owner, M7.1): DESIGN §6's tree layout wins — the loader
+recurses.** `compile_bundle` now walks the whole bundle tree
+(`hassle.compiler.bundle._iter_bundle_source_files`), skipping `tests/`,
+`.hassle/`, `stubs/`, any dot-directory, and `__pycache__` at every depth.
+Each file is imported under its dotted, package-relative module name
+(`automations.hallway`, not bare `hallway`) so a cross-file
+`from helpers.modes import guest_mode` / `from lib.notify import
+notify_adults` (DESIGN §5.3/§5.6 verbatim) resolves through **PEP 420
+namespace packages** — no `__init__.py` anywhere in the tree, since the
+bundle root is already on `sys.path` and namespace packages need none for
+this. `hassle init` now scaffolds `automations/scripts/helpers/lib/tests/`,
+none with an `__init__.py`. Flat bundles (every pre-M7.1 fixture) are
+unaffected: a bundle with no subdirectories compiles exactly as before, byte
+for byte (zero golden drift verified). Duplicate-id detection and source
+spans now span the whole tree (a span from a nested file reads like
+`automations/hallway.py:12`). Placement defaults for never-seen/adopted
+objects (`hassle_cli.bundle_ops.default_source_path`) now land under
+`automations/misc.py` / `scripts/misc.py` / `helpers/misc.py` per DESIGN
+§7.3, instead of the flat one-file-per-object fallback this finding
+previously documented as the workaround.
+
+**Review finding (M7.1 review, fixed same branch): the recursive walk
+followed symlinks.** A symlinked directory or `.py` file inside the bundle,
+pointing outside it, was imported and executed — a sandbox escape (§14) —
+and because the target's `__file__`/`__path__` resolves outside
+`bundle_path`, the cleanup pass never removed it from `sys.modules`; the
+next compile's double-import guard then served that stale leaked module
+instead of re-importing anything, silently dropping the escaped object from
+the second compile onward. **Policy: every symlink under the bundle is
+skipped, silently, whether it targets a directory or a file** — see
+`_iter_bundle_source_files`'s and `_import_bundle_modules`'s docstrings in
+`hassle.compiler.bundle` for the mechanism (walk-time `is_symlink()` check
+plus a belt-and-suspenders resolve-under-`bundle_path` re-check immediately
+before import, to also catch a symlinked intermediate directory).

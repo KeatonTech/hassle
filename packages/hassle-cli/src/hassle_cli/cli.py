@@ -581,7 +581,7 @@ def run(target: str, live: bool, yes: bool, skip_conditions: bool) -> None:
 
         object_key, sim = run_on_simulator(root, target)
         console.print(f"[green]ran {object_key} on the simulator[/green]")
-        for call in sim._calls:
+        for call in sim.all_calls():
             console.print(f"  called {call.action} {call.data}")
         return
 
