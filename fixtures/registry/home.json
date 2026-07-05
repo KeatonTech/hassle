@@ -2050,6 +2050,16 @@
       "labels": [],
       "domain": "cover",
       "platform": "tuya"
+    },
+    {
+      "entity_id": "input_text.material_you_image_url_6814bc",
+      "name": "Material You Base Color Source Image Path/URL Keaton",
+      "original_name": "Material You Base Color Source Image Path/URL Keaton",
+      "area_id": null,
+      "device_id": null,
+      "labels": [],
+      "domain": "input_text",
+      "platform": "helper"
     }
   ],
   "areas": [
@@ -2868,7 +2878,7 @@
     }
   },
   "purpose_vocabulary": {
-    "_comment": "Enumerated purpose-specific trigger/condition types (HA 2026.7+). Shape provisional — M6 will capture the real WS API enumeration (MILESTONES M6 test 8). Contains all types used by M0.1 fixtures plus realistic extensions.",
+    "_comment": "Enumerated purpose-specific trigger/condition types (HA 2026.7+). Shape provisional \u2014 M6 will capture the real WS API enumeration (MILESTONES M6 test 8). Contains all types used by M0.1 fixtures plus realistic extensions.",
     "triggers": [
       "motion.detected",
       "motion.cleared",
