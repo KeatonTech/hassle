@@ -308,3 +308,42 @@ def a():
     refs = extract_references(result)
     entity_ids = {r.entity_id for r in refs if r.entity_id is not None}
     assert "binary_sensor.wait_for_inner_entity" in entity_ids
+
+
+def test_device_block_registry_uuid_entity_id_not_validated_as_entity_name(tmp_path) -> None:
+    # Modern HA device triggers/actions store ENTITY REGISTRY UUIDs (32-hex) in
+    # their entity_id field, not domain.object_id names (owner field evidence:
+    # `d457ce94e8ab259e6867b4fc918d1106` flagged as unknown-entity). Those must
+    # not be validated as entity names.
+    from hassle.compiler.bundle import compile_bundle
+    from hassle.registry.snapshot import RegistrySnapshot
+    from hassle.registry.validate import validate_bundle
+
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "a.py").write_text(
+        "from hassle import automation, when, raw_trigger, raw_action\n"
+        "@automation(id='x', alias='X')\n"
+        "def x():\n"
+        "    when(raw_trigger({\n"
+        "        'trigger': 'device',\n"
+        "        'device_id': 'aaaabbbbccccdddd1111222233334444',\n"
+        "        'entity_id': 'd457ce94e8ab259e6867b4fc918d1106',\n"
+        "        'domain': 'binary_sensor', 'type': 'opened',\n"
+        "    }))\n"
+        "    raw_action({\n"
+        "        'device_id': 'aaaabbbbccccdddd1111222233334444',\n"
+        "        'entity_id': 'd457ce94e8ab259e6867b4fc918d1106',\n"
+        "        'domain': 'lock', 'type': 'lock',\n"
+        "    })\n",
+        encoding="utf-8",
+    )
+    result = compile_bundle(bundle)
+    snapshot = RegistrySnapshot.model_validate(
+        {
+            "entities": [{"entity_id": "light.known", "name": "K"}],
+            "devices": [{"id": "aaaabbbbccccdddd1111222233334444", "name": "Lock"}],
+        }
+    )
+    findings = validate_bundle(result, snapshot)
+    assert not [f for f in findings if f.code == "unknown-entity"], findings
