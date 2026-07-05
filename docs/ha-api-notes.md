@@ -1182,3 +1182,78 @@ breaks if the nested-condition path is ever refactored.
 *Verified 2026-07-05 against the owner's real 2026.7 Home Assistant bundle
 (field measurement: 14 → 7 raw_action fallbacks after round 2, 5 of 7 traced
 to §21.1/§21.2 above and fixed; 2 remaining are device actions, out of scope).*
+
+---
+
+## 22. Pull organization + ignore filtering (owner feedback after first real pull, `ux/pull-organization`)
+
+### 22.1 Category registry — `config/category_registry/list`, scoped, and per-entity `categories`
+
+DESIGN §7.3/§6 always said placement should follow HA's UI category registry, but it was never
+implemented (`bundle_ops.default_source_path` unconditionally fell back to `automations/misc.py`).
+Implemented this round, unit-tested against `FakeBackend`/a stand-in WS client (no live-HA capture
+was taken for the category registry itself — see the caveat below):
+
+- **`config/category_registry/list`** takes a `scope` argument (confirmed by DESIGN's own prose
+  and HA core's `websocket_api` convention for scoped registries — e.g. `entity_category` uses the
+  same `scope` parameter shape); Hassle calls it once per scope, `"automation"` and `"script"`
+  (the only two scopes DESIGN §7.3 places by). Each row is `{category_id, name, icon}`.
+- **`config/entity_registry/list` rows already carry `categories: {scope: category_id}`** — this
+  was already captured verified in §5/§2 of this document (`"categories":{}` in the real
+  `id <-> unique_id` capture), just never parsed by `RegistrySnapshot`/`EntityInfo` before now.
+  `EntityInfo` gains `unique_id` (the `id <-> unique_id` anchor already documented in §2) and
+  `categories: dict[str, str]`, both additive.
+- **Guarding:** older HA (pre-category-registry) is expected to reject the command; `DirectBackend`
+  guards each scope independently (mirroring the existing `floor_registry` guard) so one scope
+  failing doesn't blank out the other, and a total absence of the command degrades to an empty
+  `categories` map rather than raising.
+- **Placement mapping:** an object key (`automation:<id>` / `script:<object_id>`) resolves to its
+  entity-registry entry via `unique_id == identity` (the same anchor as §2, scoped by domain), then
+  to that entry's `categories[scope]`, then to the category registry's name for that id, then to
+  `automations/<slug(name)>.py` / `scripts/<slug(name)>.py`. Any missing link (no snapshot, no
+  entry, uncategorized, unknown category id) falls back to the pre-existing `misc.py` behavior —
+  strictly additive, no existing placement test needed to change.
+- **Caveat (flagged per CLAUDE.md's "record + flag" rule):** unlike most of this document's
+  findings, the `scope` parameter and per-row shape for `config/category_registry/list` were
+  **not** re-verified against a live HA instance in this work item — M0.V's Docker harness wasn't
+  re-run. The shape is inferred from DESIGN §7.3's own description plus HA core's established
+  convention for other scoped registry lists (`entity_category`, `floor_registry`'s `scope`-less
+  precedent). If a live capture ever shows a different argument name or response shape, only
+  `DirectBackend._afetch_categories` needs to change — the `RegistrySnapshot.categories` shape and
+  the placement logic in `bundle_ops` are already guarded/tested against "the command doesn't
+  exist" and would tolerate a renamed argument the same way (empty categories, no crash) until
+  fixed. Recommended follow-up: add this to a future M0.V-style verification pass.
+- **Helpers are intentionally excluded** from category-based placement: HA's category registry
+  only covers `automation`/`script` scopes (per DESIGN §7.3's own wording); helpers keep today's
+  domain-default `helpers/misc.py` fallback unconditionally.
+- Unit coverage: `packages/hassle-core/tests/test_registry_categories.py` (model),
+  `test_direct_backend_categories.py` (fetch + guarding), `packages/hassle-cli/tests/
+  test_bundle_ops_category_placement.py` (placement mapping), `test_pull_category_placement.py`
+  (end-to-end `hassle pull` via `FakeBackend`). An integration-suite category round-trip (create a
+  category via WS, assign it, pull, assert placement) was **not** added — the WS write path for
+  category creation/assignment is nontrivial to script generically (it likely requires a real
+  entity to attach the category to, which itself requires area/device setup) and the unit-level
+  `FakeBackend` coverage above is the milestone's required gate; this is a documented integration
+  TODO, not a gap in the required test contract.
+
+### 22.2 `ignore` globs — DESIGN §8.2/§6 amendment (owner decision)
+
+New `hassle.toml` field: `ignore = ["input_boolean:material_you_*", …]`, `fnmatch` globs matched
+against object keys. This is a deliberate, owner-approved exception to §8.2's "first-ever pull
+adopts everything; nothing is ever unmanaged" — DESIGN §6/§8.2 have been amended in place (this is
+not a silent workaround). Implementation lives in `hassle_cli.ignore_filter`
+(`apply_ignore_globs`/`migrate_manifest_for_ignores`), called from the CLI layer **before**
+`hassle.sync.plan.compute_plan` runs — the F2 plan engine itself is untouched, so the M5 table-spec
+tests are unaffected. See DESIGN §6/§8.2 for the full semantics; test coverage in
+`packages/hassle-cli/tests/test_ignore_filtering.py` (unit, including the safety property that an
+ignored key present remotely but absent locally never plans as `delete`) and
+`test_pull_ignore_globs.py` (end-to-end `pull`/`plan`/`push`, plus the manifest-migration notice).
+
+### 22.3 `lib/README.md` / `tests/README.md` scaffolding
+
+`hassle init` and `hassle pull` (when it scaffolds directories a bundle predating this change never
+had) now write `lib/README.md` (explaining `@macro`/`@shared_script`/plain constants per DESIGN
+§5.6, imported via `from lib.x import y`) and, only when `tests/` is otherwise empty, a one-line
+`tests/README.md`. Both writes are idempotent (`hassle_cli.init_cmd.scaffold_lib_and_tests_readmes`
+checks `Path.is_file()` before writing) — re-running `init` or `pull` never clobbers a file the
+user has since edited. Test coverage: `packages/hassle-cli/tests/test_lib_readme_scaffold.py`.

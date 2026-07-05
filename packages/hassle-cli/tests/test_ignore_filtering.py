@@ -46,7 +46,10 @@ def test_ignored_key_never_reaches_compute_plan_as_delete() -> None:
     # THE safety test: an ignored object that exists remotely but was never
     # declared locally must not be planned for deletion (or any action) even
     # though the manifest already "knows" about it from a prior sync (the
-    # shape compute_plan would otherwise turn into `delete`).
+    # shape compute_plan would otherwise turn into `drop`/`delete`). The CLI's
+    # documented composition is: migrate the manifest FIRST (drops stale
+    # entries for newly-ignored keys), THEN filter local/remote, THEN
+    # compute_plan -- all three inputs must agree the key doesn't exist.
     from hassle.sync.plan import compute_plan
 
     manifest = Manifest(
@@ -60,13 +63,15 @@ def test_ignored_key_never_reaches_compute_plan_as_delete() -> None:
         },
     )
     remote = {"input_boolean:material_you_primary_color": ("input_boolean", _HELPER_CFG)}
+    ignore_globs = ["input_boolean:material_you_*"]
+    migrated = migrate_manifest_for_ignores(manifest, ignore_globs=ignore_globs)
     filtered = apply_ignore_globs(
         local_objects={},
         remote_objects=remote,
-        ignore_globs=["input_boolean:material_you_*"],
+        ignore_globs=ignore_globs,
     )
     plan = compute_plan(
-        manifest=manifest,
+        manifest=migrated.manifest,
         local_objects=filtered.local_objects,
         remote_objects=filtered.remote_objects,
     )

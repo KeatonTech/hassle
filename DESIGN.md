@@ -414,12 +414,13 @@ my-home/                   # a git repository (hassle init/pull offers to `git i
 ├── scripts/
 ├── helpers/
 ├── lib/                   # macros, shared scripts, constants — yours, never auto-regenerated
+│                          # (README.md written once by `init`/`pull`, explaining the directory)
 ├── tests/                 # pytest files — yours; persist in git (G5)
 ├── stubs/                 # generated .pyi (checked in so pyright works immediately)
 ├── .vscode/settings.json  # points pyright at stubs/; generated once, then left alone
 ├── .hassle/
 │   ├── manifest.lock      # machine-owned sync baseline (§8.1) — committed, never hand-edited
-│   ├── registry.json      # snapshot: entities, services, areas, devices, labels (§9.2)
+│   ├── registry.json      # snapshot: entities, services, areas, devices, labels, categories (§9.2)
 │   └── plan.json          # last computed plan (transient, gitignored)
 ├── .gitignore             # generated: plan.json, caches
 ├── AGENTS.md              # generated agent instructions (§12)
@@ -430,8 +431,28 @@ my-home/                   # a git repository (hassle init/pull offers to `git i
   format (`hassle pull --zip out.zip`, `hassle push --zip in.zip`) per G1 — useful for moving a
   bundle without git, and what the optional mirror stores (§8.5).
 - File organization is user-controlled: the decompiler only decides placement for objects it has
-  never seen (defaults: one file per HA category/label if set, else `automations/misc.py`); after
-  that, objects stay in whatever file the user puts them in (tracked by manifest).
+  never seen (defaults: one file per HA UI category if the object's entity-registry entry has one
+  — `automations/<slug(category name)>.py` / `scripts/<slug(category name)>.py`, fetched via WS
+  `config/category_registry/list` per scope; else `automations/misc.py` / `scripts/misc.py` /
+  `helpers/misc.py` — helpers have no category-registry scope in HA, so they always use the domain
+  default); after that, objects stay in whatever file the user puts them in (tracked by manifest).
+  **`hassle init` and `hassle pull`** (when it scaffolds missing directories) also write
+  `lib/README.md` (explaining `@macro`/`@shared_script`/plain constants, §5.6) and, when `tests/`
+  is otherwise empty, a one-line `tests/README.md` — both idempotent, never overwriting an
+  existing file.
+- **`ignore` (owner amendment, `ux/pull-organization`):** `hassle.toml` may declare
+  `ignore = ["input_boolean:material_you_*", …]` — `fnmatch` globs matched against object keys.
+  This REVISES §8.2's "first-ever pull adopts everything; nothing is ever unmanaged": an object
+  key matching an `ignore` glob is filtered out of both the freshly-compiled local objects and the
+  freshly-fetched remote objects **before** `compute_plan` runs, so it can never be adopted,
+  refreshed, updated, or — the safety-critical case — deleted, no matter what either side looks
+  like. A local declaration that itself matches an `ignore` glob is excluded from the plan too and
+  raises a `declared-but-ignored` warning (almost always a mistake — the user probably meant to
+  ignore something else). If a glob starts matching a `manifest.lock` entry that predates it, the
+  next `hassle pull` drops that entry from the manifest (never touching HA) and prints a one-time
+  notice. See `hassle_cli.ignore_filter` for the implementation and MILESTONES-equivalent test
+  coverage (`packages/hassle-cli/tests/test_ignore_filtering.py`,
+  `test_pull_ignore_globs.py`).
 
 ---
 
@@ -536,7 +557,10 @@ For each object key, compare **base** (manifest), **local** (freshly compiled), 
   lock, so two machines applying in the *same instant* can interleave. The pre-write hash
   re-check catches everything slower than that. For a single-household tool this is acceptable;
   a future add-on could add a lock if ever needed (§13).
-- First-ever pull adopts everything; nothing is ever "unmanaged" (simplest mental model).
+- First-ever pull adopts everything; nothing is ever "unmanaged" (simplest mental model) —
+  **except** an object key matching a `hassle.toml` `ignore` glob (§6 amendment, owner decision):
+  those are filtered out before this table is even computed, deliberately staying unmanaged
+  forever (never adopted, refreshed, or deleted) so a push can never touch them.
 
 ### 8.3 Pull is the same merge, driven the other way
 

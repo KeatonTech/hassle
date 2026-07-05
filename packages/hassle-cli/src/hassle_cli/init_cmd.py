@@ -23,6 +23,87 @@ jobs:
       - run: hassle test
 """
 
+# DESIGN §5.6/§6: `lib/` is yours, never auto-regenerated -- macros (`@macro`,
+# compile-time inlined), shared scripts (`@shared_script`, a real HA script
+# entity), and plain constants, all imported cross-file as `from lib.x import y`.
+LIB_README = """\
+# lib/
+
+Your own code -- Hassle never generates or overwrites anything here (beyond
+writing this file once, if it's missing).
+
+Put here:
+
+- **Macros** (`@macro`): small glue that expands into each caller's action
+  list at compile time. Zero HA-side footprint.
+
+  ```python
+  # lib/notify.py
+  from hassle import macro
+
+  @macro
+  def notify_adults(message: str):
+      e.notify.mobile_app_keaton(message=message)
+      e.notify.mobile_app_spouse(message=message)
+  ```
+
+- **Shared scripts** (`@shared_script`): becomes a real HA script entity with
+  typed fields -- visible/runnable/editable in the HA UI, and callable from
+  UI-authored automations too.
+
+  ```python
+  @shared_script(id="flash_lights", alias="Flash lights", icon="mdi:alarm-light")
+  def flash_lights(times: int = 3):
+      ...
+  ```
+
+- **Plain constants**: anything else you want to share across automations,
+  scripts, and helpers -- area names, default brightness levels, whatever.
+
+Import from anywhere else in the bundle with `from lib.x import y`.
+"""
+
+TESTS_README = """\
+# tests/
+
+Your pytest files live here and persist in git like everything else. Write
+tests against the `sim` fixture (`hassle.testing.simulate`) -- see the DSL
+cookbook for examples. `hassle test` runs pytest with the simulator plugin
+preloaded; plain `pytest` works too.
+"""
+
+
+def _write_if_missing(path: Path, content: str) -> bool:
+    """Write `content` to `path` only if it doesn't already exist. Returns
+    whether a write happened -- never overwrites a file the user may have
+    edited (idempotent, safe to call on every `init`/`pull`)."""
+    if path.is_file():
+        return False
+    path.write_text(content, encoding="utf-8")
+    return True
+
+
+def scaffold_lib_and_tests_readmes(root: Path) -> list[str]:
+    """Write `lib/README.md` (always, once) and `tests/README.md` (only when
+    `tests/` is otherwise empty -- a bundle with real test files doesn't need
+    a placeholder). Idempotent: never overwrites an existing file. Shared by
+    `hassle init` and `hassle pull` (when it creates the scaffold dirs), so
+    both paths document `lib/`'s purpose the same way (DESIGN §5.6/§6)."""
+    steps: list[str] = []
+
+    lib_dir = root / "lib"
+    lib_dir.mkdir(exist_ok=True)
+    if _write_if_missing(lib_dir / "README.md", LIB_README):
+        steps.append("wrote lib/README.md")
+
+    tests_dir = root / "tests"
+    tests_dir.mkdir(exist_ok=True)
+    tests_is_empty = not any(tests_dir.iterdir())
+    if tests_is_empty and _write_if_missing(tests_dir / "README.md", TESTS_README):
+        steps.append("wrote tests/README.md")
+
+    return steps
+
 
 def init_bundle(root: Path) -> list[str]:
     """Scaffold `root` as a fresh Hassle bundle. Idempotent (safe to re-run).
@@ -39,6 +120,7 @@ def init_bundle(root: Path) -> list[str]:
         (root / name).mkdir(exist_ok=True)
     (root / "tests").mkdir(exist_ok=True)
     (root / ".hassle").mkdir(exist_ok=True)
+    steps.extend(scaffold_lib_and_tests_readmes(root))
 
     config_path = root / CONFIG_FILENAME
     if not config_path.is_file():

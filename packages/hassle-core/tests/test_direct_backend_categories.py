@@ -23,16 +23,18 @@ class _FakeClient:
         self._missing = missing
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
-    async def ws_command(self, type: str, **payload: Any) -> Any:  # noqa: A002
+    async def ws_command(self, type: str, **payload: Any) -> Any:
         self.calls.append((type, payload))
         if type in self._missing:
             raise HaApiError(f"{type} not supported", code="unknown_command")
+        if type == "get_services":
+            return self._responses.get("get_services", {})
         key = type
         if type == "config/category_registry/list":
             key = f"config/category_registry/list:{payload.get('scope')}"
         return self._responses.get(key, [])
 
-    async def ws_subscribe_first_event(self, type: str, **payload: Any) -> Any:  # noqa: A002
+    async def ws_subscribe_first_event(self, type: str, **payload: Any) -> Any:
         return {}
 
 
@@ -88,7 +90,7 @@ def test_fetch_registry_snapshot_one_scope_failing_does_not_drop_the_other() -> 
     )
 
     class _PartialClient(_FakeClient):
-        async def ws_command(self, type: str, **payload: Any) -> Any:  # noqa: A002
+        async def ws_command(self, type: str, **payload: Any) -> Any:
             if type == "config/category_registry/list" and payload.get("scope") == "automation":
                 raise HaApiError("boom")
             return await super().ws_command(type, **payload)

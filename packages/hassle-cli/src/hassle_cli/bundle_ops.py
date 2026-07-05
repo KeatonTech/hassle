@@ -13,6 +13,8 @@ from typing import Any
 
 from hassle.compiler.bundle import CompileResult, compile_bundle
 from hassle.ir.keys import HELPER_DOMAINS
+from hassle.ir.keys import slugify as _slugify
+from hassle.registry.snapshot import RegistrySnapshot
 from hassle.sync.plan import ObjectMap
 
 
@@ -37,18 +39,48 @@ def source_path_for(bundle_root: Path, result: CompileResult, object_key: str) -
         return span.file
 
 
-def default_source_path(object_key: str) -> str:
+def _category_source_path(object_key: str, registry: RegistrySnapshot) -> str | None:
+    """DESIGN §7.3's placement default, the category-registry half: an
+    object's entity-registry entry (matched by `unique_id == identity`, the
+    id<->unique_id anchor, docs/ha-api-notes.md §2) may carry a UI category
+    for its scope (``"automation"``/``"script"`` -- the only two scopes HA's
+    category registry covers); if so, place it under
+    ``<tree>/<slug(category name)>.py`` instead of the flat ``misc.py``.
+    Helpers have no category-registry scope, so this always returns None for
+    them (they keep the plain domain-default fallback)."""
+    kind, _, identity = object_key.partition(":")
+    if kind not in ("automation", "script"):
+        return None
+    entity = registry.entity_by_unique_id(kind, identity)
+    if entity is None:
+        return None
+    category_name = registry.category_name_for_entity(kind, entity)
+    if not category_name:
+        return None
+    tree = "automations" if kind == "automation" else "scripts"
+    return f"{tree}/{_slugify(category_name)}.py"
+
+
+def default_source_path(object_key: str, *, registry: RegistrySnapshot | None = None) -> str:
     """Fallback path for a brand-new (adopted) object with no existing file.
 
     DESIGN §7.3's placement default: "one file per HA category/label if set,
-    else ``automations/misc.py``" -- one ``misc.py`` per kind's tree
-    subdirectory (``automations/``, ``scripts/``, ``helpers/``), matching
-    what `hassle init` scaffolds and what the M7.1 loader (which now recurses,
-    docs/ha-api-notes.md §17.9 RESOLVED) actually imports. After this first
-    placement the object stays wherever the user moves it (tracked by the
-    manifest); this is only the *initial* landing spot for an object nobody
-    has ever pulled before.
+    else ``automations/misc.py``". When `registry` is supplied and the object
+    has a UI-assigned category (automations/scripts only), it lands under
+    ``<tree>/<slug(category name)>.py``; otherwise (no registry, no category
+    registry scope for this kind, or the object is uncategorized) it falls
+    back to one ``misc.py`` per kind's tree subdirectory (``automations/``,
+    ``scripts/``, ``helpers/``), matching what `hassle init` scaffolds and
+    what the M7.1 loader (which now recurses, docs/ha-api-notes.md §17.9
+    RESOLVED) actually imports. After this first placement the object stays
+    wherever the user moves it (tracked by the manifest); this is only the
+    *initial* landing spot for an object nobody has ever pulled before.
     """
+    if registry is not None:
+        categorized = _category_source_path(object_key, registry)
+        if categorized is not None:
+            return categorized
+
     kind, _, _identity = object_key.partition(":")
     if kind == "automation":
         return "automations/misc.py"
@@ -60,12 +92,16 @@ def default_source_path(object_key: str) -> str:
 
 
 def build_source_paths(
-    bundle_root: Path, result: CompileResult, object_keys: list[str]
+    bundle_root: Path,
+    result: CompileResult,
+    object_keys: list[str],
+    *,
+    registry: RegistrySnapshot | None = None,
 ) -> dict[str, str]:
     paths: dict[str, str] = {}
     for key in object_keys:
         found = source_path_for(bundle_root, result, key)
-        paths[key] = found if found is not None else default_source_path(key)
+        paths[key] = found if found is not None else default_source_path(key, registry=registry)
     return paths
 
 
