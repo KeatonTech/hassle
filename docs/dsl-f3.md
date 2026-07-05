@@ -32,6 +32,24 @@
 > a way to round-trip a UI-saved action's `metadata: {}` / step `alias`/
 > `enabled` through the call site instead of falling back to `service()`.
 
+> **Widened 2026-07-05 (`ux/shared-script-rich-fields`, owner feedback,
+> F3-additive):** `@shared_script` gained a `fields=` kwarg carrying full HA
+> field metadata (`name`/`description`/`selector`/`example`/...) VERBATIM —
+> when supplied it wins over the signature-derived `fields` dict (byte-
+> stability by construction), since real HA-UI-authored scripts always carry
+> this richer shape (the narrower signature-only rule made the decompiler's
+> caller-rewrite feature inert on real bundles: every field forced the
+> `@script` fallback). The signature stays the ergonomic call-site layer —
+> every declared field is still a real Python parameter, `None`-defaulted
+> when the metadata carries no `"default"` key (HA-side requiredness lives in
+> the metadata, not in whether the compiler can invoke the body with zero
+> arguments to build its sequence). New error `UnknownFieldError` (added to
+> `hassle.__all__`, surface count 72 → 73): a call-site kwarg not among
+> `fields=`'s keys (the superset source of truth when `fields=` is explicit)
+> is rejected even if it would otherwise bind against the signature — catches
+> an author who added a Python parameter but forgot to also declare it as a
+> field. Purely additive; no existing name's meaning changed.
+
 The public surface is exactly `hassle.__all__` (module
 `packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.

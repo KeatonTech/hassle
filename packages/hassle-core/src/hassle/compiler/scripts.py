@@ -33,7 +33,7 @@ import functools
 import inspect
 from collections.abc import Callable
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, cast
 
 from hassle.compiler.errors import CompileError
 from hassle.compiler.recording import record_action
@@ -114,6 +114,24 @@ def _fields_from_signature(func: Callable[..., Any]) -> dict[str, Any]:
     return fields
 
 
+class UnknownFieldError(CompileError):
+    """A caller passed a kwarg that is not one of the target script's
+    declared field names (``fields=``'s keys are the superset source of
+    truth when supplied -- ``ux/shared-script-rich-fields``)."""
+
+    def __init__(
+        self, name: str, object_id: str, known: list[str], span: SourceSpan | None
+    ) -> None:
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        known_str = ", ".join(known) if known else "(none)"
+        super().__init__(
+            f"call to `{object_id}({name}=...)`{where} passes a field the script "
+            f"doesn't declare. Its fields are: {known_str}. Fix: correct the spelling, "
+            f"or add `{name}` to the script's `fields=` (and as a parameter of the "
+            f"decorated function)."
+        )
+
+
 class ScriptCallAction:
     """A shared script invocation, recorded at the caller's DSL call site.
 
@@ -164,10 +182,31 @@ class ScriptCallAction:
 
 
 def _bind_call_args(
-    func: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]
+    func: Callable[..., Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    *,
+    object_id: str,
+    known_field_names: frozenset[str] | None,
+    span: SourceSpan | None,
 ) -> dict[str, Any]:
     """Bind a caller's compile-time args/kwargs against ``func``'s signature,
-    applying declared defaults, and return the {field: value} data map."""
+    applying declared defaults, and return the {field: value} data map.
+
+    ``known_field_names`` (``ux/shared-script-rich-fields``): when supplied
+    (a ``@shared_script(fields=...)`` was given explicitly), it is the
+    SUPERSET source of truth for which kwarg names are legal -- checked
+    before signature binding, so an author who added a Python parameter but
+    forgot to also list it in ``fields=`` gets a clear error naming the
+    script's actual declared fields, rather than an unrelated ``TypeError``
+    (or, worse, silently binding against a parameter HA never told the field
+    is real). ``None`` (no explicit ``fields=``) means the signature itself
+    is the only source of truth, exactly as before this widening.
+    """
+    if known_field_names is not None:
+        for name in kwargs:
+            if name not in known_field_names:
+                raise UnknownFieldError(name, object_id, sorted(known_field_names), span)
     sig = inspect.signature(func)
     bound = sig.bind_partial(*args, **kwargs)
     bound.apply_defaults()
@@ -177,13 +216,28 @@ def _bind_call_args(
 def shared_script(**options: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Register a real HA script AND make the decorated name a call-site verb.
 
-    ``@shared_script(id=..., alias=..., icon=...)`` on ``func``:
+    ``@shared_script(id=..., alias=..., icon=..., fields=...)`` on ``func``:
 
     - derives HA ``fields`` from ``func``'s parameters (defaults -> field
       default) and registers ``func`` via the core's ``script(**options)`` --
       the compiler invokes ``func`` exactly once (like any other ``@script``)
       to build the sequence, with the active-fields context set so `param()`
       resolves inside it;
+    - **``fields=`` (F3-additive, ``ux/shared-script-rich-fields``, owner
+      feedback):** when supplied explicitly, it is stored VERBATIM as the
+      script's ``fields`` block instead of the signature-derived one --
+      byte-stability by construction, since real HA-UI-authored scripts carry
+      full field metadata (``name``/``description``/``selector``/...) the
+      signature alone can never reconstruct. The signature stays the
+      ergonomic call-site layer regardless: every parameter is still a real
+      Python name (typically ``None``-defaulted for a rich field, since HA-
+      side requiredness lives in the metadata, not in whether the compiler
+      can invoke the body with zero arguments to build its sequence).
+      ``fields=``'s keys become the superset source of truth for call-site
+      kwarg validation (see :func:`_bind_call_args`) and for ``param()``
+      (the active-fields context below uses ``fields=``'s keys when given,
+      so ``param()`` can reference any declared field, not just ones that
+      happen to also be Python parameters).
     - returns a *wrapper* (not ``func`` itself) so that calling
       ``flash_lights(...)`` from another automation/script body never re-runs
       the body -- it records a ``ScriptCallAction`` instead (DESIGN §5.6: "callers
@@ -192,20 +246,36 @@ def shared_script(**options: Any) -> Callable[[Callable[..., Any]], Callable[...
 
     def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
         object_id = str(options.get("id") or func.__name__)
-        fields = _fields_from_signature(func)
+        explicit_fields = options.get("fields")
+        signature_fields = _fields_from_signature(func)
         script_options = dict(options)
-        if fields:
-            script_options["fields"] = fields
+        active_field_names: frozenset[str]
+        if isinstance(explicit_fields, dict):
+            # Verbatim wins (byte-stability by construction) -- never merged
+            # with the signature-derived shape, so decompile -> recompile
+            # reproduces the exact same fields= literal.
+            active_field_names = frozenset(cast("dict[str, Any]", explicit_fields))
+        elif signature_fields:
+            script_options["fields"] = signature_fields
+            active_field_names = frozenset(signature_fields)
+        else:
+            active_field_names = frozenset()
 
         @functools.wraps(func)
         def compiled_body(*args: Any, **kwargs: Any) -> Any:
-            token = _ACTIVE_FIELDS.set(frozenset(fields))
+            token = _ACTIVE_FIELDS.set(active_field_names)
             try:
                 return func(*args, **kwargs)
             finally:
                 _ACTIVE_FIELDS.reset(token)
 
         _register_script(**script_options)(compiled_body)
+
+        # known_field_names is None (skip the superset check, signature-only
+        # validation) unless fields= was given explicitly -- a plain
+        # signature-derived shared_script keeps its pre-existing behavior
+        # exactly (Python's own TypeError on an unknown kwarg).
+        known_field_names = active_field_names if isinstance(explicit_fields, dict) else None
 
         @functools.wraps(func)
         def caller(
@@ -215,10 +285,18 @@ def shared_script(**options: Any) -> Callable[[Callable[..., Any]], Callable[...
             enabled: Any = None,
             **kwargs: Any,
         ) -> None:
-            data = _bind_call_args(func, args, kwargs)
+            span = capture_span(depth=0)
+            data = _bind_call_args(
+                func,
+                args,
+                kwargs,
+                object_id=object_id,
+                known_field_names=known_field_names,
+                span=span,
+            )
             record_action(
                 ScriptCallAction(object_id, data, metadata=metadata, alias=alias, enabled=enabled),
-                span=capture_span(depth=0),
+                span=span,
             )
 
         return caller

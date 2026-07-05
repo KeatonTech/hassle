@@ -116,3 +116,90 @@ def test_pull_rewrites_cross_file_script_call_with_import(
     assert recompiled_call["action"] == "script.dismiss_notification"
     assert recompiled_call["data"] == {"notification_id": "guest_reminder"}
     assert recompiled_call["metadata"] == {}
+
+
+def test_pull_rewrites_rich_field_script_call_same_batch(
+    git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """`ux/shared-script-rich-fields`, task 3: a script whose every field
+    carries `selector`/`name`/`description` (the shape the HA UI always
+    saves, mirroring `call_to_action_notification`) is called by an
+    automation in the SAME pull batch -- the widened emit decision must
+    still pick `@shared_script` (not fall back to `@script`), and the caller
+    rewrite must still fire."""
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    _commit_toml_change(git_repo)
+
+    backend.create(
+        "script",
+        {
+            "alias": "Call to action notification",
+            "fields": {
+                "title": {"name": "Title", "selector": {"text": {}}},
+                "message": {"name": "Message", "selector": {"text": {}}},
+                "action_button": {"name": "Action button", "selector": {"text": {}}},
+                "action_button_icon": {"name": "Action button icon", "selector": {"text": {}}},
+                "tag": {"name": "Tag", "selector": {"text": {}}},
+            },
+            "sequence": [
+                {
+                    "service": "notify.mobile_app_keaton",
+                    "data": {
+                        "title": "{{ title }}",
+                        "message": "{{ message }}",
+                        "tag": "{{ tag }}",
+                        "action_button": "{{ action_button }}",
+                        "action_button_icon": "{{ action_button_icon }}",
+                    },
+                }
+            ],
+        },
+    )
+    backend.create(
+        "automation",
+        {
+            "id": "garage_door_opened_notify",
+            "alias": "Garage door opened notify",
+            "triggers": [{"trigger": "state", "entity_id": ["cover.garage_door"], "to": ["open"]}],
+            "conditions": [],
+            "actions": [
+                {
+                    "action": "script.call_to_action_notification",
+                    "data": {
+                        "title": "Garage",
+                        "message": "Door opened",
+                        "action_button": "view",
+                        "action_button_icon": "mdi:garage-open",
+                        "tag": "garage_door",
+                    },
+                    "metadata": {},
+                }
+            ],
+            "mode": "single",
+        },
+    )
+
+    result = cli(["pull"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+
+    misc_automation = (git_repo / "automations" / "misc.py").read_text(encoding="utf-8")
+    misc_script = (git_repo / "scripts" / "misc.py").read_text(encoding="utf-8")
+
+    assert "@shared_script(" in misc_script
+    assert "@script(" not in misc_script
+    assert "fields={" in misc_script
+    assert "call_to_action_notification(" in misc_automation
+    assert "script.call_to_action_notification" not in misc_automation
+
+    compiled = compile_bundle(git_repo)
+    recompiled_call = compiled.objects["automation:garage_door_opened_notify"].to_ha()["actions"][0]
+    assert recompiled_call["action"] == "script.call_to_action_notification"
+    assert recompiled_call["data"] == {
+        "title": "Garage",
+        "message": "Door opened",
+        "action_button": "view",
+        "action_button_icon": "mdi:garage-open",
+        "tag": "garage_door",
+    }
+    assert recompiled_call["metadata"] == {}

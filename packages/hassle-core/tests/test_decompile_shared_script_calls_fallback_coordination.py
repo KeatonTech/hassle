@@ -1,23 +1,37 @@
-"""Field failure regression (`ux/shared-script-calls-fix`): the caller
-function-call rewrite must agree with the SAME emit decision that picked
-``@shared_script`` vs. the ``@script`` fallback for the callee.
+"""Field failure regression (`ux/shared-script-calls-fix`, widened by
+`ux/shared-script-rich-fields`): the caller function-call rewrite must agree
+with the SAME emit decision that picked `@shared_script` vs. the `@script`
+fallback for the callee.
 
-The owner's real bundle hit this: ``adjust_tdbu_blind`` fell back to
-``@script`` (its ``fields`` carry rich metadata / a default-less field, per
-DESIGN §7.3's fallback rule) -- so it decompiles to a zero-parameter function
--- but ``scripts/misc.py``'s caller ``ui_cover_control_binding`` still had its
-``{"action": "script.adjust_tdbu_blind", "data": {"cover_top": ...}}`` action
-rewritten to ``adjust_tdbu_blind(cover_top=...)``, a call the zero-parameter
-function cannot accept. ``TypeError`` at compile time.
+The owner's real bundle hit this: a script fell back to `@script` -- so it
+decompiled to a zero-parameter function -- but its caller still had its
+`{"action": "script.<id>", "data": {...}}` action rewritten to a call passing
+those kwargs, a call the zero-parameter function cannot accept. `TypeError`
+at compile time.
 
-Root cause: ``codegen._build_resolver`` (same-batch) and
-``bundle_ops.build_script_refs`` (cross-file) built a ``CallTarget``/
-``ScriptRef`` for EVERY script, keyed only on whether it has any ``fields`` at
-all -- never consulting whether the emitted decorator is actually
-``@shared_script`` (parameterized call site) or ``@script`` (no parameters,
-whatever the caller's stored ``data`` was). Fix: the shared_script-vs-fallback
-decision must be computed once and gate `CallTarget`/`ScriptRef` creation, not
-just used to pick a field allow-list.
+Root cause: `codegen._build_resolver` (same-batch) and
+`bundle_ops.build_script_refs` (cross-file) built a `CallTarget`/`ScriptRef`
+for EVERY script, keyed only on whether it has any `fields` at all -- never
+consulting whether the emitted decorator is actually `@shared_script`
+(parameterized call site) or `@script` (no parameters, whatever the caller's
+stored `data` was). Fix: the shared_script-vs-fallback decision must be
+computed once and gate `CallTarget`/`ScriptRef` creation, not just used to
+pick a field allow-list.
+
+**Widened (`ux/shared-script-rich-fields`, owner feedback):** the original
+fix's example fallback shape (a field carrying `name`/`selector` metadata,
+no `default`) is now ITSELF `@shared_script`-expressible (`fields=` emitted
+verbatim, `None`-defaulted signature) -- real HA-UI-authored scripts always
+carry this shape, so the narrower rule made the whole feature inert on real
+bundles. The tests below now use one of the two remaining genuine fallback
+triggers (a field spec that isn't a dict at all -- malformed metadata) to
+keep exercising the SAME coordination hazard the fix addresses, without
+asserting a shape that's no longer a fallback case. (The other trigger, a
+field name that isn't a valid Python identifier, is covered in
+`test_decompile_shared_script_calls.py`; not reused here because it would
+also make the caller's `data` dict key non-identifier-shaped, tripping an
+unrelated, pre-existing `service()` codegen limitation on non-identifier
+data keys -- out of scope for this fix.)
 """
 
 from __future__ import annotations
@@ -27,13 +41,13 @@ from hassle.decompiler import decompile_bundle
 from hassle.decompiler.codegen import ScriptRef
 from hassle.ir import parse
 
-# The owner's exact reported shape: a script with a default-less field (forces
-# the @script fallback per DESIGN §7.3), called directly by an automation in
-# the same batch.
+# A field spec that isn't a dict at all: one of the two remaining genuine
+# @script fallback triggers post-widening (HA's UI never produces this
+# shape, but the DSL must still round-trip it losslessly if it appears).
 _FALLBACK_SCRIPT_CONFIG = {
     "alias": "Adjust TDBU blind",
     "fields": {
-        "cover_top": {"name": "Cover top position", "selector": {"number": {}}},
+        "cover_top": "not-a-dict-spec",
     },
     "sequence": [
         {
@@ -65,8 +79,9 @@ def _fallback_script_and_caller() -> dict[str, object]:
 
 
 def test_call_to_fallback_script_stays_service_same_batch() -> None:
-    """The callee falls back to @script (rich field metadata) -- its caller,
-    in the SAME decompile batch, must NOT be rewritten to a function call."""
+    """The callee falls back to @script (malformed field spec) -- its
+    caller, in the SAME decompile batch, must NOT be rewritten to a function
+    call."""
     objects = _fallback_script_and_caller()
     source = decompile_bundle(objects)
 

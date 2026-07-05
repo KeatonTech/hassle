@@ -13,7 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from hassle.compiler import NoRecordingContextError, UnknownParamError, compile_bundle
+from hassle.compiler import (
+    NoRecordingContextError,
+    UnknownFieldError,
+    UnknownParamError,
+    compile_bundle,
+)
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "dsl"
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
@@ -67,3 +72,9 @@ def test_raw_automation_non_json_serializable_error_message() -> None:
     with pytest.raises(RawAutomationNotJSONSerializableError) as excinfo:
         build_raw_automation(id="weird_raw", alias="x", data=Weird())
     _check_snapshot("raw_automation_not_json", _normalize(str(excinfo.value)))
+
+
+def test_unknown_field_call_kwarg_error_message() -> None:
+    with pytest.raises(UnknownFieldError) as excinfo:
+        compile_bundle(FIXTURES / "shared_script_rich_fields_unknown_call_kwarg" / "bundle")
+    _check_snapshot("unknown_field_call_kwarg", _normalize(str(excinfo.value)))
