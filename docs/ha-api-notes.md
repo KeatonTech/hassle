@@ -826,6 +826,35 @@ real HA), but the compiler/CLI (M5/M7) should ensure a declared helper's `name`
 slugifies to its intended `id`, or the plan's object key will drift from HA's
 assigned identity. Flagged for M7.
 
+**Amendment 2026-07-05 (smoke #7 field evidence): the slug rule only
+constrains the WS-API *creation* path — `.storage` contents themselves are
+unconstrained.** The owner's live registry has helpers whose id does **not**
+equal `slugify(name)` — e.g. an `input_text` with id
+`material_you_image_url_6814bc` and name "Material You Base Color Source
+Image Path/URL Keaton" (slug: `material_you_base_color_source_image_path_
+url_keaton`). These were created by an external integration writing HA's
+`.storage/*` files directly, bypassing the WS `create` call entirely — so the
+id/name-slug relationship above never applied to them in the first place.
+Nothing in HA enforces id == slugify(name) as an invariant of storage
+*contents*; it is purely a derivation rule of one specific creation path.
+
+Consequence for the M7 `helper-id-name-mismatch` validator Finding
+(`hassle.registry.validate._validate_helper_slugs`): the original,
+unconditional form of this check would tell an owner to "fix" the id of an
+already-live, adopted helper like the one above — advice that, if followed,
+would change `HelperConfig.id` for an object Hassle does not own the
+creation of, breaking the bundle's mapping to a real pre-existing entity
+(a de facto I2 violation via user-actioned "fix" text). **The check is now
+scoped to NEW declarations only**: it fires exclusively when
+`<domain>.<supplied_id>` is absent from the registry snapshot (i.e. nothing
+with that identity exists yet, so Hassle would create it fresh via the WS
+path, where the slug rule genuinely does bite). An id already present in the
+snapshot is adopted, live truth — exempt regardless of name/id mismatch. When
+no registry snapshot is available at all (validation can't distinguish new
+from adopted), the Finding still fires so a real bug isn't silently hidden,
+but at softened `"note"` severity with fix text explaining the uncertainty
+and pointing at `hassle pull`/`hassle stubs --refresh`.
+
 ### 17.6 The config API validates the full schema on every write
 `POST /api/config/automation/config/{id}` rejects a partial body — e.g. an
 "update just the alias" payload missing `actions` returns

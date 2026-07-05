@@ -232,6 +232,7 @@ class _InputSelect:
 class _InputText:
     entities: InputTextEntity  # input_text.entities - "Entities List"
     location: InputTextEntity  # input_text.location - "Location"
+    material_you_image_url_6814bc: InputTextEntity  # input_text.material_you_image_url_6814bc
     vacation_note: InputTextEntity  # input_text.vacation_note - "Vacation Note"
     def __getitem__(self, object_id: str) -> InputTextEntity: ...
 

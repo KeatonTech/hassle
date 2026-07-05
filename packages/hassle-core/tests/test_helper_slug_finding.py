@@ -9,6 +9,18 @@ id<->entity mapping the bundle (and the sync engine's object keys) assume.
 This is a distinct, additive Finding type (`helper-id-name-mismatch`),
 surfaced by `hassle validate` (M7), snapshot-tested per R6/the milestone's
 Finding rubric (what/where/fix).
+
+**Scoped to NEW declarations only** (smoke #7 field evidence; §17.5 amended
+2026-07-05): the slug-derivation rule only holds for the WS-API creation path
+that Hassle's own push uses. A live registry's ``.storage`` can legitimately
+hold helpers created some other way (e.g. an external integration writing
+``.storage`` directly) whose id does NOT equal ``slugify(name)`` -- those are
+adopted, already-live truth, and "fixing" them by changing the id would break
+the bundle's mapping to a real, pre-existing entity (I2). So the Finding fires
+only when the declared ``<domain>.<id>`` entity is NOT already present in the
+registry snapshot -- i.e. a genuinely new helper Hassle would create via the
+WS path, where the slug rule actually bites. An adopted helper whose id is
+already in the snapshot produces zero findings, regardless of name mismatch.
 """
 
 from __future__ import annotations
@@ -56,12 +68,16 @@ def _check_snapshot(name: str, actual: str) -> None:
 def test_helper_id_mismatched_with_name_slug_flagged(
     tmp_path: Path, snapshot: RegistrySnapshot
 ) -> None:
+    # `guest_room_mode` is NOT in the fixture registry snapshot -- this is a
+    # genuinely new declaration Hassle would create via the WS path, where
+    # the slug rule bites (see the scoping tests further below for the
+    # adopted/present-in-snapshot counterpart).
     bundle = _write_bundle(
         tmp_path,
         """
 from hassle import automation, input_boolean, service
 
-guest_flag = input_boolean(id="guest_mode", name="Guest Flag")
+guest_flag = input_boolean(id="guest_room_mode", name="Guest Room Flag")
 
 @automation(id="a", alias="A")
 def a():
@@ -72,8 +88,8 @@ def a():
     findings = validate_bundle(result, snapshot)
     matches = [f for f in findings if f.code == "helper-id-name-mismatch"]
     assert matches, f"expected a helper-id-name-mismatch finding, got: {findings}"
-    assert "guest_mode" in matches[0].message
-    assert "guest_flag" in matches[0].fix or "guest_flag" in matches[0].message
+    assert "guest_room_mode" in matches[0].message
+    assert "guest_room_flag" in matches[0].fix or "guest_room_flag" in matches[0].message
     _check_snapshot("helper_id_name_mismatch", _normalize(str(matches[0])))
 
 
@@ -114,3 +130,99 @@ def a():
     result = compile_bundle(bundle)
     findings = validate_bundle(result, snapshot)
     assert not [f for f in findings if f.code == "helper-id-name-mismatch"]
+
+
+# Field evidence (owner's live registry): fixtures/registry/home.json seeds
+# `input_text.material_you_image_url_6814bc`, named "Material You Base Color
+# Source Image Path/URL Keaton" -- an id that does NOT equal slugify(name),
+# adopted from an external integration that wrote `.storage` directly (not
+# via the WS-API create path Hassle's push uses).
+
+
+def test_adopted_helper_with_mismatched_id_present_in_snapshot_is_not_flagged(
+    tmp_path: Path, snapshot: RegistrySnapshot
+) -> None:
+    """A declared helper whose id+domain already exists in the registry
+    snapshot is an *adopted* helper, not a new WS-API creation -- the slug
+    rule never bites it (nothing will be freshly `create`d), so it is exempt
+    from this Finding regardless of the name/id mismatch.
+    """
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, input_text, service
+
+img = input_text(
+    id="material_you_image_url_6814bc",
+    name="Material You Base Color Source Image Path/URL Keaton",
+)
+
+@automation(id="a", alias="A")
+def a():
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert not [f for f in findings if f.code == "helper-id-name-mismatch"]
+
+
+def test_same_mismatched_helper_absent_from_snapshot_is_flagged(tmp_path: Path) -> None:
+    """The exact same declaration as the "present in snapshot" test above
+    (same id, same name, same mismatch) -- but validated against a snapshot
+    that does NOT contain `input_text.material_you_image_url_6814bc`. Absent
+    from the snapshot means Hassle would `create` it fresh via the WS path,
+    where the slug rule bites -- so, unlike the adopted case, this must fire,
+    with fix text explaining the new-vs-adopted scoping.
+    """
+    empty_snapshot = RegistrySnapshot()
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, input_text, service
+
+img = input_text(
+    id="material_you_image_url_6814bc",
+    name="Material You Base Color Source Image Path/URL Keaton",
+)
+
+@automation(id="a", alias="A")
+def a():
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, empty_snapshot)
+    matches = [f for f in findings if f.code == "helper-id-name-mismatch"]
+    assert matches, f"expected a helper-id-name-mismatch finding, got: {findings}"
+    # An empty snapshot ("no snapshot available") can't distinguish new from
+    # adopted, so this is the softened "note" path, not "error".
+    assert matches[0].severity == "note"
+    _check_snapshot("helper_id_name_mismatch_no_snapshot", _normalize(str(matches[0])))
+
+
+def test_new_helper_with_mismatched_id_absent_from_real_snapshot_is_flagged(
+    tmp_path: Path, snapshot: RegistrySnapshot
+) -> None:
+    """A mismatch on an id/domain that is absent from a *real* (non-empty)
+    registry snapshot -- a genuinely new declaration Hassle would create via
+    the WS path, where the slug rule bites -- must fire at full "error"
+    severity, with fix text explaining the new-vs-adopted scoping.
+    """
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, input_boolean, service
+
+guest_flag = input_boolean(id="guest_room_mode", name="Guest Room Flag")
+
+@automation(id="a", alias="A")
+def a():
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    matches = [f for f in findings if f.code == "helper-id-name-mismatch"]
+    assert matches, f"expected a helper-id-name-mismatch finding, got: {findings}"
+    assert matches[0].severity == "error"
