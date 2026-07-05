@@ -198,3 +198,23 @@ def test_mirror_disabled_by_default_reports_status(
     result = cli(["mirror", "status"], cwd=bundle_dir)
     assert result.exit_code == 0, result.output
     assert "disabled" in result.output.lower() or "off" in result.output.lower()
+
+
+def test_pull_writes_registry_snapshot(git_repo, cli, fake_backend, toml_writer) -> None:
+    # DESIGN §9.2: the snapshot is "refreshed on every pull". Smoke test showed
+    # validate skipping tier-2/3 right after a fresh pull because pull never
+    # wrote .hassle/registry.json.
+    import subprocess
+
+    _backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    subprocess.run(["git", "add", "-A"], cwd=git_repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "scaffold"], cwd=git_repo, check=True)
+
+    # The fixture pre-seeds registry.json; the refresh contract is that pull
+    # RE-fetches it from the backend, so remove the seed first.
+    (git_repo / ".hassle" / "registry.json").unlink()
+
+    result = cli(["pull"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+    assert (git_repo / ".hassle" / "registry.json").is_file(), result.output
