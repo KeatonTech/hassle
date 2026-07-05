@@ -185,11 +185,13 @@ class _ChooseBuilder:
     @contextlib.contextmanager
     def when_(
         self,
-        condition: ConditionBuilder,
-        *,
+        *conditions: ConditionBuilder,
         alias: str | None = None,
         enabled: bool | None = None,
     ) -> Generator[None]:
+        """Zero conditions (`when_()`) is the UI's unconditional final branch —
+        stored as `"conditions": []`, deliberately distinct from `default:`
+        (owner-bundle finding); multiple conditions are HA's implicit AND."""
         rec = _require_active("when_")
         nodes: list[RecordedNode] = []
         with rec.push_actions(nodes):
@@ -197,7 +199,7 @@ class _ChooseBuilder:
         branch: dict[str, Any] = {}
         if alias is not None:
             branch["alias"] = alias
-        branch["conditions"] = [_condition_body(condition)]
+        branch["conditions"] = [_condition_body(c) for c in conditions]
         branch["sequence"] = [n.body for n in nodes]
         if enabled is not None:
             branch["enabled"] = enabled

@@ -255,16 +255,20 @@ def _choose(body: dict[str, Any]) -> list[str] | None:
         if not isinstance(raw_conds, list):
             return None
         conds = cast("list[Any]", raw_conds)
-        if len(conds) != 1 or not isinstance(conds[0], dict):
-            return None
-        cond_dict = cast("dict[str, Any]", conds[0])
-        cond_src = decompile_condition(cond_dict)
-        if cond_src is None:
-            return None
+        # 0..n conditions: [] is the UI's unconditional final branch (distinct
+        # from `default:`, preserved exactly); 2+ is HA's implicit AND.
+        cond_srcs: list[str] = []
+        for cond in conds:
+            if not isinstance(cond, dict):
+                return None
+            cond_src = decompile_condition(cast("dict[str, Any]", cond))
+            if cond_src is None:
+                return None
+            cond_srcs.append(cond_src)
         seq_lines = _actions_block(branch_dict["sequence"])
         if seq_lines is None:
             return None
-        when_parts = [cond_src, *_step_option_kwargs_src(branch_dict)]
+        when_parts = [*cond_srcs, *_step_option_kwargs_src(branch_dict)]
         branch_srcs.append((", ".join(when_parts), _flatten(seq_lines)))
 
     choose_header_parts = _step_option_kwargs_src(body)
