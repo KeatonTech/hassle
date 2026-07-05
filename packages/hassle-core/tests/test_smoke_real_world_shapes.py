@@ -134,7 +134,10 @@ def test_decompile_state_trigger_singleton_list_stays_a_list() -> None:
     src = decompile_trigger(body)
     assert src is not None
     assert "raw_trigger" not in src
-    assert src == "state(['binary_sensor.x']).is_(['off']).to(['on'])"
+    # Entity position (DESIGN §7.3 owner feedback): entity_id renders through
+    # the registry accessor; `to`/`from` are state *values*, never entity
+    # positions, so they stay plain strings even when list-valued.
+    assert src == "state([e.binary_sensor.x]).is_(['off']).to(['on'])"
 
 
 def test_decompile_state_trigger_multi_entry_list() -> None:
@@ -146,7 +149,7 @@ def test_decompile_state_trigger_multi_entry_list() -> None:
     src = decompile_trigger(body)
     assert src is not None
     assert (
-        src == "state(['binary_sensor.hall_motion', 'binary_sensor.kitchen_motion'])"
+        src == "state([e.binary_sensor.hall_motion, e.binary_sensor.kitchen_motion])"
         ".to(['on', 'detected'])"
     )
 
@@ -171,7 +174,7 @@ def test_decompile_numeric_state_trigger_list_entity_id() -> None:
     src = decompile_trigger(body)
     assert src is not None
     assert "raw_trigger" not in src
-    assert src == "numeric_state(['sensor.living_room_temp', 'sensor.bedroom_temp'], above=20)"
+    assert src == "numeric_state([e.sensor.living_room_temp, e.sensor.bedroom_temp], above=20)"
 
 
 # ---------------------------------------------------------------------------

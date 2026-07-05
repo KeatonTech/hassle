@@ -220,7 +220,7 @@ def test_numeric_state_condition_with_attribute_top_level() -> None:
         "above": 0,
     }
     src = decompile_condition(body)
-    assert src == "numeric_state('cover.garage', attribute='current_position', above=0)"
+    assert src == "numeric_state(e.cover.garage, attribute='current_position', above=0)"
 
 
 def test_decompile_choose_branch_numeric_state_attribute_condition() -> None:
@@ -243,7 +243,7 @@ def test_decompile_choose_branch_numeric_state_attribute_condition() -> None:
     }
     src = "\n".join(decompile_action(body))
     assert "raw_action" not in src
-    assert "numeric_state('cover.garage', attribute='current_position', above=0)" in src
+    assert "numeric_state(e.cover.garage, attribute='current_position', above=0)" in src
 
 
 def test_choose_branch_with_empty_conditions_round_trips() -> None:

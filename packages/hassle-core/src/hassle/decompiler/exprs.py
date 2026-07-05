@@ -11,6 +11,7 @@ Nothing here mutates its input, and nothing depends on wall-clock or randomness
 
 from __future__ import annotations
 
+import re
 from typing import Any, cast
 
 # ---------------------------------------------------------------------------
@@ -22,12 +23,75 @@ def render_literal(value: Any) -> str:
     """Render a JSON-compatible value as a Python literal (deterministic)."""
     if isinstance(value, dict):
         as_dict = cast("dict[Any, Any]", value)
-        items = ", ".join(f"{render_literal(k)}: {render_literal(v)}" for k, v in as_dict.items())
+        items = ", ".join(
+            f"{render_literal(k)}: {render_entity_literal_at(k, v)}" for k, v in as_dict.items()
+        )
         return "{" + items + "}"
     if isinstance(value, list):
         as_list = cast("list[Any]", value)
         return "[" + ", ".join(render_literal(v) for v in as_list) + "]"
     return repr(value)
+
+
+# An entity id has the shape `domain.object_id` (DESIGN §5.2): domain is
+# `[a-z_]+`, object_id is `(?!_)[\da-z_]+(?<!_)` (may start with a digit,
+# never with/ending in an underscore). Anchored so a Jinja template string
+# (never a bare "domain.object_id" -- it always has `{{`/other punctuation)
+# or a registry UUID (hex, no dot) never matches.
+_ENTITY_ID_SHAPE_RE = re.compile(r"^[a-z_]+\.(?!_)[a-z0-9_]+(?<!_)$")
+
+
+def is_entity_id_string(value: Any) -> bool:
+    """True for a bare string matching the ``domain.object_id`` shape."""
+    return isinstance(value, str) and bool(_ENTITY_ID_SHAPE_RE.match(value))
+
+
+def render_entity_ref(entity_id: str) -> str:
+    """Render an entity id string as ``e.<domain>.<object_id>`` (or the index
+    form ``e.<domain>["<object_id>"]`` for a digit-leading object_id, DESIGN
+    §5.2 -- a Python attribute can't start with a digit)."""
+    domain, _, object_id = entity_id.partition(".")
+    if object_id[0].isdigit():
+        return f"e.{domain}[{object_id!r}]"
+    return f"e.{domain}.{object_id}"
+
+
+def render_entity_position(value: Any) -> str:
+    """Render a value known to be in an *entity position* (a bare entity id,
+    or a list of them -- ``_is_entity_id_shape``'s domain: state()/
+    numeric_state() entity args, ``target.entity_id``, ``wait_for_trigger``
+    triggers, helper refs). A bare id matching the entity-id shape becomes
+    ``e.<domain>.<object_id>``; a list becomes ``[e.a.b, e.c.d]`` (each entry
+    rendered independently so a non-conforming entry still round-trips as a
+    plain literal rather than dropping data, I3). ``EntityRef`` is a ``str``
+    subclass (``hassle.compiler.helpers.EntityRef``), so this substitution
+    compiles to the exact same HA value as the literal it replaces -- purely
+    cosmetic source-level sugar, zero IR drift.
+    """
+    if isinstance(value, list):
+        items = cast("list[Any]", value)
+        return "[" + ", ".join(render_entity_position(v) for v in items) + "]"
+    if is_entity_id_string(value):
+        return render_entity_ref(value)
+    return render_literal(value)
+
+
+# The one dict key where an entity-position value can appear nested (DESIGN
+# §7.3 owner feedback): `target={"entity_id": ...}`. Rendered as a real dict
+# via `render_literal`, whose per-key dispatch (`render_entity_literal_at`)
+# special-cases this key so `target={"entity_id": e.light.hallway}` -- still
+# an ordinary dict literal, `EntityRef` is a `str` subclass, so it compiles
+# byte-identical (I3).
+_ENTITY_ID_DICT_KEYS = frozenset({"entity_id"})
+
+
+def render_entity_literal_at(key: Any, value: Any) -> str:
+    """`render_literal`'s per-key dispatch for a dict being rendered: an
+    `entity_id` key's value goes through the entity-position renderer;
+    everything else renders as an ordinary literal."""
+    if key in _ENTITY_ID_DICT_KEYS:
+        return render_entity_position(value)
+    return render_literal(value)
 
 
 # Options common to every classic trigger builder (DESIGN §5.4): applied via
@@ -129,7 +193,7 @@ def _target_call(target: dict[str, Any]) -> str | None:
     if set(target) == {"device_id"}:
         return f"device_id({target['device_id']!r})"
     if set(target) == {"entity_id"} and isinstance(target["entity_id"], str):
-        return repr(target["entity_id"])
+        return render_entity_position(target["entity_id"])
     return None
 
 
@@ -232,7 +296,7 @@ def _trig_state(body: dict[str, Any]) -> str | None:
     entity_id = body.get("entity_id")
     if not _is_entity_id_shape(entity_id):
         return None
-    call = f"state({render_literal(entity_id)})"
+    call = f"state({render_entity_position(entity_id)})"
     option_kwargs = _options_kwargs_src(body)
     has_to = "to" in body
     has_from = "from" in body
@@ -271,7 +335,7 @@ def _trig_numeric_state(body: dict[str, Any]) -> str | None:
     entity_id = body.get("entity_id")
     if not _is_entity_id_shape(entity_id):
         return None
-    parts = [render_literal(entity_id)]
+    parts = [render_entity_position(entity_id)]
     for key in ("attribute", "above", "below", "value_template"):
         if key in body:
             parts.append(f"{key}={render_literal(body[key])}")
@@ -503,7 +567,7 @@ def _cond_state(body: dict[str, Any]) -> str | None:
     # normalized to a scalar (I3).
     if not _is_entity_id_shape(entity_id):
         return None
-    call = f"state({render_literal(entity_id)})"
+    call = f"state({render_entity_position(entity_id)})"
     if "state" in body:
         call += f".is_({render_literal(body['state'])})"
     return call
@@ -513,7 +577,7 @@ def _cond_numeric_state(body: dict[str, Any]) -> str | None:
     known = {"condition", "entity_id", "attribute", "above", "below", "value_template"}
     if not set(body) <= known or "entity_id" not in body:
         return None
-    parts = [repr(body["entity_id"])]
+    parts = [render_entity_position(body["entity_id"])]
     for key in ("attribute", "above", "below", "value_template"):
         if key in body:
             parts.append(f"{key}={render_literal(body[key])}")

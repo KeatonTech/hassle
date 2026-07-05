@@ -110,7 +110,7 @@ def test_decompile_state_condition_singleton_list_stays_a_list() -> None:
     src = decompile_condition(body)
     assert src is not None
     assert "raw_condition" not in src
-    assert src == "state(['input_boolean.x']).is_(['on'])"
+    assert src == "state([e.input_boolean.x]).is_(['on'])"
 
 
 def test_decompile_state_condition_multi_entry_list() -> None:
@@ -123,7 +123,7 @@ def test_decompile_state_condition_multi_entry_list() -> None:
     assert src is not None
     assert "raw_condition" not in src
     assert (
-        src == "state(['binary_sensor.hall_motion', 'binary_sensor.kitchen_motion'])"
+        src == "state([e.binary_sensor.hall_motion, e.binary_sensor.kitchen_motion])"
         ".is_(['on', 'detected'])"
     )
 
@@ -136,7 +136,7 @@ def test_decompile_state_condition_list_valued_nested_in_if_action() -> None:
     src = "\n".join(decompile_action(body))
     assert "raw_action" not in src
     assert "raw_condition" not in src
-    assert "state(['input_boolean.guest_mode']).is_(['on'])" in src
+    assert "state([e.input_boolean.guest_mode]).is_(['on'])" in src
 
 
 def test_decompile_state_condition_list_valued_nested_in_choose_branch() -> None:
@@ -157,7 +157,7 @@ def test_decompile_state_condition_list_valued_nested_in_choose_branch() -> None
     src = "\n".join(decompile_action(body))
     assert "raw_action" not in src
     assert "raw_condition" not in src
-    assert "state(['binary_sensor.hall_motion']).is_(['on'])" in src
+    assert "state([e.binary_sensor.hall_motion]).is_(['on'])" in src
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +373,7 @@ def test_wait_for_trigger_container_not_raw_with_list_valued_state_trigger() -> 
     (src,) = decompile_action(body)
     assert "raw_action" not in src
     assert src.startswith("wait_for(")
-    assert "state(['binary_sensor.front_door']).to(['off'])" in src
+    assert "state([e.binary_sensor.front_door]).to(['off'])" in src
 
 
 def test_empty_data_dict_round_trips_exactly() -> None:

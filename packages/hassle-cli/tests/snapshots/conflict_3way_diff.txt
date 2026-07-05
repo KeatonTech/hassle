@@ -1,12 +1,14 @@
                 conflict  automation:hall_light_on_motion
 --- remote
 +++ local
-@@ -1,4 +1,4 @@
--@automation(alias='Hallway light on motion (UI edit)')
-+@automation(alias='Hallway light on motion (local edit)')
- def hall_light_on_motion():
-     when(state('binary_sensor.hall_motion').to('on'))
-     service('light.turn_on', target={'entity_id': 'light.hallway'})
+@@ -1,5 +1,5 @@
+-@automation(id='hall_light_on_motion', alias='Hallway light on motion (UI edit)')
+-def hallway_light_on_motion_ui_edit():
++@automation(id='hall_light_on_motion', alias='Hallway light on motion (local edit)')
++def hallway_light_on_motion_local_edit():
+     # --- triggers ---
+     when(state(e.binary_sensor.hall_motion).to('on'))
+     # --- actions ---
 
   resolve with: hassle push --accept-local automation:hall_light_on_motion  |  --accept-remote 
 automation:hall_light_on_motion
