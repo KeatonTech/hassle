@@ -170,6 +170,12 @@ class _ChooseBuilder:
     ``with c.when_(cond): ...`` appends a ``{conditions, sequence}`` branch;
     ``with c.default(): ...`` sets the ``default`` sequence (HA allows at most
     one; a second call overwrites, matching "last wins" elsewhere in the DSL).
+
+    ``with c.when_(cond, alias=, enabled=): ...`` (residue-coverage round 3,
+    docs/ha-api-notes.md §21): names/toggles *that branch* specifically — the
+    HA UI names individual ``choose`` branches, distinct from the whole
+    ``choose`` block's own ``alias``/``enabled`` (``choose()``'s kwargs of the
+    same name) and from any step's own ``alias``/``enabled`` inside it.
     """
 
     def __init__(self) -> None:
@@ -177,14 +183,25 @@ class _ChooseBuilder:
         self._default: list[dict[str, Any]] | None = None
 
     @contextlib.contextmanager
-    def when_(self, condition: ConditionBuilder) -> Generator[None]:
+    def when_(
+        self,
+        condition: ConditionBuilder,
+        *,
+        alias: str | None = None,
+        enabled: bool | None = None,
+    ) -> Generator[None]:
         rec = _require_active("when_")
         nodes: list[RecordedNode] = []
         with rec.push_actions(nodes):
             yield
-        self._branches.append(
-            {"conditions": [_condition_body(condition)], "sequence": [n.body for n in nodes]}
-        )
+        branch: dict[str, Any] = {}
+        if alias is not None:
+            branch["alias"] = alias
+        branch["conditions"] = [_condition_body(condition)]
+        branch["sequence"] = [n.body for n in nodes]
+        if enabled is not None:
+            branch["enabled"] = enabled
+        self._branches.append(branch)
 
     @contextlib.contextmanager
     def default(self) -> Generator[None]:
@@ -294,19 +311,66 @@ def repeat_for_each(
 
 
 # ---------------------------------------------------------------------------
-# parallel()
+# parallel() / p.branch(...)
 # ---------------------------------------------------------------------------
+
+# Sentinel recorded in `parallel()`'s node list in place of a bare action, at
+# the position an explicit `p.branch(...)` was opened -- lets the assembly
+# step below interleave auto-derived one-action branches and explicit
+# multi-step/optioned branches in declaration order without a second parallel
+# tracking structure.
+_PARALLEL_BRANCH_MARKER = "__hassle_parallel_branch__"
+
+
+class _ParallelBuilder:
+    """The object yielded by ``with parallel() as p:`` (residue-coverage round 3).
+
+    Existing bundles that write ``with parallel(): action(); action()`` with no
+    ``as p:`` binding are unaffected — each bare top-level action still becomes
+    its own single-action branch, exactly as before (F3-additive). ``with
+    p.branch(alias=, enabled=): ...`` is new: it groups one or more steps into
+    one explicit branch and optionally names/toggles *that branch* (distinct
+    from any of its steps' own ``alias``/``enabled``) — the shape a real
+    UI-authored ``parallel`` with a multi-step branch actually stores
+    (docs/ha-api-notes.md §21).
+    """
+
+    def __init__(self, rec: Any, nodes: list[RecordedNode]) -> None:
+        self._rec = rec
+        self._nodes = nodes
+        self._explicit_branches: dict[int, dict[str, Any]] = {}
+
+    @contextlib.contextmanager
+    def branch(self, *, alias: str | None = None, enabled: bool | None = None) -> Generator[None]:
+        marker_span = capture_span(depth=_CM_DEPTH)
+        marker_index = len(self._nodes)
+        self._nodes.append(RecordedNode({_PARALLEL_BRANCH_MARKER: True}, marker_span))
+        branch_nodes: list[RecordedNode] = []
+        with self._rec.push_actions(branch_nodes):
+            yield
+        branch: dict[str, Any] = {}
+        if alias is not None:
+            branch["alias"] = alias
+        branch["sequence"] = [n.body for n in branch_nodes]
+        if enabled is not None:
+            branch["enabled"] = enabled
+        self._explicit_branches[marker_index] = branch
 
 
 @contextlib.contextmanager
-def parallel(*, alias: str | None = None, enabled: bool | None = None) -> Generator[None]:
+def parallel(
+    *, alias: str | None = None, enabled: bool | None = None
+) -> Generator[_ParallelBuilder]:
     """``with parallel(): ...`` -> HA ``{"parallel": [{"sequence": [...]}, ...]}``.
 
-    Each *top-level* action recorded directly in the body becomes its own
+    Each bare *top-level* action recorded directly in the body becomes its own
     single-action branch (HA runs each list entry in the ``parallel`` array
     concurrently) — matching
     fixtures/configs/automation_parallel_action.json, where each parallel
-    branch is a one-action ``sequence``.
+    branch is a one-action ``sequence``. Bind ``as p:`` and use ``with
+    p.branch(alias=, enabled=): ...`` (residue-coverage round 3) for an
+    explicit branch grouping multiple steps, or naming/toggling one branch —
+    both interleave with bare actions in declaration order.
 
     ``alias=``/``enabled=`` (residue-coverage round 2, docs/ha-api-notes.md
     §20): names/toggles the whole ``parallel`` block.
@@ -314,9 +378,16 @@ def parallel(*, alias: str | None = None, enabled: bool | None = None) -> Genera
     rec = _require_active("parallel")
     span = capture_span(depth=_CM_DEPTH)
     nodes: list[RecordedNode] = []
+    builder = _ParallelBuilder(rec, nodes)
     with rec.push_actions(nodes):
-        yield
-    branches = [{"sequence": [n.body]} for n in nodes]
+        yield builder
+    branches: list[dict[str, Any]] = []
+    for i, n in enumerate(nodes):
+        explicit = builder._explicit_branches.get(i)  # pyright: ignore[reportPrivateUsage]
+        if explicit is not None:
+            branches.append(explicit)
+        elif n.body != {_PARALLEL_BRANCH_MARKER: True}:
+            branches.append({"sequence": [n.body]})
     body: dict[str, Any] = {}
     if alias is not None:
         body["alias"] = alias

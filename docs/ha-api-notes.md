@@ -1096,3 +1096,89 @@ nesting depth) carries one of these ordinary UI shapes.
 
 *Verified 2026-07-05 against the owner's real 2026.7 Home Assistant bundle
 (101 objects, 12 raw_action fallbacks traced to these four causes).*
+
+## 21. Residue coverage, round 3, final (task #8 cont'd): branch-level `alias`/`enabled` and multi-step `parallel` branches
+
+> Source: field measurement of the owner's real 2026.7 bundle after round 2
+> (§20) landed: `raw_action` count dropped 14 → 7. Of the remaining 7, five
+> are fixable (traced to the two root causes below); two are device actions
+> that stay raw by design (no stable cross-integration schema, same rationale
+> as `device()` triggers/conditions, §16/§19 — not addressed here). Fixtures:
+> `fixtures/configs/automation_choose_template_condition_branch_alias.json`,
+> `fixtures/configs/automation_choose_numeric_state_attribute_condition.json`
+> (regression/verification, no fix needed),
+> `fixtures/configs/automation_parallel_multistep_branch_composite.json`.
+
+### 21.1 A `choose`/`parallel` **branch** can carry its own `alias`/`enabled` — a third, distinct layer round 2 missed
+Round 2 (§20.3) added `alias=`/`enabled=` at two layers: individual leaf steps
+(a service call, a delay) and the whole container block (`choose(alias=...)`,
+`parallel(alias=...)`). A real 2026.7 UI-authored automation showed a third,
+independent layer: the HA UI also lets a user name/toggle one **branch** of a
+`choose` or `parallel` — e.g. `{"alias": "Cover open or opening", "conditions":
+[...], "sequence": [...]}` inside `choose`, or `{"alias": "Notify branch",
+"sequence": [...]}` inside `parallel`. This is not the same key position as
+either of round 2's layers (it is per-branch, sitting alongside that branch's
+own `conditions`/`sequence`, not on the assembled `{"choose": [...], ...}` /
+`{"parallel": [...], ...}` body, and not on a step inside the branch's
+`sequence`). The reported real shape's tripping element was specifically this
+branch-level `alias` — the `template` condition it sat next to (with a
+script-variable reference in its Jinja body) decompiles fine standalone and
+was a red herring; diagnosis confirmed by reproducing the exact fixture shape
+with and without the branch `alias` and observing only the alias's presence
+flips the result to `raw_action`. **Fix:**
+- `_ChooseBuilder.when_(condition, *, alias=, enabled=)` (F3-additive keyword
+  widening) — the branch built by `with c.when_(cond, alias=..., enabled=...):`
+  now carries its own `alias`/`enabled` alongside `conditions`/`sequence`.
+- `parallel()` now yields a `_ParallelBuilder` (bound via `with parallel() as
+  p:`) whose new `with p.branch(alias=, enabled=): ...` sub-context builds one
+  explicit branch carrying its own `alias`/`enabled` (and, per §21.2, any
+  number of steps). Existing bundles that write `with parallel(): action();
+  action()` with **no** `as p:` binding are completely unaffected — each bare
+  top-level action still becomes its own single-action branch with no
+  alias/enabled, exactly as before (verified:
+  `test_bare_parallel_with_no_as_binding_still_works_unchanged`).
+- Decompiler: `_choose`'s and `_parallel`'s per-branch shape checks
+  (`set(branch_dict) != {"conditions", "sequence"}` /
+  `set(branch_dict) != {"sequence"}`) now tolerate `alias`/`enabled` alongside
+  the required keys, emitting them as `c.when_(cond, alias=...)` kwargs or
+  routing the branch through the new `with p.branch(alias=...):` form.
+
+### 21.2 `_parallel`'s branch handler only accepted a `sequence` of exactly one action
+DESIGN §5.5's own `parallel()` example, and every fixture through round 2,
+show one action per branch — which is *all* the compiler could ever emit,
+since `parallel()` auto-derives one branch per bare top-level action with no
+way to group more than one step into a branch. A real 2026.7 UI-authored
+automation had a `parallel` branch running **two** steps in the same
+`sequence` (a `script.notify_all` call with a rich `data` payload, then a
+`delay` with all four duration units) — an entirely ordinary HA
+`parallel`/`sequence` shape the compiler-side model just couldn't produce or
+the decompiler recognize. Diagnosis: both the delay (including its
+`milliseconds` field) and the sibling branch's `if`/`then` decompile cleanly
+in isolation, confirming the step *content* was never the issue — the
+decompiler's `len(seq) != 1` check on each branch's `sequence` was the actual
+trip. **Fix:** `_parallel` now accepts a branch `sequence` of any length,
+decompiling a multi-step (or otherwise non-bare) branch through the same new
+`with p.branch(): ...` sub-context from §21.1 (steps decompiled via the usual
+`_actions_block`/`decompile_action` recursion, so a two-step branch is just
+two ordinary statements inside the `with p.branch():` body — no new step-level
+logic needed). The compiler's `_ParallelBuilder.branch()` records however many
+actions are called inside it into that one branch's `sequence`, verified
+round-trip-exact against the real composite shape.
+
+### 21.3 Verified, not fixed: a `numeric_state` condition with `attribute` nested inside `choose` `conditions` already worked
+The field measurement's shape list also named a `choose` branch whose
+`conditions` carries `{"condition": "numeric_state", "entity_id": "cover.x",
+"attribute": "current_position", "above": 0}`. Checked against both the
+pre-round-3 and current decompiler: `_choose` calls the same top-level
+`decompile_condition` dispatcher `_cond_numeric_state` already goes through
+for a bare automation-level condition, and `_cond_numeric_state`'s `known` set
+already included `attribute` (an M1.1-era addition, docs/ha-api-notes.md's
+sun-elevation condition note). No code path exists that treats a
+choose-nested condition differently from a top-level one. **No fix was
+needed** — `automation_choose_numeric_state_attribute_condition.json` is a
+regression/verification fixture only, pinning this so it never silently
+breaks if the nested-condition path is ever refactored.
+
+*Verified 2026-07-05 against the owner's real 2026.7 Home Assistant bundle
+(field measurement: 14 → 7 raw_action fallbacks after round 2, 5 of 7 traced
+to §21.1/§21.2 above and fixed; 2 remaining are device actions, out of scope).*

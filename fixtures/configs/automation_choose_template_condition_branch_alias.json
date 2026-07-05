@@ -1,0 +1,40 @@
+{
+  "id": "choose_template_condition_branch_alias",
+  "alias": "Choose Template Condition Branch Alias",
+  "description": "Shape observed in a real 2026.7 UI-authored config: a choose branch carries its own alias alongside a template condition referencing a script variable -- the branch alias, not the template condition itself, is what previously forced the whole choose to raw_action",
+  "triggers": [
+    {
+      "trigger": "state",
+      "entity_id": ["cover.garage"],
+      "to": ["open", "opening"]
+    }
+  ],
+  "conditions": [],
+  "actions": [
+    {
+      "choose": [
+        {
+          "alias": "Cover open or opening",
+          "conditions": [
+            {
+              "condition": "template",
+              "value_template": "{{ position == 'open' or position == 'opening' }}"
+            }
+          ],
+          "sequence": [
+            {
+              "action": "cover.set_cover_position",
+              "target": {
+                "entity_id": "cover.garage"
+              },
+              "data": {
+                "position": 50
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "mode": "single"
+}

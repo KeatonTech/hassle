@@ -1,0 +1,63 @@
+{
+  "id": "parallel_multistep_branch_composite",
+  "alias": "Parallel Multistep Branch Composite",
+  "description": "Shape observed in a real 2026.7 UI-authored config: a parallel branch running a script call with rich data (title/message/tag/action_button/action_button_icon keys inside data) followed by a delay (hours/minutes/seconds/milliseconds dict) in the SAME branch sequence, alongside a sibling parallel branch containing an if/then -- the multi-step branch, not the delay's milliseconds field or the if-block shape, is what previously forced the whole parallel to raw_action",
+  "triggers": [
+    {
+      "trigger": "state",
+      "entity_id": ["cover.garage"],
+      "to": ["open"]
+    }
+  ],
+  "conditions": [],
+  "actions": [
+    {
+      "parallel": [
+        {
+          "sequence": [
+            {
+              "action": "script.notify_all",
+              "data": {
+                "title": "Garage",
+                "message": "Door opened",
+                "tag": "garage_door",
+                "action_button": "view",
+                "action_button_icon": "mdi:garage-open"
+              }
+            },
+            {
+              "delay": {
+                "hours": 0,
+                "minutes": 1,
+                "seconds": 30,
+                "milliseconds": 500
+              }
+            }
+          ]
+        },
+        {
+          "sequence": [
+            {
+              "if": [
+                {
+                  "condition": "state",
+                  "entity_id": ["cover.garage"],
+                  "state": ["open"]
+                }
+              ],
+              "then": [
+                {
+                  "action": "light.turn_on",
+                  "target": {
+                    "entity_id": "light.garage"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "mode": "single"
+}

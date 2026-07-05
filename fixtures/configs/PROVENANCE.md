@@ -160,3 +160,33 @@ schema with an explicit `id`, same convention as round 1.
 | automation_condition_state_list_valued_fields.json | Shape observed in a real 2026.7 UI-authored config: a state **condition** (not just a trigger, round 1's fix) stores `entity_id`/`state` as lists even for one value | automation-level `state` condition with singleton-list `entity_id`/`state`, plus the same shape nested inside an `if`/`then` action and a `choose` branch's conditions |
 | automation_action_step_alias_and_enabled.json | Shape observed in a real 2026.7 UI-authored config: the UI names steps (`alias`) and toggles them (`enabled`) | a plain service call with `alias`, a `delay` with `alias`+`enabled: true`, and a service call with `alias`+`enabled: false` |
 | automation_container_recursion_ui_shapes.json | Shape observed in a real 2026.7 UI-authored config: containers (`if`/`else`, `choose`, `parallel`, `wait_for_trigger`) must decompile their inner steps through the same improved path -- a container must never fall back to `raw_action` merely because a child step carries `metadata`/`data_template`, a list-valued state condition, or `alias`/`enabled` | an `if`/`else` action whose `then`/`else` branches carry `metadata`+`alias` and `data_template`+`alias`+`enabled`; a `parallel` whose branches carry an `alias`+`metadata`+`enabled` step and a nested `choose` with a list-valued condition and an `alias`+`metadata` step; a `wait_for_trigger` with a list-valued `state` trigger |
+
+## Residue coverage, round 3 -- final (task #8 cont'd): field measurement 14 -> 7, 5 fixable
+
+Source: field measurement of the owner's real 2026.7 bundle after round 2 landed: `raw_action`
+count dropped 14 -> 7. Of the remaining 7, five are fixable (traced to two decompiler root causes
+below, one of them a branch-level gap in both `choose` and `parallel`); two are device actions that
+stay raw by design (no stable cross-integration schema, same rationale as `device()`
+triggers/conditions). All fixtures are in plural/canonical schema with an explicit `id`, same
+convention as rounds 1-2.
+
+| Fixture | Source | Construct |
+|---------|--------|-----------|
+| automation_choose_template_condition_branch_alias.json | Shape observed in a real 2026.7 UI-authored config: a `choose` branch carries its own `alias` (naming the branch, not a step inside it) alongside a `template` condition referencing a script variable | `choose` with one branch carrying `alias` + a `template` condition + a `cover.set_cover_position` action with `data` |
+| automation_choose_numeric_state_attribute_condition.json | Shape observed in a real 2026.7 UI-authored config: a `choose` branch's `conditions` list carries a `numeric_state` condition with `attribute` -- a regression fixture confirming the nested-in-choose-conditions path resolves through the same `decompile_condition` dispatcher as the top-level path (no code change was needed; this pins the behavior) | `choose` with one branch whose `conditions` is a `numeric_state` condition with `attribute`+`above` |
+| automation_parallel_multistep_branch_composite.json | Shape observed in a real 2026.7 UI-authored config: a `parallel` branch running more than one step in its `sequence` (a script call with rich `data`, then a `delay` with all four duration units), alongside a sibling branch containing an `if`/`then` -- the multi-step branch shape (not the delay's `milliseconds` field or the if-block, both of which decompile fine standalone) is what forced the whole `parallel` to `raw_action` | `parallel` with one two-step branch (service call + delay) and one one-step branch (`if`/`then`) |
+
+**Root causes (docs/ha-api-notes.md §21):**
+1. A `choose`/`parallel` **branch** carrying its own `alias`/`enabled` was rejected by each handler's
+   exact-keys branch-shape check (`set(branch_dict) != {"conditions", "sequence"}` /
+   `set(branch_dict) != {"sequence"}`) -- distinct from the round-2 container-level `alias`/`enabled`
+   (on the whole `choose()`/`parallel()` block) and from any step's own `alias`/`enabled` inside the
+   branch. Fixed by widening both branch-shape checks to tolerate `alias`/`enabled` alongside the
+   required keys, and (compiler side) adding `alias=`/`enabled=` to `c.when_(...)` and a new
+   `p.branch(alias=, enabled=)` sub-context on `parallel()`'s yielded builder.
+2. `_parallel`'s branch handler only accepted a `sequence` of **exactly one** action (matching the
+   compiler's original one-action-per-branch auto-derivation) -- a real multi-step branch fell back
+   to `raw_action` regardless of what the steps' own content was. Fixed by accepting any-length
+   branch sequences; `parallel()` gained a `with p.branch(): ...` sub-context (bound via `as p:`) so
+   the compiler can author a multi-step branch, while a bare `with parallel(): action(); action():`
+   with no `as` binding is unchanged (each action still becomes its own one-step branch, F3-additive).

@@ -183,21 +183,34 @@ this is additive to `hassle.__all__`; nothing above changed.
 
 ### Control flow (DESIGN §5.5) — context managers
 - `if_then(condition, *, alias=, enabled=)` / `else_then()` / `else_if(condition)`.
-- `choose(*, alias=, enabled=)` → use `as c:` then `c.when_(condition)` /
-  `c.default()`.
+- `choose(*, alias=, enabled=)` → use `as c:` then `c.when_(condition, *,
+  alias=, enabled=)` / `c.default()`. `c.when_()`'s `alias=`/`enabled=` are a
+  residue-coverage round-3 ADDITION (docs/ha-api-notes.md §21.1): they name/
+  toggle *that branch specifically* — a third, distinct layer from `choose()`'s
+  own `alias=`/`enabled=` (the whole block) and from any step's own inside the
+  branch's body.
 - `repeat_count(n, *, alias=, enabled=)` / `repeat_while(condition, *, alias=,
   enabled=)` / `repeat_until(condition, *, alias=, enabled=)` /
   `repeat_for_each(items, *, alias=, enabled=)`.
-- `parallel(*, alias=, enabled=)`.
+- `parallel(*, alias=, enabled=)` → optionally bind `as p:` and use `with
+  p.branch(alias=, enabled=): ...` (residue-coverage round-3 ADDITION,
+  docs/ha-api-notes.md §21.1/§21.2) to group one or more steps into one
+  explicit branch, optionally naming/toggling it. A bare `with parallel():
+  action(); action()` with **no** `as p:` binding is unchanged: each top-level
+  action still becomes its own single-action branch, exactly as before this
+  addition (fully backward compatible, no pre-existing caller's compiled
+  output changes). `p.branch()` is also how a branch with more than one step
+  is authored — round-2-and-earlier `parallel()` had no way to group multiple
+  actions into a single branch at all.
 - `wait_for(*triggers, ..., alias=, enabled=)` / `wait_template(raw, ...,
   alias=, enabled=)`.
-- `alias=`/`enabled=` on every construct above are residue-coverage round-2
-  ADDITIONS (docs/ha-api-notes.md §20): the HA UI names and toggles whole
-  containers (`if`/`choose`/`repeat`/`parallel`/`wait_for_trigger`/
-  `wait_template`) the same way it does leaf actions — `with if_then(cond,
-  alias="..."):` compiles the `alias` onto the assembled `if`-block body, not
-  onto a child step. Omitted by default (unchanged behavior for every
-  pre-existing caller).
+- `alias=`/`enabled=` on every construct above (container-level) are
+  residue-coverage round-2 ADDITIONS (docs/ha-api-notes.md §20): the HA UI
+  names and toggles whole containers (`if`/`choose`/`repeat`/`parallel`/
+  `wait_for_trigger`/`wait_template`) the same way it does leaf actions —
+  `with if_then(cond, alias="..."):` compiles the `alias` onto the assembled
+  `if`-block body, not onto a child step. Omitted by default (unchanged
+  behavior for every pre-existing caller).
 
 ### Raw escape hatches (DESIGN §5.8, I3)
 - `raw_trigger(dict)`, `raw_condition(dict)`, `raw_action(dict)` — verbatim
