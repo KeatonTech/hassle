@@ -148,8 +148,24 @@ def build_script_refs(
     independently per destination file (a fresh ``used_names`` tracker per
     module path), matching how each file is actually decompiled on its own in
     `hassle_cli.pull_apply` (one `decompile_bundle` call per destination).
+
+    **Field-failure fix (``ux/shared-script-calls-fix``):** every ``ScriptRef``
+    also carries ``is_shared_script`` -- whether ``obj`` actually decompiles
+    to ``@shared_script`` (:func:`hassle.decompiler.codegen.
+    script_is_shared_script`) rather than falling back to plain ``@script``
+    (DESIGN §7.3's fallback rule). A fallback script has NO call-site
+    parameters at all, whatever its ``fields`` block's key names are --
+    ``known_fields`` alone is not enough to gate the caller rewrite; the
+    resolver checks ``is_shared_script`` first (see
+    ``hassle.decompiler.codegen._build_resolver``'s docstring for the exact
+    field failure this fixes).
     """
-    from hassle.decompiler.codegen import ScriptRef, called_script_ids, script_function_name
+    from hassle.decompiler.codegen import (
+        ScriptRef,
+        called_script_ids,
+        script_function_name,
+        script_is_shared_script,
+    )
     from hassle.ir.models import ScriptConfig, parse
 
     # Group by destination file so alias-collision suffixing matches exactly
@@ -176,6 +192,10 @@ def build_script_refs(
             known_fields = frozenset(fields) if isinstance(fields, dict) else frozenset()
             calls = frozenset(called_script_ids(obj.to_ha()))
             refs[identity] = ScriptRef(
-                module=module, function_name=fn_name, known_fields=known_fields, calls=calls
+                module=module,
+                function_name=fn_name,
+                known_fields=known_fields,
+                is_shared_script=script_is_shared_script(obj),
+                calls=calls,
             )
     return refs
