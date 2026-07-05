@@ -169,3 +169,115 @@ def test_repeated_compile_is_deterministic_with_tree_bundle() -> None:
     assert set(first.objects) == set(second.objects)
     for key in first.objects:
         assert first.objects[key].to_ha() == second.objects[key].to_ha()
+
+
+# -- symlink sandbox escape (review finding F1) ------------------------------
+#
+# A symlink inside the bundle -- to a directory OR a plain .py file -- must
+# never be followed: doing so executes code outside the bundle (sandbox
+# escape, §7.2/§14) and, because the foreign module's __file__ resolves
+# outside bundle_path, _module_belongs_to_bundle used to skip it during
+# cleanup -- leaking it into sys.modules forever. The double-import guard in
+# _import_bundle_modules (skip if already in sys.modules) then served that
+# stale leaked module on the NEXT compile instead of re-importing, silently
+# dropping the foreign object from the second compile's result even though it
+# was never supposed to be there in the first place.
+#
+# tmp_path itself may be reached through a symlink on macOS (/tmp ->
+# /private/tmp), so every path is resolved before comparison.
+
+
+def _write_outside_automation(outside_dir: Path, *, object_id: str, filename: str) -> Path:
+    outside_dir.mkdir(parents=True, exist_ok=True)
+    py = outside_dir / filename
+    py.write_text(
+        "from hassle import automation, service\n"
+        f'@automation(id="{object_id}", alias="Outside")\n'
+        f"def {object_id}():\n"
+        '    service("light.turn_on", entity_id="light.outside")\n',
+        encoding="utf-8",
+    )
+    return py
+
+
+def _write_own_automation(bundle: Path) -> None:
+    bundle.mkdir(parents=True, exist_ok=True)
+    (bundle / "automations.py").write_text(
+        "from hassle import automation, service\n"
+        '@automation(id="own_one", alias="Own")\n'
+        "def own_one():\n"
+        '    service("light.turn_on", entity_id="light.a")\n',
+        encoding="utf-8",
+    )
+
+
+def test_symlinked_directory_escape_is_never_followed(tmp_path: Path) -> None:
+    """A symlinked directory inside the bundle, pointing outside it, must
+    never be walked: its automation must never appear, and nothing from
+    outside the bundle may leak into sys.modules across two compiles."""
+    outside = (tmp_path / "outside").resolve()
+    _write_outside_automation(outside, object_id="foreign_dir_automation", filename="foreign.py")
+
+    bundle = (tmp_path / "bundle").resolve()
+    _write_own_automation(bundle)
+    (bundle / "escape_dir").symlink_to(outside, target_is_directory=True)
+
+    before = set(sys.modules)
+    first = compile_bundle(bundle)
+    assert set(first.objects) == {"automation:own_one"}
+    assert not (set(sys.modules) - before), "foreign/symlinked module leaked into sys.modules"
+
+    # The double-import guard bug: a leaked foreign module would be served
+    # (not re-imported, not re-excluded) on the second compile -- but since it
+    # must never have been imported at all, the second compile's result must
+    # be identical to the first.
+    second = compile_bundle(bundle)
+    assert set(second.objects) == {"automation:own_one"}
+    assert not (set(sys.modules) - before), "foreign/symlinked module leaked on second compile"
+
+
+def test_symlinked_file_escape_is_never_followed(tmp_path: Path) -> None:
+    """A symlinked .py FILE inside the bundle, pointing outside it, has the
+    same escape+leak anatomy as a symlinked directory -- must also never be
+    imported."""
+    outside = (tmp_path / "outside").resolve()
+    outside_py = _write_outside_automation(
+        outside, object_id="foreign_file_automation", filename="foreign_file.py"
+    )
+
+    bundle = (tmp_path / "bundle").resolve()
+    _write_own_automation(bundle)
+    (bundle / "escape_file.py").symlink_to(outside_py)
+
+    before = set(sys.modules)
+    first = compile_bundle(bundle)
+    assert set(first.objects) == {"automation:own_one"}
+    assert not (set(sys.modules) - before), "foreign/symlinked module leaked into sys.modules"
+
+    second = compile_bundle(bundle)
+    assert set(second.objects) == {"automation:own_one"}
+    assert not (set(sys.modules) - before), "foreign/symlinked module leaked on second compile"
+
+
+def test_symlink_containing_bundle_compiles_deterministically(tmp_path: Path) -> None:
+    """Two consecutive compiles of a bundle containing both kinds of escaping
+    symlink are identical (R8) and contain only the bundle's own objects --
+    the reviewer's exact repro (compile 1 yields {own, foreign}, compile 2
+    yields {own} only) must not reproduce."""
+    outside = (tmp_path / "outside").resolve()
+    _write_outside_automation(outside, object_id="foreign_dir_automation", filename="foreign.py")
+    outside_py = _write_outside_automation(
+        outside, object_id="foreign_file_automation", filename="foreign_file.py"
+    )
+
+    bundle = (tmp_path / "bundle").resolve()
+    _write_own_automation(bundle)
+    (bundle / "escape_dir").symlink_to(outside, target_is_directory=True)
+    (bundle / "escape_file.py").symlink_to(outside_py)
+
+    first = compile_bundle(bundle)
+    second = compile_bundle(bundle)
+    assert set(first.objects) == {"automation:own_one"}
+    assert set(first.objects) == set(second.objects)
+    for key in first.objects:
+        assert first.objects[key].to_ha() == second.objects[key].to_ha()
