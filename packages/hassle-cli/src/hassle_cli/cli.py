@@ -161,7 +161,7 @@ def pull(allow_dirty: bool) -> None:
     from hassle_cli import backend_factory
     from hassle_cli.doctor import find_committed_tokens
     from hassle_cli.git_support import commit_message_for_pull
-    from hassle_cli.pull_apply import apply_pull_with_decompiler
+    from hassle_cli.pull_apply import DecompiledBatchDoesNotCompileError, apply_pull_with_decompiler
 
     console = get_console()
     root = _bundle_root_or_fail()
@@ -248,7 +248,24 @@ def pull(allow_dirty: bool) -> None:
     )
 
     writer = WholeFileSourceWriter()
-    result = apply_pull_with_decompiler(plan, writer)
+    # `apply_pull_with_decompiler` self-checks every ADOPT destination
+    # together BEFORE writing any of them (`hassle_cli.pull_apply` module
+    # docstring, coordinator task 4) -- a decompiler coordination bug here is
+    # caught pre-write, so nothing from this pull's adopt set has touched
+    # disk yet. Distinct from the post-write backstop below (which also
+    # covers REFRESH's single-object splice, the one path the pre-write
+    # self-check can't cover -- see that module's docstring).
+    try:
+        result = apply_pull_with_decompiler(plan, writer)
+    except DecompiledBatchDoesNotCompileError as exc:
+        console.print(
+            f"[bold red]hassle pull: {exc}[/bold red]\n"
+            "[bold red]This is a bug in Hassle's decompiler, not a mistake in your HA "
+            "configuration. Fix: please report this, then re-run `hassle pull` (or "
+            "`--allow-dirty` if needed) once a fix lands -- nothing was written for the "
+            "affected file(s), so there is nothing to clean up.[/bold red]"
+        )
+        raise SystemExit(1) from exc
 
     # Safety backstop (``ux/shared-script-calls-fix``): pull just wrote real
     # DSL source from the decompiler -- recompile the bundle it produced
@@ -263,7 +280,7 @@ def pull(allow_dirty: bool) -> None:
     # is always just a `hassle pull --allow-dirty` once it lands.
     try:
         bundle_ops.compile_local_objects(root)
-    except Exception as exc:  # noqa: BLE001 - any bundle-compile failure here is a Hassle bug
+    except Exception as exc:
         console.print(
             f"[bold red]hassle pull: the bundle just written to {root} does not compile "
             f"({type(exc).__name__}: {exc}). This is a bug in Hassle's decompiler, not a "
