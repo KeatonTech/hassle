@@ -27,6 +27,16 @@ class EntityInfo(BaseModel):
     labels: list[str] = []
     domain: str | None = None
     platform: str | None = None
+    # `unique_id` == the automation/script/helper config `id` (docs/ha-api-notes.md
+    # §2 "id <-> unique_id" -- confirmed on a real WS `config/entity_registry/list`
+    # capture). Used to look up an object's entity-registry entry from its object
+    # key identity (pull placement, DESIGN §7.3).
+    unique_id: str | None = None
+    # Per-scope UI category assignment: `{"automation": "lighting"}` (DESIGN
+    # §7.3; docs/ha-api-notes.md §5 confirms the `categories` key is already
+    # present on real entity-registry rows -- just never parsed by this model
+    # before).
+    categories: dict[str, str] = {}
 
 
 class AreaInfo(BaseModel):
@@ -97,6 +107,10 @@ class RegistrySnapshot(BaseModel):
     devices: list[DeviceInfo] = []
     services: dict[str, dict[str, ServiceDef]] = {}
     purpose_vocabulary: PurposeVocabulary = PurposeVocabulary()
+    # UI category registry, per scope (DESIGN §7.3): `{"automation": {"lighting":
+    # "Lighting"}, "script": {"chores": "Chores"}}`. Additive -- absent entirely
+    # from every pre-existing fixture/committed snapshot, which parse to `{}`.
+    categories: dict[str, dict[str, str]] = {}
 
     @classmethod
     def load(cls, path: str | Path) -> RegistrySnapshot:
@@ -121,3 +135,21 @@ class RegistrySnapshot(BaseModel):
 
     def service_def(self, domain: str, service: str) -> ServiceDef | None:
         return self.services.get(domain, {}).get(service)
+
+    def entity_by_unique_id(self, scope: str, unique_id: str) -> EntityInfo | None:
+        """Find the entity-registry entry whose `unique_id` matches (and whose
+        domain matches `scope`, when known) -- the id<->unique_id anchor
+        (docs/ha-api-notes.md §2) that lets pull placement map an object key's
+        identity back to its registry row."""
+        for entity in self.entities:
+            if entity.unique_id == unique_id and (entity.domain is None or entity.domain == scope):
+                return entity
+        return None
+
+    def category_name_for_entity(self, scope: str, entity: EntityInfo) -> str | None:
+        """The UI category *name* (not id) assigned to `entity` within `scope`,
+        or None if uncategorized / the category id is unknown to this snapshot."""
+        category_id = entity.categories.get(scope)
+        if category_id is None:
+            return None
+        return self.categories.get(scope, {}).get(category_id)

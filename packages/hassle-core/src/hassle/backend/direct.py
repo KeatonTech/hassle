@@ -246,6 +246,10 @@ class DirectBackend:
     def fetch_registry_snapshot(self) -> RegistrySnapshot:
         return self._run(self._afetch_registry_snapshot())
 
+    # Scopes DESIGN §7.3 places by category: automations and scripts (helpers
+    # have no category-registry scope in HA -- they place by domain default).
+    _CATEGORY_SCOPES = ("automation", "script")
+
     async def _afetch_registry_snapshot(self) -> RegistrySnapshot:
         entities = await self._client.ws_command("config/entity_registry/list")
         devices = await self._client.ws_command("config/device_registry/list")
@@ -255,6 +259,7 @@ class DirectBackend:
             floors = await self._client.ws_command("config/floor_registry/list")
         except Exception:
             floors = []
+        categories = await self._afetch_categories()
         services = await self._client.ws_command("get_services")
         vocab = await self._afetch_purpose_vocabulary()
 
@@ -272,10 +277,28 @@ class DirectBackend:
                 "areas": areas,
                 "labels": labels,
                 "floors": floors,
+                "categories": categories,
                 "services": services,
                 "purpose_vocabulary": vocab.model_dump(),
             }
         )
+
+    async def _afetch_categories(self) -> dict[str, dict[str, str]]:
+        """`config/category_registry/list` per scope (DESIGN §7.3, docs/ha-api-
+        notes.md new §22): each row is `{category_id, name, icon}`. Guarded
+        per-scope, like the `floor_registry` guard above -- older HA (pre-
+        category-registry) rejects the command entirely, and even on newer HA
+        a single scope failing must not blank out the other's categories."""
+        categories: dict[str, dict[str, str]] = {}
+        for scope in self._CATEGORY_SCOPES:
+            try:
+                rows = await self._client.ws_command("config/category_registry/list", scope=scope)
+            except Exception:
+                continue
+            categories[scope] = {
+                str(row["category_id"]): str(row.get("name", row["category_id"])) for row in rows
+            }
+        return categories
 
     # -- purpose vocabulary (DESIGN §4; captured M6) ----------------------
 

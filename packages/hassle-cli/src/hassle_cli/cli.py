@@ -190,22 +190,53 @@ def pull(allow_dirty: bool) -> None:
             "Fix (optional): `git init` (or `hassle init` in a fresh directory).[/yellow]"
         )
 
+    # DESIGN §5.6/§6: a bundle that never ran `hassle init` (or predates this
+    # scaffolding) still gets `lib/README.md`/`tests/README.md` on its first
+    # pull, same as init -- idempotent, never overwrites an existing file.
+    from hassle_cli.init_cmd import scaffold_lib_and_tests_readmes
+
+    scaffold_lib_and_tests_readmes(root)
+
     ha_url, token = _require_backend_config(root)
+    config = load_config(root)
     manifest = manifest_io.load_manifest(root)
+
+    # DESIGN §8.2 amendment: an `ignore` glob added since the last sync leaves
+    # stale manifest entries for now-ignored keys -- drop them (no HA write)
+    # before planning, and tell the user (§8.1's migration notice).
+    from hassle_cli.ignore_filter import apply_ignore_globs, migrate_manifest_for_ignores
+
+    migration = migrate_manifest_for_ignores(manifest, ignore_globs=config.ignore)
+    manifest = migration.manifest
+    for dropped_key in migration.dropped_keys:
+        console.print(
+            f"[yellow]hassle pull: {dropped_key} matches an `ignore` glob in hassle.toml -- "
+            "dropped from the manifest (HA untouched); it is no longer managed by Hassle.[/yellow]"
+        )
+
     local_objects, compile_result = bundle_ops.compile_local_objects(root)
 
     with backend_factory.connect(ha_url, token) as backend:
         remote_objects = bundle_ops.remote_objects_from_backend(backend, list(OBJECT_KINDS))
         # DESIGN §9.2: the registry snapshot is refreshed on every pull (tier-2/3
         # validation and stubs depend on it). Best-effort: skipped when the
-        # backend lacks the registry surface.
-        _write_registry_snapshot(backend, root)
+        # backend lacks the registry surface. Also drives DESIGN §7.3's
+        # category-based placement for newly-adopted objects (below).
+        registry_snapshot = _write_registry_snapshot(backend, root)
+
+    ignore_result = apply_ignore_globs(
+        local_objects=local_objects, remote_objects=remote_objects, ignore_globs=config.ignore
+    )
+    for finding in ignore_result.findings:
+        console.print(f"[yellow]hassle pull: {finding}[/yellow]")
 
     plan = compute_plan(
-        manifest=manifest, local_objects=local_objects, remote_objects=remote_objects
+        manifest=manifest,
+        local_objects=ignore_result.local_objects,
+        remote_objects=ignore_result.remote_objects,
     )
     source_paths = bundle_ops.build_source_paths(
-        root, compile_result, [e.object_key for e in plan.entries]
+        root, compile_result, [e.object_key for e in plan.entries], registry=registry_snapshot
     )
     plan = plan.model_copy(
         update={
@@ -252,7 +283,11 @@ def pull(allow_dirty: bool) -> None:
             )
         elif entry.action is PlanAction.DROP:
             new_objects.pop(entry.object_key, None)
-    if new_objects != manifest.objects:
+    # `migration.dropped_keys` forces a save even when pull-side actions alone
+    # wouldn't have changed anything -- otherwise a bundle whose only change
+    # this pull is "an `ignore` glob newly matches a manifest entry" never
+    # gets the migrated (smaller) manifest written to disk.
+    if new_objects != manifest.objects or migration.dropped_keys:
         from hassle.sync.models import Manifest
 
         new_manifest = Manifest(
@@ -276,14 +311,23 @@ def _build_plan(root: Path):
     from hassle.ir.keys import OBJECT_KINDS
     from hassle.sync.plan import compute_plan
     from hassle_cli import backend_factory
+    from hassle_cli.ignore_filter import apply_ignore_globs, migrate_manifest_for_ignores
 
     ha_url, token = _require_backend_config(root)
-    manifest = manifest_io.load_manifest(root)
+    config = load_config(root)
+    manifest = migrate_manifest_for_ignores(
+        manifest_io.load_manifest(root), ignore_globs=config.ignore
+    ).manifest
     local_objects, _compile_result = bundle_ops.compile_local_objects(root)
     with backend_factory.connect(ha_url, token) as backend:
         remote_objects = bundle_ops.remote_objects_from_backend(backend, list(OBJECT_KINDS))
+    ignore_result = apply_ignore_globs(
+        local_objects=local_objects, remote_objects=remote_objects, ignore_globs=config.ignore
+    )
     return compute_plan(
-        manifest=manifest, local_objects=local_objects, remote_objects=remote_objects
+        manifest=manifest,
+        local_objects=ignore_result.local_objects,
+        remote_objects=ignore_result.remote_objects,
     )
 
 
@@ -535,18 +579,18 @@ def stubs(refresh: bool) -> None:
     console.print(f"[green]hassle stubs: wrote {out_path}[/green]")
 
 
-def _write_registry_snapshot(backend: object, root: Path) -> None:
+def _write_registry_snapshot(backend: object, root: Path):
     if not hasattr(backend, "fetch_registry_snapshot"):
-        return
+        return None
     snapshot = backend.fetch_registry_snapshot()  # type: ignore[attr-defined]
     registry_path = root / ".hassle" / "registry.json"
     registry_path.parent.mkdir(parents=True, exist_ok=True)
     content = snapshot.model_dump_json(indent=2)
     # Write-if-changed: an unchanged registry must not dirty the tree (the
     # daily loop ends with a no-op pull on a clean tree, DESIGN §8.4).
-    if registry_path.is_file() and registry_path.read_text(encoding="utf-8") == content:
-        return
-    registry_path.write_text(content, encoding="utf-8")
+    if not (registry_path.is_file() and registry_path.read_text(encoding="utf-8") == content):
+        registry_path.write_text(content, encoding="utf-8")
+    return snapshot
 
 
 def _refresh_registry_snapshot(root: Path, registry_path: Path) -> None:
