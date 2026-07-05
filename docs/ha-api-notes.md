@@ -1236,6 +1236,12 @@ was taken for the category registry itself — see the caveat below):
   `FakeBackend` coverage above is the milestone's required gate; this is a documented integration
   TODO, not a gap in the required test contract.
 
+
+**Live-verified 2026-07-05:** the owner's real 2026.7 instance returned category
+registries for both scopes on pull; placement produced correct per-category files
+(automatic_blinds/automatic_hvac/plant_care/...). The inferred `scope` argument and
+row shape are confirmed behaviorally; the integration-test TODO stands for CI.
+
 ### 22.2 `ignore` globs — DESIGN §8.2/§6 amendment (owner decision)
 
 New `hassle.toml` field: `ignore = ["input_boolean:material_you_*", …]`, `fnmatch` globs matched
