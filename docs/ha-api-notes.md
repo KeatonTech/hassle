@@ -907,3 +907,67 @@ skipped, silently, whether it targets a directory or a file** — see
 `hassle.compiler.bundle` for the mechanism (walk-time `is_symlink()` check
 plus a belt-and-suspenders resolve-under-`bundle_path` re-check immediately
 before import, to also catch a symlinked intermediate directory).
+
+## 19. Real-world smoke-test findings (task #5): three mundane UI-authored shapes DESIGN §5.4 missed
+
+> Source: the owner's first live smoke test against a real 2026.7 Home Assistant
+> instance surfaced 118 granular `raw_*` decompiler fallbacks across 101 real
+> objects, tracing to three root causes below. All three are ordinary shapes the
+> HA UI writes on every save; none are exotic. Fixtures:
+> `fixtures/configs/automation_action_metadata_ui_authored.json`,
+> `fixtures/configs/automation_state_trigger_list_valued_fields.json`,
+> `fixtures/configs/automation_time_trigger_weekday_and_entity_at.json`.
+
+### 19.1 Every UI-saved action carries `"metadata": {}` — must round-trip even when empty
+Not mentioned anywhere in DESIGN. Confirmed present on all 87 raw actions in the
+smoke-test sample. Since a real live `GET` always returns this key, eliding an
+empty `metadata: {}` on decompile+recompile would hash-drift *every*
+UI-authored action forever (I3) — this is not optional/cosmetic the way the
+`platform:`→`trigger:` or scalar-delay modernizations are (§16/§18), because HA
+itself never strips the key, so there is no "already canonical" case where it's
+absent from a live object. **Fix:** `service()`/`ServiceAction` gained an
+optional `metadata=` kwarg (F3-additive, docs/dsl-f3.md's "widening a signature
+with a new optional keyword is an addition, not a change"); the decompiler
+emits `metadata={...}` whenever the key is present in the stored action,
+including `metadata={}`, and omits the kwarg entirely when absent (so
+DSL-authored actions with no `metadata` at all are unaffected).
+
+### 19.2 `state`/`numeric_state` trigger `entity_id`/`to`/`from` are stored as lists, even for one value
+DESIGN §5.4 and every existing fixture used bare scalars
+(`"entity_id": "binary_sensor.x"`). A real 2026.7 UI-authored automation always
+stores these fields as a **list**, even when there is exactly one entity/value
+— and a singleton list must decompile back to a list, never normalized to a
+scalar, or the round-trip hash drifts (I3) on every such trigger. **Fix:**
+`state()`'s `entity_id` param (and `.to()`/`.is_()`'s value) and
+`numeric_state()`'s `entity_id` param now accept `str | list[str]`
+(F3-additive widening); the decompiler's entity-id shape check
+(`_is_entity_id_shape` in `hassle.decompiler.exprs`) accepts either shape and
+renders it with `render_literal` (which already handles lists), so a
+singleton list source (`entity_id: ["binary_sensor.x"]`) decompiles to
+`state(['binary_sensor.x'])`, not `state('binary_sensor.x')`. **Follow-on
+typing note:** `StateExpr.entity_id`'s public accessor is also used by
+`hassle.compiler.templates._entity_ref_str` (the `expr()`/`state(...).value`
+template-read path, which always names exactly one entity); a `StateExpr`
+built from a list there now raises a what/where/fix `TypeError` rather than
+silently stringifying the list — recorded because it's a new, narrow trap at
+an existing seam, not because the seam's behavior changed for the scalar case.
+
+### 19.3 `time` trigger accepts `weekday`, and `at` as an entity reference — not just condition-only/literal-only
+DESIGN §5.4's `time()` builder doc (and the pre-existing `TimeExpr` docstring)
+stated `at=` is trigger-only and `after=`/`before=`/`weekday=` are
+condition-only. A real 2026.7 UI-authored automation showed a `time` **trigger**
+with a `weekday` field (a day-abbreviation list, e.g. `["mon","tue","wed","thu","fri"]`)
+scoping a fixed-time trigger to specific days — HA's `time` trigger schema
+does accept this filter; DESIGN's description was incomplete, not the whole
+condition-only claim being wrong (`after`/`before` are still condition-only —
+only `weekday` turned out to also apply to the trigger). Separately, the same
+smoke test showed `at` set to an entity reference (`input_datetime.wakeup`)
+rather than a literal `"HH:MM:SS"` string — schedule-driven wakeups, a
+documented native HA feature (a `time` trigger's `at` accepts either an
+`input_datetime`/`sensor` entity id or a fixed time). This required no builder
+change (`at` was always typed as a plain `str`, so an entity-id string already
+flows through unchanged) but is recorded because it wasn't called out. **Fix:**
+`TimeExpr`/`time()` now also emit `weekday` on the *trigger* side (was
+condition-only before); the decompiler's `_trig_time` accepts and emits
+`weekday` alongside `at`. `time(at="input_datetime.wakeup")` already worked and
+needed no code change, only this note.

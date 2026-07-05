@@ -146,8 +146,7 @@ def test_decompile_state_trigger_multi_entry_list() -> None:
     src = decompile_trigger(body)
     assert src is not None
     assert (
-        src
-        == "state(['binary_sensor.hall_motion', 'binary_sensor.kitchen_motion'])"
+        src == "state(['binary_sensor.hall_motion', 'binary_sensor.kitchen_motion'])"
         ".to(['on', 'detected'])"
     )
 

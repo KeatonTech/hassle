@@ -23,6 +23,7 @@ def service(
     data: dict[str, Any] | None = None,
     response_variable: str | None = None,
     continue_on_error: bool | None = None,
+    metadata: dict[str, Any] | None = None,
     **fields: Any,
 ) -> None:
     """Record a service-call action (DESIGN §5.3). Bare kwargs go into ``data``.
@@ -30,6 +31,11 @@ def service(
     ``response_variable`` and ``continue_on_error`` are emitted as top-level HA
     action fields (not merged into ``data``) — folded in here so ``service()`` is
     the single service-call verb.
+
+    ``metadata=`` (real-world smoke-test addition): the HA UI stamps
+    ``"metadata": {}`` on every action it saves; passing it (even as ``{}``)
+    round-trips that byte-stable (I3, docs/ha-api-notes.md). Omitted by
+    default for DSL-authored actions that never had one.
     """
     record_action(
         ServiceAction(
@@ -38,6 +44,7 @@ def service(
             data=data,
             response_variable=response_variable,
             continue_on_error=continue_on_error,
+            metadata=metadata,
             **fields,
         ),
         span=capture_span(depth=0),

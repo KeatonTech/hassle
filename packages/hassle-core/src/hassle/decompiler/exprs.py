@@ -212,14 +212,27 @@ def decompile_trigger(body: dict[str, Any]) -> str | None:
     return handler(body)
 
 
+def _is_entity_id_shape(value: Any) -> bool:
+    """True for a bare entity-id string, or a list of them (real-world
+    smoke-test addition: the HA UI always stores entity_id as a list, even for
+    a single entity -- a singleton list must decompile back to a list, never
+    normalized to a scalar, I3)."""
+    if isinstance(value, str):
+        return True
+    if isinstance(value, list):
+        items = cast("list[Any]", value)
+        return all(isinstance(item, str) for item in items)
+    return False
+
+
 def _trig_state(body: dict[str, Any]) -> str | None:
     known = {"trigger", "platform", "entity_id", "to", "from", "id", "enabled", "variables", "for"}
     if not set(body) <= known:
         return None
     entity_id = body.get("entity_id")
-    if not isinstance(entity_id, str):
+    if not _is_entity_id_shape(entity_id):
         return None
-    call = f"state({entity_id!r})"
+    call = f"state({render_literal(entity_id)})"
     option_kwargs = _options_kwargs_src(body)
     has_to = "to" in body
     has_from = "from" in body
@@ -256,9 +269,9 @@ def _trig_numeric_state(body: dict[str, Any]) -> str | None:
     if not set(body) <= known:
         return None
     entity_id = body.get("entity_id")
-    if not isinstance(entity_id, str):
+    if not _is_entity_id_shape(entity_id):
         return None
-    parts = [repr(entity_id)]
+    parts = [render_literal(entity_id)]
     for key in ("attribute", "above", "below", "value_template"):
         if key in body:
             parts.append(f"{key}={render_literal(body[key])}")
@@ -268,10 +281,16 @@ def _trig_numeric_state(body: dict[str, Any]) -> str | None:
 
 
 def _trig_time(body: dict[str, Any]) -> str | None:
-    known = {"trigger", "platform", "at", "id", "enabled", "variables"}
+    known = {"trigger", "platform", "at", "weekday", "id", "enabled", "variables"}
     if not set(body) <= known or "at" not in body:
         return None
-    call = f"time(at={render_literal(body['at'])})"
+    parts = [f"at={render_literal(body['at'])}"]
+    if "weekday" in body:
+        # Real-world smoke-test finding: HA's `time` trigger schema also
+        # accepts `weekday` (docs/ha-api-notes.md), though it was originally
+        # documented condition-only.
+        parts.append(f"weekday={render_literal(body['weekday'])}")
+    call = f"time({', '.join(parts)})"
     suffix = _with_options_suffix(body)
     return call + suffix
 
