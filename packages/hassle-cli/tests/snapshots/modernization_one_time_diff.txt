@@ -1,0 +1,3 @@
+modernization (one-time)  automation:legacy_guest_light
+  (schema-only: Hassle compiles the modern form; HA stores whatever it's given verbatim, so this 
+diff appears once and never again)

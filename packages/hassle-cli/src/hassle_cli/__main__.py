@@ -1,17 +1,13 @@
-"""Entry point stub for the `hassle` CLI.
-
-The real command surface (pull/plan/push/validate/test/run/fmt/stubs/explain/
-mirror/doctor) is built in M7. This stub exists so the console script and the
-monorepo wiring are exercised by CI from M0 onward.
-"""
+"""Entry point for the `hassle` console script (MILESTONES M7)."""
 
 from __future__ import annotations
 
+from hassle_cli.cli import main as _click_main
+
 
 def main() -> int:
-    print("hassle: CLI not implemented yet (see MILESTONES.md M7).")
-    return 0
+    return _click_main(standalone_mode=False) or 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    _click_main()

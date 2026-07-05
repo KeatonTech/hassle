@@ -70,6 +70,10 @@ jobs:
   # when"). Docker (blocked in the M0.V sandbox) runs here; the tests target any
   # instance via HASSLE_TEST_HA_URL / HASSLE_TEST_HA_TOKEN, so this is the same
   # suite a developer runs against a local pip-installed HA.
+  #
+  # M7 extends this job (not a new one): `packages/hassle-cli/tests/integration`
+  # is the ONE `run --live` test (MILESTONES M7 test 5), gated the same way and
+  # run in the same step so it shares the already-running HA container.
   # ---------------------------------------------------------------------------
   integration:
     name: integration · HA ${{ matrix.ha_tag }}
@@ -130,7 +134,11 @@ jobs:
       - name: Integration tests (real HA)
         env:
           HASSLE_TEST_HA_URL: http://localhost:8123
-        run: uv run pytest -m integration packages/hassle-core/tests/integration -v
+        run: |
+          uv run pytest -m integration \
+            packages/hassle-core/tests/integration \
+            packages/hassle-cli/tests/integration \
+            -v
 
       - name: HA logs on failure
         if: failure()

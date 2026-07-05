@@ -4,7 +4,10 @@ version = "0.0.0"
 description = "Hassle CLI: pull/plan/push/validate/test/run/fmt/stubs/explain/mirror/doctor."
 requires-python = ">=3.12"
 dependencies = [
+    "click>=8.4.2",
     "hassle-core",
+    "keyring>=25.7.0",
+    "rich>=15.0.0",
 ]
 
 [project.scripts]

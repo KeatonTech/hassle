@@ -345,6 +345,18 @@ class DirectBackend:
             self._client.rest_post("/api/template", json={"template": template}, expect="text")
         )
 
+    # -- service calls (M7: `hassle run --live`, DESIGN §10.4) -------------
+
+    def call_service(self, domain: str, service: str, **data: Any) -> Any:
+        """Call `{domain}.{service}` via `POST /api/services/{domain}/{service}`.
+
+        Additive (M7): the shadow-automation live-run flow needs to trigger
+        `automation.trigger` with `skip_condition` explicitly set
+        (docs/ha-api-notes.md §10.6) -- not previously exposed since M6's own
+        test suite never needed a generic service-call passthrough.
+        """
+        return self._run(self._client.rest_post(f"/api/services/{domain}/{service}", json=data))
+
     # -- misc read helpers -------------------------------------------------
 
     def states(self) -> list[dict[str, Any]]:

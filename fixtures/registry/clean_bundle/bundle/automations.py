@@ -17,7 +17,7 @@ from hassle import (
     when,
 )
 
-VACATION_MODE = input_boolean(id="vacation_mode_clean", name="Vacation Mode")
+VACATION_MODE = input_boolean(id="vacation_mode", name="Vacation Mode")
 
 
 @automation(id="clean_hallway_motion", alias="Clean: hallway motion")

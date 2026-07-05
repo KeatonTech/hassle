@@ -53,7 +53,7 @@ typeCheckingMode = "strict"
 reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
-testpaths = ["packages/hassle-core/tests", "packages/hassle-dev/tests"]
+testpaths = ["packages/hassle-core/tests", "packages/hassle-dev/tests", "packages/hassle-cli/tests"]
 addopts = "-ra"
 markers = [
     "integration: tests that talk to a real Dockerized HA (M6+); never run in unit CI",

@@ -97,6 +97,17 @@ class CompileResult:
             return spans[index]
         return None
 
+    def decl_span_for(self, object_key: str) -> SourceSpan | None:
+        """The declaration-site span for ``object_key`` (M7 addition).
+
+        The same span used to point a `DuplicateObjectError` at each
+        conflicting declaration -- exposed publicly so whole-object findings
+        (e.g. the M7 helper-id/name-slug mismatch check) can point at *where
+        the helper/automation/script was declared*, not just at a
+        trigger/condition/action line within it.
+        """
+        return self._decl_spans.get(object_key)
+
 
 def _flatten_spans(nodes: list[RecordedNode]) -> list[SourceSpan | None]:
     return [n.span for n in nodes]

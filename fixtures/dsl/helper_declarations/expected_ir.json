@@ -47,8 +47,8 @@
     "name": "Cooldown",
     "duration": "00:05:00"
   },
-  "schedule:heating": {
-    "id": "heating",
+  "schedule:heating_schedule": {
+    "id": "heating_schedule",
     "name": "Heating Schedule"
   }
 }
