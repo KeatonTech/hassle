@@ -146,3 +146,17 @@ what `GET /api/config/automation/config/{id}` actually returns.
 | automation_action_metadata_ui_authored.json | Shape observed in a real 2026.7 UI-authored config: every action the HA UI saves is stamped with `"metadata": {}`, observed on all 87 raw actions in the smoke-test sample | actions carrying an empty `metadata: {}` dict alongside `target`+`data`, and a bare-data action with no `target` |
 | automation_state_trigger_list_valued_fields.json | Shape observed in a real 2026.7 UI-authored config: the HA UI always stores `entity_id`/`to`/`from` as lists, even for a single entity/value -- a singleton list is never collapsed to a scalar | `state` trigger with singleton-list `entity_id`/`to`/`from`, a second `state` trigger with genuinely multi-entry lists, and both a singleton-list and multi-entry-list `numeric_state` trigger `entity_id` |
 | automation_time_trigger_weekday_and_entity_at.json | Shape observed in a real 2026.7 UI-authored config: a weekday-scoped fixed-time trigger (the owner's schedule-driven wakeups), plus `at` referencing an `input_datetime` entity instead of a literal time string | `time` trigger with `weekday` (list of day abbreviations) alongside `at`, and a second `time` trigger whose `at` is an entity reference (`input_datetime.wakeup`) |
+
+## Residue coverage, round 2 (task #8): four more UI-authored shapes from the owner's live bundle
+
+Source: a second live smoke test against the owner's real 2026.7 Home Assistant bundle (101
+objects) surfaced 12 more granular `raw_action` fallbacks, tracing to four root causes below --
+extending the round-1 pattern (task #5, directly above). All four fixtures are in plural/canonical
+schema with an explicit `id`, same convention as round 1.
+
+| Fixture | Source | Construct |
+|---------|--------|-----------|
+| automation_action_data_template_ui_authored.json | Shape observed in a real 2026.7 UI-authored config: a service action carries the legacy `data_template` key (HA still stores it verbatim, distinct from `data`) | `climate.set_temperature` action with `target` + `data_template` (a Jinja-templated `temperature` field), no `data` key |
+| automation_condition_state_list_valued_fields.json | Shape observed in a real 2026.7 UI-authored config: a state **condition** (not just a trigger, round 1's fix) stores `entity_id`/`state` as lists even for one value | automation-level `state` condition with singleton-list `entity_id`/`state`, plus the same shape nested inside an `if`/`then` action and a `choose` branch's conditions |
+| automation_action_step_alias_and_enabled.json | Shape observed in a real 2026.7 UI-authored config: the UI names steps (`alias`) and toggles them (`enabled`) | a plain service call with `alias`, a `delay` with `alias`+`enabled: true`, and a service call with `alias`+`enabled: false` |
+| automation_container_recursion_ui_shapes.json | Shape observed in a real 2026.7 UI-authored config: containers (`if`/`else`, `choose`, `parallel`, `wait_for_trigger`) must decompile their inner steps through the same improved path -- a container must never fall back to `raw_action` merely because a child step carries `metadata`/`data_template`, a list-valued state condition, or `alias`/`enabled` | an `if`/`else` action whose `then`/`else` branches carry `metadata`+`alias` and `data_template`+`alias`+`enabled`; a `parallel` whose branches carry an `alias`+`metadata`+`enabled` step and a nested `choose` with a list-valued condition and an `alias`+`metadata` step; a `wait_for_trigger` with a list-valued `state` trigger |

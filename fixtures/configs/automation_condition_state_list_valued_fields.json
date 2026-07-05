@@ -1,0 +1,60 @@
+{
+  "id": "condition_state_list_valued_fields",
+  "alias": "Condition State List Valued Fields",
+  "description": "Shape observed in a real 2026.7 UI-authored config: a state CONDITION stores entity_id/state as lists even for one value, mirroring the round-1 trigger finding on the condition side; also covers a nested if/then and a nested choose branch",
+  "triggers": [
+    {
+      "trigger": "state",
+      "entity_id": ["input_boolean.x"],
+      "to": ["on"]
+    }
+  ],
+  "conditions": [
+    {
+      "condition": "state",
+      "entity_id": ["input_boolean.x"],
+      "state": ["on"]
+    }
+  ],
+  "actions": [
+    {
+      "if": [
+        {
+          "condition": "state",
+          "entity_id": ["input_boolean.guest_mode"],
+          "state": ["on"]
+        }
+      ],
+      "then": [
+        {
+          "action": "light.turn_on",
+          "target": {
+            "entity_id": "light.guest_room"
+          }
+        }
+      ]
+    },
+    {
+      "choose": [
+        {
+          "conditions": [
+            {
+              "condition": "state",
+              "entity_id": ["binary_sensor.hall_motion", "binary_sensor.kitchen_motion"],
+              "state": ["on", "detected"]
+            }
+          ],
+          "sequence": [
+            {
+              "action": "light.turn_on",
+              "target": {
+                "entity_id": "light.hallway"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "mode": "single"
+}
