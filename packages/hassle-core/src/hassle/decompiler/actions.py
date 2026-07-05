@@ -74,7 +74,7 @@ def decompile_action(body: Any) -> list[str]:
 
 
 def _is_plain_service_call(body: dict[str, Any]) -> bool:
-    known = {"action", "target", "data", "response_variable", "continue_on_error"}
+    known = {"action", "target", "data", "response_variable", "continue_on_error", "metadata"}
     return set(body) <= known and isinstance(body.get("action"), str)
 
 
@@ -129,6 +129,11 @@ def _service_call(body: dict[str, Any]) -> list[str]:
         parts.append(f"response_variable={render_literal(body['response_variable'])}")
     if "continue_on_error" in body:
         parts.append(f"continue_on_error={render_literal(body['continue_on_error'])}")
+    if "metadata" in body:
+        # Emitted even when `{}` (the common case, real-world smoke-test finding):
+        # every action the HA UI saves carries this key, so eliding an empty
+        # metadata would hash-drift every UI-authored action on recompile (I3).
+        parts.append(f"metadata={render_literal(body['metadata'])}")
     return [f"service({', '.join(parts)})"]
 
 

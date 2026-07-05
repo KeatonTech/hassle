@@ -93,11 +93,15 @@ class _TriggerBase:
 # numeric_state — also a condition (dual-purpose, like the core `state()`).
 # ---------------------------------------------------------------------------
 class NumericStateExpr(_TriggerBase):
-    """``numeric_state(entity, above=..., below=..., for_=...)`` — trigger + condition."""
+    """``numeric_state(entity, above=..., below=..., for_=...)`` — trigger + condition.
+
+    ``entity_id`` accepts a single entity or a list (real-world smoke-test
+    addition: the HA UI always stores this as a list, even for one entity).
+    """
 
     def __init__(
         self,
-        entity_id: str,
+        entity_id: str | list[str],
         *,
         above: float | None = None,
         below: float | None = None,
@@ -139,7 +143,7 @@ class NumericStateExpr(_TriggerBase):
 
 
 def numeric_state(
-    entity_id: str,
+    entity_id: str | list[str],
     *,
     above: float | None = None,
     below: float | None = None,
@@ -151,7 +155,9 @@ def numeric_state(
 
     ``attribute=`` (M1.1 addition) reads an entity attribute instead of its
     main state (HA's ``numeric_state`` schema field of the same name; see
-    ``fixtures/dsl/shade_tracks_sun``'s sun-elevation condition).
+    ``fixtures/dsl/shade_tracks_sun``'s sun-elevation condition). ``entity_id``
+    accepts a list too (real-world smoke-test addition, same rationale as
+    ``state()``).
     """
     return NumericStateExpr(
         entity_id,
@@ -169,10 +175,17 @@ def numeric_state(
 class TimeExpr(_TriggerBase):
     """``time(at=..., after=..., before=..., weekday=...)`` — trigger + condition.
 
-    ``at=`` is trigger-only; ``after=``/``before=``/``weekday=`` are
-    condition-only (DESIGN §5.4 / fixture corpus shapes). A single builder
-    exposes all of them; each serialization method emits only its relevant
-    subset.
+    ``at=`` is trigger-only; ``after=``/``before=`` are condition-only (DESIGN
+    §5.4 / fixture corpus shapes). ``weekday=`` was originally documented as
+    condition-only too, but a real-world smoke-test fixture
+    (``automation_time_trigger_weekday_and_entity_at.json``) showed HA's
+    ``time`` *trigger* schema also accepts ``weekday`` (a day-abbreviation-list
+    filter on the fixed-time trigger, e.g. weekday-scoped wakeups) — recorded
+    as a DESIGN §5.4 deviation in docs/ha-api-notes.md. ``at=`` also accepts an
+    entity reference (``input_datetime.x``, HA's schedule-driven-wakeup shape)
+    since it's typed as a plain ``str``, same as a literal time string. A
+    single builder exposes all of them; each serialization method emits only
+    its relevant subset.
     """
 
     def __init__(
@@ -196,6 +209,8 @@ class TimeExpr(_TriggerBase):
         fields: dict[str, Any] = {}
         if self._at is not None:
             fields["at"] = self._at
+        if self._weekday is not None:
+            fields["weekday"] = self._weekday
         return fields
 
     def to_condition(self) -> dict[str, Any]:

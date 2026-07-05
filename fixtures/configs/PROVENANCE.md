@@ -131,3 +131,18 @@ All fixtures are valid JSON per Home Assistant's schema as of July 2026 and exer
 | Fixture | Source | Construct |
 |---------|--------|-----------|
 | automation_ha_canonical_modern.json | Synthesized to match the exact post-2024.10 HA storage shape verified in docs/ha-api-notes.md §10.1 (real POST->GET capture, docs/ha-api-captures/normalize-post-get-pair.json): string `id`, plural `triggers`/`conditions`/`actions`, modern `trigger:`/`action:` discriminators throughout (no `platform:`/`service:` anywhere), no scalar/string-form `delay`, nested `choose`/`default`. This is what a real live `GET /api/config/automation/config/{id}` returns for an automation authored in the current HA UI -- the fixture the decompiler's zero-transformation round-trip (`test_ha_canonical_zero_transformation_roundtrip`) is judged against. | plural schema + modern discriminators + nested choose, all in one already-canonical fixture |
+
+## Real-world smoke-test addendum (task #5): mundane UI-authored shapes missed by the synthetic corpus
+
+Source: the owner's first live smoke test against a real 2026.7 Home Assistant instance surfaced
+118 granular `raw_*` decompiler fallbacks across 101 real objects, tracing to three root causes.
+Each is a mundane, extremely common shape the HA UI actually writes that the (hand-authored,
+docs-derived) synthetic corpus above never happened to exercise. All three fixtures below are
+already in plural/canonical schema (docs/ha-api-notes.md §10.1) with an explicit `id`, mirroring
+what `GET /api/config/automation/config/{id}` actually returns.
+
+| Fixture | Source | Construct |
+|---------|--------|-----------|
+| automation_action_metadata_ui_authored.json | Shape observed in a real 2026.7 UI-authored config: every action the HA UI saves is stamped with `"metadata": {}`, observed on all 87 raw actions in the smoke-test sample | actions carrying an empty `metadata: {}` dict alongside `target`+`data`, and a bare-data action with no `target` |
+| automation_state_trigger_list_valued_fields.json | Shape observed in a real 2026.7 UI-authored config: the HA UI always stores `entity_id`/`to`/`from` as lists, even for a single entity/value -- a singleton list is never collapsed to a scalar | `state` trigger with singleton-list `entity_id`/`to`/`from`, a second `state` trigger with genuinely multi-entry lists, and both a singleton-list and multi-entry-list `numeric_state` trigger `entity_id` |
+| automation_time_trigger_weekday_and_entity_at.json | Shape observed in a real 2026.7 UI-authored config: a weekday-scoped fixed-time trigger (the owner's schedule-driven wakeups), plus `at` referencing an `input_datetime` entity instead of a literal time string | `time` trigger with `weekday` (list of day abbreviations) alongside `at`, and a second `time` trigger whose `at` is an entity reference (`input_datetime.wakeup`) |

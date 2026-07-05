@@ -41,9 +41,14 @@ class StateExpr(_NoBool):
     The common trigger options (``id=`` / ``enabled=`` / ``variables=`` / ``for_=``,
     DESIGN §5.4) are accepted directly on ``.to()`` / ``.is_()`` / ``.with_options()``
     — there is no separate ``with_trigger_options`` wrapper.
+
+    ``entity_id`` (and ``.to()``/``.is_()``'s ``value``) accept ``str | list[str]``
+    (real-world smoke-test addition): the HA UI always stores these as *lists*,
+    even for a single entity/value, and a singleton list must round-trip as a
+    list — never normalized to a scalar (I3, docs/ha-api-notes.md).
     """
 
-    def __init__(self, entity_id: str) -> None:
+    def __init__(self, entity_id: str | list[str]) -> None:
         self._entity_id = entity_id
         self._from: Any = _UNSET
         self._to: Any = _UNSET
@@ -51,8 +56,8 @@ class StateExpr(_NoBool):
         self._options: dict[str, Any] = {}
 
     @property
-    def entity_id(self) -> str:
-        """The entity id this expression reads (public accessor, DESIGN §5.4)."""
+    def entity_id(self) -> str | list[str]:
+        """The entity id(s) this expression reads (public accessor, DESIGN §5.4)."""
         return self._entity_id
 
     def with_options(
@@ -129,8 +134,12 @@ class _Unset:
 _UNSET = _Unset()
 
 
-def state(entity_id: str) -> StateExpr:
-    """Build a state trigger/condition for ``entity_id`` (DESIGN §5.3)."""
+def state(entity_id: str | list[str]) -> StateExpr:
+    """Build a state trigger/condition for ``entity_id`` (DESIGN §5.3).
+
+    ``entity_id`` accepts a single entity or a list (real-world smoke-test
+    addition: the HA UI always stores this as a list, even for one entity).
+    """
     return StateExpr(entity_id)
 
 
@@ -141,6 +150,13 @@ class ServiceAction:
     ``response_variable`` and ``continue_on_error`` are HA *action* fields (they
     live at the top level, not inside ``data``); passing them keeps this the one
     service-call builder (no separate ``service_ext``).
+
+    ``metadata=`` (real-world smoke-test addition, docs/ha-api-notes.md): the HA
+    UI stamps ``"metadata": {}`` on every action it saves. It is emitted whenever
+    passed, **including when empty** — a real UI-authored config always carries
+    it, so eliding an empty ``metadata`` would hash-drift every such action on
+    every decompile+recompile cycle (I3). ``None`` (the default) omits the field
+    entirely, for DSL-authored actions that never had one.
     """
 
     def __init__(
@@ -151,12 +167,14 @@ class ServiceAction:
         data: dict[str, Any] | None = None,
         response_variable: str | None = None,
         continue_on_error: bool | None = None,
+        metadata: dict[str, Any] | None = None,
         **fields: Any,
     ) -> None:
         self._action = action
         self._target = target
         self._response_variable = response_variable
         self._continue_on_error = continue_on_error
+        self._metadata = metadata
         merged: dict[str, Any] = {}
         if data:
             merged.update(data)
@@ -165,6 +183,8 @@ class ServiceAction:
 
     def to_action(self) -> dict[str, Any]:
         body: dict[str, Any] = {"action": self._action}
+        if self._metadata is not None:
+            body["metadata"] = self._metadata
         if self._target is not None:
             body["target"] = self._target
         if self._data:

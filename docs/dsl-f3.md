@@ -75,8 +75,11 @@ bundles are written.
 
 ### Core action verbs
 - `service(action, *, target=, data=, response_variable=, continue_on_error=,
-  **fields)` — the **single** service-call verb (bare kwargs → `data`;
-  `response_variable`/`continue_on_error` emit as top-level HA action fields).
+  metadata=, **fields)` — the **single** service-call verb (bare kwargs → `data`;
+  `response_variable`/`continue_on_error`/`metadata` emit as top-level HA action
+  fields). `metadata=` is a real-world smoke-test ADDITION (docs/ha-api-notes.md
+  §19.1): the HA UI stamps `"metadata": {}` on every action it saves; passing
+  it (even as `{}`) round-trips that byte-stable. Omitted by default.
 - `delay(**units)` — dict-form delay.
 - `variables(**kwargs)` — a `variables` action.
 - `stop(message=None, *, error=None)` — a `stop` action.
@@ -98,6 +101,16 @@ bundles are written.
 - Common trigger options are set on the builder — for `state` via
   `.to(v, id=, enabled=, variables=, for_=)` / `.is_(...)` / `.with_options(...)`;
   for the classic-builder family via `.with_options(...)`.
+- `state(entity_id)`'s `entity_id` (and `.to()`/`.is_()`'s `value`) and
+  `numeric_state(entity_id, ...)`'s `entity_id` accept `str | list[str]`
+  (real-world smoke-test ADDITION, docs/ha-api-notes.md §19.2): the HA UI
+  always stores these fields as a list, even for a single entity/value, and a
+  singleton list decompiles back to a list, never a scalar.
+- `time(at=, after=, before=, weekday=)`: `weekday=` is now also emitted on the
+  **trigger** side, not condition-only as originally documented (real-world
+  smoke-test ADDITION, docs/ha-api-notes.md §19.3 — HA's `time` trigger schema
+  accepts it). `at=` accepting an entity reference (`input_datetime.x`) needed
+  no code change (`at` was always a plain `str`) but is noted there too.
 
 ### Condition combinators
 - `all_of(*conditions)`, `any_of(*conditions)`, `not_(condition)`.

@@ -118,9 +118,23 @@ class PythonMathMisuseError(CompileError):
 
 def _entity_ref_str(value: Any) -> str:
     """Coerce an entity reference (a plain entity_id string, or a StateExpr) to
-    its ``domain.object_id`` string."""
+    its ``domain.object_id`` string.
+
+    A template read always names exactly one entity, so a ``StateExpr`` built
+    from a list ``entity_id`` (real-world smoke-test addition: the HA UI's
+    list-valued trigger fields, ``state([...])``) is rejected here with a
+    what/where/fix error rather than silently stringifying the list.
+    """
     if isinstance(value, StateExpr):
-        return value.entity_id
+        entity_id = value.entity_id
+        if isinstance(entity_id, str):
+            return entity_id
+        raise TypeError(
+            f"expr()/state(...).value expects a single entity id, but this "
+            f"state(...) builder was constructed with a list entity_id "
+            f"({entity_id!r}). Fix: pass a single entity id string to state(...) "
+            f"when using it as a template read."
+        )
     if isinstance(value, str):
         return value
     raise TypeError(
