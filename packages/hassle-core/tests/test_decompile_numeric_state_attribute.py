@@ -31,7 +31,7 @@ def test_numeric_state_trigger_with_attribute_decompiles_without_raw() -> None:
     }
     src = decompile_trigger(body)
     assert src is not None, "numeric_state trigger with attribute= fell back to raw"
-    assert src == "numeric_state('sun.sun', attribute='elevation', above=0)"
+    assert src == "numeric_state(e.sun.sun, attribute='elevation', above=0)"
 
 
 def test_numeric_state_condition_with_attribute_decompiles_without_raw() -> None:
@@ -43,7 +43,7 @@ def test_numeric_state_condition_with_attribute_decompiles_without_raw() -> None
     }
     src = decompile_condition(body)
     assert src is not None, "numeric_state condition with attribute= fell back to raw"
-    assert src == "numeric_state('sun.sun', attribute='elevation', above=0)"
+    assert src == "numeric_state(e.sun.sun, attribute='elevation', above=0)"
 
 
 def test_automation_math_shade_sun_decompiles_with_zero_raw_nodes() -> None:

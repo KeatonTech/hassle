@@ -480,6 +480,40 @@ failures — point at the user's Python line.
   "clone the repo", and the CLI says so.
 - Objects that decompile to `raw_*` are flagged in `hassle pull` output as DSL-coverage gaps.
 
+**Codegen readability (owner feedback after first real pull; style, not schema — I3 holds byte-
+for-byte, verified over the whole round-trip corpus):**
+
+- **Entity references through the registry accessor:** an entity id in an entity position
+  (`state()`/`numeric_state()`'s entity arg, `target={"entity_id": ...}` — including nested
+  inside the dict literal — a `wait_for_trigger` trigger's entity arg, a helper declaration used
+  elsewhere) is emitted as `e.<domain>.<object_id>` (`e.<domain>["<object_id>"]` for a
+  digit-leading object_id) rather than the quoted string, backed by
+  `from hassle.registry import entities as e`. Only a bare string matching the `domain.object_id`
+  shape qualifies — a state **value** (`.to()`/`.is_()`), a Jinja `template("...")` string, and a
+  registry UUID never match, so they're untouched. `EntityRef` is a `str` subclass, so this is
+  purely cosmetic: it compiles to the identical HA value.
+- **Star import:** a freshly decompiled module emits `from hassle import *` (the DSL surface
+  defines `__all__`, so pyright resolves this without configuration) instead of an enumerated
+  builder-name list — owner preference, and it also means an F3 addition never needs a matching
+  update to a generated-code import list. The `entities as e` import stays its own explicit line
+  (DESIGN §5.3: a dedicated, non-`__all__` entry point). This is the **generated-code** style
+  only; hand-written bundle files may use either form.
+- **Section comments:** `# --- triggers ---` / `# --- conditions ---` / `# --- actions ---`
+  precede each non-empty section of an automation body (a script gets `# --- sequence ---` when
+  its sequence is non-empty); an empty section gets no comment.
+- **Function names derive from `alias`, not `id`** (this section as originally written, now
+  actually implemented): the name is `slugify(alias)`, with a deterministic `_2`/`_3` suffix on a
+  collision — collisions include another decompiled object's alias-slug **and** any name the
+  generated module's own imports bring into scope (`hassle.__all__`, `e`), so an automation
+  aliased e.g. "Wait Template" never shadows the `wait_template()` builder inside its own function
+  body. No `alias` falls back to `automation_<id>` / `script_<id>`. The `id=` kwarg is still
+  emitted whenever it differs from the (now alias-derived) function name — I2 is untouched, only
+  the *Python identifier* changed; a bundle's own `id=` values never do. One accepted UX
+  consequence: since the name now tracks `alias`, a UI-only alias edit changes the function name
+  on next pull/decompile, which shows up as a rename in the spliced diff (previously invisible,
+  since the id-derived name never changed) — considered acceptable, since the alias visibly
+  changed too and the diff is otherwise exactly the meaningful one-line edit.
+
 ---
 
 ## 8. Sync: plan/apply, conflicts, and the git loop (G2, G8)

@@ -23,8 +23,8 @@ CONFIGS_DIR = Path(__file__).resolve().parents[3] / "fixtures" / "configs"
 CASES = [
     ("automation_purpose_trigger_area_behavior_first.json", 'area("office")'),
     ("automation_purpose_trigger_label_behavior_all.json", 'label("security")'),
-    ("automation_purpose_trigger_entity_target.json", '"binary_sensor.hall_motion"'),
-    ("automation_purpose_trigger_renamed_legacy_key.json", '"sensor.wireless_device_battery"'),
+    ("automation_purpose_trigger_entity_target.json", "e.binary_sensor.hall_motion"),
+    ("automation_purpose_trigger_renamed_legacy_key.json", "e.sensor.wireless_device_battery"),
     ("automation_purpose_condition.json", 'met("climate.is_target_temperature"'),
 ]
 
