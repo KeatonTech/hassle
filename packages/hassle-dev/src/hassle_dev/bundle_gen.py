@@ -94,6 +94,10 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+# Reuse `hassle_dev.docs`'s repo-root finder (same repo, same "has fixtures/dsl
+# and fixtures/cookbook" signature) rather than defining a second one.
+from hassle_dev.docs import find_repo_root
+
 _SENTINEL_SYNCED_AT = "1970-01-01T00:00:00Z"
 
 # The registry snapshot every seeded object is drawn against: the project's
@@ -103,16 +107,6 @@ _SENTINEL_SYNCED_AT = "1970-01-01T00:00:00Z"
 # `binary_sensor.hall_motion`, `input_boolean.guest_mode`, `sun.sun`, and the
 # `notify`/`light` services below are all real, already-verified entries, not
 # fixture-specific inventions.
-_REPO_ROOT_MARKERS = ("fixtures", "packages", "DESIGN.md")
-
-
-def find_repo_root(start: Path | None = None) -> Path | None:
-    """Walk up from ``start`` (or cwd) looking for the repo root."""
-    here = (start or Path.cwd()).resolve()
-    for directory in (here, *here.parents):
-        if all((directory / marker).exists() for marker in _REPO_ROOT_MARKERS):
-            return directory
-    return None
 
 
 def _registry_snapshot_json(repo_root: Path) -> dict[str, Any]:
