@@ -2270,7 +2270,18 @@ re-verified against live HA in this PR (no Docker/HA access here) — the orches
 the actual green signal, and is expected to be the first fully-green run of this test across all
 three rounds.
 
-## 30. M11: category write-back on push-create — inferred WS shapes, not live-verified (`m11/category-writeback`)
+## 30. M11: category write-back on push-create — WS shapes now live-verified by CI (`m11/category-writeback`)
+
+> **Post-merge status (2026-07-06):** the caveats below were written before the integration
+> suite ran. PR #3's CI subsequently ran `tests/integration/test_m11_category_writeback.py`
+> green on BOTH HA images (stable + dev) on the first attempt, which live-confirms:
+> `config/category_registry/create`'s `{scope, name}` argument shape, the category assignment
+> landing in the entity-registry row's `categories` map, the slug-reuse (no-duplicate) path,
+> the `script.*` `unique_id == object_id` lookup, and cross-scope assignment preservation
+> under the client-side merge. The prospective "will confirm or refute once CI runs" wording
+> below is retained as written for the historical record; read it as confirmed. Still genuinely
+> unverified: `config/category_registry/delete`'s existence (teardown suppresses errors, so a
+> green run proves nothing either way).
 
 **Scope.** M11 is the reverse of §22's pull-side category placement: when `hassle push` CREATEs a
 brand-new automation/script whose source file matches the `automations/<slug>.py` /

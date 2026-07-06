@@ -106,9 +106,11 @@ def attempt_category_writeback(
 
     Called by `hassle.sync.apply.apply_plan` immediately after a CREATE
     succeeds — never for any other action, and never in a way that can affect
-    the apply's own success/rollback bookkeeping (the caller wraps this in a
-    try/except and only ever collects `.warning` into `ApplyResult.
-    category_warnings`, MILESTONES M11 test 3).
+    the apply's own success/rollback bookkeeping: this function catches ALL
+    exceptions internally and reports them as `.warning`, which the caller
+    only ever collects into `ApplyResult.category_warnings` (MILESTONES M11
+    test 3). The caller does NOT add its own try/except — the isolation
+    guarantee lives entirely here.
     """
     scope = _SCOPE_FOR_KIND.get(kind)
     if scope is None:
