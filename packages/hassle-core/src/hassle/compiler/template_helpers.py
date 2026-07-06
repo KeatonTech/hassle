@@ -144,12 +144,22 @@ def check_no_dangling_template_helper_declarations() -> None:
     after every registered/prebuilt object has been processed -- so this
     also covers a single-file/fixture compile path (golden error-case
     fixtures included), not just the whole-bundle loader.
+
+    Self-cleaning (reviewer note N3 on the same PR): the pending list is
+    cleared in a ``finally`` whether the sweep raises or not. Without this,
+    a DIRECT ``compile_registered`` caller (the CLI path is protected by
+    ``compile_bundle``'s start-of-compile reset) would leak an unconsumed
+    entry into the next compile in the same process, turning one dangling
+    declaration into a false positive for every later, clean compile.
     """
-    for pending in _PENDING:
-        if not pending.consumed:
-            raise DanglingTemplateHelperDeclarationError(
-                pending.builder, pending.name, pending.span
-            )
+    try:
+        for pending in _PENDING:
+            if not pending.consumed:
+                raise DanglingTemplateHelperDeclarationError(
+                    pending.builder, pending.name, pending.span
+                )
+    finally:
+        _PENDING.clear()
 
 
 def declared_template_helpers() -> list[TemplateHelperConfig]:
