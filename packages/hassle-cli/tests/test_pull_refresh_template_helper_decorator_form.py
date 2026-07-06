@@ -59,12 +59,8 @@ def test_pull_refresh_downgrades_noninvertible_template_helper_to_call_form(
     # outside the grammar `hassle.decompiler.template_invert` models),
     # simulating a UI edit through the HA template-helper options flow.
     remote = backend.list_remote("template_sensor")["average_temp"]
-    non_invertible_state = (
-        "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}"
-    )
-    backend.update(
-        "template_sensor", "average_temp", {**remote, "state": non_invertible_state}
-    )
+    non_invertible_state = "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}"
+    backend.update("template_sensor", "average_temp", {**remote, "state": non_invertible_state})
 
     result = cli(["pull"], cwd=git_repo)
     assert result.exit_code == 0, result.output
@@ -106,9 +102,7 @@ def test_pull_refresh_keeps_decorator_form_when_remote_state_still_inverts(
 
     remote = backend.list_remote("template_sensor")["average_temp"]
     still_invertible_state = "{{ states('sensor.a') | float * 3 }}"
-    backend.update(
-        "template_sensor", "average_temp", {**remote, "state": still_invertible_state}
-    )
+    backend.update("template_sensor", "average_temp", {**remote, "state": still_invertible_state})
 
     result = cli(["pull"], cwd=git_repo)
     assert result.exit_code == 0, result.output

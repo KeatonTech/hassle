@@ -221,7 +221,9 @@ def _validate_decorator_body(
     result = func()
     from hassle.compiler.templates import TemplateExpr
 
-    if isinstance(result, TemplateExpr) or (isinstance(result, str) and not isinstance(result, EntityRef)):
+    if isinstance(result, TemplateExpr) or (
+        isinstance(result, str) and not isinstance(result, EntityRef)
+    ):
         return result
     raise TemplateHelperDecoratorBodyError(
         builder,

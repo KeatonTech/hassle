@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from hassle.compiler import math_expr
 from hassle.compiler.helpers import EntityRef
@@ -72,7 +72,7 @@ def _tokenize(text: str) -> list[_Token]:
     while pos < len(text):
         m = _TOKEN_RE.match(text, pos)
         if m is None:
-            raise _LexError(f"unrecognized character at position {pos}: {text[pos:pos + 10]!r}")
+            raise _LexError(f"unrecognized character at position {pos}: {text[pos : pos + 10]!r}")
         pos = m.end()
         if m.lastgroup == "ws":
             continue
@@ -239,7 +239,7 @@ class _Parser:
         return _Node(rendered, f"concat({sources})")
 
     # -- comparisons ------------------------------------------------------
-    _CMP_OPS: dict[str, str] = {
+    _CMP_OPS: ClassVar[dict[str, str]] = {
         "==": "eq",
         "!=": "ne",
         ">": "gt",
@@ -334,7 +334,9 @@ class _Parser:
         value = builder(operand.value, *[a.value for a in args])
         dsl_name = _FILTER_SOURCE_NAMES[name]
         arg_src = ", ".join(a.source for a in args)
-        src = f"{dsl_name}({operand.source}, {arg_src})" if args else f"{dsl_name}({operand.source})"
+        src = (
+            f"{dsl_name}({operand.source}, {arg_src})" if args else f"{dsl_name}({operand.source})"
+        )
         return _Node(value, src)
 
     def _arg_list(self) -> list[_Node]:
@@ -394,7 +396,7 @@ class _Parser:
             py_value = name == "true"
             return _Node(py_value, repr(py_value))
         # Bare name: a `var("name")` runtime variables: read.
-        return _Node(var_builder(name), f'var({name!r})')
+        return _Node(var_builder(name), f"var({name!r})")
 
     def _call(self, name: str, args: list[_Node]) -> _Node:
         if name == "states":
@@ -410,7 +412,11 @@ class _Parser:
                 f"expr({_entity_source(entity_id)})",
             )
         if name == "state_attr":
-            if len(args) != 2 or not isinstance(args[0].value, str) or not isinstance(args[1].value, str):
+            if (
+                len(args) != 2
+                or not isinstance(args[0].value, str)
+                or not isinstance(args[1].value, str)
+            ):
                 raise _ParseError("state_attr(...) needs two string args")
             entity_id, attribute = args[0].value, args[1].value
             value = TemplateExpr(f"state_attr({entity_id!r}, {attribute!r})")
@@ -426,7 +432,7 @@ class _Parser:
 
 
 def _entity_source(entity_id: str) -> str:
-    if isinstance(entity_id, str) and re.match(r"^[a-z_]+\.(?!_)[a-z0-9_]+(?<!_)$", entity_id):
+    if re.match(r"^[a-z_]+\.(?!_)[a-z0-9_]+(?<!_)$", entity_id):
         return render_entity_ref(entity_id)
     return repr(entity_id)
 
@@ -477,10 +483,8 @@ def invert_template(jinja_text: str) -> InvertedTemplate | None:
     faith").
     """
     text = jinja_text.strip()
-    if text.startswith("{{") and text.endswith("}}"):
-        inner = text[2:-2].strip()
-    else:
-        inner = text
+    is_wrapped = text.startswith("{{") and text.endswith("}}")
+    inner = text[2:-2].strip() if is_wrapped else text
     try:
         tokens = _tokenize(inner)
         node = _Parser(tokens).parse_full()

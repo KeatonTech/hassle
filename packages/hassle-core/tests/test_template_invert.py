@@ -94,8 +94,8 @@ def test_invert_template_is_byte_stable_when_it_succeeds(jinja_text: str) -> Non
     # run end-to-end through the compiler rather than trusting the inverter's
     # own internal comparison a second time with different code.
     reset_declared_template_helpers()
-    from hassle import expr, state, template_sensor, var  # noqa: F401
-    from hassle.compiler.math_expr import (  # noqa: F401
+    from hassle import expr, state, var
+    from hassle.compiler.math_expr import (
         E_,
         PI,
         TAU,
@@ -118,7 +118,7 @@ def test_invert_template_is_byte_stable_when_it_succeeds(jinja_text: str) -> Non
         timedelta_,
         today_at,
     )
-    from hassle.registry import entities as e  # noqa: F401
+    from hassle.registry import entities as e
 
     namespace = {
         "expr": expr,
@@ -147,13 +147,12 @@ def test_invert_template_is_byte_stable_when_it_succeeds(jinja_text: str) -> Non
         "timedelta_": timedelta_,
         "today_at": today_at,
     }
-    rebuilt = eval(result.source, namespace)  # noqa: S307 - trusted, DSL-generated source
+    # Trusted, DSL-generated source (built entirely from this corpus's own
+    # renderer output, never from external/untrusted input).
+    rebuilt = eval(result.source, namespace)
     from hassle.compiler.templates import TemplateExpr
 
-    if isinstance(rebuilt, TemplateExpr):
-        rendered = rebuilt.to_template()
-    else:
-        rendered = rebuilt
+    rendered = rebuilt.to_template() if isinstance(rebuilt, TemplateExpr) else rebuilt
     assert rendered == jinja_text.strip()
 
 

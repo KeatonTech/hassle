@@ -23,14 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from hassle import (
-    expr,
-    service,
-    template_binary_sensor,
-    template_number,
-    template_select,
-    template_sensor,
-)
+from hassle import expr, service, template_number, template_sensor
 from hassle.compiler import NoRecordingContextError, TemplateHelperDecoratorBodyError
 from hassle.compiler.bundle import compile_bundle
 from hassle.compiler.template_helpers import reset_declared_template_helpers
@@ -44,7 +37,11 @@ FIXTURE = (
     / "bundle"
 )
 CALL_FORM_FIXTURE = (
-    Path(__file__).resolve().parents[3] / "fixtures" / "dsl" / "template_helper_declarations" / "bundle"
+    Path(__file__).resolve().parents[3]
+    / "fixtures"
+    / "dsl"
+    / "template_helper_declarations"
+    / "bundle"
 )
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
@@ -169,9 +166,7 @@ def test_decorator_with_parameters_message_snapshot() -> None:
         def _bad_sensor(some_arg):
             return expr(e.sensor.a)
 
-    _check_snapshot(
-        "template_helper_decorator_has_parameters", _normalize(str(excinfo.value))
-    )
+    _check_snapshot("template_helper_decorator_has_parameters", _normalize(str(excinfo.value)))
 
 
 def test_decorator_returning_non_template_expr_raises_decorator_body_error() -> None:
@@ -194,9 +189,7 @@ def test_decorator_returning_non_template_expr_message_snapshot() -> None:
         def _bad_return_sensor():
             return 42
 
-    _check_snapshot(
-        "template_helper_decorator_bad_return", _normalize(str(excinfo.value))
-    )
+    _check_snapshot("template_helper_decorator_bad_return", _normalize(str(excinfo.value)))
 
 
 def test_decorator_calling_a_recording_verb_raises_no_recording_context_error() -> None:
@@ -227,7 +220,5 @@ def test_decorator_returning_plain_jinja_string_is_accepted() -> None:
     from hassle.compiler.registry import current_registry
 
     prebuilt = current_registry().prebuilt
-    obj = next(
-        p.obj for p in prebuilt if p.obj.object_key() == "template_sensor:raw_string_sensor"
-    )
+    obj = next(p.obj for p in prebuilt if p.obj.object_key() == "template_sensor:raw_string_sensor")
     assert obj.to_ha()["state"] == "{{ states('sensor.a') }}"
