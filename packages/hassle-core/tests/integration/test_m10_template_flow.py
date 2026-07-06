@@ -4,7 +4,7 @@ is the AUTHORITATIVE verification of the flow shapes documented in
 docs/ha-api-notes.md §26; any mismatch found here supersedes the doc, updated
 in the same PR as the fix).
 
-**This suite is exactly what caught two real bugs, in two CI rounds:**
+**This suite is exactly what caught real bugs, across several CI rounds:**
 
 - Round 1 (§26.0): config-entry flow create/step-submission, options-flow,
   and entry removal were originally modeled as WebSocket commands; every
@@ -22,9 +22,31 @@ in the same PR as the fix).
   `select_option`); (3) `unique_id` is rejected outright -- there is no
   settable unique id, so identity is now derived from `name` (slugified),
   re-freezing MILESTONES M10's identity section.
+- Round 3 (§26.7): CREATE worked, but READ-BACK and UPDATE were still wrong
+  -- `config_entries/get` never carries an entry's options at all; fixed by
+  reading them back via an options-flow's suggested values instead.
+- Round 4 (§26.10): the plan-noop test still failed with an int-vs-float
+  hash mismatch -- HA's `NumberSelector` always stores `template_number`'s
+  `min`/`max`/`step` as floats, so the compiler now coerces to match.
+- Round 5 (this file): the round-4 fix landed in the COMPILER
+  (`hassle.compiler.template_helpers`), but this suite's local configs were
+  hand-written raw dicts with `int` `min`/`max`/`step` that never went
+  through the compiler -- so the plan-noop test kept failing with the
+  identical diff even after the compiler was fixed. **Every `local`/plan
+  config in this file is now produced by actually calling the DSL builders
+  (`hassle.compiler.template_helpers.template_number` et al.) and reading
+  back `.to_ha()`**, exactly the way the real product's `push`/`plan`
+  pipeline compiles a bundle and hands the compiler's output to
+  `compute_plan`/`apply_plan` -- never a hand-authored dict. This is also
+  more faithful to I5's spirit (tests exercise compiled IR, not hand-typed
+  approximations of it); `create`/`update`'s own tests happened to pass
+  with raw ints throughout rounds 1-4 only because HA coerces server-side
+  regardless of what's submitted, which masked this file never actually
+  exercising the compiler at all.
 
-Fixed in `hassle/backend/direct.py`; see docs/ha-api-notes.md §26.0-26.6 for
-the full correction history.
+Fixed in `hassle/backend/direct.py` (rounds 1-3) and
+`hassle/compiler/template_helpers.py` (round 4); see docs/ha-api-notes.md
+§26.0-§26.10 for the full correction history.
 
 Covers:
 - create/read/update/delete a `template_number` through `DirectBackend` (REST
@@ -45,7 +67,17 @@ Covers:
 
 from __future__ import annotations
 
+from typing import Any
+
 from hassle.backend import DirectBackend
+from hassle.compiler.template_helpers import (
+    declared_template_helpers,
+    reset_declared_template_helpers,
+    template_binary_sensor,
+    template_number,
+    template_select,
+    template_sensor,
+)
 from hassle.ir.canonical import sha256_hash
 from hassle.sync import ApplyOutcome, Manifest, Plan, PlanAction, PlanEntry
 from hassle.sync.apply import apply_plan
@@ -54,18 +86,37 @@ from hassle.sync.plan import compute_plan
 _SET_VALUE = {"action": "input_number.set_value", "data": {"value": "{{ value }}"}}
 _SELECT_OPTION = {"action": "input_select.select_option", "data": {"option": "{{ option }}"}}
 
+_BUILDERS = {
+    "template_number": template_number,
+    "template_sensor": template_sensor,
+    "template_binary_sensor": template_binary_sensor,
+    "template_select": template_select,
+}
+
+
+def _compiled(domain: str, **kwargs: Any) -> dict[str, Any]:
+    """Produce a template-helper config the way the real product does: through
+    the DSL builder, not a hand-authored dict (round 5, docs/ha-api-notes.md
+    §26.10 -- a raw `int` `min`/`max`/`step` never exercises the compiler's
+    float coercion, and I5's spirit is that tests exercise compiled IR)."""
+    reset_declared_template_helpers()
+    _BUILDERS[domain](**kwargs)
+    (helper,) = declared_template_helpers()
+    return helper.to_ha()
+
 
 def test_template_number_create_read_update_delete_cycle(ha: DirectBackend) -> None:
     identity = ha.create(
         "template_number",
-        {
-            "name": "Active HVAC Zones",
-            "state": "{{ 3 }}",
-            "set_value": _SET_VALUE,
-            "min": 0,
-            "max": 8,
-            "step": 1,
-        },
+        _compiled(
+            "template_number",
+            name="Active HVAC Zones",
+            state="{{ 3 }}",
+            set_value=_SET_VALUE,
+            min=0,
+            max=8,
+            step=1,
+        ),
     )
     assert identity == "active_hvac_zones"
 
@@ -81,14 +132,15 @@ def test_template_number_create_read_update_delete_cycle(ha: DirectBackend) -> N
     ha.update(
         "template_number",
         identity,
-        {
-            "name": "Active HVAC Zones",
-            "state": "{{ 5 }}",
-            "set_value": _SET_VALUE,
-            "min": 0,
-            "max": 8,
-            "step": 1,
-        },
+        _compiled(
+            "template_number",
+            name="Active HVAC Zones",
+            state="{{ 5 }}",
+            set_value=_SET_VALUE,
+            min=0,
+            max=8,
+            step=1,
+        ),
     )
     updated = ha.list_remote("template_number")[identity]
     assert updated["state"] == "{{ 5 }}"
@@ -100,13 +152,19 @@ def test_template_number_create_read_update_delete_cycle(ha: DirectBackend) -> N
 
 
 def _sample_config(domain: str, name: str) -> dict[str, object]:
-    base: dict[str, object] = {"name": name, "state": "{{ 1 }}"}
     if domain == "template_number":
-        base.update({"min": 0, "max": 10, "step": 1, "set_value": _SET_VALUE})
-    elif domain == "template_select":
-        base["options"] = "{{ ['a', 'b'] }}"
-        base["select_option"] = _SELECT_OPTION
-    return base
+        return _compiled(
+            domain, name=name, state="{{ 1 }}", min=0, max=10, step=1, set_value=_SET_VALUE
+        )
+    if domain == "template_select":
+        return _compiled(
+            domain,
+            name=name,
+            state="{{ 1 }}",
+            options="{{ ['a', 'b'] }}",
+            select_option=_SELECT_OPTION,
+        )
+    return _compiled(domain, name=name, state="{{ 1 }}")
 
 
 def test_every_template_domain_supports_full_cycle_live(ha: DirectBackend) -> None:
@@ -131,14 +189,15 @@ def test_every_template_domain_supports_full_cycle_live(ha: DirectBackend) -> No
 
 def test_template_helper_plan_apply_create_then_noop_on_repush(ha: DirectBackend) -> None:
     manifest = Manifest(synced_at="base", ha_version="test", objects={})
-    local_config = {
-        "name": "Zones Plan Probe",
-        "state": "{{ 2 }}",
-        "set_value": _SET_VALUE,
-        "min": 0,
-        "max": 8,
-        "step": 1,
-    }
+    local_config = _compiled(
+        "template_number",
+        name="Zones Plan Probe",
+        state="{{ 2 }}",
+        set_value=_SET_VALUE,
+        min=0,
+        max=8,
+        step=1,
+    )
     local = {"template_number:zones_plan_probe": ("template_number", local_config)}
     plan = compute_plan(manifest=manifest, local_objects=local, remote_objects={})
     entry = plan.entry_for("template_number:zones_plan_probe")
@@ -167,14 +226,15 @@ def test_template_helper_create_collision_aborts_live(ha: DirectBackend) -> None
                 object_key="template_number:collide_probe",
                 kind="template_number",
                 action=PlanAction.CREATE,
-                local={
-                    "name": "Collide Probe",
-                    "state": "{{ 1 }}",
-                    "set_value": _SET_VALUE,
-                    "min": 0,
-                    "max": 8,
-                    "step": 1,
-                },
+                local=_compiled(
+                    "template_number",
+                    name="Collide Probe",
+                    state="{{ 1 }}",
+                    set_value=_SET_VALUE,
+                    min=0,
+                    max=8,
+                    step=1,
+                ),
             )
         ]
     )
@@ -183,14 +243,15 @@ def test_template_helper_create_collision_aborts_live(ha: DirectBackend) -> None
     # collision is unambiguous.
     ha.create(
         "template_number",
-        {
-            "name": "Collide Probe",
-            "state": "{{ 9 }}",
-            "set_value": _SET_VALUE,
-            "min": 0,
-            "max": 8,
-            "step": 1,
-        },
+        _compiled(
+            "template_number",
+            name="Collide Probe",
+            state="{{ 9 }}",
+            set_value=_SET_VALUE,
+            min=0,
+            max=8,
+            step=1,
+        ),
     )
 
     result = apply_plan(plan, ha, Manifest(synced_at="b", ha_version="t", objects={}))
@@ -202,14 +263,15 @@ def test_template_helper_create_collision_aborts_live(ha: DirectBackend) -> None
 def test_template_helper_rollback_restores_prior_options_live(ha: DirectBackend) -> None:
     identity = ha.create(
         "template_number",
-        {
-            "name": "Rollback Probe",
-            "state": "{{ 1 }}",
-            "set_value": _SET_VALUE,
-            "min": 0,
-            "max": 8,
-            "step": 1,
-        },
+        _compiled(
+            "template_number",
+            name="Rollback Probe",
+            state="{{ 1 }}",
+            set_value=_SET_VALUE,
+            min=0,
+            max=8,
+            step=1,
+        ),
     )
     entry_id_before = ha.entry_id_for("template_number", identity)
     before_hash = sha256_hash(ha.list_remote("template_number")[identity])
@@ -220,19 +282,24 @@ def test_template_helper_rollback_restores_prior_options_live(ha: DirectBackend)
                 object_key="template_number:rollback_probe",
                 kind="template_number",
                 action=PlanAction.UPDATE,
-                local={
-                    "name": "Rollback Probe",
-                    "state": "{{ 2 }}",
-                    "set_value": _SET_VALUE,
-                    "min": 0,
-                    "max": 8,
-                    "step": 1,
-                },
+                local=_compiled(
+                    "template_number",
+                    name="Rollback Probe",
+                    state="{{ 2 }}",
+                    set_value=_SET_VALUE,
+                    min=0,
+                    max=8,
+                    step=1,
+                ),
                 remote_hash_at_plan=before_hash,
             ),
             # A second entry in the same batch that HA will reject (missing
             # the required `set_value` write-target field, §26.6) forces a
-            # failure so the first entry's rollback path is exercised.
+            # failure so the first entry's rollback path is exercised. This
+            # one is DELIBERATELY a raw, incomplete dict, never compiled --
+            # no real DSL author could produce it (`template_number` requires
+            # `set_value`); that's exactly why it's used here to force HA's
+            # rejection.
             PlanEntry(
                 object_key="template_number:this_will_fail",
                 kind="template_number",
