@@ -66,11 +66,16 @@ fields use ``NumberSelector``).
 
 from __future__ import annotations
 
+import inspect
+from collections.abc import Callable
 from typing import Any
 
-from hassle.compiler.errors import MissingTemplateHelperWriteTargetError
+from hassle.compiler.errors import (
+    MissingTemplateHelperWriteTargetError,
+    TemplateHelperDecoratorBodyError,
+)
 from hassle.compiler.helpers import EntityRef
-from hassle.compiler.spans import capture_span
+from hassle.compiler.spans import SourceSpan, capture_span
 from hassle.ir import TEMPLATE_DOMAINS
 from hassle.ir.keys import slugify
 from hassle.ir.models import TemplateHelperConfig
@@ -137,7 +142,9 @@ def _coerce_number_field(value: Any) -> Any:
     return float(value)
 
 
-def _declare_template_helper(domain: str, name: str, **fields: Any) -> EntityRef:
+def _declare_template_helper(
+    domain: str, name: str, *, span: SourceSpan | None, **fields: Any
+) -> EntityRef:
     if domain not in TEMPLATE_DOMAINS:
         raise ValueError(
             f"unknown template helper domain {domain!r} "
@@ -145,12 +152,7 @@ def _declare_template_helper(domain: str, name: str, **fields: Any) -> EntityRef
         )
     required_field = _REQUIRED_WRITE_TARGET_FIELDS.get(domain)
     if required_field is not None and fields.get(required_field) is None:
-        # depth=1: skip this function's own frame, same as the registration
-        # call below, so the span points at the user's `template_number(...)`/
-        # `template_select(...)` call, not this internal helper.
-        raise MissingTemplateHelperWriteTargetError(
-            domain, name, required_field, capture_span(depth=1)
-        )
+        raise MissingTemplateHelperWriteTargetError(domain, name, required_field, span)
     identity = slugify(name)
     body: dict[str, Any] = {
         "name": name,
@@ -163,8 +165,152 @@ def _declare_template_helper(domain: str, name: str, **fields: Any) -> EntityRef
     # bundle registry so the compiler lands this in CompileResult.objects.
     from hassle.compiler.registry import current_registry
 
-    current_registry().add_object(helper, capture_span(depth=1))
+    current_registry().add_object(helper, span)
     return EntityRef(domain, identity)
+
+
+# ---------------------------------------------------------------------------
+# M13: decorator form -- `@template_number(name=..., ...)` over a zero-arg
+# function returning a `TemplateExpr`/`str` (DESIGN §5.4/§5.7 extension).
+#
+# `template_number`/`template_sensor`/`template_binary_sensor`/`template_select`
+# already take only kwargs (F3: no new names, only new *usage* of the existing
+# four). Detecting decorator use is done by the RETURNED object's shape, not
+# by inspecting the call site: when `state=` is omitted, the call returns a
+# `TemplateHelperDeclaration` (an `EntityRef` subclass -- so it is still a
+# valid plain string/entity-id value if never called) that is ALSO a
+# one-argument callable. Using it as `@template_number(...)` immediately calls
+# it with the decorated function, at which point the function is invoked ONCE
+# (like `@automation`/`@script`, DESIGN §7.2 -- the compiler doesn't defer
+# this; template-helper declarations are prebuilt objects, not a recording
+# registration), its return value is validated and rendered to Jinja text via
+# `_render_state`, and the real `TemplateHelperConfig` is built and registered
+# at THAT point -- not at the original `template_number(...)` call.
+#
+# When `state=` IS given (the existing call form), the object is built and
+# registered immediately, exactly as before this milestone; the returned
+# `TemplateHelperDeclaration` is still technically callable but calling it
+# would double-register the object, so no decorator syntax ever does that in
+# practice (nothing in this workstream needs to guard against a user
+# deliberately misusing the returned value that way).
+# ---------------------------------------------------------------------------
+
+
+def _validate_decorator_body(
+    builder: str, name: str, func: Callable[..., Any], span: SourceSpan | None
+) -> Any:
+    """Run ``func`` (zero args) and return its ``TemplateExpr``/``str`` value,
+    or raise :class:`~hassle.compiler.errors.TemplateHelperDecoratorBodyError`
+    (M13 test 5) for any of the three ways a decorator body can misbehave:
+    declared parameters, a non-``TemplateExpr``/``str`` return, or (naturally,
+    via :class:`~hassle.compiler.errors.NoRecordingContextError` -- calling
+    the function here runs it with no active recorder) a recording verb
+    (``service``/``when``/``only_if``/...) called from inside it.
+    """
+    sig = inspect.signature(func)
+    if sig.parameters:
+        param_names = ", ".join(sig.parameters)
+        raise TemplateHelperDecoratorBodyError(
+            builder,
+            name,
+            f"the decorated function `{func.__name__}` takes parameter(s) "
+            f"({param_names}), but a template-helper decorator body is always "
+            f"called with zero arguments.",
+            span,
+        )
+    result = func()
+    from hassle.compiler.templates import TemplateExpr
+
+    if isinstance(result, TemplateExpr) or (isinstance(result, str) and not isinstance(result, EntityRef)):
+        return result
+    raise TemplateHelperDecoratorBodyError(
+        builder,
+        name,
+        f"the decorated function `{func.__name__}` returned {result!r} "
+        f"({type(result).__name__}), not a `TemplateExpr`/`str`.",
+        span,
+    )
+
+
+class TemplateHelperDeclaration(EntityRef):
+    """The value ``template_number(...)``/``template_sensor(...)``/etc. return.
+
+    Behaves exactly like the plain :class:`~hassle.compiler.helpers.EntityRef`
+    they used to return (a string usable as an entity id) in every case where
+    ``state=`` was given -- the object is already fully built and registered
+    by the time this is constructed, matching the pre-M13 call form
+    byte-for-byte. Additionally callable: ``@template_number(...)`` (no
+    ``state=``) applies this as a decorator over a zero-arg function, which
+    finalizes the declaration using the function's return value as ``state=``.
+    """
+
+    _finalize: Callable[[Callable[..., Any]], Callable[..., Any]] | None
+
+    def __new__(
+        cls,
+        domain: str,
+        identity: str,
+        *,
+        finalize: Callable[[Callable[..., Any]], Callable[..., Any]] | None = None,
+    ) -> TemplateHelperDeclaration:
+        # `str.__new__(cls, ...)` (not `EntityRef.__new__`/`super().__new__`)
+        # so the constructed instance is a real `TemplateHelperDeclaration`
+        # (pyright-strict-clean: no need to re-narrow an `EntityRef`-typed
+        # return via `cast`) -- `EntityRef.__new__` itself does exactly this
+        # dance (``str.__new__(cls, f"{domain}.{object_id}")``), so this
+        # mirrors its own construction, just skipping the intermediate call.
+        obj = str.__new__(cls, f"{domain}.{identity}")
+        obj.domain = domain
+        obj.object_id = identity
+        obj._finalize = finalize
+        return obj
+
+    def __call__(self, func: Callable[..., Any]) -> Callable[..., Any]:
+        if self._finalize is None:  # pragma: no cover - defensive, see class docstring
+            raise TypeError(
+                f"{self!r} was already declared with `state=` and is not usable as a "
+                f"decorator; remove `state=` to use the decorator form instead."
+            )
+        return self._finalize(func)
+
+
+def _build_or_defer(
+    domain: str, name: str, state: Any, fields: dict[str, Any]
+) -> TemplateHelperDeclaration:
+    """Shared entry point for all four public builders (M13): dispatches
+    between the pre-M13 call form (``state=`` given -- build + register right
+    now, span points at the ``template_number(...)``/etc. call site) and the
+    new decorator form (``state=`` omitted -- return a callable
+    :class:`TemplateHelperDeclaration` whose ``__call__`` finalizes the
+    declaration when applied to the decorated function, span points at the
+    ``def ...():`` line via the decoration-site capture, matching how
+    ``@automation``/``@script`` capture their span in ``registry.py``).
+    """
+    if state is not None:
+        identity_ref = _declare_template_helper(
+            domain, name, span=capture_span(depth=2), state=_render_state(state), **fields
+        )
+        return TemplateHelperDeclaration(identity_ref.domain, identity_ref.object_id)
+
+    # Decorator form: the decoration-site span is captured NOW (at
+    # `@template_number(...)` call time), matching `hassle.compiler.registry`'s
+    # `automation`/`script` decorators -- not when the function later runs,
+    # since `capture_span` looks for a non-``hassle`` frame, and by the time
+    # `_finalize` runs (from `__call__`, itself invoked from the module-level
+    # `@` syntax) the call stack shape is different (one extra decorator-call
+    # frame) but still resolves to the same user line either way. Capturing at
+    # `_build_or_defer` time is simplest and correct for both.
+    decoration_span = capture_span(depth=2)
+
+    def _finalize(func: Callable[..., Any]) -> Callable[..., Any]:
+        rendered = _validate_decorator_body(domain, name, func, decoration_span)
+        _declare_template_helper(
+            domain, name, span=decoration_span, state=_render_state(rendered), **fields
+        )
+        return func
+
+    identity = slugify(name)
+    return TemplateHelperDeclaration(domain, identity, finalize=_finalize)
 
 
 def template_number(
@@ -178,7 +324,7 @@ def template_number(
     unit_of_measurement: str | None = None,
     icon: str | None = None,
     **fields: Any,
-) -> EntityRef:
+) -> TemplateHelperDeclaration:
     """Declare a ``template_number`` helper (M10, DESIGN §5.7): the owner's
     driving case, e.g. ``number.active_hvac_zones``.
 
@@ -195,18 +341,32 @@ def template_number(
     floats regardless of what's submitted, so a compiled ``int`` literal
     (the natural way to write ``min=0``) would otherwise never byte-match
     the remote config -- a permanent, spurious plan UPDATE (I3/plan-noop).
+
+    **Decorator form (M13):** omit ``state=`` and apply the return value as a
+    decorator over a zero-arg function returning a ``TemplateExpr``/``str`` --
+    ``set_value``/``min``/``max``/``step``/etc. are still passed as decorator
+    kwargs exactly as in the call form::
+
+        @template_number(name="Active HVAC Zones", set_value={...})
+        def active_hvac_zones():
+            return expr(e.input_number.hvac_zone_override)
+
+    Compiles to the IDENTICAL IR as the call form with the equivalent
+    ``state=`` Jinja string.
     """
-    return _declare_template_helper(
+    return _build_or_defer(
         "template_number",
         name,
-        state=_render_state(state),
-        set_value=set_value,
-        min=_coerce_number_field(min),
-        max=_coerce_number_field(max),
-        step=_coerce_number_field(step),
-        unit_of_measurement=unit_of_measurement,
-        icon=icon,
-        **fields,
+        state,
+        {
+            "set_value": set_value,
+            "min": _coerce_number_field(min),
+            "max": _coerce_number_field(max),
+            "step": _coerce_number_field(step),
+            "unit_of_measurement": unit_of_measurement,
+            "icon": icon,
+            **fields,
+        },
     )
 
 
@@ -218,17 +378,23 @@ def template_sensor(
     device_class: str | None = None,
     icon: str | None = None,
     **fields: Any,
-) -> EntityRef:
+) -> TemplateHelperDeclaration:
     """Declare a ``template_sensor`` helper (M10, DESIGN §5.7). Read-only
-    (no write-target field -- ``state`` alone is HA's required schema)."""
-    return _declare_template_helper(
+    (no write-target field -- ``state`` alone is HA's required schema).
+
+    **Decorator form (M13):** see :func:`template_number`'s docstring --
+    omit ``state=`` and apply the return value as a decorator instead.
+    """
+    return _build_or_defer(
         "template_sensor",
         name,
-        state=_render_state(state),
-        unit_of_measurement=unit_of_measurement,
-        device_class=device_class,
-        icon=icon,
-        **fields,
+        state,
+        {
+            "unit_of_measurement": unit_of_measurement,
+            "device_class": device_class,
+            "icon": icon,
+            **fields,
+        },
     )
 
 
@@ -239,16 +405,22 @@ def template_binary_sensor(
     device_class: str | None = None,
     icon: str | None = None,
     **fields: Any,
-) -> EntityRef:
+) -> TemplateHelperDeclaration:
     """Declare a ``template_binary_sensor`` helper (M10, DESIGN §5.7).
-    Read-only, like ``template_sensor``."""
-    return _declare_template_helper(
+    Read-only, like ``template_sensor``.
+
+    **Decorator form (M13):** see :func:`template_number`'s docstring --
+    omit ``state=`` and apply the return value as a decorator instead.
+    """
+    return _build_or_defer(
         "template_binary_sensor",
         name,
-        state=_render_state(state),
-        device_class=device_class,
-        icon=icon,
-        **fields,
+        state,
+        {
+            "device_class": device_class,
+            "icon": icon,
+            **fields,
+        },
     )
 
 
@@ -260,7 +432,7 @@ def template_select(
     select_option: Any = None,
     icon: str | None = None,
     **fields: Any,
-) -> EntityRef:
+) -> TemplateHelperDeclaration:
     """Declare a ``template_select`` helper (M10, DESIGN §5.7).
 
     ``options`` is a Jinja template string rendering to a list (HA's own
@@ -272,13 +444,19 @@ def template_select(
     ``template_number``'s ``set_value``. Omitting it raises
     :class:`~hassle.compiler.errors.MissingTemplateHelperWriteTargetError`
     at compile time (module docstring).
+
+    **Decorator form (M13):** see :func:`template_number`'s docstring --
+    omit ``state=`` and apply the return value as a decorator instead;
+    ``options=``/``select_option=`` are still passed as decorator kwargs.
     """
-    return _declare_template_helper(
+    return _build_or_defer(
         "template_select",
         name,
-        state=_render_state(state),
-        options=options,
-        select_option=select_option,
-        icon=icon,
-        **fields,
+        state,
+        {
+            "options": options,
+            "select_option": select_option,
+            "icon": icon,
+            **fields,
+        },
     )

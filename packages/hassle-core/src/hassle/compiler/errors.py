@@ -157,6 +157,41 @@ class MissingTemplateHelperWriteTargetError(CompileError):
         )
 
 
+class TemplateHelperDecoratorBodyError(CompileError):
+    """A ``@template_number``/``@template_sensor``/``@template_binary_sensor``/
+    ``@template_select`` decorator was applied to a function whose body
+    doesn't fit the decorator form's contract (M13, DESIGN §5.4/§5.7): the
+    function must take **zero parameters** and **return** a
+    :class:`~hassle.compiler.templates.TemplateExpr` or a plain ``str`` (a
+    raw Jinja template) -- nothing else. Three ways to trip this:
+
+    - the function declares one or more parameters (the decorator form has no
+      way to supply arguments -- it is called once, at decoration time,
+      exactly like ``@automation``/``@script`` bodies are run once by the
+      compiler, not parameterized);
+    - the function calls a recording verb (``service``/``when``/``only_if``/
+      ...) -- a template helper's ``state=`` is a single expression, not an
+      action sequence, so there is no recording context for it to record
+      into;
+    - the function returns something other than a ``TemplateExpr``/``str``
+      (e.g. ``None``, a number, a list) -- there is nothing to render as the
+      ``state=`` Jinja text.
+    """
+
+    def __init__(self, builder: str, name: str, reason: str, span: SourceSpan | None) -> None:
+        self.builder = builder
+        self.reason = reason
+        self.span = span
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        super().__init__(
+            f"`@{builder}(name={name!r}, ...)`{where}: {reason} Fix: the decorated "
+            f"function must take no parameters and `return` a template expression "
+            f"built from the `hassle.compiler.templates`/`hassle.compiler.math_expr` "
+            f"surface (e.g. `return expr('sensor.x') + 1`) or a plain Jinja string -- "
+            f"no service calls, no other side effects, exactly one `return`ed value."
+        )
+
+
 class OnlyIfBlockCoverageError(CompileError):
     """``with only_if(...):`` was used but an action was recorded outside it.
 

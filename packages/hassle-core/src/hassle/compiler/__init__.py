@@ -60,6 +60,7 @@ from hassle.compiler.errors import (
     MissingTemplateHelperWriteTargetError,
     NoRecordingContextError,
     OnlyIfBlockCoverageError,
+    TemplateHelperDecoratorBodyError,
     UnknownAutomationOptionError,
 )
 from hassle.compiler.helpers import (
@@ -249,6 +250,7 @@ __all__ = [
     "SunExpr",
     "TagTrigger",
     "TemplateExpr",
+    "TemplateHelperDecoratorBodyError",
     "TimeExpr",
     "TimePatternTrigger",
     "TriggerBuilder",
