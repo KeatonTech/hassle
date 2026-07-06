@@ -39,6 +39,19 @@ list of action dicts (HA's own action-sequence shape); stored verbatim
 (I3 -- Hassle's DSL action builders are automation/script-scoped, not
 reusable here without a recording context, so these are raw HA action dicts,
 matching the ``raw_action`` escape hatch's shape).
+
+**``min``/``max``/``step`` are ``float``-coerced (CI round 4 finding,
+docs/ha-api-notes.md §26.10):** HA's ``template_number`` form schema types
+these three fields as ``NumberSelector``, whose validator
+(``homeassistant/helpers/selector.py``) unconditionally runs every submitted
+value through ``vol.Coerce(float)`` -- the config entry's stored options
+always have these as floats, however they were submitted. ``template_number``
+coerces them at declaration time (``_coerce_number_field``) so the compiled
+local IR is byte-identical to the remote config either way; nothing else
+across the four template domains has a numeric field HA coerces (confirmed
+by reading every ``template_config_flow.py`` schema for
+number/sensor/binary_sensor/select -- only ``template_number``'s three
+fields use ``NumberSelector``).
 """
 
 from __future__ import annotations
@@ -75,6 +88,27 @@ def _render_state(state: Any) -> Any:
     if state is None or isinstance(state, str):
         return state
     return str(state)
+
+
+def _coerce_number_field(value: Any) -> Any:
+    """Coerce a `template_number` `min`/`max`/`step` value to `float` (CI
+    round 4, docs/ha-api-notes.md §26.10): HA's `NumberSelector.__call__`
+    (`homeassistant/helpers/selector.py`) runs every submitted `min`/`max`/
+    `step` value through `vol.Coerce(float)` unconditionally and stores the
+    result -- so the config entry's stored options always have these three
+    fields as floats, regardless of what was submitted. A DSL author writing
+    `min=0` (an `int`, the natural literal) would otherwise produce compiled
+    local IR with an `int` where the remote/stored config has a `float`:
+    same logical value, different canonical-JSON encoding
+    (`hassle.ir.canonical.sha256_hash`: `json.dumps(0) != json.dumps(0.0)`),
+    so a byte-stable re-plan would see a hash mismatch and plan UPDATE
+    forever instead of NOOP. Coercing here, at compile time, keeps plan
+    comparison a plain hash equality with no comparison-time special case
+    (DESIGN §8.2). `None` passes through untouched (an omitted field stays
+    omitted, `_declare_template_helper` drops `None`s already)."""
+    if value is None:
+        return None
+    return float(value)
 
 
 def _declare_template_helper(domain: str, name: str, **fields: Any) -> EntityRef:
@@ -119,15 +153,21 @@ def template_number(
     set -- e.g. ``{"action": "input_number.set_value", "target": {...},
     "data": {"value": "{{ value }}"}}``, where ``{{ value }}`` is HA's
     template variable for the submitted value.
+
+    ``min``/``max``/``step`` are coerced to ``float`` (docs/ha-api-notes.md
+    §26.10): HA's form schema (``NumberSelector``) always stores them as
+    floats regardless of what's submitted, so a compiled ``int`` literal
+    (the natural way to write ``min=0``) would otherwise never byte-match
+    the remote config -- a permanent, spurious plan UPDATE (I3/plan-noop).
     """
     return _declare_template_helper(
         "template_number",
         name,
         state=_render_state(state),
         set_value=set_value,
-        min=min,
-        max=max,
-        step=step,
+        min=_coerce_number_field(min),
+        max=_coerce_number_field(max),
+        step=_coerce_number_field(step),
         unit_of_measurement=unit_of_measurement,
         icon=icon,
         **fields,

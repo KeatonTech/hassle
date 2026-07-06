@@ -231,15 +231,24 @@ def test_template_helper_plan_apply_create_then_noop_on_repush() -> None:
     # FakeBackend/plan-level regression for the DirectBackend fix (the real
     # end-to-end proof is the integration suite's
     # `test_template_helper_plan_apply_create_then_noop_on_repush`).
+    #
+    # `min`/`max`/`step` are written as floats here (not the DSL author's
+    # natural `int` literals) because this file exercises the plan/apply
+    # engine directly against a hand-written "already-compiled" config, not
+    # the compiler itself -- a real compile always produces floats for these
+    # three fields (CI round 4, docs/ha-api-notes.md §26.10; the compiler-
+    # level coercion is covered by
+    # `test_template_helper_float_coercion.py`). Using `int` literals here
+    # would test a local config the real compiler can never actually produce.
     backend = FakeBackend()
     manifest = Manifest(synced_at="base", ha_version="test", objects={})
     local_config = {
         "name": "Zones Plan Probe",
         "state": "{{ 2 }}",
         "set_value": _SET_VALUE,
-        "min": 0,
-        "max": 8,
-        "step": 1,
+        "min": 0.0,
+        "max": 8.0,
+        "step": 1.0,
     }
     local = {"template_number:zones_plan_probe": ("template_number", local_config)}
     plan = compute_plan(manifest=manifest, local_objects=local, remote_objects={})

@@ -64,6 +64,16 @@ fields into the existing stored options rather than replacing the dict
 outright, so `list_remote` after an update still has `name` (docs/
 ha-api-notes.md §26.7 findings 2-3; `test_template_number_update_rejects_name_field`,
 `test_template_number_update_preserves_name_without_resubmitting_it`).
+
+**`template_number`'s `min`/`max`/`step` are float-coerced on write (CI round
+4 finding, docs/ha-api-notes.md §26.10).** HA's `NumberSelector` (the form
+field type for these three) unconditionally runs the submitted value through
+`vol.Coerce(float)` and stores the result -- an `int` submission is stored as
+a `float` regardless. `_coerce_number_selector_fields` reproduces this on
+both create and update so `list_remote` returns what real HA actually
+stores; the compiler (`hassle.compiler.template_helpers`) coerces the same
+fields at compile time so the compiled local IR is byte-identical, keeping
+plan comparison a plain hash equality with no special case.
 """
 
 from __future__ import annotations
@@ -107,6 +117,36 @@ def _check_required_fields(kind: str, config: dict[str, Any]) -> None:
             f"(mirrors HA's real 400 {{'errors': {{'<field>': 'required key not "
             "provided'}}}} form-schema rejection, docs/ha-api-notes.md §26.6)"
         )
+
+
+# `template_number`'s `min`/`max`/`step` are the ONLY numeric fields across
+# the four template domains HA's form schema types as `NumberSelector`
+# (CI round 4, docs/ha-api-notes.md §26.10 -- confirmed by reading every
+# domain's schema in `template/config_flow.py`: sensor/binary_sensor/select
+# have no numeric fields at all). `NumberSelector.__call__`
+# (`homeassistant/helpers/selector.py`) unconditionally runs the submitted
+# value through `vol.Coerce(float)` and stores the result, regardless of
+# what was submitted -- so real HA always stores these three as floats.
+_NUMBER_SELECTOR_FIELDS: dict[str, tuple[str, ...]] = {
+    "template_number": ("min", "max", "step"),
+    "template_sensor": (),
+    "template_binary_sensor": (),
+    "template_select": (),
+}
+
+
+def _coerce_number_selector_fields(kind: str, config: dict[str, Any]) -> dict[str, Any]:
+    """Mirror HA's `NumberSelector` float coercion (docs/ha-api-notes.md
+    §26.10) on the fields it actually applies to for `kind` -- storing floats
+    the same way real HA does, so a compiled `int` local value and the
+    (fixed, §26.10) stored remote value hash-compare equal only when they
+    really are byte-identical, exactly matching production behavior instead
+    of silently tolerating a mismatch the compiler is responsible for fixing."""
+    coerced = dict(config)
+    for field_name in _NUMBER_SELECTOR_FIELDS[kind]:
+        if field_name in coerced and coerced[field_name] is not None:
+            coerced[field_name] = float(coerced[field_name])
+    return coerced
 
 
 def _empty_str_list() -> list[str]:
@@ -258,7 +298,10 @@ class FakeBackend:
         )
         self.flow_log.append(form_step)
 
-        options = dict(config)
+        # HA's NumberSelector float-coerces min/max/step on the way in
+        # (docs/ha-api-notes.md §26.10) -- store what real HA would store,
+        # not the caller's raw submission.
+        options = _coerce_number_selector_fields(kind, config)
         entry_id = self._next_entry_id()
         # Flat body (no nested "result" wrapper) -- the REST create_entry
         # response is `{"type": "create_entry", "flow_id", "entry_id",
@@ -312,9 +355,10 @@ class FakeBackend:
         # ha-api-notes.md §26.7 finding 3: `_update_and_remove_omitted_
         # optional_keys` only touches keys present in the CURRENT step's
         # schema) -- `name`/`template_type` (never part of the options-flow
-        # schema) survive an update untouched.
+        # schema) survive an update untouched. HA's NumberSelector
+        # float-coerces min/max/step on the way in too (§26.10), same as create.
         existing = self._store[kind].get(identity, {})
-        options = {**existing, **config}
+        options = {**existing, **_coerce_number_selector_fields(kind, config)}
         result_step = FlowStep(
             flow_id=flow_id,
             type="create_entry",

@@ -39,7 +39,11 @@ def test_decompile_template_number_produces_matching_builder_call() -> None:
     assert "id=" not in source  # no identity kwarg at all (§26.6)
     assert "unique_id=" not in source
     assert "set_value=" in source
-    assert "min=0" in source and "max=8" in source and "step=1" in source
+    # min/max/step decompile as floats (CI round 4, docs/ha-api-notes.md
+    # §26.10): HA's NumberSelector always stores these as floats, and the
+    # compiler now coerces to match -- `render_literal`'s `repr()` renders
+    # them accordingly.
+    assert "min=0.0" in source and "max=8.0" in source and "step=1.0" in source
 
 
 def test_decompile_every_template_domain_uses_matching_builder_name() -> None:
