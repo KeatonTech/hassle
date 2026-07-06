@@ -4,10 +4,33 @@ offers `git init` + writes `.gitignore` + a CI workflow template").
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from hassle_cli import git_support
 from hassle_cli.config import CONFIG_FILENAME, write_default_config
+
+# DESIGN §11 layer 1 ("free": generated stubs + shipped `.vscode/settings.json`
+# -> Pylance autocompletion/typo-squiggles with zero configuration).
+#
+# `python.analysis.stubPath` MUST equal the directory `hassle stubs` actually
+# writes into -- `typings/hassle/registry/__init__.pyi` (`hassle_cli.cli`'s
+# `stubs` command; `hassle.registry.stubs.generate_entities_stub`). This is
+# the M8 layer-1 finding: an earlier version of this generator/`stubs` wrote
+# to `.hassle/entities.pyi`, a path no pyright config pointed at, so the
+# generated types were silently never picked up by any real editor. Verified
+# end-to-end (not just by convention) in
+# `packages/hassle-core/tests/test_registry_stubs_pyright.py` (the mechanism)
+# and `test_registry_stubs_pyright_init_template.py` (this exact template).
+#
+# `python.analysis.extraPaths` includes `.` (the bundle root) so Pylance
+# resolves the same PEP 420 namespace-package cross-file imports
+# (`from lib.x import y`, `from helpers.modes import guest_mode`) the
+# compiler's own loader does (DESIGN §6, docs/ha-api-notes.md §17.9).
+VSCODE_SETTINGS = {
+    "python.analysis.stubPath": "typings",
+    "python.analysis.extraPaths": ["."],
+}
 
 CI_WORKFLOW = """\
 name: hassle
@@ -105,6 +128,23 @@ def scaffold_lib_and_tests_readmes(root: Path) -> list[str]:
     return steps
 
 
+def scaffold_vscode_settings(root: Path) -> list[str]:
+    """Write `.vscode/settings.json` (DESIGN §11 layer 1) pointing Pylance at
+    `hassle stubs`'s actual output location. Idempotent -- never overwrites a
+    file the user has since customized (same convention as
+    `scaffold_lib_and_tests_readmes`). Shared by `hassle init` and `hassle
+    pull` (when it scaffolds directories a bundle predating this change never
+    had) so both paths get working autocompletion, not just freshly
+    `init`-ed bundles."""
+    steps: list[str] = []
+    vscode_dir = root / ".vscode"
+    vscode_dir.mkdir(exist_ok=True)
+    settings_json = json.dumps(VSCODE_SETTINGS, indent=2) + "\n"
+    if _write_if_missing(vscode_dir / "settings.json", settings_json):
+        steps.append("wrote .vscode/settings.json")
+    return steps
+
+
 def init_bundle(root: Path) -> list[str]:
     """Scaffold `root` as a fresh Hassle bundle. Idempotent (safe to re-run).
     Returns a list of human-readable steps taken, for the CLI to print."""
@@ -121,6 +161,7 @@ def init_bundle(root: Path) -> list[str]:
     (root / "tests").mkdir(exist_ok=True)
     (root / ".hassle").mkdir(exist_ok=True)
     steps.extend(scaffold_lib_and_tests_readmes(root))
+    steps.extend(scaffold_vscode_settings(root))
 
     config_path = root / CONFIG_FILENAME
     if not config_path.is_file():
