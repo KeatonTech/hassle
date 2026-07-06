@@ -264,3 +264,61 @@ def test_execute_live_run_warns_explicitly_when_trace_never_appears(
     assert backend.created[0][1]["id"] in output
     # Still cleaned up even though no trace ever showed up.
     assert backend.deleted
+
+
+def test_execute_live_run_ignores_stale_pre_trigger_trace(
+    tmp_path: Path, _registered_stub_backend, monkeypatch
+) -> None:
+    """Round-6 CI finding: HA retains traces per item_id across the shadow's
+    delete/recreate, so a second `run --live` could render the PREVIOUS run's
+    trace. Selection must exclude run_ids that existed before this trigger."""
+    from hassle_cli import run_live
+    from hassle_cli.commands.run_live_command import execute_live_run
+
+    monkeypatch.setattr(run_live, "DEFAULT_TRACE_POLL_INTERVAL", 0.001)
+
+    class _StaleTraceBackend(_StubTraceBackend):
+        def __init__(self) -> None:
+            super().__init__(empty_polls_before_trace=None)
+            self._fresh_landed = False
+
+        def call_service(self, domain: str, service: str, **data: Any) -> None:
+            super().call_service(domain, service, **data)
+            if domain == "automation" and service == "trigger":
+                self._fresh_landed = True
+
+        def list_traces(self, kind: str, identity: str) -> list[dict[str, Any]]:
+            self.list_traces_calls.append((kind, identity))
+            stale = [{"run_id": "stale-1", "state": "stopped"}]
+            if not self._fresh_landed:
+                return stale
+            return stale + [{"run_id": "fresh-2", "state": "stopped"}]
+
+        def get_trace(self, kind: str, identity: str, run_id: str) -> dict[str, Any]:
+            self.get_trace_calls.append((kind, identity, run_id))
+            if run_id == "stale-1":
+                return {
+                    "run_id": "stale-1",
+                    "script_execution": "failed_conditions",
+                    "trace": {"trigger": [{}], "condition/0": [{}]},
+                }
+            return {
+                "run_id": "fresh-2",
+                "script_execution": "finished",
+                "trace": {"trigger": [{}], "action/0": [{}]},
+            }
+
+    backend = _StaleTraceBackend()
+    token = _registered_stub_backend(backend)
+    bundle = _write_live_bundle(tmp_path, token=token)
+
+    console = Console(no_color=True, width=200)
+    with console.capture() as capture:
+        execute_live_run(
+            bundle, "a.py::live_test_automation", skip_conditions=False, console=console
+        )
+    output = capture.get()
+
+    assert "action/0" in output, output
+    assert "fresh-2" in output, output
+    assert "stale-1" not in output, output
