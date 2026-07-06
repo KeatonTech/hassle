@@ -64,7 +64,7 @@ class FakeBackend:
         # recursive rewrite, so passing `kind` straight through is correct.
         normalized = normalize_ha(config, kind=kind)
         identity = self._derive_identity(kind, normalized)
-        normalized = {**normalized, "id": identity} if kind in HELPER_DOMAINS else normalized
+        normalized = self._stored_body(kind, identity, normalized)
         self._store[kind][identity] = normalized
         self._writes += 1
         return identity
@@ -72,10 +72,34 @@ class FakeBackend:
     def update(self, kind: str, identity: str, config: dict[str, Any]) -> None:
         self._require_kind(kind)
         normalized = normalize_ha(config, kind=kind)
-        if kind in HELPER_DOMAINS:
-            normalized = {**normalized, "id": identity}
+        normalized = self._stored_body(kind, identity, normalized)
         self._store[kind][identity] = normalized
         self._writes += 1
+
+    def _stored_body(self, kind: str, identity: str, normalized: dict[str, Any]) -> dict[str, Any]:
+        """The exact body real HA stores for one object of ``kind`` (the
+        capture-verified read-back shape, docs/ha-api-captures/rest-ws-core.json
+        ``script_read_normalized`` / ``automation_read_normalized`` /
+        ``helper_*_full_cycle``):
+
+        - Helpers store `id` in the body (`id` is an intrinsic
+          :class:`HelperConfig` field) -- always set to the derived identity.
+        - Scripts key by an EXTRINSIC object_id (no `id` field on
+          :class:`ScriptConfig` at all); real HA's script config read-back
+          never has `id` in the body, so any caller-supplied `id` in the
+          input config (a natural mistake -- automations/helpers both DO take
+          one) must be stripped here, never persisted, or local (`to_ha()`,
+          no `id`) vs remote (this store, `id` leaked in) hash forever
+          afterward, producing a phantom conflict/perpetual-update out of an
+          untouched object (docs/ha-api-notes.md's pull-plan-noop finding).
+        - Automations already carry `id` as part of the real input (intrinsic
+          identity) -- passed through verbatim, no rewrite needed.
+        """
+        if kind in HELPER_DOMAINS:
+            return {**normalized, "id": identity}
+        if kind == "script":
+            return {k: v for k, v in normalized.items() if k != "id"}
+        return normalized
 
     def delete(self, kind: str, identity: str) -> None:
         self._require_kind(kind)
