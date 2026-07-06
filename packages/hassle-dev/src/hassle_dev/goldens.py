@@ -44,6 +44,30 @@ def _dump(ir: dict[str, Any]) -> str:
     return json.dumps(ir, indent=2, ensure_ascii=False) + "\n"
 
 
+def _type_strict_equal(a: Any, b: Any) -> bool:
+    """Like ``==``, but ``0 != 0.0`` (CI round 4 finding, docs/ha-api-notes.md
+    §26.10): plain ``==`` on parsed JSON structures treats an `int` and a
+    numerically-equal `float` as equal (`{"min": 0} == {"min": 0.0}` is
+    `True` in Python), so `run_goldens`'s drift check silently missed an
+    `int`-vs-`float` compiled-IR change entirely -- `--update` reported "up
+    to date" even though the compiler's actual output had changed from `0`
+    to `0.0`. Golden files exist to catch EXACTLY this kind of byte-level
+    drift (R3's "compiling must reproduce expected_ir.json exactly"), so the
+    comparison must be type-strict, recursively, not just numerically equal.
+    ``bool`` is intentionally exempted from the int/float split it would
+    otherwise trigger (`isinstance(True, int)` is `True` in Python, but
+    `bool` is its own JSON type and was never the source of this bug)."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return type(a) is type(b) and a == b
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_type_strict_equal(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_type_strict_equal(x, y) for x, y in zip(a, b, strict=True))
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return type(a) is type(b) and a == b
+    return a == b
+
+
 @dataclass
 class GoldenReport:
     checked: int = 0
@@ -63,8 +87,9 @@ def run_goldens(dsl_dir: Path, *, update: bool) -> GoldenReport:
         actual_text = _dump(actual)
         current_text = expected_path.read_text(encoding="utf-8")
         # Compare structurally (indentation/key-order agnostic) but rewrite in the
-        # canonical dumped form on update.
-        if json.loads(current_text) != actual:
+        # canonical dumped form on update. Type-strict (docs/ha-api-notes.md
+        # §26.10): plain `!=` would miss an int-vs-float drift entirely.
+        if not _type_strict_equal(json.loads(current_text), actual):
             if update:
                 expected_path.write_text(actual_text, encoding="utf-8")
                 report.updated.append(case_dir.name)
