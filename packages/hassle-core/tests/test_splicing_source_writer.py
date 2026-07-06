@@ -205,3 +205,56 @@ def test_delete_missing_file_is_noop(tmp_path: Path) -> None:
 
 def test_splicing_source_writer_satisfies_protocol(tmp_path: Path) -> None:
     assert isinstance(SplicingSourceWriter(updated_on="2026-07-04"), SourceWriter)
+
+
+# ---------------------------------------------------------------------------
+# `find_object_statement_name`'s fallback must never match a statement that
+# declares a DIFFERENT object (reviewer finding on this workstream): the plain
+# name-equals-identity fallback exists for object forms the resolver doesn't
+# model, not for statements it DOES model whose identity simply differs --
+# matching those would splice over (or delete) the wrong object. Reachable
+# only from a manifest already inconsistent with the file, where the safe
+# outcome is "not found" (append / noop), never a mis-splice.
+# ---------------------------------------------------------------------------
+
+
+def test_fallback_never_matches_a_def_with_a_conflicting_id() -> None:
+    from hassle.decompiler.splice import find_object_statement_name
+
+    source = (
+        "from hassle import automation\n"
+        "\n"
+        "\n"
+        '@automation(id="bar", alias="Bar")\n'
+        "def foo():\n"
+        "    pass\n"
+    )
+    # `foo` IS the def's name, but the def declares automation:bar -- looking
+    # up automation:foo must not hijack it.
+    assert find_object_statement_name(source, "automation:foo") is None
+    assert find_object_statement_name(source, "automation:bar") == "foo"
+
+
+def test_fallback_never_matches_a_def_of_another_kind() -> None:
+    from hassle.decompiler.splice import find_object_statement_name
+
+    source = "from hassle import script\n\n\n@script(alias='Foo')\ndef foo():\n    pass\n"
+    assert find_object_statement_name(source, "automation:foo") is None
+    assert find_object_statement_name(source, "script:foo") == "foo"
+
+
+def test_fallback_never_matches_a_helper_with_a_conflicting_id() -> None:
+    from hassle.decompiler.splice import find_object_statement_name
+
+    source = 'from hassle import input_boolean\n\nfoo = input_boolean(id="bar")\n'
+    assert find_object_statement_name(source, "input_boolean:foo") is None
+    assert find_object_statement_name(source, "input_boolean:bar") == "foo"
+
+
+def test_fallback_still_matches_unmodeled_statement_forms() -> None:
+    from hassle.decompiler.splice import find_object_statement_name
+
+    # A plain assignment that isn't a modeled object-declaration call: the
+    # name fallback is exactly for these.
+    source = "foo = make_something()\n"
+    assert find_object_statement_name(source, "automation:foo") == "foo"
