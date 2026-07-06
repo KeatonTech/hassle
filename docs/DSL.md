@@ -1880,8 +1880,8 @@ Compiles to (canonical IR / stored HA shape):
     "state": "{{ is_state('binary_sensor.front_door', 'on') }}"
   },
   "template_number:active_hvac_zones": {
-    "max": 8,
-    "min": 0,
+    "max": 8.0,
+    "min": 0.0,
     "name": "Active HVAC Zones",
     "set_value": {
       "action": "input_number.set_value",
@@ -1893,7 +1893,7 @@ Compiles to (canonical IR / stored HA shape):
       }
     },
     "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
-    "step": 1,
+    "step": 1.0,
     "unit_of_measurement": "zones"
   },
   "template_select:house_scene": {
@@ -1992,8 +1992,8 @@ Compiles to (canonical IR / stored HA shape):
     "state": "{{ is_state('binary_sensor.front_door', 'on') }}"
   },
   "template_number:active_hvac_zones": {
-    "max": 8,
-    "min": 0,
+    "max": 8.0,
+    "min": 0.0,
     "name": "Active HVAC Zones",
     "set_value": {
       "action": "input_number.set_value",
@@ -2005,7 +2005,7 @@ Compiles to (canonical IR / stored HA shape):
       }
     },
     "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
-    "step": 1,
+    "step": 1.0,
     "unit_of_measurement": "zones"
   },
   "template_select:house_scene": {
@@ -2104,8 +2104,8 @@ Compiles to (canonical IR / stored HA shape):
     "state": "{{ is_state('binary_sensor.front_door', 'on') }}"
   },
   "template_number:active_hvac_zones": {
-    "max": 8,
-    "min": 0,
+    "max": 8.0,
+    "min": 0.0,
     "name": "Active HVAC Zones",
     "set_value": {
       "action": "input_number.set_value",
@@ -2117,7 +2117,7 @@ Compiles to (canonical IR / stored HA shape):
       }
     },
     "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
-    "step": 1,
+    "step": 1.0,
     "unit_of_measurement": "zones"
   },
   "template_select:house_scene": {
@@ -2216,8 +2216,8 @@ Compiles to (canonical IR / stored HA shape):
     "state": "{{ is_state('binary_sensor.front_door', 'on') }}"
   },
   "template_number:active_hvac_zones": {
-    "max": 8,
-    "min": 0,
+    "max": 8.0,
+    "min": 0.0,
     "name": "Active HVAC Zones",
     "set_value": {
       "action": "input_number.set_value",
@@ -2229,7 +2229,7 @@ Compiles to (canonical IR / stored HA shape):
       }
     },
     "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
-    "step": 1,
+    "step": 1.0,
     "unit_of_measurement": "zones"
   },
   "template_select:house_scene": {
