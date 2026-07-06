@@ -159,9 +159,21 @@ def _id_kwarg(node: cst.BaseExpression) -> str | None:
     return None
 
 
-def _declared_identity(stmt: cst.CSTNode, kind: str) -> str | None:
-    """The object identity ``stmt`` declares for ``kind``, or ``None`` if it
-    isn't a ``kind``-shaped hassle object statement.
+# Assignment-call kinds that ARE object declarations: every helper domain
+# (F1) plus `blueprint_automation`'s mapping above. Anything else on an
+# assignment's right-hand side (`state(...)`, an arbitrary local call) is not
+# a hassle object statement at all.
+def _assign_object_kinds() -> frozenset[str]:
+    from hassle.ir import HELPER_DOMAINS
+
+    return frozenset(HELPER_DOMAINS) | frozenset(_ASSIGN_CALL_KINDS.values())
+
+
+def _declared_object(stmt: cst.CSTNode) -> tuple[str, str] | None:
+    """The ``(kind, identity)`` ``stmt`` declares, when it is an object
+    declaration form this module models (a hassle-decorated ``def``, or a
+    helper/``blueprint_automation`` assignment call); ``None`` for anything
+    else (imports, local helper functions, unrelated assignments).
 
     Mirrors compile-time identity: the ``id=`` kwarg when present, else the
     statement's own name (``hassle.compiler.registry._register``:
@@ -172,36 +184,43 @@ def _declared_identity(stmt: cst.CSTNode, kind: str) -> str | None:
         return None
     if isinstance(stmt, cst.FunctionDef):
         for decorator in stmt.decorators:
-            if _DEF_DECORATOR_KINDS.get(_call_name(decorator.decorator) or "") != kind:
-                continue
-            return _id_kwarg(decorator.decorator) or name
+            kind = _DEF_DECORATOR_KINDS.get(_call_name(decorator.decorator) or "")
+            if kind is not None:
+                return kind, _id_kwarg(decorator.decorator) or name
         return None
     if isinstance(stmt, cst.SimpleStatementLine):
         for small in stmt.body:
             if not isinstance(small, cst.Assign):
                 continue
             call_name = _call_name(small.value) or ""
-            if _ASSIGN_CALL_KINDS.get(call_name, call_name) != kind:
-                continue
-            return _id_kwarg(small.value) or name
+            kind = _ASSIGN_CALL_KINDS.get(call_name, call_name)
+            if kind in _assign_object_kinds():
+                return kind, _id_kwarg(small.value) or name
     return None
 
 
 def find_object_statement_name(file_source: str, object_key: str) -> str | None:
     """The name of the top-level statement in ``file_source`` that defines
     ``object_key`` (``"<kind>:<identity>"``), or ``None`` if the file doesn't
-    define it. A statement whose declared identity matches wins over a plain
-    name-equals-identity fallback (which covers object forms this module
-    doesn't model)."""
+    define it.
+
+    A statement whose declared ``(kind, identity)`` matches wins. The plain
+    name-equals-identity fallback applies ONLY to statement forms this module
+    doesn't model as object declarations -- a statement that declares a
+    DIFFERENT object (another id, another kind) is never matched by name
+    alone, or a refresh/drop driven by a manifest inconsistent with the file
+    would splice over / delete the wrong object instead of safely reporting
+    not-found."""
     kind, _, identity = object_key.partition(":")
     module = cst.parse_module(file_source)
     fallback: str | None = None
     for stmt in module.body:
-        if _declared_identity(stmt, kind) == identity:
+        declared = _declared_object(stmt)
+        if declared == (kind, identity):
             name = _object_name(stmt)
-            assert name is not None  # _declared_identity requires a named stmt
+            assert name is not None  # _declared_object requires a named stmt
             return name
-        if fallback is None and _object_name(stmt) == identity:
+        if declared is None and fallback is None and _object_name(stmt) == identity:
             fallback = identity
     return fallback
 
