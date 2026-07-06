@@ -653,25 +653,48 @@ class DirectBackend:
         existing map is read first and merged client-side before resubmit,
         never dropping an assignment under a DIFFERENT scope this call isn't
         about (I6).
+
+        **Bounded-polls for the entity-registry row itself** (same class of
+        async-settling wait as `_await_config_entity`, §17.7): by the time
+        `apply_plan` calls this, `create()` already waited for the entity to
+        appear in `/api/states`, but that is a DIFFERENT signal than "the
+        entity-registry row is visible via `config/entity_registry/list`" --
+        if HA populates the registry row on a slightly later tick, an
+        immediate lookup here would raise `LookupError` even though the
+        object was created correctly. Reuses `self._reload_timeout`/
+        `self._reload_interval` (the same knobs `_await_config_entity` uses)
+        rather than inventing a second wait budget.
         """
-        entities = await self._client.ws_command("config/entity_registry/list")
-        entity_id: str | None = None
-        existing_categories: dict[str, str] = {}
-        for entity in entities:
-            if str(entity.get("unique_id")) == identity:
-                entity_id = str(entity.get("entity_id"))
-                existing_categories = dict(entity.get("categories") or {})
-                break
-        if entity_id is None:
-            raise LookupError(
-                f"no entity-registry row found with unique_id={identity!r} for {kind}:{identity} "
-                "-- cannot assign its HA UI category (the object was created successfully; "
-                "only this metadata step failed)"
-            )
+        entity_id, existing_categories = await self._await_entity_registry_row(kind, identity)
         merged = {**existing_categories, scope: category_id}
         await self._client.ws_command(
             "config/entity_registry/update", entity_id=entity_id, categories=merged
         )
+
+    async def _find_entity_registry_row(self, identity: str) -> tuple[str, dict[str, str]] | None:
+        entities = await self._client.ws_command("config/entity_registry/list")
+        for entity in entities:
+            if str(entity.get("unique_id")) == identity:
+                return str(entity.get("entity_id")), dict(entity.get("categories") or {})
+        return None
+
+    async def _await_entity_registry_row(
+        self, kind: str, identity: str
+    ) -> tuple[str, dict[str, str]]:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._reload_timeout
+        while True:
+            found = await self._find_entity_registry_row(identity)
+            if found is not None:
+                return found
+            if loop.time() >= deadline:
+                raise LookupError(
+                    f"no entity-registry row found with unique_id={identity!r} for "
+                    f"{kind}:{identity} after waiting {self._reload_timeout}s -- cannot assign "
+                    "its HA UI category (the object was created successfully; only this "
+                    "metadata step failed)"
+                )
+            await asyncio.sleep(self._reload_interval)
 
     def categories_for(self, kind: str, identity: str) -> dict[str, str]:
         """Test/CLI-facing lookup: the entity-registry row's current

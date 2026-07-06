@@ -50,6 +50,12 @@ class _FakeClient:
 def _make_backend(client: _FakeClient) -> DirectBackend:
     backend = DirectBackend.__new__(DirectBackend)
     backend._client = client  # type: ignore[attr-defined]
+    # `_aassign_category` bounded-polls for the entity-registry row (same
+    # settle-wait class as `_await_config_entity`, §17.7) -- a fast budget
+    # here keeps the "not found" test from actually waiting out a real
+    # timeout while still exercising the same code path.
+    backend._reload_timeout = 0.05  # type: ignore[attr-defined]
+    backend._reload_interval = 0.01  # type: ignore[attr-defined]
     return backend
 
 
@@ -119,3 +125,39 @@ def test_assign_category_raises_when_entity_not_found() -> None:
         pass
     else:
         raise AssertionError("expected a LookupError when no entity-registry row matches")
+
+
+class _SettlingClient(_FakeClient):
+    """The entity-registry row appears only after `appears_after` calls to
+    `config/entity_registry/list` -- models the async settle gap
+    `_aassign_category`'s bounded poll exists to cover (docs/ha-api-notes.md
+    §30 addendum, §17.7's `_await_config_entity` precedent)."""
+
+    def __init__(self, row: dict[str, Any], *, appears_after: int) -> None:
+        super().__init__()
+        self._row = row
+        self._appears_after = appears_after
+        self._list_calls = 0
+
+    async def ws_command(self, type: str, **payload: Any) -> Any:
+        if type == "config/entity_registry/list":
+            self._list_calls += 1
+            self.calls.append((type, payload))
+            return [self._row] if self._list_calls > self._appears_after else []
+        return await super().ws_command(type, **payload)
+
+
+def test_assign_category_polls_until_entity_registry_row_appears() -> None:
+    row = {
+        "entity_id": "automation.auto_hvac_1",
+        "unique_id": "auto_hvac_1",
+        "categories": {},
+    }
+    client = _SettlingClient(row, appears_after=2)
+    backend = _make_backend(client)
+
+    asyncio.run(backend._aassign_category("automation", "auto_hvac_1", "automation", "cat_hvac"))  # type: ignore[attr-defined]
+
+    ((_cmd, payload),) = [c for c in client.calls if c[0] == "config/entity_registry/update"]
+    assert payload["entity_id"] == "automation.auto_hvac_1"
+    assert client._list_calls > 2  # actually polled more than once before succeeding
