@@ -35,6 +35,8 @@ EXEMPT_NAMES: frozenset[str] = frozenset(
         "PythonMathMisuseError",
         "UnknownFieldError",
         "UnknownParamError",
+        # Compile-time guard, not a construct (ux/dsl-ergonomics round):
+        "OnlyIfBlockCoverageError",
     }
 )
 
@@ -43,6 +45,8 @@ EXEMPT_NAMES: frozenset[str] = frozenset(
 # ---------------------------------------------------------------------------
 
 NAME_TO_CASES: dict[str, list[str]] = {
+    "Mode": ["mode_enum_parity"],
+    "MaxExceeded": ["mode_enum_parity"],
     # constants
     "PI": ["shade_tracks_sun", "math_expr_reference"],
     "E_": ["math_expr_reference"],
