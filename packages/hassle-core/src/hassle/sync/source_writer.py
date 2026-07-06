@@ -150,7 +150,7 @@ class SplicingSourceWriter(WholeFileSourceWriter):
         else:
             new_source = splice_object(
                 file_source,
-                object_name=target_name,
+                object_key=object_key,
                 new_source=object_source,
                 updated_on=self._updated_on,
             )
@@ -167,7 +167,7 @@ class SplicingSourceWriter(WholeFileSourceWriter):
             # Not defined here (stale manifest) -- nothing to delete; the old
             # whole-file unlink would have destroyed unrelated siblings.
             return
-        remaining = remove_object(file_source, object_name=target_name)
+        remaining = remove_object(file_source, object_key=object_key)
         if remaining is None:
             path.unlink()
         else:

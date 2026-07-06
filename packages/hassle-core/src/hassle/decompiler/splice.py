@@ -24,6 +24,14 @@ REFRESH clobbering sibling objects that share a source file):
 - :func:`remove_object` -- the drop-side counterpart: delete one statement,
   keep the rest of the file byte-identical.
 
+:func:`splice_object` and :func:`remove_object` target the SINGLE statement
+whose declared ``(kind, identity)`` matches their ``object_key``
+(:func:`_resolve_target_index`, shared with
+:func:`find_object_statement_name`) -- never "every statement with this
+name": two defs may legally share a name while declaring different ids, and
+name-based targeting spliced over / removed both (the
+``test_splicing_source_writer.py`` name-collision regressions).
+
 R8 (determinism / no wall-clock in core logic): ``updated_on`` is a parameter
 the caller passes explicitly -- this module never reads the system clock.
 """
@@ -47,23 +55,6 @@ def _object_name(stmt: cst.CSTNode) -> str | None:
                 if isinstance(target, cst.Name):
                     return target.value
     return None
-
-
-class _SpliceTransformer(cst.CSTTransformer):
-    def __init__(self, object_name: str, replacement: cst.BaseStatement) -> None:
-        self._object_name = object_name
-        self._replacement = replacement
-        self.found = False
-
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
-        new_body: list[cst.BaseStatement | cst.BaseCompoundStatement] = []
-        for stmt in updated_node.body:
-            if _object_name(stmt) == self._object_name:
-                new_body.append(self._replacement)
-                self.found = True
-            else:
-                new_body.append(stmt)
-        return updated_node.with_changes(body=new_body)
 
 
 def _parse_replacement(new_source: str, *, updated_on: str) -> cst.BaseStatement:
@@ -96,11 +87,12 @@ def _parse_replacement(new_source: str, *, updated_on: str) -> cst.BaseStatement
 def splice_object(
     file_source: str,
     *,
-    object_name: str,
+    object_key: str,
     new_source: str,
     updated_on: str,
 ) -> str:
-    """Replace the top-level object named ``object_name`` in ``file_source``.
+    """Replace the single top-level statement defining ``object_key``
+    (``"<kind>:<identity>"``) in ``file_source``.
 
     ``new_source`` is the replacement statement's source (typically
     :func:`hassle.decompiler.decompile_object`'s output for the drifted
@@ -108,17 +100,22 @@ def splice_object(
     never wall-clock) that becomes the ``# hassle: updated from UI on <date>``
     marker on the spliced-in replacement.
 
-    Raises :class:`ValueError` if no top-level statement named ``object_name``
-    is found.
+    The target is resolved by its declared ``(kind, identity)`` (same
+    resolution as :func:`find_object_statement_name`), never by statement
+    name alone: two defs may legally share a name while declaring different
+    ids, and only the one matching ``object_key`` may be touched.
+
+    Raises :class:`ValueError` if the file doesn't define ``object_key``.
     """
     module = cst.parse_module(file_source)
     replacement = _parse_replacement(new_source, updated_on=updated_on)
 
-    transformer = _SpliceTransformer(object_name, replacement)
-    new_module = module.visit(transformer)
-    if not transformer.found:
-        raise ValueError(f"no top-level object named {object_name!r} found to splice")
-    return new_module.code
+    index = _resolve_target_index(module, object_key)
+    if index is None:
+        raise ValueError(f"no top-level object defining {object_key!r} found to splice")
+    new_body: list[cst.BaseStatement | cst.BaseCompoundStatement] = list(module.body)
+    new_body[index] = replacement
+    return module.with_changes(body=new_body).code
 
 
 # `@<decorator>` -> object-key kind, for the def-shaped object forms.
@@ -199,10 +196,10 @@ def _declared_object(stmt: cst.CSTNode) -> tuple[str, str] | None:
     return None
 
 
-def find_object_statement_name(file_source: str, object_key: str) -> str | None:
-    """The name of the top-level statement in ``file_source`` that defines
-    ``object_key`` (``"<kind>:<identity>"``), or ``None`` if the file doesn't
-    define it.
+def _resolve_target_index(module: cst.Module, object_key: str) -> int | None:
+    """Index in ``module.body`` of the SINGLE statement defining
+    ``object_key`` (``"<kind>:<identity>"``), or ``None`` if the module
+    doesn't define it.
 
     A statement whose declared ``(kind, identity)`` matches wins. The plain
     name-equals-identity fallback applies ONLY to statement forms this module
@@ -210,19 +207,34 @@ def find_object_statement_name(file_source: str, object_key: str) -> str | None:
     DIFFERENT object (another id, another kind) is never matched by name
     alone, or a refresh/drop driven by a manifest inconsistent with the file
     would splice over / delete the wrong object instead of safely reporting
-    not-found."""
+    not-found. This is the one targeting authority for
+    :func:`find_object_statement_name`, :func:`splice_object`, and
+    :func:`remove_object`, so a lookup and the mutation it precedes can never
+    disagree on which statement is meant -- and a mutation can never touch
+    more than this one statement (two defs may legally share a name while
+    declaring different ids)."""
     kind, _, identity = object_key.partition(":")
-    module = cst.parse_module(file_source)
-    fallback: str | None = None
-    for stmt in module.body:
+    fallback: int | None = None
+    for index, stmt in enumerate(module.body):
         declared = _declared_object(stmt)
         if declared == (kind, identity):
-            name = _object_name(stmt)
-            assert name is not None  # _declared_object requires a named stmt
-            return name
+            return index
         if declared is None and fallback is None and _object_name(stmt) == identity:
-            fallback = identity
+            fallback = index
     return fallback
+
+
+def find_object_statement_name(file_source: str, object_key: str) -> str | None:
+    """The name of the top-level statement in ``file_source`` that defines
+    ``object_key`` (``"<kind>:<identity>"``), or ``None`` if the file doesn't
+    define it (targeting rules: :func:`_resolve_target_index`)."""
+    module = cst.parse_module(file_source)
+    index = _resolve_target_index(module, object_key)
+    if index is None:
+        return None
+    name = _object_name(module.body[index])
+    assert name is not None  # both resolution tiers require a named stmt
+    return name
 
 
 def _is_import_statement(stmt: cst.CSTNode) -> bool:
@@ -362,34 +374,24 @@ def merge_missing_imports(file_source: str, import_sources: list[str]) -> str:
     return module.with_changes(body=new_body).code
 
 
-class _RemoveTransformer(cst.CSTTransformer):
-    def __init__(self, object_name: str) -> None:
-        self._object_name = object_name
-        self.found = False
+def remove_object(file_source: str, *, object_key: str) -> str | None:
+    """Remove the single top-level statement defining ``object_key``; every
+    other statement stays byte-identical. Returns ``None`` when nothing but
+    imports (and comments) would remain -- the caller should delete the file,
+    matching drop's whole-file semantics for a single-object file.
 
-    def leave_Module(self, original_node: cst.Module, updated_node: cst.Module) -> cst.Module:
-        new_body: list[cst.BaseStatement | cst.BaseCompoundStatement] = []
-        for stmt in updated_node.body:
-            if _object_name(stmt) == self._object_name:
-                self.found = True
-            else:
-                new_body.append(stmt)
-        return updated_node.with_changes(body=new_body)
+    Same identity-based target resolution as :func:`splice_object` (never by
+    statement name alone -- see :func:`_resolve_target_index`).
 
-
-def remove_object(file_source: str, *, object_name: str) -> str | None:
-    """Remove the top-level statement named ``object_name``; every other
-    statement stays byte-identical. Returns ``None`` when nothing but imports
-    (and comments) would remain -- the caller should delete the file, matching
-    drop's whole-file semantics for a single-object file.
-
-    Raises :class:`ValueError` if no statement named ``object_name`` exists.
+    Raises :class:`ValueError` if the file doesn't define ``object_key``.
     """
     module = cst.parse_module(file_source)
-    transformer = _RemoveTransformer(object_name)
-    new_module = module.visit(transformer)
-    if not transformer.found:
-        raise ValueError(f"no top-level object named {object_name!r} found to remove")
+    index = _resolve_target_index(module, object_key)
+    if index is None:
+        raise ValueError(f"no top-level object defining {object_key!r} found to remove")
+    new_body = list(module.body)
+    del new_body[index]
+    new_module = module.with_changes(body=new_body)
     if all(_is_import_statement(stmt) for stmt in new_module.body):
         return None
     return new_module.code
