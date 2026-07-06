@@ -258,3 +258,79 @@ def test_fallback_still_matches_unmodeled_statement_forms() -> None:
     # name fallback is exactly for these.
     source = "foo = make_something()\n"
     assert find_object_statement_name(source, "automation:foo") == "foo"
+
+
+# ---------------------------------------------------------------------------
+# Two defs may legally share a NAME while declaring different ids (identity is
+# the `id=` kwarg; the def name is arbitrary -- both compile, each registering
+# under its own id). Reviewer finding on this workstream: the splice/remove
+# transformers matched EVERY top-level statement with the target's name, so on
+# such a file a refresh spliced the target over BOTH defs (destroying the
+# sibling's source) and a drop removed BOTH -- leaving only imports, which
+# `delete_object` then unlinked, silently losing the still-live sibling (I6;
+# the next push would have deleted it from HA too). Targeting must go by the
+# statement's declared (kind, identity), never by name alone.
+# ---------------------------------------------------------------------------
+
+SHARED_NAME_AUTOMATIONS = """\
+from hassle import automation, service, state, when
+
+
+@automation(id="hall_light_on_motion", alias="Hallway light on motion")
+def light_on_motion():
+    when(state("binary_sensor.hall_motion").to("on"))
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+
+
+# Keep me: hand-written note on the porch variant.
+@automation(id="porch_light_on_motion", alias="Porch light on motion")
+def light_on_motion():
+    when(state("binary_sensor.porch_motion").to("on"))
+    service("light.turn_on", target={"entity_id": "light.porch"})
+"""
+
+PORCH_VARIANT_BLOCK = (
+    "# Keep me: hand-written note on the porch variant.\n"
+    '@automation(id="porch_light_on_motion", alias="Porch light on motion")\n'
+    "def light_on_motion():\n"
+    '    when(state("binary_sensor.porch_motion").to("on"))\n'
+    '    service("light.turn_on", target={"entity_id": "light.porch"})\n'
+)
+
+
+def test_delete_targets_by_identity_when_def_names_collide(tmp_path: Path) -> None:
+    writer = SplicingSourceWriter(updated_on="2026-07-05")
+    target = _write(tmp_path, SHARED_NAME_AUTOMATIONS)
+
+    writer.delete_object(target, "automation:hall_light_on_motion")
+
+    assert target.exists()  # name-based removal dropped BOTH defs, then the file
+    after = target.read_text(encoding="utf-8")
+    assert PORCH_VARIANT_BLOCK in after, after
+    assert 'id="hall_light_on_motion"' not in after
+
+
+def test_delete_targets_by_identity_even_for_the_second_name_collision(tmp_path: Path) -> None:
+    # Deleting the SECOND of the two same-named defs: first-match-by-name is
+    # just as wrong as all-matches-by-name.
+    writer = SplicingSourceWriter(updated_on="2026-07-05")
+    target = _write(tmp_path, SHARED_NAME_AUTOMATIONS)
+
+    writer.delete_object(target, "automation:porch_light_on_motion")
+
+    after = target.read_text(encoding="utf-8")
+    assert 'id="hall_light_on_motion"' in after, after
+    assert 'id="porch_light_on_motion"' not in after
+
+
+def test_splice_targets_by_identity_when_def_names_collide(tmp_path: Path) -> None:
+    writer = SplicingSourceWriter(updated_on="2026-07-05")
+    target = _write(tmp_path, SHARED_NAME_AUTOMATIONS)
+
+    writer.splice_object(target, "automation:hall_light_on_motion", HALL_REPLACEMENT)
+
+    after = target.read_text(encoding="utf-8")
+    # Name-based splicing replaced BOTH defs with the hall replacement.
+    assert after.count('id="hall_light_on_motion"') == 1, after
+    assert "Hallway light on motion (UI edit)" in after
+    assert PORCH_VARIANT_BLOCK in after, after
