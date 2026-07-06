@@ -112,7 +112,15 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
         env={"NO_COLOR": "1", "HASSLE_HA_URL": url, "HASSLE_TOKEN": token},
     )
     assert result.exit_code == 0, result.output
-    assert "trace" in result.output.lower()
+    # Structural assertion (coordinator finding, docs/ha-api-notes.md §27):
+    # the word "trace" alone doesn't prove a timeline was actually rendered
+    # -- a step path from the real automation (it has one action, no
+    # conditions since only_if was satisfied) must appear, and the "trace
+    # never became available" warning must NOT (that would mean
+    # stream_trace's poll gave up, which is the exact bug being regression-
+    # tested here).
+    assert "action/0" in result.output
+    assert "no trace became available" not in result.output.lower()
     # Shadow cleaned up on success.
     assert _shadow_ids(ha) == []
 

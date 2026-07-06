@@ -104,6 +104,108 @@ def test_live_session_cleans_up_shadow_on_success(fake_backend) -> None:
     assert backend.list_remote("automation") == {}  # cleaned up
 
 
+class _FakeClock:
+    """Deterministic clock/sleep for `stream_trace`'s bounded poll (R8: no
+    real wall-clock waits in tests) -- `sleep()` just advances the fake
+    clock's `now` rather than actually blocking."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.sleep_calls = 0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleep_calls += 1
+        self.now += seconds
+
+
+def test_stream_trace_polls_until_trace_appears() -> None:
+    """CI regression (coordinator finding): `trace/list` racing HA's async
+    trace persistence used to make `get_trace_fn` return `{}` once and
+    `stream_trace` accepted that immediately, so a live run silently rendered
+    no trace at all even though one showed up moments later. A fake
+    `get_trace_fn` that returns `{}` for the first few calls then a real
+    trace must have its trace polled for and returned, not dropped."""
+    from hassle_cli.run_live import stream_trace
+
+    calls: list[int] = []
+    real_trace = {"run_id": "abc123", "script_execution": "finished", "trace": {"action/0": [{}]}}
+
+    def flaky_get_trace(shadow_id: str) -> dict[str, object]:
+        calls.append(1)
+        if len(calls) < 3:
+            return {}
+        return real_trace
+
+    clock = _FakeClock()
+    trace = stream_trace(
+        flaky_get_trace,
+        "hassle_shadow_abc",
+        poll_timeout=5.0,
+        poll_interval=0.25,
+        sleep_fn=clock.sleep,
+        monotonic_fn=clock.monotonic,
+    )
+    assert trace == real_trace
+    assert len(calls) == 3
+    assert clock.sleep_calls == 2  # slept between polls 1->2 and 2->3, not after success
+
+
+def test_stream_trace_gives_up_after_poll_timeout_returns_empty() -> None:
+    """A permanently-empty trace (never persisted) must not poll forever --
+    bounded by `poll_timeout`, then return `{}` (still the "no trace" signal;
+    it's `execute_live_run`'s job to turn that into an explicit warning, see
+    `test_run_live_command.py`)."""
+    from hassle_cli.run_live import stream_trace
+
+    clock = _FakeClock()
+    trace = stream_trace(
+        lambda shadow_id: {},
+        "hassle_shadow_abc",
+        poll_timeout=1.0,
+        poll_interval=0.25,
+        sleep_fn=clock.sleep,
+        monotonic_fn=clock.monotonic,
+    )
+    assert trace == {}
+    # Bounded: stopped polling once the fake clock crossed poll_timeout, not
+    # an unbounded/infinite loop.
+    assert clock.sleep_calls == 4
+    assert clock.now >= 1.0
+
+
+def test_render_trace_timeline_lists_step_paths() -> None:
+    """DESIGN §10.4 point 3: a step-by-step timeline, not a raw dict repr.
+    Structural assertion (a step path like `action/0` appears), matching the
+    coordinator's ask to assert on the rendered structure, not just the word
+    'trace'."""
+    from hassle_cli.run_live import render_trace_timeline
+
+    trace = {
+        "run_id": "abc123",
+        "script_execution": "finished",
+        "trace": {
+            "trigger": [{}],
+            "condition/0": [{}],
+            "action/0": [{}],
+        },
+    }
+    rendered = render_trace_timeline(trace)
+    assert "action/0" in rendered
+    assert "condition/0" in rendered
+    assert "trigger" in rendered
+    assert "abc123" in rendered
+
+
+def test_render_trace_timeline_empty_steps_says_so() -> None:
+    from hassle_cli.run_live import render_trace_timeline
+
+    rendered = render_trace_timeline({"run_id": "abc123", "script_execution": "finished", "trace": {}})
+    assert "no steps recorded" in rendered.lower()
+
+
 def test_live_session_cleans_up_shadow_on_trace_failure(fake_backend) -> None:
     from hassle_cli.run_live import run_shadow_session
 
