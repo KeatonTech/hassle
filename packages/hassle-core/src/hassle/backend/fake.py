@@ -49,6 +49,21 @@ requires `select_option` (alongside `options`). Missing either raises
 `ConfigEntryFlowError`, mirroring HA's real `400 {"errors": {"set_value":
 "required key not provided"}}` rejection (modeled as an exception here since
 `create`/`update` are single-shot, not step-by-step — module note below).
+
+**Options-flow schema never includes `name` (CI round 3 finding, docs/
+ha-api-notes.md §26.7).** Real HA's `generate_schema(domain, flow_type)`
+(`template/config_flow.py`) only adds the name field `if flow_type ==
+"config"` — the options flow's schema (`flow_type="options"`) never has it,
+so submitting `name` in an UPDATE 400s with `"extra keys not allowed @
+data['name']"`. `_update_via_options_flow` reproduces this rejection
+(`ConfigEntryFlowError`); `name` (and the server-injected `template_type`)
+survive an update untouched regardless, since real HA only overwrites keys
+that appear in the CURRENT step's schema (`_update_and_remove_omitted_
+optional_keys`) — `FakeBackend` reproduces that too, merging the submitted
+fields into the existing stored options rather than replacing the dict
+outright, so `list_remote` after an update still has `name` (docs/
+ha-api-notes.md §26.7 findings 2-3; `test_template_number_update_rejects_name_field`,
+`test_template_number_update_preserves_name_without_resubmitting_it`).
 """
 
 from __future__ import annotations
@@ -177,7 +192,15 @@ class FakeBackend:
     def update(self, kind: str, identity: str, config: dict[str, Any]) -> None:
         self._require_kind(kind)
         if kind in TEMPLATE_DOMAINS:
-            self._update_via_options_flow(kind, identity, config)
+            # `update()`'s contract (F2) still takes the FULL local config,
+            # same as every other kind -- `name` is stripped here, at the
+            # public-API boundary, before it ever reaches the simulated
+            # options-flow submission, exactly mirroring `DirectBackend.
+            # _aupdate_template_helper` (docs/ha-api-notes.md §26.7: the
+            # options-flow schema never includes `name`, so a caller must
+            # never be able to leak it onto the wire through this path).
+            payload = {k: v for k, v in config.items() if k != "name"}
+            self._update_via_options_flow(kind, identity, payload)
             return
         normalized = normalize_ha(config, kind=kind)
         normalized = self._stored_body(kind, identity, normalized)
@@ -263,6 +286,17 @@ class FakeBackend:
                 f"no config entry tracked for {kind}:{identity} -- an UPDATE must "
                 "target an existing entry (options-flow update, never a recreate, I2 analog)"
             )
+        # `name` is REJECTED by the real options-flow schema outright (CI
+        # round 3, docs/ha-api-notes.md §26.7 finding 2): `generate_schema`
+        # only adds the name field for `flow_type == "config"`, never
+        # `"options"`. Mirrors HA's real `400 {"errors": {"base": ["extra
+        # keys not allowed @ data['name']"]}}`.
+        if "name" in config:
+            raise ConfigEntryFlowError(
+                f"{kind} options-flow form rejected: extra keys not allowed @ data['name'] "
+                "(the options-flow schema never includes `name` -- it is create-only and "
+                "becomes the entry's title, docs/ha-api-notes.md §26.7)"
+            )
         _check_required_fields(kind, config)
         flow_id = f"optflow_{entry_id}"
         form_step = FlowStep(
@@ -273,7 +307,14 @@ class FakeBackend:
         )
         self.flow_log.append(form_step)
 
-        options = dict(config)
+        # Real HA MERGES the submitted fields into the entry's existing
+        # options rather than replacing the dict outright (docs/
+        # ha-api-notes.md §26.7 finding 3: `_update_and_remove_omitted_
+        # optional_keys` only touches keys present in the CURRENT step's
+        # schema) -- `name`/`template_type` (never part of the options-flow
+        # schema) survive an update untouched.
+        existing = self._store[kind].get(identity, {})
+        options = {**existing, **config}
         result_step = FlowStep(
             flow_id=flow_id,
             type="create_entry",
@@ -282,7 +323,7 @@ class FakeBackend:
         self.flow_log.append(result_step)
 
         # entry_id is UNCHANGED (I2 analog: an options-update never recreates
-        # the entry) -- only the options body is replaced. Note: real HA's
+        # the entry) -- only the options body is updated. Note: real HA's
         # options-flow submission for `template` still cannot rename the
         # entry's title via a `name` change without special handling; Hassle
         # treats the object key (identity) as fixed once created (matching

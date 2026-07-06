@@ -28,6 +28,7 @@ from hassle.backend.fake import FakeBackend
 from hassle.ir.canonical import sha256_hash
 from hassle.sync import ApplyOutcome, Manifest, Plan, PlanAction, PlanEntry
 from hassle.sync.apply import apply_plan
+from hassle.sync.plan import compute_plan
 
 _SET_VALUE = {"action": "input_number.set_value", "data": {"value": "{{ value }}"}}
 
@@ -220,6 +221,45 @@ def test_template_helper_delete_reverifies_and_removes_entry() -> None:
     assert result.succeeded is True
     assert identity not in backend.list_remote("template_number")
     assert backend.entry_id_for("template_number", identity) is None
+
+
+def test_template_helper_plan_apply_create_then_noop_on_repush() -> None:
+    # CI round 3 finding (docs/ha-api-notes.md §26.7): a `list_remote` that
+    # doesn't carry back a template helper's full stored config (name +
+    # options) makes a re-plan see `remote={}` and plan UPDATE instead of
+    # NOOP forever, even with nothing actually changed. This is the
+    # FakeBackend/plan-level regression for the DirectBackend fix (the real
+    # end-to-end proof is the integration suite's
+    # `test_template_helper_plan_apply_create_then_noop_on_repush`).
+    backend = FakeBackend()
+    manifest = Manifest(synced_at="base", ha_version="test", objects={})
+    local_config = {
+        "name": "Zones Plan Probe",
+        "state": "{{ 2 }}",
+        "set_value": _SET_VALUE,
+        "min": 0,
+        "max": 8,
+        "step": 1,
+    }
+    local = {"template_number:zones_plan_probe": ("template_number", local_config)}
+    plan = compute_plan(manifest=manifest, local_objects=local, remote_objects={})
+    entry = plan.entry_for("template_number:zones_plan_probe")
+    assert entry is not None and entry.action is PlanAction.CREATE
+
+    result = apply_plan(plan, backend, manifest, synced_at="after")
+    assert result.succeeded is True
+    assert result.manifest is not None
+    manifest_entry = result.manifest.objects["template_number:zones_plan_probe"]
+    assert manifest_entry.entry_id is not None
+
+    # Re-push with the same local config: byte-stable round trip -> noop.
+    remote_after = {
+        f"template_number:{identity}": ("template_number", cfg)
+        for identity, cfg in backend.list_remote("template_number").items()
+    }
+    plan2 = compute_plan(manifest=result.manifest, local_objects=local, remote_objects=remote_after)
+    entry2 = plan2.entry_for("template_number:zones_plan_probe")
+    assert entry2 is not None and entry2.action is PlanAction.NOOP
 
 
 @pytest.mark.parametrize("fail_at", ["input_boolean", "template_number", "script", "automation"])

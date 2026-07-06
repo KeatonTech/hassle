@@ -124,10 +124,12 @@ def test_template_number_update_drives_options_flow_same_entry_id() -> None:
     backend.reset_write_tracking()
     log_len_before = len(backend.flow_log)
 
+    # `name` is NOT resubmitted (docs/ha-api-notes.md §26.7 -- the
+    # options-flow schema never includes it; real HA 400s if it's sent).
     backend.update(
         "template_number",
         identity,
-        {"name": "Zones", "state": "{{ 2 }}", "set_value": _SET_VALUE, "min": 0, "max": 10},
+        {"state": "{{ 2 }}", "set_value": _SET_VALUE, "min": 0, "max": 10},
     )
 
     entry_id_after = backend.entry_id_for("template_number", identity)
@@ -137,15 +139,84 @@ def test_template_number_update_drives_options_flow_same_entry_id() -> None:
     stored = backend.list_remote("template_number")[identity]
     assert stored["state"] == "{{ 2 }}"
     assert stored["max"] == 10
+    # `name` survives an update it was never resubmitted in (§26.7 finding 3).
+    assert stored["name"] == "Zones"
 
     new_steps = backend.flow_log[log_len_before:]
     assert len(new_steps) == 2
     form, result = new_steps
     assert form.type == "form"
     assert "unique_id" not in form.data_schema
+    assert "name" not in form.data_schema
     assert result.type == "create_entry"
     assert result.result is not None
     assert result.result["entry_id"] == entry_id_before
+
+
+def test_template_number_update_silently_strips_name_at_the_public_api_boundary() -> None:
+    # `update()` (F2, the `Backend`-protocol-facing method) still takes the
+    # FULL local config, exactly like every other kind -- `name` is stripped
+    # before it ever reaches the simulated options-flow submission, mirroring
+    # `DirectBackend._aupdate_template_helper` protecting a caller from ever
+    # producing the real HA 400 (docs/ha-api-notes.md §26.7). A caller must
+    # never see this as an error: nothing else in Hassle strips `name` out of
+    # the local config before calling `Backend.update`.
+    backend = FakeBackend()
+    identity = backend.create(
+        "template_number", {"name": "Zones", "state": "{{ 1 }}", "set_value": _SET_VALUE}
+    )
+    backend.update(
+        "template_number",
+        identity,
+        {"name": "Zones", "state": "{{ 2 }}", "set_value": _SET_VALUE},
+    )
+    stored = backend.list_remote("template_number")[identity]
+    assert stored["state"] == "{{ 2 }}"
+    assert stored["name"] == "Zones"
+
+
+def test_template_number_internal_options_flow_submission_rejects_name_field() -> None:
+    # The internal flow-submission step itself (mirroring the real
+    # options-flow schema, docs/ha-api-notes.md §26.7 finding 2) must reject
+    # `name` if it ever reached it -- `update()`'s stripping (previous test)
+    # is what actually prevents this in practice; this test pins the
+    # lower-level simulation's fidelity to the real 400 directly.
+    backend = FakeBackend()
+    identity = backend.create(
+        "template_number", {"name": "Zones", "state": "{{ 1 }}", "set_value": _SET_VALUE}
+    )
+    with pytest.raises(ConfigEntryFlowError, match="name"):
+        backend._update_via_options_flow(  # type: ignore[attr-defined]
+            "template_number",
+            identity,
+            {"name": "Zones", "state": "{{ 2 }}", "set_value": _SET_VALUE},
+        )
+
+
+def test_template_number_update_preserves_name_without_resubmitting_it() -> None:
+    # Real HA merges the update's fields into the entry's EXISTING options
+    # rather than replacing the dict outright (docs/ha-api-notes.md §26.7
+    # finding 3) -- `name` (never part of the options-flow schema) survives
+    # untouched across an update that never resubmits it.
+    backend = FakeBackend()
+    identity = backend.create(
+        "template_number",
+        {
+            "name": "Active HVAC Zones",
+            "state": "{{ 1 }}",
+            "set_value": _SET_VALUE,
+            "min": 0,
+            "max": 8,
+        },
+    )
+    backend.update(
+        "template_number",
+        identity,
+        {"state": "{{ 2 }}", "set_value": _SET_VALUE, "min": 0, "max": 8},
+    )
+    stored = backend.list_remote("template_number")[identity]
+    assert stored["name"] == "Active HVAC Zones"
+    assert stored["state"] == "{{ 2 }}"
 
 
 def test_template_number_delete_is_entry_removal() -> None:
@@ -202,13 +273,12 @@ def test_every_template_domain_supports_full_cycle(domain: str) -> None:
     extra = _required_fields(domain)
     identity = backend.create(domain, {"name": "Thing", "state": "{{ 1 }}", **extra})
     assert backend.list_remote(domain)[identity]["name"] == "Thing"
-    # `name` in an UPDATE payload does not change the object key (the
-    # identity Hassle tracks stays anchored to the identity `update` was
-    # called with) even though the real entry's title/name field is what
-    # got resubmitted -- this mirrors every other kind's update semantics
-    # (addressed by identity, not re-derived from the new body).
-    backend.update(domain, identity, {"name": "Thing", "state": "{{ 2 }}", **extra})
-    assert backend.list_remote(domain)[identity]["state"] == "{{ 2 }}"
+    # `name` is NOT part of an UPDATE's payload (docs/ha-api-notes.md §26.7 --
+    # the options-flow schema never includes it); it survives untouched.
+    backend.update(domain, identity, {"state": "{{ 2 }}", **extra})
+    updated = backend.list_remote(domain)[identity]
+    assert updated["state"] == "{{ 2 }}"
+    assert updated["name"] == "Thing"
     backend.delete(domain, identity)
     assert identity not in backend.list_remote(domain)
 
@@ -255,7 +325,7 @@ def test_template_writes_counted_like_any_other_kind() -> None:
     backend.update(
         "template_number",
         identity,
-        {"name": "Zones", "state": "{{ 2 }}", "set_value": _SET_VALUE},
+        {"state": "{{ 2 }}", "set_value": _SET_VALUE},
     )
     assert backend.writes_since_reset() == 2
     backend.delete("template_number", identity)
