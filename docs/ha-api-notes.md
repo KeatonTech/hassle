@@ -1847,6 +1847,103 @@ future milestone's `pull`/`plan` on a large template-helper population needs
 it addressed (e.g. batching, or caching options against `modified_at` from
 `config_entries/get`'s already-free listing).
 
+### 26.10 CI round 4 finding: `template_number`'s `min`/`max`/`step` are always stored as `float` — compiler must coerce to match
+
+**The CI failure, verbatim** (both HA `stable` and `dev`, run 28811559165;
+this was the ONLY failure left after the §26.7 read-back/update fix landed —
+4 of 5 integration tests were already green):
+
+```
+test_template_helper_plan_apply_create_then_noop_on_repush:
+  local  = {..., 'min': 0,   'max': 8,   'step': 1}
+  remote = {..., 'min': 0.0, 'max': 8.0, 'step': 1.0}
+  -> hashes differ -> plan says UPDATE instead of NOOP.
+```
+
+**Root cause, confirmed by reading `homeassistant/helpers/selector.py`**
+(`class NumberSelector`, `CONFIG_SCHEMA` and `__call__`): every `min`/`max`/
+`step` field typed as `selector.NumberSelector()` in `template_number`'s form
+schema (`homeassistant/components/template/config_flow.py`'s
+`generate_schema`, `if domain == Platform.NUMBER`) is validated by
+`NumberSelector.__call__`, which unconditionally does
+`value: float = vol.Coerce(float)(data)` and returns that float — HA stores
+whatever the selector's `__call__` returns, so `min`/`max`/`step` are
+**always** floats in the config entry's options, regardless of whether an
+`int` or a `float` was submitted. This holds for BOTH the config flow
+(create) and the options flow (update): both use the identical
+`NumberSelector`-typed schema field (`generate_schema` is shared, keyed only
+by `flow_type` for which OTHER fields it adds — `min`/`max`/`step` are
+present, and `NumberSelector`-typed, in both).
+
+**Checked every other numeric-shaped field across all four template domains
+Hassle manages** (`generate_schema`'s per-`Platform` branches in
+`template_config_flow.py`) — `template_number`'s `min`/`max`/`step` are the
+ONLY fields anywhere in the four domains typed as `NumberSelector`:
+`template_sensor` (`unit_of_measurement`/`device_class`/`state_class`) and
+`template_binary_sensor` (`device_class`) use only `SelectSelector` (string
+enum choices); `template_select` (`options`/`select_option`) uses
+`TemplateSelector`/`ActionSelector`, neither numeric. No other coercion
+class exists to hunt for in this milestone's scope.
+
+**Fixed at compile time**, per the design direction that keeps plan
+comparison a plain hash equality with no comparison-time special case
+(DESIGN §8.2): `hassle.compiler.template_helpers.template_number` now runs
+`min`/`max`/`step` through `_coerce_number_field` (`float(value)` if not
+`None`, pass-through otherwise) before building the IR body, so the compiled
+local IR is byte-identical to what HA actually stores whether the DSL author
+wrote `min=0` (the natural, and now still supported, `int` literal) or
+`min=0.0`. `FakeBackend._coerce_number_selector_fields` reproduces the same
+coercion on both `create` and `update` (mirroring the real
+`NumberSelector.__call__` behavior on both the config flow and the options
+flow), so this class of bug is caught by a unit-level plan/apply test
+without a live HA
+(`test_template_helper_float_coercion.py::test_plan_apply_create_then_noop_on_repush_with_fakebackend`,
+confirmed to fail against the pre-fix compiler/FakeBackend for the exact
+CI-reported reason before the fix landed).
+
+**Key-order red herring, checked and dismissed:** the CI log's `local`/
+`remote` dicts print with `name` in different positions, but
+`hassle.ir.canonical.canonical_json` already sorts keys
+(`json.dumps(..., sort_keys=True)`) before hashing — confirmed by
+`test_template_helper_float_coercion.py::
+test_canonical_hash_is_insensitive_to_key_order_int_vs_float_is_the_real_bug`,
+which hashes the same dict with two different key orders (equal) and the
+same dict with `int` vs `float` values (NOT equal) side by side. Key order
+was never the discriminator; `int` vs `float` was.
+
+**A second, independent bug found while updating the golden fixture:**
+`hassle-dev goldens`'s drift check (`hassle_dev.goldens.run_goldens`) compared
+parsed JSON with plain `!=`, which is blind to an `int`-vs-`float` difference
+(`{"min": 0} == {"min": 0.0}` is `True` in Python — dict/list `==` recurses
+using `==`, and `0 == 0.0`). Both the check-only path and `--update` reported
+`fixtures/dsl/template_helper_declarations` as "already up to date" even
+though the compiler's actual output had silently changed from `0` to `0.0` —
+`hassle-dev goldens --update` could not be used to regenerate the fixture
+until this was fixed too. Fixed with a recursive `_type_strict_equal` helper
+(dicts/lists compared key-by-key/element-by-element; `int`/`float`/`bool`
+compared with `type(a) is type(b)` in addition to `==`) in
+`packages/hassle-dev/src/hassle_dev/goldens.py`, regression-tested in the
+new `packages/hassle-dev/tests/test_goldens.py` (confirmed red against the
+pre-fix comparison for the exact same reason before fixing it). With that
+fixed, `hassle-dev goldens --update` correctly found and rewrote exactly one
+golden: `fixtures/dsl/template_helper_declarations/expected_ir.json`'s
+`template_number:active_hvac_zones` entry's `min`/`max`/`step` from
+`0`/`8`/`1` to `0.0`/`8.0`/`1.0` — no other golden pair was affected (69
+checked, 1 updated).
+
+**Decompile/I3 round-trip:** unaffected by construction —
+`hassle.decompiler.exprs.render_literal` uses `repr(value)`, so a `float`
+value decompiles as a Python float literal (`repr(0.0)` → `"0.0"`) and
+recompiling that source produces the identical float (the DSL builder's
+`_coerce_number_field(0.0)` is `float(0.0) == 0.0`, idempotent). Verified by
+tightening `test_decompile_template_helpers.py`'s existing assertion from a
+loose `"min=0" in source` substring check (which happened to already pass
+against `"min=0.0"` too, masking the fact that it wasn't actually pinning
+the float form) to an explicit `"min=0.0" in source`, and by the existing
+`test_decompile_recompile_round_trip_is_byte_stable_for_options_body` test,
+which now exercises the float-valued fixture end-to-end (decompile → write
+→ recompile) unchanged.
+
 ## 25. M8 finding: `DiagnosticsManager.refresh()` race (fixed, regression-tested) — `vscode-extension/`
 
 While writing the `@vscode/test-electron` integration test for Problems-pane diagnostics
