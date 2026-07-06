@@ -192,7 +192,7 @@ def pull(allow_dirty: bool) -> None:
     """Merge UI-side edits into the working tree (never writes to HA)."""
     from hassle.ir.keys import OBJECT_KINDS
     from hassle.sync.plan import compute_plan
-    from hassle.sync.source_writer import WholeFileSourceWriter
+    from hassle.sync.source_writer import SplicingSourceWriter
     from hassle_cli import backend_factory
     from hassle_cli.doctor import find_committed_tokens
     from hassle_cli.git_support import commit_message_for_pull
@@ -292,7 +292,15 @@ def pull(allow_dirty: bool) -> None:
         }
     )
 
-    writer = WholeFileSourceWriter()
+    # The REAL splicer-backed writer: REFRESH/DROP touch exactly one object's
+    # statement, so sibling objects sharing a source file survive (I6 -- the
+    # `test_pull_refresh_splice.py` regression: `WholeFileSourceWriter` here
+    # rewrote the whole file per refreshed object). The marker date is stamped
+    # at this CLI edge (R8 keeps wall-clock out of core logic only, same as
+    # `manifest_io`'s `last_synced`).
+    from datetime import UTC, datetime
+
+    writer = SplicingSourceWriter(updated_on=datetime.now(UTC).strftime("%Y-%m-%d"))
     # `apply_pull_with_decompiler` self-checks every ADOPT destination
     # together BEFORE writing any of them (`hassle_cli.pull_apply` module
     # docstring, coordinator task 4) -- a decompiler coordination bug here is
