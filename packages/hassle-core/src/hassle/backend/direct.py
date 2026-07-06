@@ -611,6 +611,77 @@ class DirectBackend:
             }
         return categories
 
+    # -- M11: category write-back on push-create --------------------------
+    #
+    # Additive, non-`Backend`-Protocol surface (same `entry_id_for`/
+    # `fetch_registry_snapshot` pattern) driving `hassle.sync.
+    # category_writeback.attempt_category_writeback`. Shapes are inferred
+    # from HA core's `homeassistant/components/config/category_registry.py`
+    # / `entity_registry.py` (NOT live-verified in this PR -- docs/
+    # ha-api-notes.md §30 records the caveat, mirroring §22's own "not
+    # re-verified live" flag for `category_registry/list`'s `scope` param).
+
+    def list_categories(self, scope: str) -> dict[str, str]:
+        return self._run(self._alist_categories(scope))
+
+    async def _alist_categories(self, scope: str) -> dict[str, str]:
+        rows = await self._client.ws_command("config/category_registry/list", scope=scope)
+        return {str(row["category_id"]): str(row.get("name", row["category_id"])) for row in rows}
+
+    def create_category(self, scope: str, name: str) -> str:
+        return self._run(self._acreate_category(scope, name))
+
+    async def _acreate_category(self, scope: str, name: str) -> str:
+        result = await self._client.ws_command(
+            "config/category_registry/create", scope=scope, name=name
+        )
+        return str(result["category_id"])
+
+    def assign_category(self, kind: str, identity: str, scope: str, category_id: str) -> None:
+        self._run(self._aassign_category(kind, identity, scope, category_id))
+
+    async def _aassign_category(
+        self, kind: str, identity: str, scope: str, category_id: str
+    ) -> None:
+        """Find `kind:identity`'s entity-registry row (matched by `unique_id
+        == identity`, the same id<->unique_id anchor `bundle_ops.
+        _category_source_path` uses on the pull side, docs/ha-api-notes.md
+        §2/§22) and update its `categories` map.
+
+        HA's entity-registry update replaces `categories` wholesale rather
+        than merging per-scope server-side (inferred, §30) -- so the
+        existing map is read first and merged client-side before resubmit,
+        never dropping an assignment under a DIFFERENT scope this call isn't
+        about (I6).
+        """
+        entities = await self._client.ws_command("config/entity_registry/list")
+        entity_id: str | None = None
+        existing_categories: dict[str, str] = {}
+        for entity in entities:
+            if str(entity.get("unique_id")) == identity:
+                entity_id = str(entity.get("entity_id"))
+                existing_categories = dict(entity.get("categories") or {})
+                break
+        if entity_id is None:
+            raise LookupError(
+                f"no entity-registry row found with unique_id={identity!r} for {kind}:{identity} "
+                "-- cannot assign its HA UI category (the object was created successfully; "
+                "only this metadata step failed)"
+            )
+        merged = {**existing_categories, scope: category_id}
+        await self._client.ws_command(
+            "config/entity_registry/update", entity_id=entity_id, categories=merged
+        )
+
+    def categories_for(self, kind: str, identity: str) -> dict[str, str]:
+        """Test/CLI-facing lookup: the entity-registry row's current
+        `categories` map for `kind:identity` (empty if not found/uncategorized)."""
+        entities = self._run(self._client.ws_command("config/entity_registry/list"))
+        for entity in entities:
+            if str(entity.get("unique_id")) == identity:
+                return dict(entity.get("categories") or {})
+        return {}
+
     # -- purpose vocabulary (DESIGN §4; captured M6) ----------------------
 
     def fetch_purpose_vocabulary(self) -> PurposeVocabulary:

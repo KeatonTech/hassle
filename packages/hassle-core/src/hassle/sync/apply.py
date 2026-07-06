@@ -20,12 +20,23 @@ every entry succeeds; on any failure the caller keeps its old manifest
 (`test_manifest_updates_only_on_success`). `synced_at` is never computed here
 (R8) — it's supplied by the caller, defaulting to the incoming manifest's own
 value if the caller doesn't advance it explicitly.
+
+**M11: category write-back on CREATE.** Immediately after a CREATE succeeds
+for an automation/script, `hassle.sync.category_writeback.
+attempt_category_writeback` is given a chance to assign the HA UI category
+implied by `PlanEntry.source_path` (DESIGN §7.3's placement, run in reverse).
+This never affects apply's own success/rollback bookkeeping (I6: it's pure
+metadata, and a failure here is surfaced as a warning in
+`ApplyResult.category_warnings`, never an aborted/rolled-back object,
+MILESTONES M11 test 3) and is never attempted for any action besides a
+freshly-succeeded CREATE (MILESTONES M11 test 4).
 """
 
 from __future__ import annotations
 
 from hassle.backend.protocol import Backend
 from hassle.ir.canonical import sha256_hash
+from hassle.sync.category_writeback import attempt_category_writeback
 from hassle.sync.models import (
     ApplyOutcome,
     ApplyResult,
@@ -84,6 +95,7 @@ def apply_plan(
     # object didn't exist yet, e.g. a CREATE).
     snapshots: list[tuple[str, str, dict[str, object] | None]] = []
     applied: list[str] = []  # object_keys successfully applied, in apply order
+    category_warnings: list[str] = []  # M11: never fails/rolls back apply (I6)
 
     for entry in push_entries:
         identity = _identity_of(entry.object_key)
@@ -120,8 +132,21 @@ def apply_plan(
         outcomes[entry.object_key] = ApplyOutcome.SUCCEEDED
         applied.append(entry.object_key)
 
+        if entry.action is PlanAction.CREATE:
+            # M11: metadata-only, best-effort -- never raises past this call
+            # (attempt_category_writeback catches everything internally) and
+            # never affects `outcomes`/rollback for the object it just created.
+            result = attempt_category_writeback(backend, entry.kind, identity, entry.source_path)
+            if result.warning is not None:
+                category_warnings.append(result.warning)
+
     new_manifest = _advance_manifest(manifest, backend, push_entries, synced_at)
-    return ApplyResult(outcomes=outcomes, succeeded=True, manifest=new_manifest)
+    return ApplyResult(
+        outcomes=outcomes,
+        succeeded=True,
+        manifest=new_manifest,
+        category_warnings=category_warnings,
+    )
 
 
 def _identity_of(object_key: str) -> str:

@@ -175,3 +175,9 @@ class ApplyResult(BaseModel):
     outcomes: dict[str, ApplyOutcome] = {}
     succeeded: bool
     manifest: Manifest | None = None
+    # M11 (additive): non-fatal warnings from category write-back on CREATE
+    # (`hassle.sync.category_writeback`) -- always empty when nothing was
+    # attempted or everything succeeded. Never affects `succeeded` (I6: a
+    # category-assignment failure is metadata-only, surfaced here rather than
+    # silently dropped, but never fails or rolls back the object it's about).
+    category_warnings: list[str] = []

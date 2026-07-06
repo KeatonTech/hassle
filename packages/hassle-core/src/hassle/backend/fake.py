@@ -74,6 +74,24 @@ both create and update so `list_remote` returns what real HA actually
 stores; the compiler (`hassle.compiler.template_helpers`) coerces the same
 fields at compile time so the compiled local IR is byte-identical, keeping
 plan comparison a plain hash equality with no special case.
+
+**M11: category registry + per-entity category assignment.** Additive,
+non-`Backend`-Protocol surface (same pattern as `entry_id_for`/
+`fetch_registry_snapshot`) modeling `config/category_registry/list|create`
+and `config/entity_registry/update`'s `categories` field (docs/ha-api-notes.md
+§30) well enough for `hassle.sync.category_writeback` to drive against it in
+unit tests: `list_categories`/`create_category` per scope
+(`self._categories: dict[scope, dict[category_id, name]]`), and
+`assign_category`/`categories_for` per `(kind, identity)`
+(`self._entity_categories`) -- FakeBackend doesn't model real entity_ids at
+all (no automation/script entity_id synthesis exists elsewhere in this class
+either), so category assignment is keyed directly by `(kind, identity)`
+rather than round-tripping through a simulated entity registry row; this is
+an internal simplification, like the helper-id-from-name-slug shortcut
+above, not a claim about HA's wire shape (`DirectBackend` -- the real
+transport -- does look the entity up by `unique_id`, docs/ha-api-notes.md
+§30). `seed_category` is test-only sugar for pre-populating a category
+before a push (MILESTONES M11 test 1's "category already exists" case).
 """
 
 from __future__ import annotations
@@ -197,6 +215,12 @@ class FakeBackend:
         # create_entry / options-flow form -> create_entry) so the shapes
         # themselves are test-visible, not just their net effect on the store.
         self.flow_log: list[FlowStep] = []
+        # M11: category registry per scope (scope -> {category_id: name}) and
+        # per-object category assignment ((kind, identity) -> {scope:
+        # category_id}) -- see module docstring's M11 paragraph.
+        self._categories: dict[str, dict[str, str]] = {}
+        self._category_id_counter = 0
+        self._entity_categories: dict[tuple[str, str], dict[str, str]] = {}
 
     # -- Backend protocol -------------------------------------------------
 
@@ -380,6 +404,41 @@ class FakeBackend:
         """Test/CLI-facing lookup of a template helper's HA-assigned
         `entry_id` (manifest-only in the real sync engine, docs/backend.md)."""
         return self._entry_ids.get((kind, identity))
+
+    # -- M11: category registry + per-entity category assignment ----------
+
+    def list_categories(self, scope: str) -> dict[str, str]:
+        """`config/category_registry/list` for `scope` -- `{category_id: name}`
+        (additive, non-`Backend`-Protocol; module docstring's M11 paragraph)."""
+        return dict(self._categories.get(scope, {}))
+
+    def create_category(self, scope: str, name: str) -> str:
+        """`config/category_registry/create` -- returns the new `category_id`."""
+        self._category_id_counter += 1
+        category_id = f"cat_{self._category_id_counter:04d}"
+        self._categories.setdefault(scope, {})[category_id] = name
+        return category_id
+
+    def assign_category(self, kind: str, identity: str, scope: str, category_id: str) -> None:
+        """`config/entity_registry/update`'s `categories` field, scoped merge
+        (never drops another scope's existing assignment on the same object,
+        I6 -- mirrors the merge `DirectBackend._aassign_category` does against
+        the real entity-registry row before resubmitting the whole dict)."""
+        existing = dict(self._entity_categories.get((kind, identity), {}))
+        existing[scope] = category_id
+        self._entity_categories[(kind, identity)] = existing
+
+    def categories_for(self, kind: str, identity: str) -> dict[str, str]:
+        """Test-facing lookup: the current `{scope: category_id}` assignment
+        for `kind:identity` (empty if never assigned)."""
+        return dict(self._entity_categories.get((kind, identity), {}))
+
+    def seed_category(self, scope: str, category_id: str, name: str) -> None:
+        """Test-only sugar: pre-populate a category registry row (MILESTONES
+        M11 test 1's "category already exists" case) with a caller-chosen,
+        stable `category_id` rather than the auto-generated `cat_NNNN` shape
+        `create_category` would assign."""
+        self._categories.setdefault(scope, {})[category_id] = name
 
     def _stored_body(self, kind: str, identity: str, normalized: dict[str, Any]) -> dict[str, Any]:
         """The exact body real HA stores for one object of ``kind`` (the

@@ -449,16 +449,32 @@ def _build_plan(root: Path):
     manifest = migrate_manifest_for_ignores(
         manifest_io.load_manifest(root), ignore_globs=config.ignore
     ).manifest
-    local_objects, _compile_result = bundle_ops.compile_local_objects(root)
+    local_objects, compile_result = bundle_ops.compile_local_objects(root)
     with backend_factory.connect(ha_url, token) as backend:
         remote_objects = bundle_ops.remote_objects_from_backend(backend, list(OBJECT_KINDS))
     ignore_result = apply_ignore_globs(
         local_objects=local_objects, remote_objects=remote_objects, ignore_globs=config.ignore
     )
-    return compute_plan(
+    the_plan = compute_plan(
         manifest=manifest,
         local_objects=ignore_result.local_objects,
         remote_objects=ignore_result.remote_objects,
+    )
+    # M11: `source_path` drives category write-back on CREATE (`hassle.sync.
+    # category_writeback`, via `apply_plan`) -- a CREATE always has a real
+    # bundle source (it's local-only at plan time), so no registry snapshot
+    # is needed here (unlike pull's adopt-placement fallback, which needs one
+    # for objects that have never been declared in the bundle at all).
+    source_paths = bundle_ops.build_source_paths(
+        root, compile_result, [e.object_key for e in the_plan.entries]
+    )
+    return the_plan.model_copy(
+        update={
+            "entries": [
+                entry.model_copy(update={"source_path": source_paths.get(entry.object_key)})
+                for entry in the_plan.entries
+            ]
+        }
     )
 
 
@@ -577,6 +593,11 @@ def push(
 
     if result.manifest is not None:
         manifest_io.save_manifest(root, result.manifest)
+
+    # M11: category write-back warnings are metadata-only (I6) -- the push
+    # already succeeded (checked above); these are printed, never fatal.
+    for warning in result.category_warnings:
+        console.print(f"[yellow]{warning}[/yellow]")
 
     summary = plan_summary(resolved_plan)
     console.print(f"[green]hassle push: applied {sum(summary.values())} change(s)[/green]")

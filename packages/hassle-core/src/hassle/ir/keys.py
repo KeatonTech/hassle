@@ -84,3 +84,18 @@ def slugify(name: str) -> str:
     """
     slug = re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
     return slug or "item"
+
+
+def humanize_slug(slug: str) -> str:
+    """The inverse of :func:`slugify`, approximately: ``"automatic_hvac"`` ->
+    ``"Automatic Hvac"``. Used only to pick a human-readable ``name`` when
+    Hassle creates a brand-new HA UI category on push (MILESTONES M11) for a
+    source file that names a category HA doesn't have yet -- there is no way
+    to recover the original mixed-case/punctuated name from a slug, so this is
+    a best-effort display name, not a round-trip. The category's *identity*
+    from that point on is its HA-assigned `category_id`, matched by
+    ``slugify(name) == slug`` on every subsequent push/pull (same anchor
+    `bundle_ops._category_source_path` already uses in the other direction).
+    """
+    words = [w for w in slug.split("_") if w]
+    return " ".join(w.capitalize() for w in words) or "Misc"
