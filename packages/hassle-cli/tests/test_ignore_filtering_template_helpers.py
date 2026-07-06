@@ -13,7 +13,7 @@ from hassle.sync.models import Manifest, ManifestEntry
 from hassle.sync.plan import compute_plan
 from hassle_cli.ignore_filter import apply_ignore_globs, migrate_manifest_for_ignores
 
-_TEMPLATE_CFG = {"unique_id": "active_hvac_zones", "name": "Zones", "state": "{{ 1 }}"}
+_TEMPLATE_CFG = {"name": "Active Hvac Zones", "state": "{{ 1 }}"}
 
 
 def test_ignored_template_helper_key_produces_no_plan_entry() -> None:

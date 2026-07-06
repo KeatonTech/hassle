@@ -456,6 +456,12 @@ helper domains (threshold, derivative, group, …) become mechanical follow-ons.
    HA stable + dev) — integration test creates/updates/deletes a template number end-to-end.
 2. DSL declarations: `template_number(id=..., name=..., state="{{ ... }}", min=..., max=...)`
    (+ template_sensor/binary_sensor/select), registered as prebuilt objects; golden pairs.
+   **Amended by CI evidence (docs/ha-api-notes.md §26.6):** no `id=` kwarg exists in the
+   implemented DSL — real HA's config-flow schema rejects a caller-supplied `unique_id` outright,
+   so `name=` is the sole identity-bearing kwarg (`slugify(name)` derives the object key).
+   `template_number`/`template_select` also gained required `set_value=`/`select_option=` kwargs
+   (HA's own schema requires a write-target action sequence for a writable entity). See the
+   identity-freeze note below for the full re-freeze.
 3. Decompile/adopt into `helpers/` with the same category/misc placement rules; round-trip
    byte-stable against the entry-options shape (I3 applies to options bodies).
 4. Plan/apply: create = full flow; update = options flow; delete = config entry removal;
@@ -467,18 +473,39 @@ helper domains (threshold, derivative, group, …) become mechanical follow-ons.
 DESIGN amendments in the same series: §1 non-goals (config-entry helpers move from v2 to M10),
 §13 (plugin protocol gains the flow-based apply notes).
 
-**Identity freeze (decided in this PR, `m10/template-helpers`):** object key is
-`"<template domain>:<unique_id>"` (e.g. `"template_number:active_hvac_zones"`) — `unique_id` is
-Hassle's declared identity (the DSL's `id=` kwarg), frozen as the object-key identity exactly like
-every other kind's `object_key(kind, identity)` (F1, `hassle.ir.keys.object_key`, additive:
-`TEMPLATE_DOMAINS` widens `OBJECT_KINDS`, the key *format* is unchanged). HA's config entry `entry_id`
-is transport-side identity only: tracked in `ManifestEntry.entry_id` (additive optional field,
-`hassle.sync.models`), never in the IR body (`TemplateHelperConfig` has no `entry_id` field) and
-never in the object key. An UPDATE never changes `entry_id` (I2 analog, driven through the options
-flow); a DELETE followed by a re-CREATE under the same `unique_id` gets a **fresh** `entry_id` from
-HA — documented, not hidden, as the rollback-by-recreate caveat (docs/ha-api-notes.md §26.3). See
-docs/backend.md §3.1 and docs/ha-api-notes.md §26 for the full mechanics; `Backend` (F2) itself
-required zero changes.
+**Identity freeze, ORIGINAL (`m10/template-helpers`, CI round 1) — SUPERSEDED, see below:** object
+key `"<template domain>:<unique_id>"`, `unique_id` a caller-declared DSL kwarg. **CI round 2 found
+this un-implementable against real HA**: the `template` config flow's form schema rejects an
+unrecognized `unique_id` key outright (`400 {"errors": {"base": ["extra keys not allowed @
+data['unique_id']"]}}`, both HA `stable` and `dev` — docs/ha-api-notes.md §26.6) — a flow-created
+entry has no caller-settable unique id at all. Per R5, un-freezing and re-freezing in the same
+series with the evidence:
+
+**Identity freeze, RE-FROZEN (`m10/template-helpers`, CI round 2 evidence, docs/ha-api-notes.md
+§26.6):** object key is `"<template domain>:<slugify(name)>"` (e.g.
+`"template_number:active_hvac_zones"` for `name="Active HVAC Zones"`) — identity is DERIVED from
+the declared `name` (the DSL's `name=` kwarg, required), mirroring the nine storage helpers'
+"id is a slug of name" rule (§4/§17.5) exactly, except here it is the ONLY identity source (no
+override kwarg exists — there is nothing else HA lets a caller set). `TemplateHelperConfig`
+(`hassle.ir.models`) has no `unique_id`/`id` field at all; `identity` is a computed property. The
+object-key *format* itself is unchanged (`object_key(kind, identity)`, F1, additive:
+`TEMPLATE_DOMAINS` widens `OBJECT_KINDS`). On the wire, the config flow sets the entry's `title`
+from the submitted `name`; `list_remote` re-derives the identical identity by slugifying
+`entry["title"]` on read-back. Sub-kind discrimination (which of the 4 template domains a listed
+entry is) is resolved via the entity registry's `config_entry_id` cross-reference (a WS call,
+`config/entity_registry/list`), not a client-side marker — the sub-kind data can't travel through
+`options` either, for the same "no bookkeeping keys in the form schema" reason.
+
+HA's config entry `entry_id` remains transport-side identity only (unaffected by the identity
+redesign): tracked in `ManifestEntry.entry_id` (additive optional field, `hassle.sync.models`),
+never in the IR body and never in the object key. An UPDATE never changes `entry_id` (I2 analog,
+driven through the options flow); a DELETE followed by a re-CREATE under the same name-derived
+identity gets a **fresh** `entry_id` from HA — documented, not hidden, as the rollback-by-recreate
+caveat (docs/ha-api-notes.md §26.3). `template_number`/`template_select` additionally require a
+write-target action sequence (`set_value=`/`select_option=`, §26.6) — HA's own form schema rejects
+the submission without one. See docs/backend.md §3.1 and docs/ha-api-notes.md §26 (especially
+§26.0 and §26.6) for the full mechanics; `Backend` (F2) itself required zero changes throughout
+both rounds of correction.
 
 ---
 

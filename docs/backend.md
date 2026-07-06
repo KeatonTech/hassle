@@ -221,10 +221,20 @@ scoped to the `template` domain (`hassle.ir.TEMPLATE_DOMAINS`:
 addressed the same `(kind, identity)` way. What differs is entirely internal
 to `FakeBackend`/`DirectBackend`:
 
-- **Identity.** `identity` is the declared `unique_id` (the DSL's `id=`
-  kwarg) — frozen as the object-key identity in the M10 PR. HA's own
-  config-entry identity, the `entry_id` it assigns on creation
-  (docs/ha-api-notes.md §26), is transport-side only.
+- **Identity (redesigned after CI evidence, docs/ha-api-notes.md §26.6):**
+  there is no settable `unique_id` — real HA's config-flow form schema
+  rejects an unrecognized `unique_id` key outright. `identity` is
+  DERIVED from the declared `name` (slugified), the same rule storage
+  helpers use for an unsupplied `id` (§4/§17.5) — except here it's the ONLY
+  identity source. HA's own config-entry identity, the `entry_id` it assigns
+  on creation (docs/ha-api-notes.md §26), remains transport-side only; the
+  wire-level correlator for re-deriving identity on `list_remote` is the
+  entry's `title` (set from the submitted `name` by the flow). Which of the
+  four template sub-kinds a listed entry is gets determined by
+  cross-referencing the entity registry's `config_entry_id` field (a WS
+  call, `config/entity_registry/list`, unaffected by any of this) rather
+  than a client-side marker, since sub-kind data can't travel through
+  `options` either (the same "no bookkeeping keys" schema rule).
 - **`ManifestEntry.entry_id`** (additive optional field, `hassle.sync.models`):
   where the `entry_id` is tracked — never in the IR body, never in the
   object key. `apply.py`'s `_advance_manifest` populates it by calling an
@@ -268,33 +278,48 @@ design work. Concretely, a new domain (e.g. `threshold`) needs:
 
 1. **IR:** a domain string added to a `*_DOMAINS` frozenset next to
    `TEMPLATE_DOMAINS` (`hassle.ir.keys`) — or, if it shares the exact same
-   options shape as `TemplateHelperConfig` (`unique_id`/`name` + passthrough
-   extras), no new IR class at all; a genuinely different shape gets its own
-   thin `IRObject` subclass mirroring `TemplateHelperConfig` (~15 lines).
+   options shape as `TemplateHelperConfig` (`name` + passthrough extras, no
+   `unique_id`/`id` field at all, §26.6), no new IR class at all; a
+   genuinely different shape gets its own thin `IRObject` subclass mirroring
+   `TemplateHelperConfig` (~15 lines). `identity` is a computed
+   `slugify(name)` property either way — check the new integration's own
+   config-flow schema for whether it, too, rejects a caller-supplied
+   `unique_id` (§26.6's finding may not generalize to every future
+   config-entry integration; verify against its own `config_flow.py`, don't
+   assume).
 2. **DSL:** one builder function per new domain in a sibling module to
    `hassle.compiler.template_helpers`, reusing `_declare_helper`'s pattern
    (validate domain membership, build the IR object, register via
    `current_registry().add_object`, return an `EntityRef`) — no new
-   registration mechanism.
+   registration mechanism. Check the new domain's own required-field set
+   (§26.6's finding: `set_value`/`select_option` are template-specific write
+   targets, not a general config-entry pattern) and encode it the same way
+   (`_TEMPLATE_REQUIRED_FIELDS`-equivalent map).
 3. **FakeBackend:** the SAME three internal methods
    (`_create_via_flow`/`_update_via_options_flow`/`entry_id_for`, or a shared
    helper extracted from them if a second domain makes the duplication worth
    collapsing) dispatch on the new domain's `_TEMPLATE_FLOW_TYPE`-equivalent
-   step_id map — `create`/`update`/`delete`/`list_remote` themselves need NO
-   change (they already dispatch on `kind in TEMPLATE_DOMAINS`-shaped
-   membership checks; widen the membership set or add a sibling one).
+   step_id map and its own required-fields map — `create`/`update`/`delete`/
+   `list_remote` themselves need NO change (they already dispatch on
+   `kind in TEMPLATE_DOMAINS`-shaped membership checks; widen the membership
+   set or add a sibling one).
 4. **DirectBackend:** same shape — the REST flow/options-flow/entry-removal
    endpoints (`/api/config/config_entries/flow[/{flow_id}]`, `/api/config/
    config_entries/options/flow[/{flow_id}]`, `/api/config/config_entries/
    entry/{entry_id}`, §26.0) are **generic across every config-entry
    integration** (`handler=<domain integration name>` is the only per-domain
-   parameter on the start-flow POST); only the step_id/field-name map is
-   domain-specific.
-5. **Decompiler/placement:** `_template_helper_source`'s `unique_id` -> `id=`
-   rename logic is already generic per-domain (keyed off `TEMPLATE_DOMAINS`
-   membership, not a hardcoded domain name); `default_source_path`'s
-   `helpers/misc.py` rule already covers `TEMPLATE_DOMAINS` as a set, so a
-   domain added to that set needs no placement-code change at all.
+   parameter on the start-flow POST); only the step_id/field-name/
+   required-field map is domain-specific. The entity-registry
+   sub-kind-discrimination cross-reference (§26.6) is also generic — any
+   config-entry integration creating exactly one entity per entry can reuse
+   `_template_entry_domains`'s pattern verbatim.
+5. **Decompiler/placement:** `_template_helper_source` needs no rename logic
+   at all (there's no identity kwarg to rename, §26.6) — the stored body's
+   keys map straight onto the builder's kwargs, generic per-domain (keyed
+   off `TEMPLATE_DOMAINS` membership, not a hardcoded domain name);
+   `default_source_path`'s `helpers/misc.py` rule already covers
+   `TEMPLATE_DOMAINS` as a set, so a domain added to that set needs no
+   placement-code change at all.
 6. **Apply order / validation / ignore-glob:** all three are driven by
    `hassle.ir.OBJECT_KINDS` membership or plain object-key string matching —
    zero code changes for a new domain that's added to `OBJECT_KINDS`.

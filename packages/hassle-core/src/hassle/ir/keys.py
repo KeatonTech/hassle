@@ -34,11 +34,15 @@ HELPER_DOMAINS: frozenset[str] = frozenset(
 
 # The template-helper config-entry domains (M10, DESIGN §13's "config-entry
 # helpers" future plugin, now built). Unlike HELPER_DOMAINS these are backed by
-# a config entry (`config_entries/flow` create, `config_entries/options/flow`
-# update, entry removal delete) rather than a WS storage collection — see
-# docs/ha-api-notes.md §26 and docs/backend.md's config-entry addendum. Object
-# identity is the declared unique id (not the HA-assigned `entry_id`, which
-# lives only in the manifest, never in the object key or DSL body).
+# a config entry (REST flow create, REST options-flow update, REST entry
+# removal delete -- docs/ha-api-notes.md §26.0) rather than a WS storage
+# collection — see docs/ha-api-notes.md §26 and docs/backend.md's config-entry
+# addendum. Object identity is derived from the declared `name` (slugified,
+# mirroring HELPER_DOMAINS' "id is a slug of name" rule) -- NOT a caller-set
+# unique id: real HA's config flow rejects an unrecognized `unique_id` field
+# outright (docs/ha-api-notes.md §26.6), so there is no settable unique id at
+# all here. The HA-assigned `entry_id` lives only in the manifest, never in
+# the object key or DSL body.
 TEMPLATE_DOMAINS: frozenset[str] = frozenset(
     {
         "template_number",

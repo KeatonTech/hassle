@@ -612,16 +612,17 @@ def _helper_source(obj: HelperConfig, ident: str) -> str:
 
 
 def _template_helper_source(obj: TemplateHelperConfig, ident: str) -> str:
-    """M10: like ``_helper_source`` but the stored ``unique_id`` field maps
-    back to the builder's ``id=`` kwarg (the builders' one deliberate name
-    difference from the stored body, docs/dsl-f3.md's M10 addition)."""
+    """M10: like ``_helper_source``, but there is no identity kwarg to rename
+    -- ``TemplateHelperConfig`` has no ``id``/``unique_id`` field at all
+    (docs/ha-api-notes.md §26.6: real HA's config-flow form schema rejects an
+    unrecognized ``unique_id`` key outright). The stored body's keys map
+    1:1 onto the builder's kwargs (``name=``, ``state=``, ...); identity is
+    derived from ``name`` (slugified) at both compile and decompile time, so
+    no rename is needed here."""
     body = dict(obj.to_ha())
     domain = obj.kind()
     builder = _TEMPLATE_HELPER_BUILDER_NAMES[domain]
-    kwargs: list[str] = []
-    for key, value in body.items():
-        out_key = "id" if key == "unique_id" else key
-        kwargs.append(f"{out_key}={render_literal(value)}")
+    kwargs = [f"{k}={render_literal(v)}" for k, v in body.items()]
     return f"{ident} = {builder}({', '.join(kwargs)})\n"
 
 

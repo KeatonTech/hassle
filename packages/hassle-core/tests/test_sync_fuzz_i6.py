@@ -269,10 +269,22 @@ def test_i6_fuzz_runs_exactly_1000_seeds() -> None:
 
 
 # -- M10: fuzz extension for the config-entry template-helper kind ----------
+#
+# Identity redesign (docs/ha-api-notes.md §26.6): a template helper's
+# identity is DERIVED from `name` (slugified) -- there is no separate,
+# stable `id` field the way automation/script/storage-helper kinds have.
+# `name` must therefore stay CONSTANT across every "distinct edit" in this
+# harness (`identity` -- the fixed slug the harness tracks the object
+# under -- doubles as the fixed `name`); `state` is the field that varies to
+# produce distinct, comparable values instead.
 
 
 def _template_number_value(identity: str, label: str, counter: int) -> dict[str, object]:
-    return {"unique_id": identity, "name": f"{label}-{counter}", "state": "{{ 1 }}"}
+    return {
+        "name": identity,
+        "state": f"{{{{ {counter} }}}}",  # {{ 1 }}, {{ 2 }}, ... -- distinct per edit
+        "set_value": {"action": "input_number.set_value", "data": {"value": "{{ value }}"}},
+    }
 
 
 @pytest.mark.parametrize("seed", list(range(1000)))

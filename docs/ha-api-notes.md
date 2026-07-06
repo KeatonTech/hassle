@@ -1454,13 +1454,19 @@ The `template` integration's config flow starts with a **menu** step
 (`step_id: "user"`) whose choices are the four helper types this milestone
 manages (`number`/`sensor`/`binary_sensor`/`select`, plus others the
 integration itself defines that Hassle doesn't manage), then a **form** step
-(`step_id` = the chosen type) collecting the type's fields (`name`,
-`state` — the Jinja template string — plus type-specific fields: `min`/`max`/
-`step`/`unit_of_measurement` for number, `device_class` for sensor/
-binary_sensor, `options` for select). A successful submission returns
-`type: "create_entry"` with `options` holding exactly the submitted fields
-and a fresh `entry_id` HA assigns (never caller-supplied — same "creation
-assigns identity" rule as storage helpers, §17.5):
+(`step_id` = the chosen type) collecting EXACTLY the type's own schema fields
+— `name`, `state` (the Jinja template string), plus type-specific fields:
+`min`/`max`/`step`/`unit_of_measurement`/**`set_value`** (REQUIRED — the
+write-target action sequence, §26.6) for number; `device_class` for
+sensor/binary_sensor; `options`/**`select_option`** (REQUIRED, §26.6) for
+select. **No other keys are accepted** — `voluptuous` schema validation
+400s on anything unrecognized, including a caller-supplied `unique_id`
+(§26.6: there is no settable unique id at all). A successful submission
+returns `type: "create_entry"` with `options` holding exactly the submitted
+fields, a `title` set from the submitted `name` (the wire-level identity
+correlator, since there's no `unique_id`, §26.6), and a fresh `entry_id` HA
+assigns (never caller-supplied — same "creation assigns identity" rule as
+storage helpers, §17.5):
 
 ```jsonc
 // 1. start the flow — REST POST /api/config/config_entries/flow
@@ -1471,26 +1477,32 @@ assigns identity" rule as storage helpers, §17.5):
 // 2. choose the type — REST POST to the flow_id resource
 → POST /api/config/config_entries/flow/f1  { "next_step_id":"number" }
 ← 200  { "type":"form", "flow_id":"f1", "step_id":"number",
-         "data_schema":[ {"name":"name", ...}, {"name":"state", ...}, ... ] }
+         "data_schema":[ {"name":"name", ...}, {"name":"state", ...},
+                         {"name":"set_value", ...}, ... ] }
 
-// 3. submit the form — same resource, another POST
+// 3. submit the form — same resource, another POST. EXACTLY the domain's
+//    own fields; no unique_id, no bookkeeping keys (§26.6 correction 1).
 → POST /api/config/config_entries/flow/f1
-    { "name":"Active HVAC Zones", "state":"{{ ... }}", "min":0, "max":8 }
+    { "name":"Active HVAC Zones", "state":"{{ ... }}", "min":0, "max":8,
+      "set_value": {"action":"input_number.set_value", "data":{"value":"{{ value }}"}} }
 ← 200  { "type":"create_entry", "flow_id":"f1", "handler":"template",
          "entry_id":"01ABC...", "title":"Active HVAC Zones",
          "options":{ "name":"Active HVAC Zones", "state":"{{ ... }}",
-                     "min":0, "max":8 } }
+                     "min":0, "max":8, "set_value": {...} } }
 ```
 
-(Corrected 2026-07-05: this was originally modeled as three `config_entries/
-flow/*` WebSocket commands — see §26.0 for the CI failure that found the
-mistake. It is REST throughout.)
+(Corrected 2026-07-05, twice: round 1 modeled this as three `config_entries/
+flow/*` WebSocket commands — §26.0 found it's REST. Round 2 sent
+`unique_id`/`_template_type` alongside the real fields and omitted
+`set_value` — §26.6 found the schema rejects the former and requires the
+latter.)
 
 `FakeBackend._create_via_flow` (`hassle/backend/fake.py`) models this same
 three-step shape (menu -> form -> create_entry) as `FlowStep` records
 (`type`/`flow_id`/`step_id`/`data_schema`/`result` fields mirroring the REST
 JSON payloads above, not a WS envelope) for test assertions
-(`test_fake_backend_template_flow.py`).
+(`test_fake_backend_template_flow.py`), including the required-field check
+(`ConfigEntryFlowError` on a missing `set_value`/`select_option`).
 
 ### 26.2 Update: REST `/api/config/config_entries/options/flow` — one form step, same `entry_id`
 
@@ -1498,26 +1510,28 @@ Updating an existing template helper's options goes through the **options**
 flow (`/api/config/config_entries/options/flow`, POSTed with `{"handler":
 "<entry_id>"}` — not the plain flow endpoint), which for the `template`
 integration is a single form step (no menu — the type is already fixed once
-the entry exists) re-presenting the current fields, then `create_entry` on
-submission. The `entry_id` is **unchanged** across an update — this is the
-config-entry world's I2 analog: an update is genuinely a mutation of the
-existing entry's options, never a delete+recreate, so downstream references
-to the entry survive untouched:
+the entry exists) re-presenting the current fields (same schema, same
+required fields, as create — §26.6), then `create_entry` on submission. The
+`entry_id` is **unchanged** across an update — this is the config-entry
+world's I2 analog: an update is genuinely a mutation of the existing entry's
+options, never a delete+recreate, so downstream references to the entry
+survive untouched:
 
 ```jsonc
 → POST /api/config/config_entries/options/flow  { "handler":"01ABC..." }
 ← 200  { "type":"form", "flow_id":"f2", "step_id":"number", ... }
 → POST /api/config/config_entries/options/flow/f2
-    { "name":"Active HVAC Zones", "state":"{{ new }}", "min":0, "max":10 }
+    { "name":"Active HVAC Zones", "state":"{{ new }}", "min":0, "max":10,
+      "set_value": {"action":"input_number.set_value", "data":{"value":"{{ value }}"}} }
 ← 200  { "type":"create_entry", "flow_id":"f2", "result":{} }
        // the entry's options are merged in-place; entry_id is NOT re-issued.
 ```
 
-(Corrected 2026-07-05: originally modeled as `config_entries/options/flow/*`
-WS commands — REST, per §26.0.)
+(Corrected 2026-07-05, twice: round 1 — REST, per §26.0. Round 2 — exactly
+the domain's own fields, per §26.6.)
 
 `FakeBackend._update_via_options_flow` models this (form -> create_entry,
-same `entry_id` preserved).
+same `entry_id` preserved, same required-field check as create).
 
 ### 26.3 Delete: REST `DELETE /api/config/config_entries/entry/{entry_id}` — no options-flow equivalent
 
@@ -1559,16 +1573,103 @@ into the Protocol. No MILESTONES.md F2 update needed. See docs/backend.md's
 config-entry addendum for the identity/manifest bookkeeping this implies
 (`entry_id` lives in `ManifestEntry`, additively).
 
-### 26.5 Manifest/identity, frozen this PR
+### 26.5 Manifest/identity — SUPERSEDED by §26.6, kept for history
 
-Object key: `template_number:<unique_id>` (and the sibling three domains).
+~~Object key: `template_number:<unique_id>` (and the sibling three domains).
 `unique_id` is Hassle's declared identity (the DSL's `id=` kwarg); HA's
 `entry_id` is transport-side identity only, tracked in
 `ManifestEntry.entry_id` (additive field, `hassle.sync.models`) — never in the
 IR body, never in the object key, mirroring I2's spirit ("never change an
 existing object's HA id" — here, "never let an update change the entry_id;
 only a delete+recreate legitimately gets a new one, and that IS a different
-HA-side object even though Hassle's object key is unchanged").
+HA-side object even though Hassle's object key is unchanged").~~
+
+**This was wrong — see §26.6.** CI round 2 found the flow's form schema
+rejects an unrecognized `unique_id` key outright: there is no
+caller-settable unique id at all, so this identity scheme was never
+achievable against real HA. Left here (struck through, not deleted) as the
+record of what was tried and why it failed, per the standing "every bug
+becomes evidence, not silently erased" practice this doc follows throughout
+(cf. §17.5's amendment, §23's bug-and-fix pattern).
+
+### 26.6 Identity REDESIGNED (CI round 2 finding): no settable `unique_id` — identity derives from `name`
+
+**The CI failure, verbatim** (both HA `stable` and `dev`, all 5
+`test_m10_template_flow.py` tests, after the §26.0 REST-transport fix
+unblocked flow step submission):
+
+```
+400 {"errors": {
+  "base": [
+    "extra keys not allowed @ data['_template_type']",
+    "extra keys not allowed @ data['unique_id']"
+  ],
+  "set_value": "required key not provided"
+}}
+```
+
+**Three findings, all confirmed by re-reading
+`homeassistant/components/template/config_flow.py`'s schema definitions:**
+
+1. **The form step's submission must be EXACTLY the domain's own schema
+   fields — no bookkeeping keys smuggled in.** The original implementation
+   sent `{"_template_type": step_id, **config}` (this module's own
+   "which-sub-kind" tracker) and `{"unique_id": ..., **config}` (the original
+   identity scheme) alongside the real fields; HA's `voluptuous` schema
+   validation rejects ANY unrecognized key with `"extra keys not allowed"`.
+   The menu selection (`{"next_step_id": "number"}`) is already a SEPARATE
+   request from the form submission (§26.1) and was never the problem; the
+   bug was re-including tracking data inside the form's own body.
+2. **`template_number`'s schema REQUIRES `set_value`** — the action sequence
+   HA runs when the entity is set (from the UI or a service call). A
+   template number's `state` template only computes the *displayed* value;
+   without `set_value` HA has no write target at all, so the integration's
+   own schema makes it mandatory. By the same reasoning, **`template_select`
+   requires `select_option`** (the sequence run when an option is chosen)
+   alongside `options` (the choice list). Sensor/binary_sensor are read-only
+   — `state` alone is a complete, valid schema for them.
+3. **`unique_id` is REJECTED by the flow, unconditionally.** A flow-created
+   template config entry has no caller-settable unique id at all — real HA
+   assigns none itself either (unlike storage helpers, which slugify `name`
+   into a caller-visible `id`, §4/§17.5). This invalidates §26.5's identity
+   scheme outright: there was never a `unique_id` to send.
+
+**Identity, REDESIGNED and RE-FROZEN in this PR (supersedes §26.5; MILESTONES
+M10 updated in the same series, R5):**
+
+- Object key: `"<template domain>:<slugify(name)>"` — e.g.
+  `"template_number:active_hvac_zones"` for `name="Active HVAC Zones"`. This
+  mirrors the storage helpers' "id is a slug of name" rule (§4/§17.5)
+  *exactly*, except here it is the ONLY identity source (no override field
+  exists to supply one, unlike storage helpers' optional `id=`).
+- `TemplateHelperConfig` (`hassle.ir.models`) has no `unique_id`/`id` field
+  at all; `identity` is a computed property (`slugify(name)`), consistent
+  with how `HelperConfig.identity` falls back to a name-derived value only
+  when no explicit `id` was supplied — template helpers simply never have
+  that explicit-id option.
+- **Wire-level correlator for read-back:** the flow's `create_entry` response
+  sets the entry's `title` from the submitted `name` (§26.1); `DirectBackend.
+  _alist_template_helpers` re-derives the SAME identity by slugifying
+  `entry["title"]` on every `list_remote` call.
+- **Sub-kind discrimination without `_template_type`:** since the sub-kind
+  can no longer travel inside `options` either, `_alist_template_helpers`
+  cross-references the **entity registry**
+  (`config/entity_registry/list`, WS — genuinely unaffected by any of this,
+  it's a pre-existing, correct call) via each row's `config_entry_id`, which
+  links back to the config entry: the entity's own domain
+  (`number`/`sensor`/`binary_sensor`/`select`, from `entity_id.split(".", 1)
+  [0]`) is the authoritative, HA-side answer to "which of the four template
+  sub-kinds is this entry", not a client-side guess.
+- `ManifestEntry.entry_id` (added in §26.5, unaffected by this redesign)
+  still carries the HA-assigned `entry_id` — transport-side identity only,
+  never in the IR body or object key. The I2-analog rollback-recreate caveat
+  from §26.3 is unchanged: a delete+recreate under the same name-derived
+  identity gets a fresh `entry_id`.
+- **DSL surface (`hassle.compiler.template_helpers`):** `id=`/`unique_id=`
+  kwargs are REMOVED (F3-compatible: never shipped in a release, so this is
+  not a break of a frozen surface — see docs/dsl-f3.md). `template_number`
+  gained a required `set_value=` kwarg; `template_select` gained a required
+  `select_option=` kwarg. `name=` became the sole identity-bearing kwarg.
 
 ## 25. M8 finding: `DiagnosticsManager.refresh()` race (fixed, regression-tested) — `vscode-extension/`
 

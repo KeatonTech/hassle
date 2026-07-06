@@ -26,7 +26,9 @@ Per-kind mapping to HA's APIs (DESIGN §4, docs/ha-api-notes.md):
   config_entries/options/flow[/{flow_id}]`, `DELETE /api/config/
   config_entries/entry/{entry_id}`) — docs/ha-api-notes.md §26, §26.0
   correction (an earlier revision modeled all three as WS commands; CI
-  found they don't exist as such on real HA).
+  found they don't exist as such on real HA). Identity is derived from
+  `name` (§26.6 correction: the flow's form schema rejects an unrecognized
+  `unique_id` key outright, so there is no settable unique id at all).
 """
 
 from __future__ import annotations
@@ -53,6 +55,17 @@ _TEMPLATE_FLOW_TYPE = {
     "template_select": "select",
 }
 
+# Fields HA's form schema requires beyond `name`/`state` (CI finding,
+# docs/ha-api-notes.md §26.6): a template number needs a write target
+# (`set_value`); a template select needs both the option list (`options`) and
+# its write target (`select_option`). Sensor/binary_sensor are read-only.
+_TEMPLATE_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    "template_number": ("set_value",),
+    "template_sensor": (),
+    "template_binary_sensor": (),
+    "template_select": ("options", "select_option"),
+}
+
 
 class DirectBackend:
     """Synchronous `Backend` (F2) talking to a real HA instance over REST + WS."""
@@ -75,11 +88,12 @@ class DirectBackend:
         self._ha_version: str | None = None
         self._reload_timeout = reload_timeout
         self._reload_interval = reload_interval
-        # M10: (kind, unique_id) -> HA-assigned entry_id, discovered via
-        # list_remote/create and consumed by update/delete (which the real
-        # config_entries WS API addresses by entry_id, not unique_id --
-        # docs/ha-api-notes.md §26). Process-local cache; a fresh DirectBackend
-        # rebuilds it from `_alist_template_helpers` on first list_remote.
+        # M10: (kind, name-derived identity) -> HA-assigned entry_id,
+        # discovered via list_remote/create and consumed by update/delete
+        # (which address the entry by entry_id, not identity --
+        # docs/ha-api-notes.md §26, §26.6). Process-local cache; a fresh
+        # DirectBackend rebuilds it from `_alist_template_helpers` on first
+        # list_remote.
         self._template_entry_ids: dict[tuple[str, str], str] = {}
 
     # -- lifecycle / bridge ------------------------------------------------
@@ -280,66 +294,103 @@ class DirectBackend:
 
     # -- config-entry template helpers (M10, docs/ha-api-notes.md §26) ----
     #
-    # **CORRECTION (docs/ha-api-notes.md §26.0, found via CI on real HA
-    # stable+dev, both failed identically):** the ORIGINAL implementation drove
-    # config_entries/flow, config_entries/options/flow, and config_entries/remove
-    # over the WebSocket -- all three do not exist as WS commands (HA raised
+    # **CORRECTION 1 (docs/ha-api-notes.md §26.0, CI round 1, HA stable+dev):**
+    # the ORIGINAL implementation drove config_entries/flow,
+    # config_entries/options/flow, and config_entries/remove over the
+    # WebSocket -- all three do not exist as WS commands (HA raised
     # `Unknown command` on every one). `homeassistant/components/config/
-    # config_entries.py` registers these as **REST views**, not WS commands:
-    # flow start/step submission is `ConfigManagerFlowIndexView`/
-    # `ConfigManagerFlowResourceView` under `/api/config/config_entries/flow`;
-    # options-flow is the same shape under `/api/config/config_entries/options/
-    # flow`; entry removal is `ConfigManagerEntryResourceView`'s
-    # `DELETE /api/config/config_entries/entry/{entry_id}`. Only listing
-    # entries (`config_entries/get`) is a genuine WS command (registered
-    # separately in that module's `async_setup` via `websocket_api.py`) --
-    # that one call was correct in the original implementation and is
-    # unchanged below.
+    # config_entries.py` registers these as **REST views**: flow start/step
+    # submission is `ConfigManagerFlowIndexView`/`ConfigManagerFlowResourceView`
+    # under `/api/config/config_entries/flow`; options-flow is the same shape
+    # under `/api/config/config_entries/options/flow`; entry removal is
+    # `ConfigManagerEntryResourceView`'s `DELETE /api/config/config_entries/
+    # entry/{entry_id}`. Only listing entries (`config_entries/get`) is a
+    # genuine WS command and was already correct.
     #
-    # `config_entries/get` (WS) enumerates every config entry; each entry's
-    # `options` dict holds the fields this milestone manages, keyed by
-    # `entry_id`. Hassle's declared identity (`unique_id`) is
-    # `options.get("name")`-independent -- the template integration's config
-    # entries don't carry a separate `unique_id` field on the entry itself
-    # the way storage helpers do, so DirectBackend uses the entry's own
-    # `entry_id` internally and derives the object identity from the
-    # *options* body's own declared identity, mirroring how a caller's
-    # `unique_id` field round-trips through `options` verbatim (FakeBackend's
-    # `_create_via_flow` stores it the same way).
+    # **CORRECTION 2 (docs/ha-api-notes.md §26.6, CI round 2, HA stable+dev):**
+    # with the transport fixed, step submission itself 400'd:
+    # `{"errors": {"base": ["extra keys not allowed @ data['_template_type']",
+    # "extra keys not allowed @ data['unique_id']"], "set_value": "required
+    # key not provided"}}`. Three findings:
+    #
+    # 1. The form step's `user_input` must be EXACTLY the domain's own fields
+    #    -- no smuggled-in bookkeeping keys. `_template_type` (this module's
+    #    own "which of the 4 sub-kinds" tracker) and `unique_id` (the
+    #    original identity scheme) are both rejected as unknown schema keys.
+    #    The menu selection is a SEPARATE step (`{"next_step_id": "number"}`,
+    #    §26.1) and is never resent with the form.
+    # 2. `template_number`'s schema requires `set_value` (the write-target
+    #    action sequence, since a number needs somewhere to send a written
+    #    value -- `state` alone only computes the display value);
+    #    `template_select` likewise requires `select_option` alongside
+    #    `options`. Sensor/binary_sensor need only `state` (read-only, no
+    #    write target). See `_TEMPLATE_REQUIRED_FIELDS` above and
+    #    `hassle.compiler.template_helpers`'s `set_value=`/`select_option=`
+    #    DSL kwargs.
+    # 3. `unique_id` is REJECTED by the flow outright -- a flow-created entry
+    #    has no caller-settable unique id at all. **Identity redesign
+    #    (un-freezes and re-freezes MILESTONES M10's identity section, same
+    #    PR, R5):** object identity is now derived from the declared `name`
+    #    (slugified), exactly mirroring the storage helpers' "id is a slug of
+    #    name" rule -- see `TemplateHelperConfig.identity`
+    #    (`hassle.ir.models`). On the wire, the entry's `title` (which the
+    #    flow sets from the submitted `name`) is what `list_remote` slugifies
+    #    to re-derive the SAME identity on read-back. The sub-kind (which of
+    #    the 4 domains an entry is) can no longer travel inside `options`
+    #    either, so `_alist_template_helpers` below cross-references the
+    #    entity registry (`config/entity_registry/list`, keyed by
+    #    `config_entry_id`) to read the actual HA domain
+    #    (`number`/`sensor`/`binary_sensor`/`select`) of the entity the entry
+    #    created -- the authoritative, HA-side answer to "which sub-kind is
+    #    this", not a client-side guess.
+
+    async def _template_entry_domains(self) -> dict[str, str]:
+        """`entry_id -> HA entity domain` for every template config entry,
+        by cross-referencing the entity registry (docs/ha-api-notes.md
+        §26.6): each template config entry creates exactly one entity, and
+        its registry row's `config_entry_id` links back to the entry."""
+        entities = await self._client.ws_command("config/entity_registry/list")
+        out: dict[str, str] = {}
+        for entity in entities:
+            config_entry_id = entity.get("config_entry_id")
+            entity_id = str(entity.get("entity_id", ""))
+            if not config_entry_id or "." not in entity_id:
+                continue
+            out[str(config_entry_id)] = entity_id.split(".", 1)[0]
+        return out
 
     async def _alist_template_helpers(self, kind: str) -> dict[str, dict[str, Any]]:
+        wanted_domain = _TEMPLATE_FLOW_TYPE[kind]
         entries = await self._client.ws_command("config_entries/get")
+        entry_domains = await self._template_entry_domains()
         out: dict[str, dict[str, Any]] = {}
         for entry in entries:
             if entry.get("domain") != "template":
                 continue
-            options = dict(entry.get("options", {}))
-            if _TEMPLATE_FLOW_TYPE.get(kind) != options.get("_template_type", options.get("type")):
-                # Distinguish which of the four template sub-kinds this entry
-                # is. Real HA's template config entry doesn't expose a bare
-                # "type" field on `options` outside of what the flow itself
-                # asked for; Hassle stores the sub-kind alongside the entry
-                # via the create flow's chosen menu step (`next_step_id`,
-                # §26.1) -- tracked here so a mixed bundle's four domains
-                # don't collide when listing.
-                continue
-            unique_id = options.get("unique_id")
-            if not unique_id:
-                continue
             entry_id = str(entry["entry_id"])
-            identity = str(unique_id)
+            if entry_domains.get(entry_id) != wanted_domain:
+                continue
+            options = dict(entry.get("options", {}))
+            title = entry.get("title") or options.get("name")
+            if not title:
+                continue
+            identity = _slugify(str(title))
             self._template_entry_ids[(kind, identity)] = entry_id
-            stored = {k: v for k, v in options.items() if k != "_template_type"}
-            out[identity] = stored
+            out[identity] = options
         return out
 
     async def _acreate_template_helper(self, kind: str, config: dict[str, Any]) -> str:
-        unique_id = config.get("unique_id")
-        if not unique_id:
+        name = config.get("name")
+        if not name:
+            raise ValueError(f"{kind} config has no 'name' (required to derive identity/title)")
+        identity = _slugify(str(name))
+        missing = [f for f in _TEMPLATE_REQUIRED_FIELDS[kind] if config.get(f) is None]
+        if missing:
             raise ValueError(
-                f"{kind} config has no 'unique_id' (required to start the config-entry flow)"
+                f"{kind} config is missing required field(s) {missing} "
+                "(HA's template form schema rejects the submission without them, "
+                "docs/ha-api-notes.md §26.6)"
             )
-        identity = str(unique_id)
         step_id = _TEMPLATE_FLOW_TYPE[kind]
 
         flow = await self._client.rest_post(
@@ -350,9 +401,10 @@ class DirectBackend:
             flow = await self._client.rest_post(
                 f"/api/config/config_entries/flow/{flow_id}", json={"next_step_id": step_id}
             )
-        user_input = {"_template_type": step_id, **{k: v for k, v in config.items()}}
+        # EXACTLY the domain's own fields -- no `_template_type`/`unique_id`
+        # smuggled in (§26.6 correction 1).
         result = await self._client.rest_post(
-            f"/api/config/config_entries/flow/{flow_id}", json=user_input
+            f"/api/config/config_entries/flow/{flow_id}", json=dict(config)
         )
         # Flat create_entry body (docs/ha-api-notes.md §26.1): `entry_id` is a
         # top-level key, not nested under a "result" wrapper (that was the
@@ -375,14 +427,20 @@ class DirectBackend:
                 f"no config entry found for {kind}:{identity} -- an UPDATE must "
                 "target an existing entry (options-flow update, never a recreate, I2 analog)"
             )
+        missing = [f for f in _TEMPLATE_REQUIRED_FIELDS[kind] if config.get(f) is None]
+        if missing:
+            raise ValueError(
+                f"{kind} config is missing required field(s) {missing} "
+                "(HA's template form schema rejects the submission without them, "
+                "docs/ha-api-notes.md §26.6)"
+            )
         flow = await self._client.rest_post(
             "/api/config/config_entries/options/flow", json={"handler": entry_id}
         )
         flow_id = flow["flow_id"]
-        step_id = _TEMPLATE_FLOW_TYPE[kind]
-        user_input = {"_template_type": step_id, **{k: v for k, v in config.items()}}
+        # EXACTLY the domain's own fields, same as create (§26.6 correction 1).
         await self._client.rest_post(
-            f"/api/config/config_entries/options/flow/{flow_id}", json=user_input
+            f"/api/config/config_entries/options/flow/{flow_id}", json=dict(config)
         )
 
     async def _adelete_template_helper(self, kind: str, identity: str) -> None:

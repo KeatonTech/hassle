@@ -43,7 +43,11 @@ def test_bundle_declared_template_helper_counts_as_existing(
         """
 from hassle import automation, service, state, template_number, when
 
-MY_HELPER = template_number(id="active_hvac_zones", name="Zones", state="{{ 1 }}")
+MY_HELPER = template_number(
+    name="Active Hvac Zones",
+    state="{{ 1 }}",
+    set_value={"action": "input_number.set_value", "data": {"value": "{{ value }}"}},
+)
 
 @automation(id="a", alias="A")
 def a():

@@ -3,10 +3,11 @@
 options body.
 
 `TemplateHelperConfig` decompiles to the matching builder call
-(`hassle.decompiler.codegen._template_helper_source`): the stored
-``unique_id`` field maps back to the builder's ``id=`` kwarg (the one
-deliberate name difference from the stored body, since ``id=`` is the DSL's
-declared-identity kwarg everywhere else too). Placement follows the same
+(`hassle.decompiler.codegen._template_helper_source`): there is no identity
+kwarg to rename -- `TemplateHelperConfig` has no `id`/`unique_id` field at
+all (docs/ha-api-notes.md §26.6: real HA's config-flow form schema rejects
+an unrecognized `unique_id` key outright). Identity is derived from `name`
+(slugified) at both compile and decompile time. Placement follows the same
 category/misc rule as the nine storage-collection helpers
 (`test_bundle_ops_placement.py::test_default_source_path_places_template_helpers_under_helpers_misc`).
 """
@@ -34,8 +35,10 @@ def test_decompile_template_number_produces_matching_builder_call() -> None:
     source = decompile_object(key, obj)
 
     assert source.startswith("active_hvac_zones = template_number(")
-    assert "id='active_hvac_zones'" in source
-    assert "unique_id=" not in source  # unique_id -> id= rename, never leaked
+    assert "name='Active HVAC Zones'" in source
+    assert "id=" not in source  # no identity kwarg at all (§26.6)
+    assert "unique_id=" not in source
+    assert "set_value=" in source
     assert "min=0" in source and "max=8" in source and "step=1" in source
 
 
@@ -67,6 +70,11 @@ def test_decompile_recompile_round_trip_is_byte_stable_for_options_body(
         "    template_select,",
         "    template_sensor,",
         ")",
+        # The fixture's set_value/select_option action dicts contain entity-id
+        # -shaped strings, which the decompiler's `render_literal` (DESIGN
+        # §7.3's entity-reference cosmetic rewrite) emits as `e.<domain>.<id>`
+        # -- needs this import, exactly like any generated bundle would carry.
+        "from hassle.registry import entities as e",
         "",
     ]
     for key, obj in sorted(result.objects.items()):

@@ -166,15 +166,24 @@ bundles are written.
   `input_boolean`, `input_number`, `input_select`, `input_text`,
   `input_datetime`, `input_button`, `counter`, `timer`, `schedule`.
 - **M10 ADDITION** — template-helper declarations (config-entry domain, DESIGN
-  §13's config-entry plugin, docs/ha-api-notes.md §26): `template_number(id=,
-  name=, state=, min=, max=, step=, unit_of_measurement=, icon=)`,
-  `template_sensor(id=, name=, state=, unit_of_measurement=, device_class=,
-  icon=)`, `template_binary_sensor(id=, name=, state=, device_class=, icon=)`,
-  `template_select(id=, name=, state=, options=, icon=)`. Same
+  §13's config-entry plugin, docs/ha-api-notes.md §26): `template_number(name=,
+  state=, set_value=, min=, max=, step=, unit_of_measurement=, icon=)`,
+  `template_sensor(name=, state=, unit_of_measurement=, device_class=, icon=)`,
+  `template_binary_sensor(name=, state=, device_class=, icon=)`,
+  `template_select(name=, state=, options=, select_option=, icon=)`. Same
   import-and-reference pattern as the storage-collection helpers above
-  (returns an `EntityRef`); `id=` becomes the config entry's `unique_id` (the
-  object-key identity), never the HA-assigned `entry_id` (manifest-only,
-  docs/backend.md).
+  (returns an `EntityRef`).
+  **No `id=`/`unique_id=` kwarg** (redesigned 2026-07-05, docs/ha-api-notes.md
+  §26.6, CI evidence: real HA's config-flow form schema rejects an
+  unrecognized `unique_id` key outright — a flow-created entry has no
+  caller-settable unique id at all). `name=` is the sole identity-bearing
+  kwarg: the object key is `"<domain>:<slugify(name)>"`, mirroring the
+  storage helpers' "id is a slug of name" rule. `set_value=` on
+  `template_number` and `select_option=` on `template_select` are REQUIRED
+  (HA's own form schema rejects the submission without them — a number/select
+  needs a write-target action sequence; `template_sensor`/
+  `template_binary_sensor` are read-only and need neither). The HA-assigned
+  `entry_id` is manifest-only (docs/backend.md), never in the DSL body.
 
 ### Recording verbs
 - `when(*triggers)` — append triggers to the active automation. Fully

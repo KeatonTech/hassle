@@ -4,15 +4,27 @@ is the AUTHORITATIVE verification of the flow shapes documented in
 docs/ha-api-notes.md §26; any mismatch found here supersedes the doc, updated
 in the same PR as the fix).
 
-**This suite is exactly what caught the §26.0 transport bug:** the original
-implementation drove config-entry flow create/step-submission, options-flow,
-and entry removal over the WebSocket; every test here failed identically on
-both HA `stable` and `dev` with `HaApiError: WS command failed: Unknown
-command.`. Root cause (confirmed against `homeassistant/components/config/
-config_entries.py`): those three operations are REST views, not WS commands
-(only entry *listing*, `config_entries/get`, is genuinely WS). Fixed in
-`hassle/backend/direct.py`; see docs/ha-api-notes.md §26.0-26.3 for the full
-correction.
+**This suite is exactly what caught two real bugs, in two CI rounds:**
+
+- Round 1 (§26.0): config-entry flow create/step-submission, options-flow,
+  and entry removal were originally modeled as WebSocket commands; every
+  test here failed identically on both HA `stable` and `dev` with
+  `HaApiError: WS command failed: Unknown command.`. Root cause: those three
+  operations are REST views (`homeassistant/components/config/
+  config_entries.py`), not WS commands (only entry *listing*,
+  `config_entries/get`, is genuinely WS).
+- Round 2 (§26.6): with the transport fixed, step submission itself 400'd:
+  `{"errors": {"base": ["extra keys not allowed @ data['_template_type']",
+  "extra keys not allowed @ data['unique_id']"], "set_value": "required key
+  not provided"}}`. Three findings: (1) the form step must be EXACTLY the
+  domain's own fields, no bookkeeping keys; (2) `template_number`/
+  `template_select` require a write-target action sequence (`set_value`/
+  `select_option`); (3) `unique_id` is rejected outright -- there is no
+  settable unique id, so identity is now derived from `name` (slugified),
+  re-freezing MILESTONES M10's identity section.
+
+Fixed in `hassle/backend/direct.py`; see docs/ha-api-notes.md §26.0-26.6 for
+the full correction history.
 
 Covers:
 - create/read/update/delete a `template_number` through `DirectBackend` (REST
@@ -39,14 +51,17 @@ from hassle.sync import ApplyOutcome, Manifest, Plan, PlanAction, PlanEntry
 from hassle.sync.apply import apply_plan
 from hassle.sync.plan import compute_plan
 
+_SET_VALUE = {"action": "input_number.set_value", "data": {"value": "{{ value }}"}}
+_SELECT_OPTION = {"action": "input_select.select_option", "data": {"option": "{{ option }}"}}
+
 
 def test_template_number_create_read_update_delete_cycle(ha: DirectBackend) -> None:
     identity = ha.create(
         "template_number",
         {
-            "unique_id": "active_hvac_zones",
             "name": "Active HVAC Zones",
             "state": "{{ 3 }}",
+            "set_value": _SET_VALUE,
             "min": 0,
             "max": 8,
             "step": 1,
@@ -67,9 +82,9 @@ def test_template_number_create_read_update_delete_cycle(ha: DirectBackend) -> N
         "template_number",
         identity,
         {
-            "unique_id": "active_hvac_zones",
             "name": "Active HVAC Zones",
             "state": "{{ 5 }}",
+            "set_value": _SET_VALUE,
             "min": 0,
             "max": 8,
             "step": 1,
@@ -84,12 +99,13 @@ def test_template_number_create_read_update_delete_cycle(ha: DirectBackend) -> N
     assert identity not in ha.list_remote("template_number")
 
 
-def _sample_config(domain: str, identity: str) -> dict[str, object]:
-    base = {"unique_id": identity, "name": identity, "state": "{{ 1 }}"}
+def _sample_config(domain: str, name: str) -> dict[str, object]:
+    base: dict[str, object] = {"name": name, "state": "{{ 1 }}"}
     if domain == "template_number":
-        base.update({"min": 0, "max": 10, "step": 1})
+        base.update({"min": 0, "max": 10, "step": 1, "set_value": _SET_VALUE})
     elif domain == "template_select":
         base["options"] = "{{ ['a', 'b'] }}"
+        base["select_option"] = _SELECT_OPTION
     return base
 
 
@@ -100,12 +116,13 @@ def test_every_template_domain_supports_full_cycle_live(ha: DirectBackend) -> No
         "template_binary_sensor",
         "template_select",
     ):
+        name = f"Probe {domain}"
         identity = f"probe_{domain}"
-        created = ha.create(domain, _sample_config(domain, identity))
+        created = ha.create(domain, _sample_config(domain, name))
         assert created == identity
         assert identity in ha.list_remote(domain)
 
-        ha.update(domain, identity, _sample_config(domain, identity))
+        ha.update(domain, identity, _sample_config(domain, name))
         assert identity in ha.list_remote(domain)
 
         ha.delete(domain, identity)
@@ -115,9 +132,9 @@ def test_every_template_domain_supports_full_cycle_live(ha: DirectBackend) -> No
 def test_template_helper_plan_apply_create_then_noop_on_repush(ha: DirectBackend) -> None:
     manifest = Manifest(synced_at="base", ha_version="test", objects={})
     local_config = {
-        "unique_id": "zones_plan_probe",
         "name": "Zones Plan Probe",
         "state": "{{ 2 }}",
+        "set_value": _SET_VALUE,
         "min": 0,
         "max": 8,
         "step": 1,
@@ -151,9 +168,9 @@ def test_template_helper_create_collision_aborts_live(ha: DirectBackend) -> None
                 kind="template_number",
                 action=PlanAction.CREATE,
                 local={
-                    "unique_id": "collide_probe",
-                    "name": "Mine",
+                    "name": "Collide Probe",
                     "state": "{{ 1 }}",
+                    "set_value": _SET_VALUE,
                     "min": 0,
                     "max": 8,
                     "step": 1,
@@ -161,13 +178,15 @@ def test_template_helper_create_collision_aborts_live(ha: DirectBackend) -> None
             )
         ]
     )
-    # Between plan and apply, the identity is taken (simulates a UI create).
+    # Between plan and apply, the identity is taken (simulates a UI create) --
+    # same NAME (so the same slugified identity), different state, so the
+    # collision is unambiguous.
     ha.create(
         "template_number",
         {
-            "unique_id": "collide_probe",
-            "name": "Created in UI",
+            "name": "Collide Probe",
             "state": "{{ 9 }}",
+            "set_value": _SET_VALUE,
             "min": 0,
             "max": 8,
             "step": 1,
@@ -177,16 +196,16 @@ def test_template_helper_create_collision_aborts_live(ha: DirectBackend) -> None
     result = apply_plan(plan, ha, Manifest(synced_at="b", ha_version="t", objects={}))
     assert result.succeeded is False
     assert result.outcomes["template_number:collide_probe"] is ApplyOutcome.ABORTED
-    assert ha.list_remote("template_number")["collide_probe"]["name"] == "Created in UI"
+    assert ha.list_remote("template_number")["collide_probe"]["state"] == "{{ 9 }}"
 
 
 def test_template_helper_rollback_restores_prior_options_live(ha: DirectBackend) -> None:
     identity = ha.create(
         "template_number",
         {
-            "unique_id": "rollback_probe",
-            "name": "Original",
+            "name": "Rollback Probe",
             "state": "{{ 1 }}",
+            "set_value": _SET_VALUE,
             "min": 0,
             "max": 8,
             "step": 1,
@@ -202,22 +221,23 @@ def test_template_helper_rollback_restores_prior_options_live(ha: DirectBackend)
                 kind="template_number",
                 action=PlanAction.UPDATE,
                 local={
-                    "unique_id": "rollback_probe",
-                    "name": "Updated",
+                    "name": "Rollback Probe",
                     "state": "{{ 2 }}",
+                    "set_value": _SET_VALUE,
                     "min": 0,
                     "max": 8,
                     "step": 1,
                 },
                 remote_hash_at_plan=before_hash,
             ),
-            # A second, deliberately invalid entry in the same batch forces a
+            # A second entry in the same batch that HA will reject (missing
+            # the required `set_value` write-target field, §26.6) forces a
             # failure so the first entry's rollback path is exercised.
             PlanEntry(
-                object_key="template_number:this_will_fail___",
+                object_key="template_number:this_will_fail",
                 kind="template_number",
                 action=PlanAction.CREATE,
-                local={"unique_id": "", "name": "", "state": "{{ this is not valid jinja"},
+                local={"name": "This Will Fail", "state": "{{ 1 }}"},
             ),
         ]
     )

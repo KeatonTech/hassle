@@ -128,18 +128,28 @@ class TemplateHelperConfig(IRObject):
     binary_sensor/select config entry holds (DESIGN §13's config-entry helper
     plugin).
 
-    Keyed by ``unique_id`` (the declared identity, frozen as the object-key
-    identity for this PR) — **not** the HA-assigned config `entry_id`, which
-    is HA-side identity only and lives in the manifest entry, never in this
-    body or the object key (mirrors I2: the entry_id is never changed once
-    assigned, and the DSL body never references it). ``name``/``state`` (the
-    Jinja template string) are the two fields every template domain shares;
-    domain-specific fields (``min``/``max``/``step``/``unit_of_measurement``
-    for number, ``options``/... for select) pass through via ``extra="allow"``
-    like every other IR model (I3).
+    **Identity (redesigned 2026-07-05 after CI evidence, docs/ha-api-notes.md
+    §26.6): there is no ``unique_id`` field.** The `template` config flow's
+    form schema rejects an unrecognized ``unique_id`` key outright (real HA
+    returned ``400 {"errors": {"base": ["extra keys not allowed @
+    data['unique_id']"]}}``) — a flow-created entry has no caller-settable
+    unique id at all. Identity is instead **derived from ``name``**, exactly
+    mirroring the nine storage helpers' "id is a slug of name" rule
+    (``hassle.ir.keys.slugify``, docs/ha-api-notes.md §4/§17.5) — except here
+    it's the ONLY identity source (no override), since the flow gives us
+    nothing else stable to key on locally; on the wire, HA's own correlator
+    is the entry's ``title`` (which the flow sets from the submitted
+    ``name``). The HA-assigned config ``entry_id`` remains HA-side transport
+    identity only, tracked in the manifest entry, never in this body or the
+    object key (I2 spirit unchanged: an update never changes the entry_id).
+
+    ``name``/``state`` (the Jinja template string) are the two fields every
+    template domain shares; domain-specific fields (``min``/``max``/``step``/
+    ``unit_of_measurement``/``set_value`` for number, ``options``/
+    ``select_option`` for select) pass through via ``extra="allow"`` like
+    every other IR model (I3).
     """
 
-    unique_id: Any = None
     name: Any = None
 
     _domain: str = PrivateAttr(default="")
@@ -157,7 +167,13 @@ class TemplateHelperConfig(IRObject):
 
     @property
     def identity(self) -> str | None:
-        return self.unique_id if self.unique_id is not None else self._key_id
+        if self._key_id is not None:
+            return self._key_id
+        if self.name is not None:
+            from hassle.ir.keys import slugify
+
+            return slugify(str(self.name))
+        return None
 
 
 def parse(config: dict[str, Any], *, kind: str, key_hint: str | None = None) -> IRObject:

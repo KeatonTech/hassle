@@ -10,6 +10,12 @@ same way regardless of what kind of HA object is behind it. These tests prove
 the template-helper kind slots into that existing machinery with ZERO changes
 to the plan/apply decision logic, only the `_KIND_ORDER` dependency-ordering
 tuple (M10 addition).
+
+**Identity (docs/ha-api-notes.md §26.6):** there is no `unique_id` -- identity
+is derived from `name` (slugified). `name` is kept CONSTANT across
+create/update pairs below (an update addresses the existing identity; it
+does not re-derive one), matching how the real options flow can change other
+fields without recreating the entry.
 """
 
 from __future__ import annotations
@@ -22,6 +28,8 @@ from hassle.backend.fake import FakeBackend
 from hassle.ir.canonical import sha256_hash
 from hassle.sync import ApplyOutcome, Manifest, Plan, PlanAction, PlanEntry
 from hassle.sync.apply import apply_plan
+
+_SET_VALUE = {"action": "input_number.set_value", "data": {"value": "{{ value }}"}}
 
 
 def _create_entry(object_key: str, kind: str, local: dict[str, Any]) -> PlanEntry:
@@ -47,7 +55,7 @@ def test_apply_order_places_template_helpers_after_storage_helpers_before_script
             _create_entry(
                 "template_number:zones",
                 "template_number",
-                {"unique_id": "zones", "name": "Zones", "state": "{{ 1 }}"},
+                {"name": "Zones", "state": "{{ 1 }}", "set_value": _SET_VALUE},
             ),
             _create_entry("input_boolean:b1", "input_boolean", {"name": "B"}),
         ]
@@ -69,16 +77,16 @@ def test_template_helper_create_collision_aborts_and_rolls_back() -> None:
             _create_entry(
                 "template_number:zones",
                 "template_number",
-                {"unique_id": "zones", "name": "Mine", "state": "{{ 1 }}"},
+                {"name": "Zones", "state": "{{ 1 }}", "set_value": _SET_VALUE},
             ),
         ]
     )
 
     # Drift: a UI-created template number materializes under the same
-    # unique_id before apply runs.
+    # name-derived identity before apply runs.
     backend.create(
         "template_number",
-        {"unique_id": "zones", "name": "Created in UI", "state": "{{ 9 }}"},
+        {"name": "Zones", "state": "{{ 9 }}", "set_value": _SET_VALUE},
     )
     backend.reset_write_tracking()
 
@@ -89,7 +97,7 @@ def test_template_helper_create_collision_aborts_and_rolls_back() -> None:
     assert result.outcomes["input_boolean:hb"] is ApplyOutcome.ROLLED_BACK
     assert "hb" not in backend.list_remote("input_boolean")
     # The colliding template number (and its entry_id) is untouched.
-    assert backend.list_remote("template_number")["zones"]["name"] == "Created in UI"
+    assert backend.list_remote("template_number")["zones"]["state"] == "{{ 9 }}"
 
 
 def test_apply_populates_manifest_entry_id_for_template_helper() -> None:
@@ -100,7 +108,7 @@ def test_apply_populates_manifest_entry_id_for_template_helper() -> None:
             _create_entry(
                 "template_number:zones",
                 "template_number",
-                {"unique_id": "zones", "name": "Zones", "state": "{{ 1 }}"},
+                {"name": "Zones", "state": "{{ 1 }}", "set_value": _SET_VALUE},
             )
         ]
     )
@@ -128,7 +136,7 @@ def test_apply_manifest_entry_id_is_none_for_non_template_kinds() -> None:
 def test_template_helper_update_reverifies_hash_and_uses_options_flow() -> None:
     backend = FakeBackend()
     identity = backend.create(
-        "template_number", {"unique_id": "zones", "name": "Zones", "state": "{{ 1 }}"}
+        "template_number", {"name": "Zones", "state": "{{ 1 }}", "set_value": _SET_VALUE}
     )
     entry_id_before = backend.entry_id_for("template_number", identity)
     plan_time_hash = sha256_hash(backend.list_remote("template_number")[identity])
@@ -139,7 +147,7 @@ def test_template_helper_update_reverifies_hash_and_uses_options_flow() -> None:
                 object_key="template_number:zones",
                 kind="template_number",
                 action=PlanAction.UPDATE,
-                local={"unique_id": "zones", "name": "Zones 2", "state": "{{ 2 }}"},
+                local={"name": "Zones", "state": "{{ 2 }}", "set_value": _SET_VALUE},
                 remote_hash_at_plan=plan_time_hash,
             )
         ]
@@ -149,7 +157,6 @@ def test_template_helper_update_reverifies_hash_and_uses_options_flow() -> None:
 
     assert result.succeeded is True
     stored = backend.list_remote("template_number")[identity]
-    assert stored["name"] == "Zones 2"
     assert stored["state"] == "{{ 2 }}"
     # Options-flow update: same entry_id, never a recreate (I2 analog).
     assert backend.entry_id_for("template_number", identity) == entry_id_before
@@ -158,13 +165,15 @@ def test_template_helper_update_reverifies_hash_and_uses_options_flow() -> None:
 def test_template_helper_update_aborts_on_drift_since_plan() -> None:
     backend = FakeBackend()
     identity = backend.create(
-        "template_number", {"unique_id": "zones", "name": "Zones", "state": "{{ 1 }}"}
+        "template_number", {"name": "Zones", "state": "{{ 1 }}", "set_value": _SET_VALUE}
     )
     plan_time_hash = sha256_hash(backend.list_remote("template_number")[identity])
 
     # Remote drifts (a UI edit) after plan, before apply.
     backend.update(
-        "template_number", identity, {"unique_id": "zones", "name": "Drifted", "state": "{{ 9 }}"}
+        "template_number",
+        identity,
+        {"name": "Zones", "state": "{{ 9 }}", "set_value": _SET_VALUE},
     )
     backend.reset_write_tracking()
 
@@ -174,7 +183,7 @@ def test_template_helper_update_aborts_on_drift_since_plan() -> None:
                 object_key="template_number:zones",
                 kind="template_number",
                 action=PlanAction.UPDATE,
-                local={"unique_id": "zones", "name": "Local Edit", "state": "{{ 2 }}"},
+                local={"name": "Zones", "state": "{{ 2 }}", "set_value": _SET_VALUE},
                 remote_hash_at_plan=plan_time_hash,
             )
         ]
@@ -184,13 +193,13 @@ def test_template_helper_update_aborts_on_drift_since_plan() -> None:
 
     assert result.succeeded is False
     assert backend.writes_since_reset() == 0
-    assert backend.list_remote("template_number")[identity]["name"] == "Drifted"
+    assert backend.list_remote("template_number")[identity]["state"] == "{{ 9 }}"
 
 
 def test_template_helper_delete_reverifies_and_removes_entry() -> None:
     backend = FakeBackend()
     identity = backend.create(
-        "template_number", {"unique_id": "zones", "name": "Zones", "state": "{{ 1 }}"}
+        "template_number", {"name": "Zones", "state": "{{ 1 }}", "set_value": _SET_VALUE}
     )
     plan_time_hash = sha256_hash(backend.list_remote("template_number")[identity])
 
@@ -200,7 +209,7 @@ def test_template_helper_delete_reverifies_and_removes_entry() -> None:
                 object_key="template_number:zones",
                 kind="template_number",
                 action=PlanAction.DELETE,
-                remote={"unique_id": "zones", "name": "Zones", "state": "{{ 1 }}"},
+                remote={"name": "Zones", "state": "{{ 1 }}", "set_value": _SET_VALUE},
                 remote_hash_at_plan=plan_time_hash,
             )
         ]
@@ -218,7 +227,8 @@ def test_apply_rollback_at_each_step_including_template_helper(fail_at: str) -> 
     backend = FakeBackend()
     helper_id = backend.create("input_boolean", {"name": "Helper Original"})
     template_id = backend.create(
-        "template_number", {"unique_id": "zones", "name": "Template Original", "state": "{{ 1 }}"}
+        "template_number",
+        {"name": "Template Original", "state": "{{ 1 }}", "set_value": _SET_VALUE},
     )
     script_id = backend.create("script", {"alias": "Script Original"})
     automation_id = backend.create("automation", {"id": "a1", "alias": "Automation Original"})
@@ -254,9 +264,9 @@ def test_apply_rollback_at_each_step_including_template_helper(fail_at: str) -> 
                 "template_number",
                 template_id,
                 {
-                    "unique_id": template_id,
-                    "name": "FAIL" if fail_at == "template_number" else "Template Updated",
-                    "state": "{{ 2 }}",
+                    "name": "Template Original",
+                    "state": "FAIL" if fail_at == "template_number" else "{{ 2 }}",
+                    "set_value": _SET_VALUE,
                 },
             ),
             make_entry(
@@ -277,7 +287,11 @@ def test_apply_rollback_at_each_step_including_template_helper(fail_at: str) -> 
     original_update = backend.update
 
     def failing_update(kind: str, identity: str, config: dict[str, Any]) -> None:
-        if config.get("name") == "FAIL" or config.get("alias") == "FAIL":
+        if (
+            config.get("name") == "FAIL"
+            or config.get("alias") == "FAIL"
+            or config.get("state") == "FAIL"
+        ):
             raise RuntimeError("simulated backend failure")
         original_update(kind, identity, config)
 

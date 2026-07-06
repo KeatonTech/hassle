@@ -1815,6 +1815,16 @@ Golden case: `fixtures/dsl/template_helper_declarations/`.
 """Golden case: template-helper declarations (M10) for all four template
 domains. The owner's driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
+
+Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
+real HA's config flow rejects an unrecognized `unique_id` key outright.
+Identity is derived from `name` (slugified): "Active HVAC Zones" ->
+`template_number:active_hvac_zones`.
+
+`template_number`/`template_select` require a write-target action sequence
+(`set_value=`/`select_option=`) -- HA's form schema rejects the submission
+without one (a number/select needs somewhere to send a written value; a
+sensor/binary_sensor is read-only and needs only `state=`).
 """
 
 from hassle import (
@@ -1825,32 +1835,38 @@ from hassle import (
 )
 
 template_number(
-    id="active_hvac_zones",
     name="Active HVAC Zones",
     state="{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    set_value={
+        "action": "input_number.set_value",
+        "target": {"entity_id": "input_number.hvac_zone_override"},
+        "data": {"value": "{{ value }}"},
+    },
     min=0,
     max=8,
     step=1,
     unit_of_measurement="zones",
 )
 template_sensor(
-    id="average_temp",
     name="Average Temp",
     state="{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
     unit_of_measurement="°C",
     device_class="temperature",
 )
 template_binary_sensor(
-    id="any_door_open",
     name="Any Door Open",
     state="{{ is_state('binary_sensor.front_door', 'on') }}",
     device_class="door",
 )
 template_select(
-    id="house_scene",
     name="House Scene",
     state="{{ states('input_select.house_mode') }}",
     options="{{ ['home', 'away', 'night'] }}",
+    select_option={
+        "action": "input_select.select_option",
+        "target": {"entity_id": "input_select.house_mode"},
+        "data": {"option": "{{ option }}"},
+    },
 )
 ```
 
@@ -1861,29 +1877,43 @@ Compiles to (canonical IR / stored HA shape):
   "template_binary_sensor:any_door_open": {
     "device_class": "door",
     "name": "Any Door Open",
-    "state": "{{ is_state('binary_sensor.front_door', 'on') }}",
-    "unique_id": "any_door_open"
+    "state": "{{ is_state('binary_sensor.front_door', 'on') }}"
   },
   "template_number:active_hvac_zones": {
     "max": 8,
     "min": 0,
     "name": "Active HVAC Zones",
+    "set_value": {
+      "action": "input_number.set_value",
+      "data": {
+        "value": "{{ value }}"
+      },
+      "target": {
+        "entity_id": "input_number.hvac_zone_override"
+      }
+    },
     "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
     "step": 1,
-    "unique_id": "active_hvac_zones",
     "unit_of_measurement": "zones"
   },
   "template_select:house_scene": {
     "name": "House Scene",
     "options": "{{ ['home', 'away', 'night'] }}",
-    "state": "{{ states('input_select.house_mode') }}",
-    "unique_id": "house_scene"
+    "select_option": {
+      "action": "input_select.select_option",
+      "data": {
+        "option": "{{ option }}"
+      },
+      "target": {
+        "entity_id": "input_select.house_mode"
+      }
+    },
+    "state": "{{ states('input_select.house_mode') }}"
   },
   "template_sensor:average_temp": {
     "device_class": "temperature",
     "name": "Average Temp",
     "state": "{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
-    "unique_id": "average_temp",
     "unit_of_measurement": "°C"
   }
 }
@@ -1897,6 +1927,16 @@ Golden case: `fixtures/dsl/template_helper_declarations/`.
 """Golden case: template-helper declarations (M10) for all four template
 domains. The owner's driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
+
+Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
+real HA's config flow rejects an unrecognized `unique_id` key outright.
+Identity is derived from `name` (slugified): "Active HVAC Zones" ->
+`template_number:active_hvac_zones`.
+
+`template_number`/`template_select` require a write-target action sequence
+(`set_value=`/`select_option=`) -- HA's form schema rejects the submission
+without one (a number/select needs somewhere to send a written value; a
+sensor/binary_sensor is read-only and needs only `state=`).
 """
 
 from hassle import (
@@ -1907,32 +1947,38 @@ from hassle import (
 )
 
 template_number(
-    id="active_hvac_zones",
     name="Active HVAC Zones",
     state="{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    set_value={
+        "action": "input_number.set_value",
+        "target": {"entity_id": "input_number.hvac_zone_override"},
+        "data": {"value": "{{ value }}"},
+    },
     min=0,
     max=8,
     step=1,
     unit_of_measurement="zones",
 )
 template_sensor(
-    id="average_temp",
     name="Average Temp",
     state="{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
     unit_of_measurement="°C",
     device_class="temperature",
 )
 template_binary_sensor(
-    id="any_door_open",
     name="Any Door Open",
     state="{{ is_state('binary_sensor.front_door', 'on') }}",
     device_class="door",
 )
 template_select(
-    id="house_scene",
     name="House Scene",
     state="{{ states('input_select.house_mode') }}",
     options="{{ ['home', 'away', 'night'] }}",
+    select_option={
+        "action": "input_select.select_option",
+        "target": {"entity_id": "input_select.house_mode"},
+        "data": {"option": "{{ option }}"},
+    },
 )
 ```
 
@@ -1943,29 +1989,43 @@ Compiles to (canonical IR / stored HA shape):
   "template_binary_sensor:any_door_open": {
     "device_class": "door",
     "name": "Any Door Open",
-    "state": "{{ is_state('binary_sensor.front_door', 'on') }}",
-    "unique_id": "any_door_open"
+    "state": "{{ is_state('binary_sensor.front_door', 'on') }}"
   },
   "template_number:active_hvac_zones": {
     "max": 8,
     "min": 0,
     "name": "Active HVAC Zones",
+    "set_value": {
+      "action": "input_number.set_value",
+      "data": {
+        "value": "{{ value }}"
+      },
+      "target": {
+        "entity_id": "input_number.hvac_zone_override"
+      }
+    },
     "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
     "step": 1,
-    "unique_id": "active_hvac_zones",
     "unit_of_measurement": "zones"
   },
   "template_select:house_scene": {
     "name": "House Scene",
     "options": "{{ ['home', 'away', 'night'] }}",
-    "state": "{{ states('input_select.house_mode') }}",
-    "unique_id": "house_scene"
+    "select_option": {
+      "action": "input_select.select_option",
+      "data": {
+        "option": "{{ option }}"
+      },
+      "target": {
+        "entity_id": "input_select.house_mode"
+      }
+    },
+    "state": "{{ states('input_select.house_mode') }}"
   },
   "template_sensor:average_temp": {
     "device_class": "temperature",
     "name": "Average Temp",
     "state": "{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
-    "unique_id": "average_temp",
     "unit_of_measurement": "°C"
   }
 }
@@ -1979,6 +2039,16 @@ Golden case: `fixtures/dsl/template_helper_declarations/`.
 """Golden case: template-helper declarations (M10) for all four template
 domains. The owner's driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
+
+Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
+real HA's config flow rejects an unrecognized `unique_id` key outright.
+Identity is derived from `name` (slugified): "Active HVAC Zones" ->
+`template_number:active_hvac_zones`.
+
+`template_number`/`template_select` require a write-target action sequence
+(`set_value=`/`select_option=`) -- HA's form schema rejects the submission
+without one (a number/select needs somewhere to send a written value; a
+sensor/binary_sensor is read-only and needs only `state=`).
 """
 
 from hassle import (
@@ -1989,32 +2059,38 @@ from hassle import (
 )
 
 template_number(
-    id="active_hvac_zones",
     name="Active HVAC Zones",
     state="{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    set_value={
+        "action": "input_number.set_value",
+        "target": {"entity_id": "input_number.hvac_zone_override"},
+        "data": {"value": "{{ value }}"},
+    },
     min=0,
     max=8,
     step=1,
     unit_of_measurement="zones",
 )
 template_sensor(
-    id="average_temp",
     name="Average Temp",
     state="{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
     unit_of_measurement="°C",
     device_class="temperature",
 )
 template_binary_sensor(
-    id="any_door_open",
     name="Any Door Open",
     state="{{ is_state('binary_sensor.front_door', 'on') }}",
     device_class="door",
 )
 template_select(
-    id="house_scene",
     name="House Scene",
     state="{{ states('input_select.house_mode') }}",
     options="{{ ['home', 'away', 'night'] }}",
+    select_option={
+        "action": "input_select.select_option",
+        "target": {"entity_id": "input_select.house_mode"},
+        "data": {"option": "{{ option }}"},
+    },
 )
 ```
 
@@ -2025,29 +2101,43 @@ Compiles to (canonical IR / stored HA shape):
   "template_binary_sensor:any_door_open": {
     "device_class": "door",
     "name": "Any Door Open",
-    "state": "{{ is_state('binary_sensor.front_door', 'on') }}",
-    "unique_id": "any_door_open"
+    "state": "{{ is_state('binary_sensor.front_door', 'on') }}"
   },
   "template_number:active_hvac_zones": {
     "max": 8,
     "min": 0,
     "name": "Active HVAC Zones",
+    "set_value": {
+      "action": "input_number.set_value",
+      "data": {
+        "value": "{{ value }}"
+      },
+      "target": {
+        "entity_id": "input_number.hvac_zone_override"
+      }
+    },
     "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
     "step": 1,
-    "unique_id": "active_hvac_zones",
     "unit_of_measurement": "zones"
   },
   "template_select:house_scene": {
     "name": "House Scene",
     "options": "{{ ['home', 'away', 'night'] }}",
-    "state": "{{ states('input_select.house_mode') }}",
-    "unique_id": "house_scene"
+    "select_option": {
+      "action": "input_select.select_option",
+      "data": {
+        "option": "{{ option }}"
+      },
+      "target": {
+        "entity_id": "input_select.house_mode"
+      }
+    },
+    "state": "{{ states('input_select.house_mode') }}"
   },
   "template_sensor:average_temp": {
     "device_class": "temperature",
     "name": "Average Temp",
     "state": "{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
-    "unique_id": "average_temp",
     "unit_of_measurement": "°C"
   }
 }
@@ -2061,6 +2151,16 @@ Golden case: `fixtures/dsl/template_helper_declarations/`.
 """Golden case: template-helper declarations (M10) for all four template
 domains. The owner's driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
+
+Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
+real HA's config flow rejects an unrecognized `unique_id` key outright.
+Identity is derived from `name` (slugified): "Active HVAC Zones" ->
+`template_number:active_hvac_zones`.
+
+`template_number`/`template_select` require a write-target action sequence
+(`set_value=`/`select_option=`) -- HA's form schema rejects the submission
+without one (a number/select needs somewhere to send a written value; a
+sensor/binary_sensor is read-only and needs only `state=`).
 """
 
 from hassle import (
@@ -2071,32 +2171,38 @@ from hassle import (
 )
 
 template_number(
-    id="active_hvac_zones",
     name="Active HVAC Zones",
     state="{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    set_value={
+        "action": "input_number.set_value",
+        "target": {"entity_id": "input_number.hvac_zone_override"},
+        "data": {"value": "{{ value }}"},
+    },
     min=0,
     max=8,
     step=1,
     unit_of_measurement="zones",
 )
 template_sensor(
-    id="average_temp",
     name="Average Temp",
     state="{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
     unit_of_measurement="°C",
     device_class="temperature",
 )
 template_binary_sensor(
-    id="any_door_open",
     name="Any Door Open",
     state="{{ is_state('binary_sensor.front_door', 'on') }}",
     device_class="door",
 )
 template_select(
-    id="house_scene",
     name="House Scene",
     state="{{ states('input_select.house_mode') }}",
     options="{{ ['home', 'away', 'night'] }}",
+    select_option={
+        "action": "input_select.select_option",
+        "target": {"entity_id": "input_select.house_mode"},
+        "data": {"option": "{{ option }}"},
+    },
 )
 ```
 
@@ -2107,29 +2213,43 @@ Compiles to (canonical IR / stored HA shape):
   "template_binary_sensor:any_door_open": {
     "device_class": "door",
     "name": "Any Door Open",
-    "state": "{{ is_state('binary_sensor.front_door', 'on') }}",
-    "unique_id": "any_door_open"
+    "state": "{{ is_state('binary_sensor.front_door', 'on') }}"
   },
   "template_number:active_hvac_zones": {
     "max": 8,
     "min": 0,
     "name": "Active HVAC Zones",
+    "set_value": {
+      "action": "input_number.set_value",
+      "data": {
+        "value": "{{ value }}"
+      },
+      "target": {
+        "entity_id": "input_number.hvac_zone_override"
+      }
+    },
     "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
     "step": 1,
-    "unique_id": "active_hvac_zones",
     "unit_of_measurement": "zones"
   },
   "template_select:house_scene": {
     "name": "House Scene",
     "options": "{{ ['home', 'away', 'night'] }}",
-    "state": "{{ states('input_select.house_mode') }}",
-    "unique_id": "house_scene"
+    "select_option": {
+      "action": "input_select.select_option",
+      "data": {
+        "option": "{{ option }}"
+      },
+      "target": {
+        "entity_id": "input_select.house_mode"
+      }
+    },
+    "state": "{{ states('input_select.house_mode') }}"
   },
   "template_sensor:average_temp": {
     "device_class": "temperature",
     "name": "Average Temp",
     "state": "{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
-    "unique_id": "average_temp",
     "unit_of_measurement": "°C"
   }
 }

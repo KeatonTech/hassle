@@ -47,6 +47,19 @@ def test_object_kinds_cover_automation_script_and_helpers() -> None:
 
 
 def test_object_key_for_every_template_domain() -> None:
+    # Identity redesign (docs/ha-api-notes.md §26.6): there is no `unique_id`
+    # -- the flow's real form schema rejects it as an unrecognized key.
+    # Identity is derived from `name` (slugified), mirroring the storage
+    # helpers' "id is a slug of name" rule.
     for domain in TEMPLATE_DOMAINS:
-        obj = parse({"unique_id": f"{domain}_thing", "name": "X"}, kind=domain)
-        assert obj.object_key() == f"{domain}:{domain}_thing"
+        obj = parse({"name": "Some Thing"}, kind=domain)
+        assert obj.object_key() == f"{domain}:some_thing"
+
+
+def test_object_key_for_template_domain_uses_key_hint_when_supplied() -> None:
+    # A key_hint (read-back path: DirectBackend/FakeBackend re-derive the
+    # identity from the entry's title and pass it as key_hint, mirroring
+    # how a script's extrinsic object_id is supplied) takes priority over
+    # re-deriving from `name`.
+    obj = parse({"name": "Some Thing"}, kind="template_number", key_hint="some_thing")
+    assert obj.object_key() == "template_number:some_thing"

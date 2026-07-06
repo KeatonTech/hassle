@@ -23,19 +23,32 @@ Two behaviors mirror real HA exactly (docs/ha-api-notes.md §10.1, §11):
   `Backend` Protocol's `update`/`delete` signatures are domain-shape-agnostic.
 
 **M10: config-entry template-helper domains (`TEMPLATE_DOMAINS`)** are modeled
-on the same four `Backend` methods, but internally drive a simulated
-`config_entries/flow` (create — menu step `step_id="user"` choosing the
-template type, then a form step collecting fields, `type: "create_entry"`
-result) / `config_entries/options/flow` (update — one form step re-collecting
-the same fields, `type: "create_entry"` result merges into `entry.options`)
-instead of the storage-collection WS API (docs/ha-api-notes.md §26 records the
-real shapes this models; CI's integration suite is the authoritative
-verification against real HA per MILESTONES M10). Delete is config-entry
-removal (`config_entries/remove`). Object identity is the declared
-`unique_id`; the config entry's HA-assigned `entry_id` is tracked internally
-(`self._entry_ids`) exactly the way a real sync engine would persist it in the
-manifest — never in the stored config body itself (module docstring above,
-docs/backend.md's config-entry addendum).
+on the same four `Backend` methods, but internally drive a simulated REST
+config-entry flow (create — menu step `step_id="user"` choosing the template
+type, then a form step collecting fields, `type: "create_entry"` result) /
+options-flow (update — one form step re-collecting the same fields,
+`type: "create_entry"` result merges into `entry.options`) instead of the
+storage-collection WS API (docs/ha-api-notes.md §26 records the real shapes
+this models — flow/options-flow/removal are REST, §26.0; CI's integration
+suite is the authoritative verification against real HA per MILESTONES M10).
+Delete is config-entry removal (REST `DELETE .../entry/{entry_id}`).
+
+**Identity (redesigned 2026-07-05, docs/ha-api-notes.md §26.6): there is no
+`unique_id`.** CI found the real form schema rejects an unrecognized
+`unique_id` key outright. Object identity is derived from the submitted
+`name` (slugified) -- mirroring the storage helpers' "id is a slug of name"
+rule, except here it is the ONLY identity source. The config entry's
+HA-assigned `entry_id` is tracked internally (`self._entry_ids`) exactly the
+way a real sync engine would persist it in the manifest — never in the
+stored config body itself (module docstring above, docs/backend.md's
+config-entry addendum).
+
+**Required write-target fields (CI finding, docs/ha-api-notes.md §26.6):** a
+`template_number`'s form requires `set_value`; a `template_select`'s form
+requires `select_option` (alongside `options`). Missing either raises
+`ConfigEntryFlowError`, mirroring HA's real `400 {"errors": {"set_value":
+"required key not provided"}}` rejection (modeled as an exception here since
+`create`/`update` are single-shot, not step-by-step — module note below).
 """
 
 from __future__ import annotations
@@ -57,6 +70,28 @@ _TEMPLATE_FLOW_TYPE = {
     "template_binary_sensor": "binary_sensor",
     "template_select": "select",
 }
+
+# Fields HA's form schema requires beyond `name`/`state` (docs/ha-api-notes.md
+# §26.6): a template number needs a write target (`set_value`); a template
+# select needs both the option list (`options`) and its write target
+# (`select_option`). Sensor/binary_sensor are read-only -- no extra required
+# field.
+_TEMPLATE_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    "template_number": ("set_value",),
+    "template_sensor": (),
+    "template_binary_sensor": (),
+    "template_select": ("options", "select_option"),
+}
+
+
+def _check_required_fields(kind: str, config: dict[str, Any]) -> None:
+    missing = [f for f in _TEMPLATE_REQUIRED_FIELDS[kind] if config.get(f) is None]
+    if missing:
+        raise ConfigEntryFlowError(
+            f"{kind} form rejected: required key(s) not provided: {missing} "
+            f"(mirrors HA's real 400 {{'errors': {{'<field>': 'required key not "
+            "provided'}}}} form-schema rejection, docs/ha-api-notes.md §26.6)"
+        )
 
 
 def _empty_str_list() -> list[str]:
@@ -99,7 +134,7 @@ class FakeBackend:
         self.ha_version: str | None = None
         # M10: config-entry template-helper bookkeeping. `entry_id` is
         # HA-side identity, tracked the way a real manifest would (never in
-        # the stored config body) -- (kind, unique_id) -> entry_id.
+        # the stored config body) -- (kind, name-derived identity) -> entry_id.
         self._entry_ids: dict[tuple[str, str], str] = {}
         self._entry_id_counter = 0
         # Every simulated flow step this backend has driven, in order --
@@ -159,28 +194,27 @@ class FakeBackend:
     # failed identically on real HA stable+dev with "Unknown command"): a
     # menu step choosing the template type, then a form step collecting
     # fields, ending in a flat `type: "create_entry"` body whose `options` is
-    # exactly what the integration stores. Identity is the declared
-    # `unique_id`; the flow's `create_entry` result carries a fresh
-    # `entry_id` HA assigns (never caller-supplied, mirrors §17.5's "creation
-    # assigns identity" rule for storage helpers) -- tracked here, never in
-    # the stored options body.
+    # exactly what the integration stores. Identity is derived from `name`
+    # (§26.6 -- there is no settable `unique_id`); the flow's `create_entry`
+    # result carries a fresh `entry_id` HA assigns (never caller-supplied,
+    # mirrors §17.5's "creation assigns identity" rule for storage helpers)
+    # -- tracked here, never in the stored options body.
 
     def _next_entry_id(self) -> str:
         self._entry_id_counter += 1
         return f"entry_{self._entry_id_counter:04d}"
 
     def _create_via_flow(self, kind: str, config: dict[str, Any]) -> str:
-        unique_id = config.get("unique_id")
-        if not unique_id:
-            raise ValueError(
-                f"{kind} config has no 'unique_id' (required to start the config-entry flow)"
-            )
-        identity = str(unique_id)
+        name = config.get("name")
+        if not name:
+            raise ValueError(f"{kind} config has no 'name' (required to derive identity/title)")
+        identity = _slugify(str(name))
         if (kind, identity) in self._entry_ids:
             raise ConfigEntryFlowError(
-                f"a {kind} config entry with unique_id {identity!r} already exists "
+                f"a {kind} config entry titled {name!r} already exists "
                 "(CREATE-collision -- the flow would need to be aborted, not overwrite)"
             )
+        _check_required_fields(kind, config)
 
         flow_id = f"flow_{self._next_entry_id()}"
         menu_step = FlowStep(
@@ -191,30 +225,34 @@ class FakeBackend:
         )
         self.flow_log.append(menu_step)
 
+        # `unique_id` is NEVER part of the form's data_schema/submission
+        # (docs/ha-api-notes.md §26.6: real HA rejects it as an extra key).
         form_step = FlowStep(
             flow_id=flow_id,
             type="form",
             step_id=_TEMPLATE_FLOW_TYPE[kind],
-            data_schema=sorted(k for k in config if k != "unique_id"),
+            data_schema=sorted(config),
         )
         self.flow_log.append(form_step)
 
-        options = {k: v for k, v in config.items() if k != "unique_id"}
+        options = dict(config)
         entry_id = self._next_entry_id()
         # Flat body (no nested "result" wrapper) -- the REST create_entry
         # response is `{"type": "create_entry", "flow_id", "entry_id",
-        # "options", ...}` directly, not a WS-style `{"result": {...}}`
-        # envelope (docs/ha-api-notes.md §26.0/§26.1 correction).
+        # "title", "options", ...}` directly, not a WS-style
+        # `{"result": {...}}` envelope (docs/ha-api-notes.md §26.0/§26.1).
+        # `title` is what HA actually sets from the submitted `name` -- the
+        # wire-level correlator now that there is no settable unique_id
+        # (§26.6).
         result_step = FlowStep(
             flow_id=flow_id,
             type="create_entry",
-            result={"entry_id": entry_id, "options": dict(options), "unique_id": identity},
+            result={"entry_id": entry_id, "title": str(name), "options": dict(options)},
         )
         self.flow_log.append(result_step)
 
         self._entry_ids[(kind, identity)] = entry_id
-        stored = {"unique_id": identity, **options}
-        self._store[kind][identity] = stored
+        self._store[kind][identity] = options
         self._writes += 1
         return identity
 
@@ -225,16 +263,17 @@ class FakeBackend:
                 f"no config entry tracked for {kind}:{identity} -- an UPDATE must "
                 "target an existing entry (options-flow update, never a recreate, I2 analog)"
             )
+        _check_required_fields(kind, config)
         flow_id = f"optflow_{entry_id}"
         form_step = FlowStep(
             flow_id=flow_id,
             type="form",
             step_id=_TEMPLATE_FLOW_TYPE[kind],
-            data_schema=sorted(k for k in config if k != "unique_id"),
+            data_schema=sorted(config),
         )
         self.flow_log.append(form_step)
 
-        options = {k: v for k, v in config.items() if k != "unique_id"}
+        options = dict(config)
         result_step = FlowStep(
             flow_id=flow_id,
             type="create_entry",
@@ -243,9 +282,13 @@ class FakeBackend:
         self.flow_log.append(result_step)
 
         # entry_id is UNCHANGED (I2 analog: an options-update never recreates
-        # the entry) -- only the options body is replaced.
-        stored = {"unique_id": identity, **options}
-        self._store[kind][identity] = stored
+        # the entry) -- only the options body is replaced. Note: real HA's
+        # options-flow submission for `template` still cannot rename the
+        # entry's title via a `name` change without special handling; Hassle
+        # treats the object key (identity) as fixed once created (matching
+        # every other kind -- a rename is a delete+recreate under a new key,
+        # never an in-place identity change, I2's spirit).
+        self._store[kind][identity] = options
         self._writes += 1
 
     def entry_id_for(self, kind: str, identity: str) -> str | None:
@@ -283,9 +326,9 @@ class FakeBackend:
         self._store[kind].pop(identity, None)
         if kind in TEMPLATE_DOMAINS:
             # Config entry removal (docs/ha-api-notes.md §26): the entry_id
-            # is retired -- a later re-CREATE under the same unique_id gets a
-            # FRESH entry_id (the "entry_id-changes" rollback caveat, DESIGN
-            # §13 amendment / MILESTONES M10 test 4).
+            # is retired -- a later re-CREATE under the same name-derived
+            # identity gets a FRESH entry_id (the "entry_id-changes" rollback
+            # caveat, DESIGN §13 amendment / MILESTONES M10 test 4).
             self._entry_ids.pop((kind, identity), None)
         self._writes += 1
 
