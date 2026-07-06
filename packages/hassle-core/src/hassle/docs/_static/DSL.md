@@ -1807,6 +1807,334 @@ Compiles to (canonical IR / stored HA shape):
 }
 ```
 
+### `template_number`
+
+Golden case: `fixtures/dsl/template_helper_declarations/`.
+
+```python
+"""Golden case: template-helper declarations (M10) for all four template
+domains. The owner's driving case is `template_number` (e.g.
+`number.active_hvac_zones`).
+"""
+
+from hassle import (
+    template_binary_sensor,
+    template_number,
+    template_select,
+    template_sensor,
+)
+
+template_number(
+    id="active_hvac_zones",
+    name="Active HVAC Zones",
+    state="{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    min=0,
+    max=8,
+    step=1,
+    unit_of_measurement="zones",
+)
+template_sensor(
+    id="average_temp",
+    name="Average Temp",
+    state="{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
+    unit_of_measurement="°C",
+    device_class="temperature",
+)
+template_binary_sensor(
+    id="any_door_open",
+    name="Any Door Open",
+    state="{{ is_state('binary_sensor.front_door', 'on') }}",
+    device_class="door",
+)
+template_select(
+    id="house_scene",
+    name="House Scene",
+    state="{{ states('input_select.house_mode') }}",
+    options="{{ ['home', 'away', 'night'] }}",
+)
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "template_binary_sensor:any_door_open": {
+    "device_class": "door",
+    "name": "Any Door Open",
+    "state": "{{ is_state('binary_sensor.front_door', 'on') }}",
+    "unique_id": "any_door_open"
+  },
+  "template_number:active_hvac_zones": {
+    "max": 8,
+    "min": 0,
+    "name": "Active HVAC Zones",
+    "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    "step": 1,
+    "unique_id": "active_hvac_zones",
+    "unit_of_measurement": "zones"
+  },
+  "template_select:house_scene": {
+    "name": "House Scene",
+    "options": "{{ ['home', 'away', 'night'] }}",
+    "state": "{{ states('input_select.house_mode') }}",
+    "unique_id": "house_scene"
+  },
+  "template_sensor:average_temp": {
+    "device_class": "temperature",
+    "name": "Average Temp",
+    "state": "{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
+    "unique_id": "average_temp",
+    "unit_of_measurement": "°C"
+  }
+}
+```
+
+### `template_sensor`
+
+Golden case: `fixtures/dsl/template_helper_declarations/`.
+
+```python
+"""Golden case: template-helper declarations (M10) for all four template
+domains. The owner's driving case is `template_number` (e.g.
+`number.active_hvac_zones`).
+"""
+
+from hassle import (
+    template_binary_sensor,
+    template_number,
+    template_select,
+    template_sensor,
+)
+
+template_number(
+    id="active_hvac_zones",
+    name="Active HVAC Zones",
+    state="{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    min=0,
+    max=8,
+    step=1,
+    unit_of_measurement="zones",
+)
+template_sensor(
+    id="average_temp",
+    name="Average Temp",
+    state="{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
+    unit_of_measurement="°C",
+    device_class="temperature",
+)
+template_binary_sensor(
+    id="any_door_open",
+    name="Any Door Open",
+    state="{{ is_state('binary_sensor.front_door', 'on') }}",
+    device_class="door",
+)
+template_select(
+    id="house_scene",
+    name="House Scene",
+    state="{{ states('input_select.house_mode') }}",
+    options="{{ ['home', 'away', 'night'] }}",
+)
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "template_binary_sensor:any_door_open": {
+    "device_class": "door",
+    "name": "Any Door Open",
+    "state": "{{ is_state('binary_sensor.front_door', 'on') }}",
+    "unique_id": "any_door_open"
+  },
+  "template_number:active_hvac_zones": {
+    "max": 8,
+    "min": 0,
+    "name": "Active HVAC Zones",
+    "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    "step": 1,
+    "unique_id": "active_hvac_zones",
+    "unit_of_measurement": "zones"
+  },
+  "template_select:house_scene": {
+    "name": "House Scene",
+    "options": "{{ ['home', 'away', 'night'] }}",
+    "state": "{{ states('input_select.house_mode') }}",
+    "unique_id": "house_scene"
+  },
+  "template_sensor:average_temp": {
+    "device_class": "temperature",
+    "name": "Average Temp",
+    "state": "{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
+    "unique_id": "average_temp",
+    "unit_of_measurement": "°C"
+  }
+}
+```
+
+### `template_binary_sensor`
+
+Golden case: `fixtures/dsl/template_helper_declarations/`.
+
+```python
+"""Golden case: template-helper declarations (M10) for all four template
+domains. The owner's driving case is `template_number` (e.g.
+`number.active_hvac_zones`).
+"""
+
+from hassle import (
+    template_binary_sensor,
+    template_number,
+    template_select,
+    template_sensor,
+)
+
+template_number(
+    id="active_hvac_zones",
+    name="Active HVAC Zones",
+    state="{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    min=0,
+    max=8,
+    step=1,
+    unit_of_measurement="zones",
+)
+template_sensor(
+    id="average_temp",
+    name="Average Temp",
+    state="{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
+    unit_of_measurement="°C",
+    device_class="temperature",
+)
+template_binary_sensor(
+    id="any_door_open",
+    name="Any Door Open",
+    state="{{ is_state('binary_sensor.front_door', 'on') }}",
+    device_class="door",
+)
+template_select(
+    id="house_scene",
+    name="House Scene",
+    state="{{ states('input_select.house_mode') }}",
+    options="{{ ['home', 'away', 'night'] }}",
+)
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "template_binary_sensor:any_door_open": {
+    "device_class": "door",
+    "name": "Any Door Open",
+    "state": "{{ is_state('binary_sensor.front_door', 'on') }}",
+    "unique_id": "any_door_open"
+  },
+  "template_number:active_hvac_zones": {
+    "max": 8,
+    "min": 0,
+    "name": "Active HVAC Zones",
+    "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    "step": 1,
+    "unique_id": "active_hvac_zones",
+    "unit_of_measurement": "zones"
+  },
+  "template_select:house_scene": {
+    "name": "House Scene",
+    "options": "{{ ['home', 'away', 'night'] }}",
+    "state": "{{ states('input_select.house_mode') }}",
+    "unique_id": "house_scene"
+  },
+  "template_sensor:average_temp": {
+    "device_class": "temperature",
+    "name": "Average Temp",
+    "state": "{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
+    "unique_id": "average_temp",
+    "unit_of_measurement": "°C"
+  }
+}
+```
+
+### `template_select`
+
+Golden case: `fixtures/dsl/template_helper_declarations/`.
+
+```python
+"""Golden case: template-helper declarations (M10) for all four template
+domains. The owner's driving case is `template_number` (e.g.
+`number.active_hvac_zones`).
+"""
+
+from hassle import (
+    template_binary_sensor,
+    template_number,
+    template_select,
+    template_sensor,
+)
+
+template_number(
+    id="active_hvac_zones",
+    name="Active HVAC Zones",
+    state="{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    min=0,
+    max=8,
+    step=1,
+    unit_of_measurement="zones",
+)
+template_sensor(
+    id="average_temp",
+    name="Average Temp",
+    state="{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
+    unit_of_measurement="°C",
+    device_class="temperature",
+)
+template_binary_sensor(
+    id="any_door_open",
+    name="Any Door Open",
+    state="{{ is_state('binary_sensor.front_door', 'on') }}",
+    device_class="door",
+)
+template_select(
+    id="house_scene",
+    name="House Scene",
+    state="{{ states('input_select.house_mode') }}",
+    options="{{ ['home', 'away', 'night'] }}",
+)
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "template_binary_sensor:any_door_open": {
+    "device_class": "door",
+    "name": "Any Door Open",
+    "state": "{{ is_state('binary_sensor.front_door', 'on') }}",
+    "unique_id": "any_door_open"
+  },
+  "template_number:active_hvac_zones": {
+    "max": 8,
+    "min": 0,
+    "name": "Active HVAC Zones",
+    "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    "step": 1,
+    "unique_id": "active_hvac_zones",
+    "unit_of_measurement": "zones"
+  },
+  "template_select:house_scene": {
+    "name": "House Scene",
+    "options": "{{ ['home', 'away', 'night'] }}",
+    "state": "{{ states('input_select.house_mode') }}",
+    "unique_id": "house_scene"
+  },
+  "template_sensor:average_temp": {
+    "device_class": "temperature",
+    "name": "Average Temp",
+    "state": "{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
+    "unique_id": "average_temp",
+    "unit_of_measurement": "°C"
+  }
+}
+```
+
 ### `when`
 
 Golden case: `fixtures/dsl/state_delay_service/`.

@@ -20,3 +20,12 @@ def test_default_source_path_places_helpers_under_helpers_misc() -> None:
     assert default_source_path("input_boolean:guest_mode") == "helpers/misc.py"
     assert default_source_path("counter:door_opens") == "helpers/misc.py"
     assert default_source_path("timer:cooldown") == "helpers/misc.py"
+
+
+def test_default_source_path_places_template_helpers_under_helpers_misc() -> None:
+    # M10: config-entry template-helper domains use the same helpers/ misc
+    # placement rule as the nine storage-collection helper domains.
+    assert default_source_path("template_number:active_hvac_zones") == "helpers/misc.py"
+    assert default_source_path("template_sensor:average_temp") == "helpers/misc.py"
+    assert default_source_path("template_binary_sensor:any_door_open") == "helpers/misc.py"
+    assert default_source_path("template_select:house_scene") == "helpers/misc.py"

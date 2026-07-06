@@ -20,8 +20,14 @@ from typing import Any, cast
 from hassle.compiler.enums import MaxExceeded, Mode
 from hassle.decompiler.actions import INDENT, CallResolver, CallTarget, decompile_action
 from hassle.decompiler.exprs import decompile_condition, decompile_trigger, render_literal
-from hassle.ir.keys import HELPER_DOMAINS, slugify
-from hassle.ir.models import AutomationConfig, HelperConfig, IRObject, ScriptConfig
+from hassle.ir.keys import HELPER_DOMAINS, TEMPLATE_DOMAINS, slugify
+from hassle.ir.models import (
+    AutomationConfig,
+    HelperConfig,
+    IRObject,
+    ScriptConfig,
+    TemplateHelperConfig,
+)
 from hassle.ir.normalize import normalize_ha
 
 # Owner preference (DESIGN §7.3): a fresh whole-bundle decompile always emits a
@@ -594,6 +600,7 @@ def _script_source(obj: ScriptConfig, ident: str, resolver: CallResolver | None)
 
 
 _HELPER_BUILDER_NAMES = {domain: domain for domain in HELPER_DOMAINS}
+_TEMPLATE_HELPER_BUILDER_NAMES = {domain: domain for domain in TEMPLATE_DOMAINS}
 
 
 def _helper_source(obj: HelperConfig, ident: str) -> str:
@@ -601,6 +608,20 @@ def _helper_source(obj: HelperConfig, ident: str) -> str:
     domain = obj.kind()
     builder = _HELPER_BUILDER_NAMES[domain]
     kwargs = [f"{k}={render_literal(v)}" for k, v in body.items()]
+    return f"{ident} = {builder}({', '.join(kwargs)})\n"
+
+
+def _template_helper_source(obj: TemplateHelperConfig, ident: str) -> str:
+    """M10: like ``_helper_source`` but the stored ``unique_id`` field maps
+    back to the builder's ``id=`` kwarg (the builders' one deliberate name
+    difference from the stored body, docs/dsl-f3.md's M10 addition)."""
+    body = dict(obj.to_ha())
+    domain = obj.kind()
+    builder = _TEMPLATE_HELPER_BUILDER_NAMES[domain]
+    kwargs: list[str] = []
+    for key, value in body.items():
+        out_key = "id" if key == "unique_id" else key
+        kwargs.append(f"{out_key}={render_literal(value)}")
     return f"{ident} = {builder}({', '.join(kwargs)})\n"
 
 
@@ -656,6 +677,8 @@ def decompile_object(
         return _script_source(obj, ident, resolver)
     if isinstance(obj, HelperConfig):
         return _helper_source(obj, ident)
+    if isinstance(obj, TemplateHelperConfig):
+        return _template_helper_source(obj, ident)
     raise TypeError(f"cannot decompile object of type {type(obj).__name__}")  # pragma: no cover
 
 

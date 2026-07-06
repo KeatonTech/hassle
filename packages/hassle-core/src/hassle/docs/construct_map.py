@@ -67,6 +67,11 @@ NAME_TO_CASES: dict[str, list[str]] = {
     "counter": ["helper_declarations"],
     "timer": ["helper_declarations"],
     "schedule": ["helper_declarations"],
+    # M10: config-entry template-helper declarations
+    "template_number": ["template_helper_declarations"],
+    "template_sensor": ["template_helper_declarations"],
+    "template_binary_sensor": ["template_helper_declarations"],
+    "template_select": ["template_helper_declarations"],
     # recording verbs
     "when": ["state_delay_service"],
     "only_if": ["classic_conditions"],

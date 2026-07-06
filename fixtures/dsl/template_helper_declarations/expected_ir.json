@@ -1,0 +1,30 @@
+{
+  "template_number:active_hvac_zones": {
+    "unique_id": "active_hvac_zones",
+    "name": "Active HVAC Zones",
+    "state": "{{ states.climate | selectattr('state', 'ne', 'off') | list | count }}",
+    "min": 0,
+    "max": 8,
+    "step": 1,
+    "unit_of_measurement": "zones"
+  },
+  "template_sensor:average_temp": {
+    "unique_id": "average_temp",
+    "name": "Average Temp",
+    "state": "{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature"
+  },
+  "template_binary_sensor:any_door_open": {
+    "unique_id": "any_door_open",
+    "name": "Any Door Open",
+    "state": "{{ is_state('binary_sensor.front_door', 'on') }}",
+    "device_class": "door"
+  },
+  "template_select:house_scene": {
+    "unique_id": "house_scene",
+    "name": "House Scene",
+    "state": "{{ states('input_select.house_mode') }}",
+    "options": "{{ ['home', 'away', 'night'] }}"
+  }
+}

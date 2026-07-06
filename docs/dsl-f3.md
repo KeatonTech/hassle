@@ -165,6 +165,16 @@ bundles are written.
   returning an `EntityRef` usable as an entity id elsewhere:
   `input_boolean`, `input_number`, `input_select`, `input_text`,
   `input_datetime`, `input_button`, `counter`, `timer`, `schedule`.
+- **M10 ADDITION** — template-helper declarations (config-entry domain, DESIGN
+  §13's config-entry plugin, docs/ha-api-notes.md §26): `template_number(id=,
+  name=, state=, min=, max=, step=, unit_of_measurement=, icon=)`,
+  `template_sensor(id=, name=, state=, unit_of_measurement=, device_class=,
+  icon=)`, `template_binary_sensor(id=, name=, state=, device_class=, icon=)`,
+  `template_select(id=, name=, state=, options=, icon=)`. Same
+  import-and-reference pattern as the storage-collection helpers above
+  (returns an `EntityRef`); `id=` becomes the config entry's `unique_id` (the
+  object-key identity), never the HA-assigned `entry_id` (manifest-only,
+  docs/backend.md).
 
 ### Recording verbs
 - `when(*triggers)` — append triggers to the active automation. Fully

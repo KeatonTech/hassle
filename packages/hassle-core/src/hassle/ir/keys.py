@@ -3,6 +3,14 @@
 An object key is ``"<kind>:<identity>"`` — e.g. ``"automation:hall_light_on_motion"``,
 ``"script:movie_time"``, ``"input_boolean:guest_mode"``. This is the stable key
 used by the manifest and the plan/apply engine (DESIGN §8.1); it is frozen at F1.
+
+**M10 addition (additive, F1-compatible):** the object-key *format* itself is
+unchanged; ``OBJECT_KINDS`` (the enumerated domain vocabulary) widens to include
+the four config-entry template-helper domains (``TEMPLATE_DOMAINS``), exactly as
+it would for any future helper domain. See docs/ha-api-notes.md §26 and DESIGN
+§13's plugin-protocol amendment for the config-entry apply model these domains
+use (flow-based create/update, entry removal for delete) instead of the
+storage-collection WS API the nine ``HELPER_DOMAINS`` use.
 """
 
 from __future__ import annotations
@@ -24,8 +32,33 @@ HELPER_DOMAINS: frozenset[str] = frozenset(
     }
 )
 
-# Every object kind Hassle syncs in v1: automation, script, and the nine helpers.
-OBJECT_KINDS: frozenset[str] = frozenset({"automation", "script"}) | HELPER_DOMAINS
+# The template-helper config-entry domains (M10, DESIGN §13's "config-entry
+# helpers" future plugin, now built). Unlike HELPER_DOMAINS these are backed by
+# a config entry (`config_entries/flow` create, `config_entries/options/flow`
+# update, entry removal delete) rather than a WS storage collection — see
+# docs/ha-api-notes.md §26 and docs/backend.md's config-entry addendum. Object
+# identity is the declared unique id (not the HA-assigned `entry_id`, which
+# lives only in the manifest, never in the object key or DSL body).
+TEMPLATE_DOMAINS: frozenset[str] = frozenset(
+    {
+        "template_number",
+        "template_sensor",
+        "template_binary_sensor",
+        "template_select",
+    }
+)
+
+# Every config-entry-backed helper domain (M10). A separate set from
+# HELPER_DOMAINS (not folded in) because the apply mechanics genuinely differ
+# (flow-based vs. direct WS create/update/delete) even though both are
+# "helpers" from the DSL/bundle-placement point of view (DESIGN §5.7/§7.3).
+CONFIG_ENTRY_DOMAINS: frozenset[str] = TEMPLATE_DOMAINS
+
+# Every object kind Hassle syncs: automation, script, the nine storage-collection
+# helpers, and (M10) the config-entry template-helper domains.
+OBJECT_KINDS: frozenset[str] = (
+    frozenset({"automation", "script"}) | HELPER_DOMAINS | CONFIG_ENTRY_DOMAINS
+)
 
 
 def object_key(kind: str, identity: str) -> str:

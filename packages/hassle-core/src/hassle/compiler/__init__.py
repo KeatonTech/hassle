@@ -75,6 +75,13 @@ from hassle.compiler.helpers import (
     timer,
 )
 from hassle.compiler.macros import macro
+from hassle.compiler.template_helpers import (
+    declared_template_helpers,
+    template_binary_sensor,
+    template_number,
+    template_select,
+    template_sensor,
+)
 from hassle.compiler.math_expr import (
     E_,
     PI,
@@ -336,6 +343,10 @@ __all__ = [
     "tag",
     "tan",
     "template",
+    "template_binary_sensor",
+    "template_number",
+    "template_select",
+    "template_sensor",
     "time",
     "time_pattern",
     "timedelta_",

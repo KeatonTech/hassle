@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from hassle.compiler.bundle import CompileResult, compile_bundle
-from hassle.ir.keys import HELPER_DOMAINS
+from hassle.ir.keys import HELPER_DOMAINS, TEMPLATE_DOMAINS
 from hassle.ir.keys import slugify as _slugify
 from hassle.registry.snapshot import RegistrySnapshot
 from hassle.sync.plan import ObjectMap
@@ -78,6 +78,12 @@ def default_source_path(object_key: str, *, registry: RegistrySnapshot | None = 
     RESOLVED) actually imports. After this first placement the object stays
     wherever the user moves it (tracked by the manifest); this is only the
     *initial* landing spot for an object nobody has ever pulled before.
+
+    M10: the four config-entry template-helper domains (``TEMPLATE_DOMAINS``)
+    place under ``helpers/misc.py`` exactly like the nine storage-collection
+    helper domains -- same category/misc placement rules (DESIGN §5.7/§7.3
+    treat every helper domain the same way from the bundle-layout point of
+    view; only the sync/apply mechanics differ, docs/backend.md).
     """
     if registry is not None:
         categorized = _category_source_path(object_key, registry)
@@ -89,7 +95,7 @@ def default_source_path(object_key: str, *, registry: RegistrySnapshot | None = 
         return "automations/misc.py"
     if kind == "script":
         return "scripts/misc.py"
-    if kind in HELPER_DOMAINS:
+    if kind in HELPER_DOMAINS or kind in TEMPLATE_DOMAINS:
         return "helpers/misc.py"
     return f"{kind}s/misc.py"  # pragma: no cover - defensive, all OBJECT_KINDS covered above
 

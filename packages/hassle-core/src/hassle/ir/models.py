@@ -22,7 +22,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from hassle.ir.canonical import canonical_json, sha256_hash
-from hassle.ir.keys import HELPER_DOMAINS, object_key
+from hassle.ir.keys import HELPER_DOMAINS, TEMPLATE_DOMAINS, object_key
 
 
 class IRObject(BaseModel):
@@ -122,6 +122,42 @@ class HelperConfig(IRObject):
         return self.id if self.id is not None else self._key_id
 
 
+class TemplateHelperConfig(IRObject):
+    """A template-helper config-entry subentry body (one of the four
+    ``TEMPLATE_DOMAINS``, M10) — the "options" a template number/sensor/
+    binary_sensor/select config entry holds (DESIGN §13's config-entry helper
+    plugin).
+
+    Keyed by ``unique_id`` (the declared identity, frozen as the object-key
+    identity for this PR) — **not** the HA-assigned config `entry_id`, which
+    is HA-side identity only and lives in the manifest entry, never in this
+    body or the object key (mirrors I2: the entry_id is never changed once
+    assigned, and the DSL body never references it). ``name``/``state`` (the
+    Jinja template string) are the two fields every template domain shares;
+    domain-specific fields (``min``/``max``/``step``/``unit_of_measurement``
+    for number, ``options``/... for select) pass through via ``extra="allow"``
+    like every other IR model (I3).
+    """
+
+    unique_id: Any = None
+    name: Any = None
+
+    _domain: str = PrivateAttr(default="")
+
+    def attach_domain(self, domain: str) -> None:
+        """Attach the template domain (used by :func:`parse`)."""
+        self._domain = domain
+
+    def kind(self) -> str:
+        if not self._domain:
+            raise ValueError("TemplateHelperConfig has no domain; parse it with kind=<template domain>")
+        return self._domain
+
+    @property
+    def identity(self) -> str | None:
+        return self.unique_id if self.unique_id is not None else self._key_id
+
+
 def parse(config: dict[str, Any], *, kind: str, key_hint: str | None = None) -> IRObject:
     """Parse an HA config body into the IR model for ``kind``.
 
@@ -137,6 +173,10 @@ def parse(config: dict[str, Any], *, kind: str, key_hint: str | None = None) -> 
         helper = HelperConfig.model_validate(config)
         helper.attach_domain(kind)
         obj = helper
+    elif kind in TEMPLATE_DOMAINS:
+        template_helper = TemplateHelperConfig.model_validate(config)
+        template_helper.attach_domain(kind)
+        obj = template_helper
     else:
         raise ValueError(f"unknown object kind {kind!r}")
     if key_hint is not None:
