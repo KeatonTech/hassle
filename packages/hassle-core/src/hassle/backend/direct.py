@@ -34,6 +34,7 @@ Per-kind mapping to HA's APIs (DESIGN §4, docs/ha-api-notes.md):
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import threading
 from types import TracebackType
 from typing import Any, cast
@@ -343,6 +344,64 @@ class DirectBackend:
     #    (`number`/`sensor`/`binary_sensor`/`select`) of the entity the entry
     #    created -- the authoritative, HA-side answer to "which sub-kind is
     #    this", not a client-side guess.
+    #
+    # **CORRECTION 3 (docs/ha-api-notes.md §26.7-26.9, CI round 3, HA
+    # stable+dev): CREATE works; READ-BACK and UPDATE were both still wrong.**
+    #
+    # 1. **`config_entries/get` (and `config_entries/get_single`) never carry
+    #    a config entry's options at all.** Both serialize
+    #    `ConfigEntry.as_json_fragment` (`homeassistant/config_entries.py`),
+    #    whose JSON body is `entry_id`/`domain`/`title`/`state`/... -- there is
+    #    no `options`/`data` key in that shape, full stop. The round-2 code's
+    #    `entry.get("options", {})` was always `{}` against real HA; that's
+    #    exactly the `KeyError: 'name'` / `KeyError: 'state'` CI hit reading
+    #    back a just-created entry. **There is no admin API that returns a
+    #    config entry's options directly** (confirmed by reading every view
+    #    `homeassistant/components/config/config_entries.py` registers: the
+    #    single-entry REST resource has only `DELETE`/reload-`POST`, no `GET`).
+    #    The only place options ever appear on the wire is as **suggested
+    #    values baked into an options-flow form's `data_schema`**
+    #    (`SchemaOptionsFlowHandler.__init__` seeds `self._options` from
+    #    `config_entry.options`; `SchemaCommonFlowHandler._show_next_step`
+    #    calls `add_suggested_values_to_schema` with exactly that dict,
+    #    `homeassistant/helpers/schema_config_entry_flow.py`), which
+    #    `voluptuous_serialize.convert` turns into each field's
+    #    `{"name": ..., "description": {"suggested_value": ...}}` entry
+    #    (`homeassistant/helpers/data_entry_flow.py`). This is genuinely what
+    #    the UI's own edit dialog does to pre-populate its form (I1) -- so
+    #    read-back now starts an options flow per entry, reads the suggested
+    #    values off `data_schema`, and **cancels the flow**
+    #    (`DELETE .../options/flow/{flow_id}`, same cleanup a user closing the
+    #    dialog without saving triggers) rather than committing it.
+    # 2. **The options-flow schema never includes `name` for any domain.**
+    #    `generate_schema(domain, flow_type)` (`template/config_flow.py`) only
+    #    adds `CONF_NAME` `if flow_type == "config"`; `options_schema =
+    #    partial(generate_schema, flow_type="options")` never does. That's the
+    #    verbatim `"extra keys not allowed @ data['name']"` 400 CI hit --
+    #    UPDATE must submit the domain's own fields MINUS `name`.
+    # 3. **`name` is NOT lost by omitting it from an update.** The entry's
+    #    `title` (and hence `options["name"]`, since `async_config_entry_title`
+    #    reads `options["name"]` and `SchemaConfigFlowHandler.async_create_entry`
+    #    stores `options=data` verbatim on CREATE) is preserved server-side:
+    #    `SchemaCommonFlowHandler._update_and_remove_omitted_optional_keys`
+    #    only prunes/overwrites keys that appear in the CURRENT step's schema;
+    #    since `name` was never in the options-flow schema to begin with, the
+    #    pre-existing `name` (and `template_type`, likewise server-injected
+    #    and absent from the options-flow schema) survive an update untouched.
+    #    Hassle therefore never needs to (and must not try to) push `name`
+    #    through the options flow.
+    # 4. **Renames are out of scope for the options flow, by construction.**
+    #    HA does expose an explicit entry-rename primitive
+    #    (`config_entries/update`, WS, `vol.Optional("title")`,
+    #    `homeassistant/components/config/config_entries.py`) -- the
+    #    mechanism the UI's "rename" affordance uses. Hassle does not call it:
+    #    since `identity = slugify(name)` (MILESTONES M10, re-frozen §26.6), a
+    #    changed local `name` is a changed `object_key`, which the plan engine
+    #    already treats as delete-old + create-new (or an id-collision
+    #    conflict) like every other kind -- there is no code path where an
+    #    UPDATE entry (same object_key, hence same `name`) would ever need to
+    #    change the title. Recorded here rather than wired up, since wiring an
+    #    unused rename path would be untested dead code.
 
     async def _template_entry_domains(self) -> dict[str, str]:
         """`entry_id -> HA entity domain` for every template config entry,
@@ -359,6 +418,35 @@ class DirectBackend:
             out[str(config_entry_id)] = entity_id.split(".", 1)[0]
         return out
 
+    async def _acurrent_template_options(self, entry_id: str) -> dict[str, Any]:
+        """The stored options of a template config entry, read back via an
+        options-flow's suggested values (docs/ha-api-notes.md §26.7 -- there
+        is no admin API that returns entry options directly). Opens an
+        options flow, harvests `data_schema`'s `description.suggested_value`
+        per field, then cancels the flow (mirrors a user opening then closing
+        the edit dialog without saving -- never commits a write)."""
+        flow = await self._client.rest_post(
+            "/api/config/config_entries/options/flow", json={"handler": entry_id}
+        )
+        flow_id = flow["flow_id"]
+        try:
+            options: dict[str, Any] = {}
+            data_schema: list[dict[str, Any]] = flow.get("data_schema") or []
+            for field in data_schema:
+                name = field.get("name")
+                description = field.get("description")
+                if name is None or not isinstance(description, dict):
+                    continue
+                if "suggested_value" in description:
+                    options[str(name)] = description["suggested_value"]
+            return options
+        finally:
+            # Cancel rather than commit -- this is a read, not a write
+            # (docs/ha-api-notes.md §26.7). Best-effort: an already-expired
+            # flow 404ing on cancel is not this call's problem to raise.
+            with contextlib.suppress(HaApiError):
+                await self._client.rest_delete(f"/api/config/config_entries/options/flow/{flow_id}")
+
     async def _alist_template_helpers(self, kind: str) -> dict[str, dict[str, Any]]:
         wanted_domain = _TEMPLATE_FLOW_TYPE[kind]
         entries = await self._client.ws_command("config_entries/get")
@@ -370,12 +458,17 @@ class DirectBackend:
             entry_id = str(entry["entry_id"])
             if entry_domains.get(entry_id) != wanted_domain:
                 continue
-            options = dict(entry.get("options", {}))
-            title = entry.get("title") or options.get("name")
+            title = entry.get("title")
             if not title:
                 continue
             identity = _slugify(str(title))
             self._template_entry_ids[(kind, identity)] = entry_id
+            # `config_entries/get` never carries options (§26.7) -- the
+            # options-flow's suggested values are the only source of truth,
+            # plus `name` (from `title`, never present in the options-flow
+            # schema itself, §26.7 finding 2/3).
+            options = await self._acurrent_template_options(entry_id)
+            options["name"] = str(title)
             out[identity] = options
         return out
 
@@ -434,13 +527,19 @@ class DirectBackend:
                 "(HA's template form schema rejects the submission without them, "
                 "docs/ha-api-notes.md §26.6)"
             )
+        # `name` (and any other non-options-flow-schema key) must NOT be
+        # resubmitted -- the options-flow schema never includes it (§26.7
+        # finding 2); HA 400s with "extra keys not allowed @ data['name']"
+        # otherwise. `name` survives untouched server-side regardless
+        # (§26.7 finding 3) since an UPDATE's object_key/identity -- and
+        # hence its `name` -- never actually changes (finding 4).
+        payload = {k: v for k, v in config.items() if k != "name"}
         flow = await self._client.rest_post(
             "/api/config/config_entries/options/flow", json={"handler": entry_id}
         )
         flow_id = flow["flow_id"]
-        # EXACTLY the domain's own fields, same as create (§26.6 correction 1).
         await self._client.rest_post(
-            f"/api/config/config_entries/options/flow/{flow_id}", json=dict(config)
+            f"/api/config/config_entries/options/flow/{flow_id}", json=payload
         )
 
     async def _adelete_template_helper(self, kind: str, identity: str) -> None:
