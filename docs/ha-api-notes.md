@@ -1671,6 +1671,182 @@ M10 updated in the same series, R5):**
   gained a required `set_value=` kwarg; `template_select` gained a required
   `select_option=` kwarg. `name=` became the sole identity-bearing kwarg.
 
+### 26.7 CI round 3 finding: CREATE works, READ-BACK and UPDATE were still wrong — no admin API exposes entry options at all
+
+**The CI failures, verbatim** (both HA `stable` and `dev`, run 28809973141;
+CREATE itself now succeeds — the §26.1/§26.6 fixes held):
+
+```
+KeyError: 'name'      # reading a just-created entry's config back
+KeyError: 'state'     # same, on the collision-abort test
+HA returned 400 for POST /api/config/config_entries/options/flow/<id>:
+  {"errors":{"base":["extra keys not allowed @ data['name']"]}}
+# plan-noop test: re-plan sees remote={} for a live entry -> plans UPDATE
+# forever instead of NOOP, because list_remote returns an empty dict.
+```
+
+**Root cause, confirmed by reading HA source directly** (`home-assistant/
+core`, commit-pinned to whatever `stable`/`dev` resolved to at CI time — file
+paths below, read via `gh api .../contents/<path>` since this sandbox has no
+local HA checkout):
+
+1. **`config_entries/get` (WS) and `config_entries/get_single` (WS) NEVER
+   carry a config entry's `options`/`data` at all**, for ANY config entry,
+   template or otherwise. Both serialize `ConfigEntry.as_json_fragment`
+   (`homeassistant/config_entries.py`, `class ConfigEntry`, the
+   `as_json_fragment` cached property): its JSON body is exactly
+   `created_at`/`entry_id`/`domain`/`modified_at`/`title`/`source`/`state`/
+   `supports_options`/`supports_remove_device`/`supports_unload`/
+   `supports_reconfigure`/`supported_subentry_types`/
+   `pref_disable_new_entities`/`pref_disable_polling`/`disabled_by`/
+   `reason`/`error_reason_translation_key`/
+   `error_reason_translation_placeholders`/`num_subentries` — there is no
+   `options` or `data` key in that shape, full stop, in either the list
+   command (`_async_matching_config_entries_json_fragments`,
+   `homeassistant/components/config/config_entries.py`) or the single-entry
+   command (`config_entry_get_single`, same file, which ALSO just returns
+   `entry.as_json_fragment`). The round-2 code's `entry.get("options", {})`
+   was therefore always `{}` against real HA — the exact source of the
+   `KeyError: 'name'` / `KeyError: 'state'` CI hit reading back a
+   just-created entry's `list_remote` row.
+2. **There genuinely is no admin API that returns a config entry's options
+   directly.** Checked every view `homeassistant/components/config/
+   config_entries.py` registers: `ConfigManagerEntryResourceView`
+   (`/api/config/config_entries/entry/{entry_id}`) has only `delete` and a
+   reload `post` — no `get` at all. `config_entries/get_single` (WS, checked
+   above) doesn't have it either. The single place options ever appear on
+   the wire is as **suggested values baked into an options-flow's first form
+   step**: `SchemaOptionsFlowHandler.__init__`
+   (`homeassistant/helpers/schema_config_entry_flow.py`) seeds
+   `self._options = copy.deepcopy(dict(config_entry.options))`;
+   `SchemaCommonFlowHandler._show_next_step` (same file) passes exactly that
+   dict as `suggested_values` into
+   `FlowHandler.add_suggested_values_to_schema`
+   (`homeassistant/data_entry_flow.py`), which sets each matching schema
+   marker's `.description = {"suggested_value": <current value>}`; the REST
+   view's `_prepare_result_json`
+   (`homeassistant/helpers/data_entry_flow.py`) then runs the schema through
+   `voluptuous_serialize.convert(schema, custom_serializer=cv.custom_serializer)`,
+   producing the wire-level `data_schema` as a list of
+   `{"name": ..., ..., "description": {"suggested_value": ...}}` dicts per
+   field. **This is exactly what the UI's own options-flow edit dialog reads
+   to pre-populate its form** (I1) — so read-back now does the same thing:
+   `DirectBackend._acurrent_template_options` opens an options flow
+   (`POST /api/config/config_entries/options/flow {"handler": entry_id}`,
+   the same call `_aupdate_template_helper` already made), harvests
+   `data_schema`'s `description.suggested_value` per field into a dict, then
+   **cancels the flow** (`DELETE /api/config/config_entries/options/flow/
+   {flow_id}` — `OptionManagerFlowResourceView`/`FlowManagerResourceView.
+   delete`, `homeassistant/helpers/data_entry_flow.py`: "Cancel a flow in
+   progress") rather than committing it — mirroring a user opening then
+   closing the edit dialog without saving. `_alist_template_helpers` calls
+   this once per entry and merges in `name` (see finding 3 below).
+3. **The options-flow schema never includes `name`, for any template
+   domain, ever.** `generate_schema(domain, flow_type)`
+   (`homeassistant/components/template/config_flow.py`) only adds
+   `vol.Required(CONF_NAME)` `if flow_type == "config"`; `options_schema =
+   partial(generate_schema, flow_type="options")` (same file) never hits
+   that branch. That is the verbatim `"extra keys not allowed @
+   data['name']"` 400 CI hit on UPDATE. Fix: `DirectBackend.
+   _aupdate_template_helper` now strips `name` from the config before
+   POSTing to the options-flow's form step (`FakeBackend.update` does the
+   same at its public-API boundary, so `Backend.update`'s F2 contract — take
+   the full local config, same as every other kind — is unchanged; only the
+   internal wire submission is filtered).
+4. **`name` is NOT lost by omitting it from an update.** `entry.title` (and
+   `options["name"]`, which is the same value —
+   `TemplateConfigFlowHandler.async_config_entry_title` literally returns
+   `options["name"]`, and `SchemaConfigFlowHandler.async_create_entry`
+   stores `options=data` verbatim on CREATE, `name` included) survives an
+   options-flow update that never resubmits it: `OptionsFlowManager.
+   async_finish_flow` (`homeassistant/config_entries.py`) does
+   `async_update_entry(entry, options=result["data"])` — a wholesale
+   REPLACE of `entry.options`, not a merge — but `result["data"]` is
+   `SchemaOptionsFlowHandler`'s own `self._options`, which STARTED as a full
+   copy of the existing options and is only ever selectively mutated by
+   `SchemaCommonFlowHandler._update_and_remove_omitted_optional_keys`
+   (`homeassistant/helpers/schema_config_entry_flow.py`): that helper only
+   overwrites/prunes keys that appear in the CURRENT step's schema. Since
+   `name` (and the server-injected `template_type`, `validate_user_input`,
+   `homeassistant/components/template/config_flow.py`) were never in the
+   options-flow schema to begin with, they're never touched — so the
+   "replace" at the `ConfigEntry` level is, in net effect, a merge from the
+   caller's point of view. `FakeBackend._update_via_options_flow` reproduces
+   this (merges the submitted fields into the existing stored options
+   rather than replacing the dict outright).
+5. **Renames are a real HA primitive Hassle deliberately does not use.**
+   `config_entries/update` (WS, `homeassistant/components/config/
+   config_entries.py`, `vol.Optional("title")`) is the mechanism the UI's
+   "rename" affordance uses to change a config entry's title in place
+   without touching its options or `entry_id` — genuinely analogous to a
+   storage helper's `id`-preserving rename. Hassle does not wire this up:
+   per the frozen identity scheme (§26.6), `identity = slugify(name)`, so a
+   changed local `name` IS a changed `object_key` — the plan engine already
+   treats that as delete-old + create-new (or an id-collision conflict, if
+   both keys are live simultaneously) exactly like every other kind. An
+   UPDATE `PlanEntry` targets a fixed identity, hence a fixed (unchanged)
+   `name`, by construction — there is no code path where an in-place rename
+   would ever be needed. Documented here rather than implemented, since a
+   wired-up-but-unreachable rename path would be untested dead code.
+
+**Fixed in `hassle/backend/direct.py`** (`_acurrent_template_options`,
+`_alist_template_helpers`, `_aupdate_template_helper`) **and `hassle/backend/
+fake.py`** (`FakeBackend.update` strips `name` before delegating to
+`_update_via_options_flow`; `_update_via_options_flow` merges into existing
+stored options and defensively 400s — `ConfigEntryFlowError` — if `name`
+somehow still reaches it, mirroring the real schema rejection for direct
+callers of the internal method). No `Backend` (F2) or MILESTONES.md identity
+changes — this round is purely an implementation-fidelity fix, not a design
+change. Regression tests (unit-level; this sandbox cannot run the Docker-HA
+integration suite that is the authoritative verification):
+`packages/hassle-core/tests/test_direct_backend_template_helpers.py` (new —
+faithfully fakes the `_client` wire shapes above, confirmed to fail against
+the round-2 code for the exact CI-reported reasons before the fix landed),
+`test_fake_backend_template_flow.py`'s
+`test_template_number_update_silently_strips_name_at_the_public_api_boundary`
+/ `test_template_number_internal_options_flow_submission_rejects_name_field`
+/ `test_template_number_update_preserves_name_without_resubmitting_it`, and
+`test_apply_template_helpers.py`'s
+`test_template_helper_plan_apply_create_then_noop_on_repush`.
+
+### 26.8 Why `data_schema`'s wire shape (`voluptuous_serialize.convert`) is trusted without a live capture
+
+This correction relies on parsing `data_schema` entries as
+`{"name": ..., "description": {"suggested_value": ...}}`. That shape comes
+from `voluptuous_serialize.convert(schema, custom_serializer=cv.
+custom_serializer)` (`homeassistant/helpers/data_entry_flow.py`,
+`_BaseFlowManagerView._prepare_result_json`) applied to a `vol.Schema` whose
+markers had `.description = {"suggested_value": ...}` set by
+`FlowHandler.add_suggested_values_to_schema` (`homeassistant/
+data_entry_flow.py`) — reading `add_suggested_values_to_schema`'s own source
+confirms the `description` dict is set verbatim as `{"suggested_value":
+suggested_values[key.schema]}` on a copy of each matching marker, and
+`voluptuous_serialize` (a separate, stable, widely-used HA-frontend-facing
+library) is documented/known to surface a marker's `.description` under a
+`"description"` key in its per-field output — this is the same mechanism
+every HA frontend form (including the actual template-helper edit dialog in
+the Settings UI) relies on to pre-fill values, so it is not a guess specific
+to this integration. `_acurrent_template_options` defensively `.get()`s both
+`"name"` and `"description"` (never indexes them directly) and skips any
+field lacking a `suggested_value`, so an unexpected shape degrades to a
+missing field rather than a crash — CI will still catch a genuine mismatch
+(a missing option would show up as a spurious diff/plan-update, not a
+`KeyError`, which is a strictly safer failure mode than round 2's).
+
+### 26.9 Read-back cost: one options-flow open+cancel round-trip per entry, per `list_remote`
+
+`_alist_template_helpers` now makes one extra REST round-trip pair (open +
+cancel an options flow) per template config entry on every `list_remote`
+call, on top of the pre-existing `config_entries/get` + `config/
+entity_registry/list` WS calls. This is the unavoidable cost of there being
+no direct "read one entry's options" API (§26.7 finding 2) — real HA's own
+frontend pays the same cost every time its helpers-list page needs to show
+current values. Not optimized further in this milestone (no perf budget was
+set for `list_remote` in DESIGN or MILESTONES M10); flagged here in case a
+future milestone's `pull`/`plan` on a large template-helper population needs
+it addressed (e.g. batching, or caching options against `modified_at` from
+`config_entries/get`'s already-free listing).
+
 ## 25. M8 finding: `DiagnosticsManager.refresh()` race (fixed, regression-tested) — `vscode-extension/`
 
 While writing the `@vscode/test-electron` integration test for Problems-pane diagnostics
