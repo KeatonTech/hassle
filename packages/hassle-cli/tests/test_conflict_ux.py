@@ -18,6 +18,74 @@ def _check_snapshot(name: str, actual: str) -> None:
     assert actual == path.read_text(encoding="utf-8").rstrip("\n")
 
 
+def test_dsl_diff_list_literal_is_not_mangled_by_rich_markup() -> None:
+    """Regression test (bug found while implementing `ux/triggers-in-decorator`):
+    `render_plan`'s conflict diff printed `dsl_diff`'s output through
+    `console.print(diff_text, style="")` with Rich markup parsing left on.
+    `diff_text` is arbitrary decompiled DSL source, not a markup string -- a
+    literal `[...]` list in it (e.g. `triggers=[...]`, or a list-valued
+    `target={"entity_id": [...]}`) was silently stripped by Rich's `[tag]`
+    markup parser, corrupting the printed diff (`triggers=[state(...)])`
+    rendered as `triggers=)`). Pinned directly against `render_plan`, which is
+    the actual code path with the fix (`markup=False`), rather than only via
+    the full CLI conflict-flow snapshot above (belt-and-suspenders: this one
+    fails immediately at the rendering layer if the fix regresses, independent
+    of any future change to the surrounding conflict scenario/snapshot)."""
+    import io
+    from dataclasses import dataclass
+    from unittest.mock import patch
+
+    from rich.console import Console
+
+    from hassle.sync import PlanAction
+    from hassle_cli import plan_render
+
+    @dataclass
+    class _FakeConflict:
+        local: dict[str, object]
+        remote: dict[str, object]
+
+    @dataclass
+    class _FakeEntry:
+        object_key: str
+        kind: str
+        action: PlanAction
+        local: dict[str, object] | None
+        remote: dict[str, object] | None
+        conflict: _FakeConflict | None
+
+    @dataclass
+    class _FakePlan:
+        entries: list[_FakeEntry]
+
+    local = {
+        "id": "a",
+        "alias": "A",
+        "triggers": [{"trigger": "state", "entity_id": "binary_sensor.hall_motion", "to": "on"}],
+        "conditions": [],
+        "actions": [],
+    }
+    remote = {**local, "alias": "A (remote edit)"}
+    entry = _FakeEntry(
+        object_key="automation:a",
+        kind="automation",
+        action=PlanAction.CONFLICT,
+        local=local,
+        remote=remote,
+        conflict=_FakeConflict(local=local, remote=remote),
+    )
+
+    buf = io.StringIO()
+    console = Console(file=buf, no_color=True, force_terminal=False, width=100)
+    with patch.object(plan_render, "is_modernization_only_diff", return_value=False):
+        plan_render.render_plan(console, _FakePlan(entries=[entry]))
+    output = buf.getvalue()
+
+    # The list literal must survive intact -- not stripped to `triggers=)`.
+    assert "triggers=[state(e.binary_sensor.hall_motion).to(" in output
+    assert "triggers=)" not in output
+
+
 def test_plan_renders_conflict_with_3way_dsl_diff(
     git_repo: Path, cli, fake_backend, tmp_path: Path, toml_writer, output_normalizer
 ) -> None:

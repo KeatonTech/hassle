@@ -245,7 +245,7 @@ Result: `e.light.halway` is a **pyright error in the editor**, before any tool r
 
 ```python
 # automations/hallway.py
-from hassle import automation, when, only_if, state, sun, delay, if_then
+from hassle import automation, only_if, state, sun, delay, if_then
 from hassle.registry import entities as e
 from helpers.modes import guest_mode
 from lib.notify import notify_adults
@@ -254,9 +254,9 @@ from lib.notify import notify_adults
     id="hall_light_on_motion",   # HA identity — NEVER change once deployed (tooling enforces)
     alias="Hallway: light on motion",
     mode="restart",
+    triggers=[state(e.binary_sensor.hall_motion).to("on")],
 )
 def hall_light_on_motion():
-    when(state(e.binary_sensor.hall_motion).to("on"))
     only_if(
         state(guest_mode).is_("off"),
         sun(after="sunset", after_offset="-00:30"),
@@ -266,9 +266,19 @@ def hall_light_on_motion():
     e.light.hallway.turn_off()
 ```
 
-Semantics: the decorator registers the function; the **compiler calls it once inside a recording
-context**. `when()`/`only_if()` set triggers/conditions; entity service calls, `delay`, etc.
+Semantics: the decorator registers the function and, when `triggers=` is given, records those
+triggers immediately (at decoration time — the list itself is built when the `@automation(...)`
+line runs, same as every other decorator kwarg); the **compiler then calls the function once
+inside a recording context**. `only_if()` sets conditions; entity service calls, `delay`, etc.
 append actions. The body is a *description*, not runtime code (§5.5).
+
+`triggers=` is the canonical, preferred spelling for an automation's triggers (Python idiom: the
+decorator is where subscription/registration metadata lives, the same way a web framework's route
+decorator carries its path — cf. `@app.route("/x")`). The classic form, `when(...)` called inside
+the body, remains fully supported and is still the right tool when the trigger list itself needs
+to be built dynamically (a compile-time Python loop, a helper function, a conditional trigger set)
+— see the position-independence note in §7.3. The two **compose**: `triggers=`'s list is recorded
+first, then any `when()` calls inside the body append after it, in call order.
 
 `@automation` accepts every HA automation option (`mode`, `max`, `max_exceeded`,
 `trigger_variables`, `variables`, `description`, `initial_state`, …). New automations default
@@ -332,6 +342,11 @@ wait_for(state(e.binary_sensor.door).to("off"), timeout=minutes(2))
   A native Python `if` on an entity comparison therefore *cannot silently compile wrong* — it
   fails loudly with a teaching error. This class of error message is a deliverable, not a nicety
   (agents and humans both depend on it).
+- **`@automation(triggers=[...])` changes nothing about this rule.** The trigger builder objects
+  in the list are ordinary compile-time-built Python objects — `state(...)`, `on(...)`, etc. —
+  built when the decorator line itself runs, exactly like a `when(state(...))` call inside the
+  body would build them. Putting them in the decorator is purely a placement/style choice (§5.3);
+  it has no bearing on the compile-time/runtime split.
 
 ### 5.6 Macros and shared scripts (G7)
 
@@ -519,9 +534,10 @@ for-byte, verified over the whole round-trip corpus):**
   update to a generated-code import list. The `entities as e` import stays its own explicit line
   (DESIGN §5.3: a dedicated, non-`__all__` entry point). This is the **generated-code** style
   only; hand-written bundle files may use either form.
-- **Section comments:** `# --- triggers ---` / `# --- conditions ---` / `# --- actions ---`
-  precede each non-empty section of an automation body (a script gets `# --- sequence ---` when
-  its sequence is non-empty); an empty section gets no comment.
+- **Section comments:** `# --- conditions ---` / `# --- actions ---` precede each non-empty
+  section of an automation body (a script gets `# --- sequence ---` when its sequence is
+  non-empty); an empty section gets no comment. Triggers no longer have a body section at all —
+  see the `triggers=` bullet below (`ux/triggers-in-decorator`).
 - **Function names derive from `alias`, not `id`** (this section as originally written, now
   actually implemented): the name is `slugify(alias)`, with a deterministic `_2`/`_3` suffix on a
   collision — collisions include another decompiled object's alias-slug **and** any name the
@@ -574,6 +590,32 @@ for-byte, verified over the whole round-trip corpus):**
   direction's edge is deterministically dropped back to `service()`, with a one-line
   `# hassle: ... cross-file script call cycle ...` comment, rather than ever emitting a mutually
   importing pair of generated files.
+- **Triggers decompile into the decorator, not the body** (owner-approved DSL evolution,
+  `ux/triggers-in-decorator`, task #10; DESIGN §5.3/§5.5): typed triggers are emitted as a
+  `triggers=[...]` decorator kwarg (multi-line, one trigger per line, when there's more than
+  one — the same formatting `when(...)` used to use for a multi-trigger body call), rather than
+  a `when(...)` call at the top of the body. `when()` itself is unaffected and stays fully
+  supported (F3 forbids removing it) — it's still the only option for a dynamically-built trigger
+  list (built by a compile-time `for` loop, a shared helper function, etc. — the decorator's
+  `triggers=` list, by contrast, is one Python expression evaluated once, at decoration time, so
+  it can only hold a single static list literal). A `raw_trigger(...)` (an untyped/unmodeled
+  trigger) still can't be nested inside a list-literal kwarg — it's a recording *verb*, not an
+  expression — so it stays a body statement, emitted first (with no header comment, since there's
+  no more triggers section at all).
+
+  **Position-independence, explained:** before this change, `when()`/`only_if()` could be called
+  anywhere in an automation's body (the recorder doesn't care about call order relative to
+  actions — DESIGN §7.2's "trace a function call" model just appends to whichever list the call
+  targets) — so a body's *physical* layout carried no meaning beyond decompiler convention (the
+  `# --- triggers ---`/`# --- conditions ---`/`# --- actions ---` section comments existed purely
+  to make that convention legible, not because the compiler required that order). Moving triggers
+  into the decorator removes this ambiguity entirely for the common case: a trigger is now
+  syntactically pinned to one place (the decorator argument list), not just conventionally placed
+  first in the body — there is no longer a *question* of where in the body a trigger "belongs".
+  `when()` keeps the old position-independence property for whatever it's used for (which now
+  reads, correctly, as "an escape hatch for dynamic trigger construction", not "the normal way to
+  write a trigger") — a `when()` call still composes with the decorator's list regardless of
+  where in the body it appears, appending after the decorator's triggers in call order.
 
 ---
 

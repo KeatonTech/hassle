@@ -16,9 +16,14 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
+from hassle.compiler.protocols import TriggerBuilder
 from hassle.compiler.recording import check_options
 from hassle.compiler.spans import SourceSpan, capture_span
 from hassle.ir.models import IRObject
+
+
+def _empty_decorator_triggers() -> list[TriggerBuilder]:
+    return []
 
 
 @dataclass
@@ -32,6 +37,12 @@ class RegisteredObject:
     # The declared id (explicit ``id=`` or the function name default). The object
     # key is ``"<kind>:<declared_id>"``.
     declared_id: str
+    # `@automation(triggers=[...])` (DESIGN §5.3/§5.5, docs/dsl-f3.md,
+    # F3-additive): triggers evaluated at decoration time, recorded before the
+    # function body runs (bundle.py's `compile_registered`) so they land first
+    # and any `when()` calls inside the body compose after them, in order.
+    # Always empty for `@script` (no `triggers` option exists there at all).
+    decorator_triggers: list[TriggerBuilder] = field(default_factory=_empty_decorator_triggers)
 
 
 @dataclass
@@ -95,7 +106,13 @@ def fresh() -> Registry:
     return reg
 
 
-def _register(kind: str, options: dict[str, Any], func: Callable[..., Any]) -> None:
+def _register(
+    kind: str,
+    options: dict[str, Any],
+    func: Callable[..., Any],
+    *,
+    decorator_triggers: list[TriggerBuilder] | None = None,
+) -> None:
     span = options.pop("__span__", None)
     check_options(kind, options, span)
     declared_id = options.get("id") or func.__name__
@@ -106,12 +123,26 @@ def _register(kind: str, options: dict[str, Any], func: Callable[..., Any]) -> N
             options=dict(options),
             span=span,
             declared_id=str(declared_id),
+            decorator_triggers=list(decorator_triggers) if decorator_triggers else [],
         )
     )
 
 
-def automation(**options: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def automation(
+    *, triggers: list[TriggerBuilder] | None = None, **options: Any
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Register an automation (DESIGN §5.3). Accepts every HA automation option.
+
+    ``triggers=`` (F3-additive, docs/dsl-f3.md): a list of ``TriggerBuilder``
+    objects -- the same objects ``when()`` accepts -- evaluated at decoration
+    time (i.e. built when the ``@automation(...)`` line itself runs, before the
+    compiler ever invokes the function body). This is the preferred, canonical
+    form the decompiler emits (Python idiom: subscription metadata lives in the
+    decorator, cf. ``@app.route``). ``triggers=`` and ``when()`` COMPOSE: the
+    decorator list is recorded first, then any ``when()`` calls inside the body
+    append after it, in call order (``bundle.py``'s ``compile_registered``).
+    ``when()`` remains fully supported and is still the right tool for a
+    dynamically-built trigger list (F3 forbids removing it).
 
     The undecorated function is returned unchanged, so a bundle can still call it
     (e.g. a test importing the function). Compilation runs it inside a recorder.
@@ -119,7 +150,7 @@ def automation(**options: Any) -> Callable[[Callable[..., Any]], Callable[..., A
     span = capture_span(depth=0)
 
     def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
-        _register("automation", {**options, "__span__": span}, func)
+        _register("automation", {**options, "__span__": span}, func, decorator_triggers=triggers)
         return func
 
     return decorate

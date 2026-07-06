@@ -16,9 +16,12 @@ compiles to the exact same string as the quoted literal it replaces):
    strings are untouched.
 3. `from hassle import *` replaces the enumerated builder import. The
    `entities as e` import stays explicit.
-4. Section comments (`# --- triggers ---` / `# --- conditions ---` /
-   `# --- actions ---`) precede each non-empty section in an automation body;
-   `# --- sequence ---` precedes a script's sequence when non-empty.
+4. Section comments (`# --- conditions ---` / `# --- actions ---`) precede
+   each non-empty section in an automation body; `# --- sequence ---`
+   precedes a script's sequence when non-empty. Triggers no longer have a
+   body section comment at all -- they're emitted as the `triggers=` decorator
+   kwarg now (``ux/triggers-in-decorator``, see test_decompile_triggers_in_
+   decorator.py), which precedes the body entirely.
 """
 
 from __future__ import annotations
@@ -348,14 +351,15 @@ def test_automation_body_gets_section_comments_for_nonempty_sections() -> None:
     obj = parse(config, kind="automation")
     source = decompile_bundle({obj.object_key(): obj})
 
-    assert "# --- triggers ---" in source
+    # Triggers no longer get a body section comment at all -- they're in the
+    # `triggers=` decorator kwarg (ux/triggers-in-decorator).
+    assert "# --- triggers ---" not in source
     assert "# --- conditions ---" in source
     assert "# --- actions ---" in source
-    # Ordering: triggers, then conditions, then actions.
-    tri_idx = source.index("# --- triggers ---")
+    # Ordering: conditions, then actions.
     cond_idx = source.index("# --- conditions ---")
     act_idx = source.index("# --- actions ---")
-    assert tri_idx < cond_idx < act_idx
+    assert cond_idx < act_idx
 
 
 def test_automation_body_omits_section_comment_for_empty_sections() -> None:
