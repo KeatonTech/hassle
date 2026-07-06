@@ -81,6 +81,63 @@ def a():
     assert "did you mean" in result.output.lower() or "hallway" in result.output.lower()
 
 
+def test_validate_json_clean_bundle(bundle_dir: Path, cli) -> None:
+    import json
+
+    result = cli(["validate", "--json"], cwd=bundle_dir)
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload == {"findings": []}
+
+
+def test_validate_json_reports_findings_with_stable_schema(
+    tmp_path: Path, cli, registry_snapshot_json
+) -> None:
+    # M8 test 3: `hassle validate --json` is the shared contract with the VS
+    # Code extension's Problems-pane integration -- one JSON object with a
+    # `findings` array, each Finding surfacing exactly the fields the
+    # extension maps to a `vscode.Diagnostic` (file/line/severity/code/
+    # message/fix), snapshot-tested on both sides.
+    import json
+
+    root = tmp_path / "broken-house"
+    root.mkdir()
+    (root / ".hassle").mkdir()
+    (root / ".hassle" / "registry.json").write_text(
+        json.dumps(registry_snapshot_json), encoding="utf-8"
+    )
+    (root / "hassle.toml").write_text("format_version = 1\nmirror = false\n", encoding="utf-8")
+    (root / "a.py").write_text(
+        """
+from hassle import automation, service
+
+@automation(id="a", alias="A")
+def a():
+    service("light.turn_on", target={"entity_id": "light.halway"})
+""",
+        encoding="utf-8",
+    )
+    result = cli(["validate", "--json"], cwd=root)
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    assert set(payload) == {"findings"}
+    assert len(payload["findings"]) >= 1
+    finding = payload["findings"][0]
+    assert set(finding) == {"code", "severity", "file", "line", "message", "fix"}
+    assert finding["file"] == "a.py"
+    assert isinstance(finding["line"], int)
+    assert "halway" in finding["message"]
+
+
+def test_validate_json_output_has_no_rich_markup(bundle_dir: Path, cli) -> None:
+    # The JSON mode must never be wrapped in the human [red]/[green] rich
+    # markup the plain-text renderer uses elsewhere -- an editor extension
+    # parses this stdout directly as JSON.
+    result = cli(["validate", "--json"], cwd=bundle_dir)
+    assert "[green]" not in result.output
+    assert "[red]" not in result.output
+
+
 def test_status_shows_plan_and_git_status(git_repo: Path, cli, fake_backend, toml_writer) -> None:
     _backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
@@ -149,7 +206,19 @@ def test_stubs_generates_pyi_files(bundle_dir: Path, cli) -> None:
     # `hassle.registry.stubs.generate_entities_stub` embeds typed service
     # methods on each domain's entity class -- there is no separate
     # services.pyi artifact (DESIGN §9.2/§5.2), just entities.pyi.
-    assert (bundle_dir / ".hassle" / "entities.pyi").is_file()
+    #
+    # M8 layer-1 fix: the stub must live at `typings/hassle/registry/__init__.pyi`
+    # (a pyright custom-stubPath location), NOT `.hassle/entities.pyi` -- the
+    # latter is not on any import path pyright resolves `hassle.registry` to,
+    # so a real editor never picked up the generated types at all (M3's own
+    # `test_registry_stubs_pyright.py` proves the correct placement/config;
+    # this command just never matched it -- see docs/ha-api-notes.md).
+    stub_path = bundle_dir / "typings" / "hassle" / "registry" / "__init__.pyi"
+    assert stub_path.is_file()
+    assert not (bundle_dir / ".hassle" / "entities.pyi").exists()
+    # Package marker so pyright treats the synthetic `hassle` stub package as
+    # a regular package (mirrors test_registry_stubs_pyright.py's own setup).
+    assert (bundle_dir / "typings" / "hassle" / "__init__.pyi").is_file()
 
 
 def test_explain_renders_compiled_yaml_for_object(bundle_dir: Path, cli) -> None:
