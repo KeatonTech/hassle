@@ -649,6 +649,69 @@ def active_hvac_zones():
 
 ---
 
+## M15 — Category-first bundle layout: coworkers in one file (owner-commissioned)
+
+**Goal:** replace the type-tree layout (`automations/<cat>.py`, `scripts/<cat>.py`,
+`helpers/misc.py`) with category-first, mixed-kind files at the bundle root: `hvac.py`
+holds the HVAC automations AND their template helpers AND scripts; `misc.py` holds
+everything uncategorized. Evidence base: docs/ha-api-notes.md §31 (source-verified) —
+ALL helper domains (nine storage-collection + four template config-entry) carry
+categories under the shared frontend scope `"helpers"`, so helper grouping round-trips
+through HA; it is NOT source-only metadata. DESIGN §7.3 must be amended in the same PR
+(R5-style: layout is a design-level surface).
+
+**Binding semantics:**
+- **Placement = category.** An object's file is derived from its own scope's category
+  (`automation`→scope `automation`, `script`→scope `script`, every helper kind→scope
+  `helpers`); same category name across scopes → same file (slug anchor per scope,
+  independently — §31.6). No category → `misc.py`.
+- **Local moves sync back (the key new behavior).** Moving an EXISTING object to a
+  different category file is a category reassignment on push — extends M11's
+  create-only write-back to updates. Three-way: `ManifestEntry` gains an optional
+  `category` field (base category slug; F2 amendment — this line is that amendment,
+  binding once merged) so a local move + a conflicting HA-side recategorization is
+  surfaced as a conflict (I6), never silently overwritten in either direction.
+- **Per-scope creation/divergence policy (§31.6.2):** a mixed-kind file maps to up to
+  three category rows (scopes automation/script/helpers) sharing a name; push creates
+  per scope on demand (CATEGORY global supplies the display name, else humanize_slug).
+  If HA-side renames make the scopes' names diverge for what was one file, pull places
+  each object by its OWN scope's category (files may split) and emits a
+  divergence warning naming the scopes — never guesses a winner.
+- **Backend simplifications from §31.5:** `_aassign_category` sends a single-scope
+  merge payload (no read-first); integration teardown uses the now-confirmed
+  `config/category_registry/delete`; the false "only two scopes" comments in
+  `category_writeback.py`/`bundle_ops.py` (and §22-derived docstrings) are corrected.
+- **Migration:** old-layout bundles are detected (type trees present) and restructured
+  by the next `hassle pull`: managed objects move to their category files (splice DROP
+  from old files, regenerate into new); old files are deleted ONLY when no user content
+  remains (I6); every move is reported in pull output; `hassle.toml` bundle-format
+  version bumps (M9 versioning surface: older CLI opening a newer bundle → clear
+  upgrade error).
+- `CATEGORY` global (M12) semantics unchanged, now applying to root-level
+  `<slug>.py` files; `category_shaped_stem` learns the new shape (root-level, stem ≠
+  `misc`, excluding `lib/`/`tests/`/`docs/`/dot-dirs).
+
+**Work item A — sync semantics (do first):**
+1. Pull placement reads helper categories (scope `helpers`) for all 13 helper kinds;
+   FakeBackend models per-scope entity-registry categories incl. the same-object
+   two-scope case (§31.5d) — live integration test assigns a category to a
+   storage-collection helper AND a template helper via Hassle and reads both back.
+2. Write-back extended: create AND move-update for every kind; manifest base category;
+   conflict test (local move + remote recategorize → conflict, not silent win).
+3. Single-scope merge payload + delete-based teardown; §31.5d same-object two-scope
+   I6 test; corrected comments/docstrings.
+
+**Work item B — layout + migration (after A merges):**
+4. Root-level mixed-kind decompile placement + codegen imports across kinds in one
+   file; `misc.py` fallback; predicate/init scaffold/AGENTS.md/docs updates.
+5. Migration test: an old-layout bundle with user content in an old file pulls into
+   the new layout with nothing lost (I6), byte-stable second pull, plan noop after.
+6. Acceptance sample bundle regenerated in the new layout; harness presupposition
+   tests updated; `hassle-dev acceptance-bundle` output stays deterministic.
+7. Bundle-format version bump test (older-CLI clear error, M9 test 4 pattern).
+
+---
+
 ## Milestone sizing (rough, for planning the swarm)
 
 | Milestone | Size | Parallel workstreams inside |

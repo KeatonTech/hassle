@@ -1187,6 +1187,11 @@ to §21.1/§21.2 above and fixed; 2 remaining are device actions, out of scope).
 
 ## 22. Pull organization + ignore filtering (owner feedback after first real pull, `ux/pull-organization`)
 
+> **Correction (2026-07-06):** this section's claim that HA's category registry
+> only covers `automation`/`script` scopes is wrong (and was wrong when written) —
+> the frontend also uses `scene` and a shared plural `helpers` scope covering all
+> helper domains, storage-collection and config-entry alike. See §31.
+
 ### 22.1 Category registry — `config/category_registry/list`, scoped, and per-entity `categories`
 
 DESIGN §7.3/§6 always said placement should follow HA's UI category registry, but it was never
@@ -2318,6 +2323,11 @@ three rounds.
 
 ## 30. M11: category write-back on push-create — WS shapes now live-verified by CI (`m11/category-writeback`)
 
+> **Corrections (2026-07-06, source-verified in §31):** (b) `config/entity_registry/
+> update` merges `categories` per scope server-side (not wholesale replace) — the
+> client-side read+merge is harmless but unnecessary; (c) `config/category_registry/
+> delete` exists; (d) one entity CAN carry categories in multiple scopes at once.
+
 > **Post-merge status (2026-07-06):** the caveats below were written before the integration
 > suite ran. PR #3's CI subsequently ran `tests/integration/test_m11_category_writeback.py`
 > green on BOTH HA images (stable + dev) on the first attempt, which live-confirms:
@@ -2467,3 +2477,178 @@ now covered by tests that will confirm or refute them once CI runs): whether
 `config/entity_registry/update`'s wholesale-replace-vs-merge `categories` semantics match what
 this section infers. If CI finds either wrong, fix `DirectBackend` + this section in the same PR
 as §26 did, and downgrade the corresponding unit test's docstring claim accordingly.
+
+## 31. M15 research: HA UI categories — which object kinds, which scopes, and can helpers round-trip? (source-verified, core `dev` + `2026.7.1` + `2026.2.3`, frontend `dev` + `20260624.4` + `20260226.0`)
+
+> **Verification method.** All claims below were read directly from GitHub source
+> (`gh api .../contents/... -H "Accept: application/vnd.github.raw"`) of
+> `home-assistant/core` (branch `dev`, tags `2026.7.1` and `2026.2.3`) and
+> `home-assistant/frontend` (branch `dev`, tags `20260624.4` and `20260226.0`) on
+> 2026-07-06. Nothing here is from memory. Line numbers are for the `dev` branch
+> unless tagged otherwise; the tagged versions were diff-checked for the load-bearing
+> claims and are identical unless noted.
+
+### 31.1 Q1 — `scope` is an arbitrary caller-chosen string; core defines NO scope enum
+
+`homeassistant/helpers/category_registry.py` (dev):
+
+- `CategoryRegistry.categories: dict[str, dict[str, CategoryEntry]]` — outer key is the
+  scope, a plain `str` (line ~96). Storage (`core.category_registry`, version 1.2) is
+  `{"categories": {<scope>: [<entry>, ...]}}`.
+- `async_create(*, name: str, scope: str, icon: str | None = None)` (line ~124): `scope`
+  is typed `str`, never validated against any set — an unknown scope is simply created
+  on first use (`if scope not in self.categories: self.categories[scope] = {}`).
+- Category names are unique **per scope**, case-insensitively
+  (`_async_ensure_name_is_available`, raises `ValueError "The name '...' is already in use"`).
+- `CategoryEntry` = `{category_id (ULID), name, icon, created_at, modified_at}`.
+
+`homeassistant/components/config/category_registry.py` (dev, identical schema at 2026.7.1):
+all four WS commands take `vol.Required("scope"): str` — plain string, no enum
+(`list` line 26, `create` line 47, `delete` line 75, `update` line 100). So the WS layer
+also accepts any scope string.
+
+**Core itself writes no scopes.** A code search for category-registry `scope=` usage in
+`home-assistant/core` hits only `homeassistant/helpers/category_registry.py`,
+`homeassistant/components/config/category_registry.py`,
+`homeassistant/helpers/entity_registry.py` (generic cleanup, §31.3), and tests. Every
+real scope string in existence is a **frontend convention**, not a backend contract.
+
+### 31.2 Q2 — which frontend tables use categories, and their scope strings
+
+Code search over `home-assistant/frontend` for `category_registry` /
+`ha-filter-categories` importers finds exactly four config tables (plus the shared
+category dialogs/picker and `suggest-metadata-helpers.ts`, which reuses the same scope
+strings for AI metadata suggestions). **Devices and entities tables have NO category
+support** — neither imports `ha-filter-categories` nor touches `categories` on update.
+
+Scopes that exist and who writes them:
+
+| scope string | written by (frontend file) | filter / assign evidence (dev) | present in 20260226.0 (HA ~2026.2)? |
+|---|---|---|---|
+| `automation` | `src/panels/config/automation/ha-automation-picker.ts` | `scope="automation"` (line 534), bulk write `categories: { automation: category }` (line 1214), read `entityRegEntry?.categories.automation` (line 269) | yes |
+| `script` | `src/panels/config/script/ha-script-picker.ts` | `scope="script"` (line 524), `categories: { script: category }` (line 943) | yes |
+| `scene` | `src/panels/config/scene/ha-scene-dashboard.ts` | `scope="scene"` (line 553), `categories: { scene: category }` (line 892) | yes |
+| `helpers` (**plural!**) | `src/panels/config/helpers/ha-config-helpers.ts` | `scope="helpers"` (line 721), assign dialog `scope: "helpers"` (line 1048), bulk write `categories: { helpers: category }` (line ~1055 region), read `entityRegEntry?.categories.helpers` (line 578) | **yes** (grep at tag 20260226.0: 4 hits) |
+| *(anything else)* | nobody in core/frontend | backend accepts it; nothing displays it | — |
+
+Note the asymmetry: three singular scopes matching the HA domain (`automation`,
+`script`, `scene`) and one plural umbrella scope `helpers` shared by ALL helper
+domains. There is no per-helper-domain scope (`input_boolean` etc. do not get their
+own); one category namespace covers every helper on the page.
+
+**Helpers page mechanics** (`ha-config-helpers.ts`, dev): the table's rows are (a) every
+state whose domain satisfies `isHelperDomain` (the storage-collection domains) plus (b)
+every entity whose entity-source integration is a helper-type config-flow integration
+(this is how config-entry helpers — template, derivative, etc. — appear), plus (c) bare
+config-entry rows for entries whose entity failed to load (`entity: undefined`,
+`selectable: false`). Category assignment (`_editCategory`, line ~1032) resolves the row's
+`entity_id` in the **entity registry** and refuses with an alert
+(`no_category_support` / `no_category_entity_reg`) only if there is no registry entry —
+i.e. case (c), a broken/not-yet-loaded config entry. For every normally loaded helper,
+storage-collection **and** config-entry-backed alike, assignment works and is written
+via `config/entity_registry/update` with `categories: { helpers: <id | null> }`.
+
+### 31.3 Q3 — `config/entity_registry/update` `categories` is `{scope: category_id}` per entity, and it MERGES server-side
+
+`homeassistant/helpers/entity_registry.py` (dev): `RegistryEntry.categories:
+dict[str, str] = attr.ib(factory=dict)` (line 203) — scope → category_id, at most one
+category per scope per entity. Deleted entities retain their categories and restore them
+on re-registration (lines ~1418/1496). When a category is deleted from the registry,
+`async_clear_category_id(scope, category_id)` (line ~2183) strips it from live AND
+deleted entities. `async_entries_for_category(registry, scope, category_id)`
+(line ~2326) is the reverse lookup.
+
+`homeassistant/components/config/entity_registry.py` — **identical at dev, 2026.7.1,
+and 2026.2.3**:
+
+- Schema (dev line 166): `vol.Optional("categories"): cv.schema_with_slug_keys(vol.Any(str, None))`
+  — scope keys must be slugs; value is a category_id or `None`.
+- Handler (dev lines 253–263) with the comment at lines 157–162: *"If passed in, we
+  update/adjust only the provided scope(s). Other category scopes in the entity, are
+  left as is."* The code copies `entity_entry.categories`, then per submitted scope
+  either deletes it (value `None`) or sets it. **This is a per-scope server-side merge,
+  not a wholesale replace** — see discrepancy (b) in §31.5.
+
+### 31.4 Q4 — every helper domain gets a categorizable entity-registry row, and the helpers UI exposes it
+
+- The nine storage-collection domains (`input_boolean`, `input_button`,
+  `input_datetime`, `input_number`, `input_select`, `input_text`, `counter`, `timer`,
+  `schedule`): each helper is one entity with an entity-registry row (this codebase
+  already relies on that row's `unique_id == object_id` anchor, §2/§4). Rows carry
+  `categories`; the helpers table lists them via `isHelperDomain` and offers
+  assign/edit/bulk-move category and category filtering/grouping under scope `helpers`.
+- The four config-entry template domains (§26's flows): a loaded config entry registers
+  its entity in the entity registry (that is how the helpers page finds it, via entity
+  sources + `config_entry_id`), so it too carries `categories` and the UI exposes the
+  same assign path. The only excluded case is a config entry in an error state whose
+  entity never registered — the UI shows an explanatory alert instead
+  (`no_category_entity_reg`).
+- Scenes also have a live scope (`scene`) should Hassle ever manage them.
+
+### 31.5 Discrepancies with §22 / §30 (current HA reality vs. what those sections recorded)
+
+(a) **§22 "Helpers are intentionally excluded … HA's category registry only covers
+`automation`/`script` scopes" — wrong, and was already wrong when written.** The
+backend never had a scope allowlist, and the frontend's `scene` and `helpers` scopes
+are present at frontend tag `20260226.0` — i.e. they existed on the very HA 2026.2.3
+instance §0 says this document was verified against. The exclusion was inherited from
+DESIGN §7.3's wording, not from HA. Same for the §30-derived comment in
+`hassle/sync/category_writeback.py` (`_SCOPE_FOR_KIND` header: "Only
+automations/scripts have a category-registry scope in HA") and
+`bundle_ops._category_source_path`'s docstring ("the only two scopes HA's category
+registry covers … Helpers have no category-registry scope") — both restate the same
+false premise.
+
+(b) **§30's inference that `config/entity_registry/update` `attr.evolve`-replaces the
+whole `categories` dict — wrong (at dev, 2026.7.1, AND 2026.2.3).** The WS handler
+merges per scope before `attr.evolve` runs (§31.3), and `None` unsets a single scope.
+This is exactly the contingency §30 itself pre-declared: `DirectBackend
+._aassign_category`'s read-then-client-side-merge is harmless/idempotent, only the
+"read first" round-trip is unnecessary. It could be simplified to send just
+`{scope: category_id}`, and gains a free "unset" primitive (`{scope: None}`) if M15
+ever needs category *removal*.
+
+(c) **§30 addendum's open item — `config/category_registry/delete` — is now
+source-confirmed to exist**: `websocket_delete_category`, args
+`{type: "config/category_registry/delete", scope, category_id}` (dev and 2026.7.1).
+The integration-teardown `contextlib.suppress` is masking a command that is real.
+
+(d) **§30 addendum's "real HA's category registry only has the two scopes … no way to
+seed a second scope's category on the SAME object" — the premise is wrong.** Scopes
+are arbitrary; one entity can carry `{"automation": X, "helpers": Y, "anything_sluggy": Z}`
+simultaneously (only the slug-key constraint of `cv.schema_with_slug_keys` applies).
+The existing cross-object test still exercises the right code path, but a literal
+same-object two-scope test IS possible and would be the stronger I6 check.
+
+(e) Minor: §22's guess that the `scope` request parameter follows the
+"`entity_category`" convention was directionally right; the real signature is
+confirmed at §31.1 (`vol.Required("scope"): str` on all four commands), matching the
+2026-07-05 live verification note already appended to §22.
+
+### 31.6 Implications for M15 (category-first bundle layout)
+
+**Helper category grouping CAN round-trip through HA — it does not need to be
+source-only metadata.** Every helper Hassle manages (all nine storage-collection
+domains and the four config-entry template domains) has an entity-registry row whose
+`categories["helpers"]` the real HA helpers UI reads, writes, filters, and groups by —
+the same `config/entity_registry/update` + `config/category_registry/*` surface
+Hassle already drives for automations/scripts (I1 holds). Concretely: pull-side,
+`RegistrySnapshot` already parses the full `categories` dict, so placement only needs
+`category_registry/list` called for scope `"helpers"` and a helper-kind branch in
+`bundle_ops._category_source_path`; push-side, `_SCOPE_FOR_KIND` extends with each
+helper kind → scope `"helpers"` (and tree `"helpers"`). Two design consequences to
+plan for: (1) `helpers` is ONE shared scope — category names are unique across all
+thirteen helper domains, which conveniently matches a single `helpers/<slug>.py` (or a
+cross-kind `<slug>.py`) per category; but (2) a mixed-kind category file
+(automation + script + helper sharing category "Plant Care") maps to **three separate
+category rows** (scopes `automation`/`script`/`helpers`, three distinct `category_id`s
+that merely share a name) — creation on push must happen per scope, and a user
+renaming the category in one HA table but not the others makes the three names
+diverge, so M15 needs an explicit policy (e.g. slug-match per scope independently, the
+same anchor §30 already uses, and surface divergence as a warning rather than guessing).
+One residual caveat: a config-entry helper whose entry is in an error state has no
+registry row, so category assignment for it fails into the existing
+`category_warnings` path (I6-consistent, already handled). Identity lookup for
+config-entry helpers goes via `config_entry_id` → registry row rather than the
+`unique_id == object_id` anchor used for automations/scripts/storage helpers —
+`DirectBackend`'s helper-side assign needs that variant.
