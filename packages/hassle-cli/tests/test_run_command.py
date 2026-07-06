@@ -202,7 +202,9 @@ def test_render_trace_timeline_lists_step_paths() -> None:
 def test_render_trace_timeline_empty_steps_says_so() -> None:
     from hassle_cli.run_live import render_trace_timeline
 
-    rendered = render_trace_timeline({"run_id": "abc123", "script_execution": "finished", "trace": {}})
+    rendered = render_trace_timeline(
+        {"run_id": "abc123", "script_execution": "finished", "trace": {}}
+    )
     assert "no steps recorded" in rendered.lower()
 
 

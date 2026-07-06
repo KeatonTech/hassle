@@ -10,7 +10,8 @@ from typing import Any
 from rich.console import Console
 
 from hassle_cli import bundle_ops
-from hassle_cli.run_live import run_shadow_session
+from hassle_cli import run_live as run_live_module
+from hassle_cli.run_live import render_trace_timeline, run_shadow_session
 from hassle_cli.run_sim import parse_target
 
 
@@ -50,6 +51,11 @@ def execute_live_run(root: Path, target: str, *, skip_conditions: bool, console:
             run_id = traces[0]["run_id"]
             return backend.get_trace("automation", shadow_id, run_id)  # type: ignore[attr-defined]
 
+        # Read the poll bound off the module at call time (not as bound
+        # defaults on run_shadow_session) so tests can monkeypatch
+        # hassle_cli.run_live.DEFAULT_TRACE_POLL_TIMEOUT/_INTERVAL down to
+        # keep the permanently-empty-trace test fast (R2/R8: no real
+        # multi-second wait in a unit test).
         result = run_shadow_session(
             backend,
             object_key,
@@ -57,9 +63,28 @@ def execute_live_run(root: Path, target: str, *, skip_conditions: bool, console:
             trigger_fn=trigger_fn,
             get_trace_fn=get_trace_fn,
             skip_conditions=skip_conditions,
+            poll_timeout=run_live_module.DEFAULT_TRACE_POLL_TIMEOUT,
+            poll_interval=run_live_module.DEFAULT_TRACE_POLL_INTERVAL,
         )
 
     console.print(f"[green]shadow run complete: {result.shadow_id}[/green]")
     if result.trace:
-        console.print("[bold]trace:[/bold]")
-        console.print(str(result.trace))
+        console.print(render_trace_timeline(result.trace))
+    else:
+        # Never silent (coordinator finding, docs/ha-api-notes.md §27): the
+        # shadow ran and was cleaned up, but no trace ever appeared even
+        # after `stream_trace`'s bounded poll -- tell the user explicitly
+        # instead of just printing "shadow run complete" and nothing else.
+        # Note the shadow is already deleted by the time we get here (cleanup
+        # always runs, MILESTONES M7 test 5) -- there is nothing left to
+        # inspect for THIS run; the fix hint points at HA's own automation
+        # traces list for the next attempt / a longer-running one instead.
+        console.print(
+            f"[yellow]hassle run --live: no trace became available for run "
+            f"{result.shadow_id!r} within the poll window, even though the "
+            "shadow automation was created, triggered, and cleaned up "
+            "successfully. Fix: check Settings > Automations > Traces in the "
+            "Home Assistant UI while the run is in progress next time, or "
+            "re-run -- a slow HA instance may need more than the default "
+            f"{run_live_module.DEFAULT_TRACE_POLL_TIMEOUT:.0f}s poll window.[/yellow]"
+        )
