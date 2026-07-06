@@ -274,7 +274,25 @@ def _record_service_call(action: dict[str, Any], ctx: ActionContext) -> None:
     ctx.calls.append(ServiceCall(action["action"], data=rendered_data, target=target))
 
 
-def _duration(value: dict[str, Any]) -> timedelta:
+def _duration(value: dict[str, Any] | str) -> timedelta:
+    """Parse a compiled duration field (``delay``/``wait_for_trigger``'s
+    ``timeout``/``wait_template``'s ``timeout``) into a :class:`timedelta`.
+
+    Accepts both shapes the compiler can legitimately emit here: HA's usual
+    dict form (``{"hours": .., "minutes": .., ...}``) and a plain
+    ``"HH:MM:SS"`` string -- `wait_for`'s ``timeout=`` is passed through
+    verbatim by the compiler (unlike `for_=`, it is never routed through
+    ``normalize_duration``, see ``hassle.compiler.control_flow.wait_for``), so
+    a bundle author writing ``wait_for(..., timeout="00:10:00")`` (exactly
+    what ``fixtures/dsl/wait_for_trigger`` golden-compiles) previously crashed
+    the simulator with an ``AttributeError`` (M9 regression, found via the
+    cookbook recipe ``wait_then_lock_reminder``:
+    `packages/hassle-core/tests/test_sim_wait_for_trigger.py::
+    test_wait_for_trigger_accepts_plain_string_timeout`).
+    """
+    if isinstance(value, str):
+        h, m, s = (int(p) for p in value.split(":"))
+        return timedelta(hours=h, minutes=m, seconds=s)
     return timedelta(
         hours=int(value.get("hours", 0)),
         minutes=int(value.get("minutes", 0)),
