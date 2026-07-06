@@ -610,6 +610,45 @@ the fallback).
 
 ---
 
+## M14 — Decorator form is the canonical template-helper output, both branches (owner-commissioned)
+
+**Goal:** M13's decompiler emits the decorator form only when Jinja inversion is byte-exact;
+non-invertible templates fall back to the call form. Owner feedback: the fallback should ALSO
+be the decorator shape, with the raw Jinja as the string body — same IR, same I3 guarantee,
+but hand-converting a helper to Python later means rewriting only the `return` expression:
+
+```python
+@template_number(name="Active HVAC Zones", min=0.0, ..., set_value=[])
+def active_hvac_zones():
+    return """{% set entities = [ ... ] %}
+{{ entities | map('states') | ... | count }}"""
+```
+
+**Semantics (binding):**
+- Both decompile branches emit the decorator form; the only difference is the body
+  (inverted `TemplateExpr` expression vs. verbatim raw-string return). The call form stays
+  valid DSL (F3) — it just stops being canonical output.
+- The raw-string body must reproduce the stored template BYTE-FOR-BYTE on recompile (I3):
+  choose quoting (triple-quote / escaping) mechanically so arbitrary template text —
+  embedded quotes, backslashes, trailing newlines, `"""` inside the template — survives.
+- `template_select.options=` (the second template) stays a kwarg, unchanged this round.
+- Function names derive from slug(name), deterministic; collisions with other decompiled
+  names follow the existing codegen uniquing rules.
+
+**Write these tests first**
+1. Golden update: the non-invertible fixture(s) (e.g. the gnarly-Jinja fallback fixture)
+   now decompile to decorator-with-string form; `compile(decompile(x)) == x` still holds
+   (I3 fallback branch).
+2. Quoting torture test: templates containing `"""`, `'''`, backslashes, trailing/leading
+   newlines, and both quote characters round-trip byte-exactly.
+3. Invertible branch output unchanged (regression: the M13 decorator-expression golden is
+   byte-identical before/after M14).
+4. Splice REFRESH: a remote edit to a decorator-with-string helper re-splices in place;
+   the M13 downgrade test now asserts decorator-with-string (not call form) as the result.
+5. Byte-stable re-decompile (R8 determinism).
+
+---
+
 ## Milestone sizing (rough, for planning the swarm)
 
 | Milestone | Size | Parallel workstreams inside |
