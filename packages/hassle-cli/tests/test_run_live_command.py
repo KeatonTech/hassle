@@ -93,9 +93,7 @@ class _StubTraceBackend:
             return []
         if not any(name == "automation.trigger" for name, _ in self.triggered):
             return []
-        polls_after_trigger = sum(
-            1 for _ in self.list_traces_calls
-        ) - self._polls_at_trigger
+        polls_after_trigger = sum(1 for _ in self.list_traces_calls) - self._polls_at_trigger
         if polls_after_trigger <= self._empty_polls_before_trace:
             return []
         return [{"run_id": "run-xyz", "state": "stopped"}]
