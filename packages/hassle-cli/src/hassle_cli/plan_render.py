@@ -52,7 +52,19 @@ def render_plan(console: Console, plan: Plan, *, show_noop: bool = False) -> Non
             remote = conflict.remote if conflict else entry.remote
             diff_text = dsl_diff(entry.object_key, entry.kind, local, remote)
             if diff_text:
-                console.print(diff_text, style="")
+                # markup=False (bug fix, regression-tested): `diff_text` is
+                # arbitrary decompiled DSL source, not a Rich markup string --
+                # a literal `[...]` in it (a list literal, e.g. `triggers=[...]`
+                # or `target={"entity_id": [...]}`) was being parsed as a Rich
+                # style tag and silently stripped, corrupting the printed diff.
+                # soft_wrap=True: a unified diff's `-`/`+`-prefixed lines are
+                # meaningful as literal lines (like `git diff`'s own output,
+                # never word-wrapped) -- Rich's default wrapping at the
+                # console width would otherwise split a long decompiled line
+                # (e.g. a multi-kwarg `@automation(...)`) across several
+                # visual lines with no `-`/`+` prefix on the continuation,
+                # making the diff ambiguous to read.
+                console.print(diff_text, style="", markup=False, soft_wrap=True)
             else:
                 console.print("  (local)")
                 console.print(f"  {local}")

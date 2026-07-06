@@ -272,11 +272,45 @@ def _automation_source(
     for key in ("alias", "description", "mode", "max", "max_exceeded", "initial_state"):
         if key in body:
             decorator_kwargs.append(f"{key}={body.pop(key)!r}")
-    # Any remaining scalar option (trigger_variables, variables, ...) not
-    # explicitly modeled above still round-trips via a generic kwarg.
     triggers = body.pop("triggers", [])
     conditions = body.pop("conditions", [])
     actions = body.pop("actions", [])
+
+    # `triggers=` decorator metadata is the canonical decompiled form
+    # (ux/triggers-in-decorator, DESIGN §5.3/§5.5, docs/dsl-f3.md): subscription
+    # metadata lives in the decorator, Python-idiom style (cf. `@app.route`).
+    # Only TYPED triggers can be nested as a kwarg's list-literal expression --
+    # `raw_trigger(...)` is a recording *verb* (it calls `record_trigger` itself
+    # and returns None), so it cannot be an element of a list literal. A raw
+    # trigger therefore stays a body statement, emitted first (before
+    # conditions/actions), in original order -- it still composes correctly
+    # with the decorator's `triggers=` list (bundle.py's `compile_registered`
+    # records the decorator list first, then runs the body, so a raw_trigger()
+    # body statement still lands after the decorator's typed triggers; since
+    # the original recorded order interleaved them in the single `triggers`
+    # list, preserving typed-then-raw here can only reorder relative to each
+    # other, never drop data -- I3 holds via the underlying builder/verb
+    # semantics, not literal position).
+    typed_trigger_srcs: list[str] = []
+    raw_trigger_stmts: list[str] = []
+    for trig in triggers:
+        src = decompile_trigger(cast("dict[str, Any]", trig)) if isinstance(trig, dict) else None
+        if src is not None:
+            typed_trigger_srcs.append(src)
+        else:
+            raw_trigger_stmts.append(f"raw_trigger({render_literal(trig)})")
+    if typed_trigger_srcs:
+        if len(typed_trigger_srcs) == 1:
+            decorator_kwargs.append(f"triggers=[{typed_trigger_srcs[0]}]")
+        else:
+            triggers_arg_lines = ["triggers=["]
+            for src in typed_trigger_srcs:
+                triggers_arg_lines.append(f"{INDENT}{src},")
+            triggers_arg_lines.append("]")
+            decorator_kwargs.append("\n".join(triggers_arg_lines))
+
+    # Any remaining scalar option (trigger_variables, variables, ...) not
+    # explicitly modeled above still round-trips via a generic kwarg.
     for key, value in body.items():
         decorator_kwargs.append(f"{key}={render_literal(value)}")
 
@@ -287,41 +321,24 @@ def _automation_source(
 
     # `raw_trigger`/`raw_condition` are recording *verbs* (they call
     # record_trigger/record_condition themselves and return None) -- they
-    # cannot be nested as arguments inside when(...)/only_if(...). Any typed
-    # (non-raw) triggers/conditions are collected into one when()/only_if()
-    # call; raw ones become separate statements alongside it, in original order
+    # cannot be nested as arguments inside when(...)/only_if(...)/`triggers=`.
+    # Typed (non-raw) conditions are collected into one only_if() call; raw
+    # ones become separate statements alongside it, in original order
     # (whether emitted before or after doesn't change the recorded set, since
-    # `when`/`only_if`/`raw_trigger`/`raw_condition` all append to the same
-    # list -- but preserving relative order keeps the generated source legible
-    # and, on a splice, minimizes the visible diff).
+    # `only_if`/`raw_condition` all append to the same list -- but preserving
+    # relative order keeps the generated source legible and, on a splice,
+    # minimizes the visible diff).
     # Section comments (owner feedback, DESIGN §7.3): a `# --- <section> ---`
     # line precedes each *non-empty* section, so a body with only actions
-    # doesn't get two comments pointing at nothing.
-    if triggers:
-        typed: list[str] = []
-        raw_stmts: list[str] = []
-        for trig in triggers:
-            src = (
-                decompile_trigger(cast("dict[str, Any]", trig)) if isinstance(trig, dict) else None
-            )
-            if src is not None:
-                typed.append(src)
-            else:
-                raw_stmts.append(f"raw_trigger({render_literal(trig)})")
-        body_lines.append("# --- triggers ---")
-        if typed:
-            if len(typed) == 1:
-                body_lines.append(f"when({typed[0]})")
-            else:
-                body_lines.append("when(")
-                for src in typed:
-                    body_lines.append(f"{INDENT}{src},")
-                body_lines.append(")")
-        body_lines.extend(raw_stmts)
+    # doesn't get two comments pointing at nothing. Triggers no longer get a
+    # body section comment at all -- they're in the `triggers=` decorator
+    # kwarg now, which precedes the body entirely; any raw_trigger() leftover
+    # is emitted plain, with no header, right at the top of the body.
+    body_lines.extend(raw_trigger_stmts)
 
     if conditions:
-        typed = []
-        raw_stmts = []
+        typed: list[str] = []
+        raw_stmts: list[str] = []
         for cond in conditions:
             src = (
                 decompile_condition(cast("dict[str, Any]", cond))

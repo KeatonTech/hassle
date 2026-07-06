@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from hassle.compiler.errors import DuplicateObjectError
-from hassle.compiler.recording import RecordedNode, Recorder, recording
+from hassle.compiler.recording import RecordedNode, Recorder, record_trigger, recording
 from hassle.compiler.registry import PrebuiltObject, RegisteredObject, fresh
 from hassle.compiler.spans import SourceSpan
 from hassle.ir import normalize_ha
@@ -192,6 +192,14 @@ def compile_registered(
         result.add(pre.obj, spans={}, decl_span=pre.span, duplicate_of=pre.span)
     for reg in registry_objects:
         with recording(kind=reg.kind, **reg.options) as rec:
+            # `@automation(triggers=[...])` (F3-additive, DESIGN §5.3/§5.5):
+            # the decorator's triggers were already built at decoration time --
+            # record them first, before running the body, so they land ahead
+            # of any `when()` calls inside the body (composition order, both
+            # docs/dsl-f3.md and this milestone's contract: "decorator list
+            # first, when() appends").
+            for trig in reg.decorator_triggers:
+                record_trigger(trig, span=reg.span)
             reg.func()
         if reg.kind == "automation":
             obj, spans = _build_automation(reg, rec)

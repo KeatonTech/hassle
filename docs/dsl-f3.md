@@ -50,6 +50,30 @@
 > an author who added a Python parameter but forgot to also declare it as a
 > field. Purely additive; no existing name's meaning changed.
 
+> **Widened 2026-07-05 (`ux/triggers-in-decorator`, owner-approved DSL
+> evolution, task #10, F3-additive):** `@automation` gained a `triggers=`
+> keyword-only kwarg: a list of `TriggerBuilder` objects — the same objects
+> `when()` accepts — evaluated at decoration time (built when the
+> `@automation(...)` line itself runs, before the compiler invokes the
+> function body). This is now the CANONICAL decompiled form (DESIGN §5.3/§7.3):
+> the decompiler emits `triggers=[...]` in the decorator instead of a
+> `when(...)` call at the top of the body, multi-line (one trigger per line)
+> when there's more than one. `when()` itself is UNCHANGED and remains fully
+> supported (F3 forbids removing it) — still the right tool when the trigger
+> list must be built dynamically (a compile-time loop, a shared helper
+> function, …), since `triggers=`'s list is one Python expression evaluated
+> once, at decoration time, and so can only ever be a single static list
+> literal. `triggers=` and `when()` COMPOSE: the decorator's list is recorded
+> first, then any `when()` calls inside the body append after it, in call
+> order — see DESIGN §5.3's position-independence note. Compile parity is
+> exact: `@automation(triggers=[state(x).to("on")])` produces byte-identical
+> IR to the equivalent `when(state(x).to("on"))` form (golden pair
+> `fixtures/dsl/triggers_in_decorator/`, proven against the `when()`-form
+> golden `fixtures/dsl/state_delay_service/`'s identical `expected_ir.json`).
+> Purely additive: no existing name's meaning changed, `hassle.__all__` itself
+> is untouched (`automation` was already frozen there; only its accepted
+> kwargs widened).
+
 The public surface is exactly `hassle.__all__` (module
 `packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.
@@ -86,6 +110,10 @@ bundles are written.
 
 ### Object decorators / declarations (top-level objects)
 - `automation` — `@automation(**ha_options)` registers an automation.
+  `triggers=` (F3-additive, `ux/triggers-in-decorator`) is a list of
+  `TriggerBuilder` objects recorded at decoration time — the canonical,
+  decompiler-emitted way to attach triggers; composes with `when()` (below),
+  which remains the tool for a dynamically-built trigger list.
 - `script` — `@script(**ha_options)` registers a plain script.
 - `shared_script` — `@shared_script(...)` registers a script **and** returns a
   call-site verb (invoking it elsewhere records a `script.<id>` call, DESIGN §5.6).
@@ -103,7 +131,11 @@ bundles are written.
   `input_datetime`, `input_button`, `counter`, `timer`, `schedule`.
 
 ### Recording verbs
-- `when(*triggers)` — append triggers to the active automation.
+- `when(*triggers)` — append triggers to the active automation. Fully
+  supported alongside `@automation(triggers=...)` (composes, decorator list
+  first) — the right tool for a dynamically-built trigger list; no longer the
+  decompiler's canonical output form (`ux/triggers-in-decorator`), but never
+  removed (F3).
 - `only_if(*conditions)` — append conditions.
 
 ### Core action verbs
