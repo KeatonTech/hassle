@@ -1380,3 +1380,77 @@ if no newer `refresh()` call has started since. Regression test:
 `vscode-extension/src/test/suite/extension.test.ts`'s
 `"regression: a slow, stale refresh() cannot clobber a newer one's results"` (verified to fail
 without the guard, confirming it exercises the real bug).
+
+## 26. CI stabilization (`fix/ci-stabilization`): two unrelated root causes for 8 pushes of red `main`
+
+Main was red on every push for a while; the two failures had nothing to do with each other and
+neither was actually the "HA behavior changed" story one might guess from the job names.
+
+**Finding A — ubuntu-only unit job: `keyring.errors.NoKeyringError` from `fake://`-backed CLI
+tests.** `hassle_cli.token.resolve_token(ha_url)` was called unconditionally by
+`_require_backend_config` (`hassle_cli.cli`) for every command, including when `ha_url` was the
+`fake://<token>` test-only seam (`hassle_cli.backend_factory`) — the `startswith("fake://")` check
+only skipped the *subsequent* "no token" error message, not the keyring lookup itself. On macOS,
+`keyring.get_password` always resolves to the Keychain backend (returns `None` for an unknown
+entry, never raises), so this was invisible locally. On the headless ubuntu-latest GitHub runner
+there is no keyring backend installed at all, so the same call raises
+`keyring.errors.NoKeyringError`, which propagated as an unhandled exception out of `hassle_cli.
+cli.py::status/plan/push/pull` and anything else going through `_require_backend_config` — i.e.
+most of `test_cli_commands.py` and `test_agents_md_scaffold.py`. This is not an HA API/version
+finding — it's a pure test-isolation bug — but is recorded here per the standing instruction to
+log any finding discovered while stabilizing the shared CI pipeline.
+
+Fix, both layers as required:
+- **Product** (`packages/hassle-cli/src/hassle_cli/token.py`): `resolve_token` now short-circuits
+  on `fake://` URLs before ever importing/calling `keyring` (the token is embedded in the URL —
+  there is nothing to look up), and separately catches `keyring.errors.NoKeyringError` for real
+  URLs, treating "no keyring backend installed" the same as "no token found" rather than letting
+  it crash. A new `resolve_token_or_raise` + `TokenResolutionError` (what/where/fix, one paragraph)
+  is what `_require_backend_config` uses to turn "token not found anywhere" into a clean CLI error
+  that explicitly names the headless-server fix (`export HASSLE_TOKEN=...`) alongside the desktop
+  one (`hassle login`).
+- **Test** (`packages/hassle-cli/tests/conftest.py`): a new autouse `_forbid_real_keyring_access`
+  fixture monkeypatches `keyring.get_password`/`set_password`/`delete_password` to raise
+  `RealKeyringUsedInUnitTestError` for every test in the suite, unconditionally — no unit test may
+  ever depend on a real OS keyring existing again. Tests that intentionally exercise
+  keyring-touching code (`hassle login`, the `hassle_cli.token` unit tests) monkeypatch
+  `hassle_cli.token._keyring_get`/`_keyring_set` directly instead, which is unaffected by this
+  guard (it patches a different, module-internal seam).
+- Regression tests added to `packages/hassle-cli/tests/test_token_and_secrets.py`:
+  `test_resolve_token_never_touches_keyring_for_fake_url`,
+  `test_resolve_token_falls_through_to_env_when_keyring_unavailable`,
+  `test_resolve_token_no_keyring_and_no_env_gives_clean_error`,
+  `test_cli_status_against_fake_backend_survives_headless_keyring` (the last one reproduces the
+  exact CI failure end-to-end by monkeypatching `keyring.get_password`/`set_password` to raise
+  `NoKeyringError`, confirmed red before the fix).
+
+**Finding B — `integration · HA stable` and `integration · HA dev`, identically:
+`packages/hassle-cli/tests/integration/test_run_live.py::test_run_live_creates_shadow_triggers_
+and_cleans_up` — `TypeError: Context.__init__() got an unexpected keyword argument 'cwd'`.** The
+task description hypothesized an HA-dev trace/shadow behavior change or a timing/settle issue;
+neither is correct. `gh run view 28765559755 --log-failed` shows the identical `AssertionError:
+assert 1 == 0` / `TypeError` on **both** the `stable` and `dev` matrix legs, which rules out an
+HA-version-specific behavior change outright (a dev-only regression cannot reproduce byte-for-byte
+on stable too). The actual cause: the test called
+`click.testing.CliRunner.invoke(main, args, env=..., cwd=str(bundle))` — but `CliRunner.invoke`
+has never supported a `cwd` kwarg; `**extra` is forwarded through `Command.main` into
+`click.Context.__init__`, which raises `TypeError` for the unrecognized keyword *before the command
+body ever runs*. `catch_exceptions` defaults to `True`, so the `TypeError` is swallowed into
+`Result.exit_code == 1` — the shadow-automation body (create/trigger/trace/cleanup) never executed
+at all, on either HA version. This also means
+`test_run_live_cleans_up_shadow_on_trace_stream_failure` (which only asserts `exit_code != 0`) was
+passing for the wrong reason — the same `TypeError` satisfies its assertion regardless of whether
+the injected `stream_trace` failure ever ran.
+
+Fix (a genuine bug fix, not an xfail — the failure is fully diagnosable and platform-independent):
+replaced the invalid `cwd=` kwarg with an `os.chdir()`-around-the-call helper
+(`_invoke_in_dir` in `test_run_live.py`), matching the pattern the unit-test suite's
+`packages/hassle-cli/tests/conftest.py::run_cli` already uses for the same reason. A new unit test,
+`test_cli_runner_invoke_rejects_cwd_kwarg_regression` (no network, runs in the ordinary unit job),
+pins down the root cause directly against a trivial `click.command()` so this class of mistake
+gets caught immediately in the unit job next time instead of silently no-op'ing an integration
+test. No DESIGN.md or MILESTONES.md change needed — DESIGN §10.4 / MILESTONES M7 test 5's
+intended behavior (shadow created, triggered, trace rendered, cleaned up) is unchanged; only the
+test's own Click API usage was wrong. Not independently re-verified against live HA in this PR (no
+Docker/HA access in this environment) — the orchestrator's CI run against both `stable` and `dev`
+is the actual green/red signal for this fix, per the task's definition of done.

@@ -77,7 +77,7 @@ def _relative_finding_path(file: str | None, root: Path) -> str | None:
 def _require_backend_config(root: Path) -> tuple[str, str]:
     import os
 
-    from hassle_cli.token import resolve_token
+    from hassle_cli.token import TokenResolutionError, resolve_token_or_raise
 
     # HASSLE_HA_URL + HASSLE_TOKEN env override (same convention as the M6
     # integration suite's HASSLE_TEST_HA_URL/_TOKEN): lets `run --live`'s one
@@ -96,16 +96,12 @@ def _require_backend_config(root: Path) -> tuple[str, str]:
             err=True,
         )
         raise SystemExit(2)
-    token = resolve_token(config.ha_url)
-    if token is None and not config.ha_url.startswith("fake://"):
-        click.echo(
-            "hassle: no token found for this HA instance (checked HASSLE_TOKEN and the "
-            "system keyring). Fix: run `hassle login --url "
-            f"{config.ha_url}` to store one.",
-            err=True,
-        )
-        raise SystemExit(2)
-    return config.ha_url, token or ""
+    try:
+        token = resolve_token_or_raise(config.ha_url)
+    except TokenResolutionError as exc:
+        click.echo(str(exc), err=True)
+        raise SystemExit(2) from exc
+    return config.ha_url, token
 
 
 @click.group()
