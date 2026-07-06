@@ -373,10 +373,16 @@ gate and orphan sweep in `doctor`.
     (Hassle compiles the modern form; HA stores it verbatim thereafter — capture-verified).
     The plan renderer must label this class of diff as "modernization (one-time)" so users
     aren't alarmed; snapshot-tested.
-5. `run --live` integration test (Dockerized HA): shadow created with `initial_state: off`,
-   triggered with `skip_condition: false` by default (HA's own default is `true` — assert we
-   override it), trace rendered with correct source lines, shadow deleted — **also on failure**
-   (inject a trace-stream error; assert cleanup).
+5. `run --live` integration test (Dockerized HA): shadow created **enabled**, with its trigger
+   list replaced by a single never-fires event trigger (a run-unique event type — post-M7 revision,
+   docs/ha-api-notes.md §27 addendum; superseded the original `initial_state: off` design after live
+   verification), triggered with `skip_condition: false` by default (HA's own default is `true` —
+   assert we override it) against the shadow's real `entity_id` (resolved via `attributes.id`
+   matching, never assumed as `automation.<id>` — §10.2's quirk), trace rendered with correct
+   source lines, the action's real side effect independently observed (a counter helper
+   increments, M0.V pattern — proves the automation actually ran, not just that the service call
+   was accepted), shadow deleted — **also on failure** (inject a trace-stream error; assert
+   cleanup).
 6. `test_no_token_in_bundle`: pull refuses/scrubs if a token appears in `hassle.toml`; doctor
    flags a committed token.
 7. End-to-end smoke on mac + linux CI runners (the two target platforms).

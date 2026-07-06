@@ -845,9 +845,21 @@ with `hassle init`: `hassle validate && hassle test` on every push).
 `hassle run automations/hallway.py::hall_light_on_motion --live`:
 
 1. Compile + validate the single object; push it as a **shadow automation**
-   (`id="hassle_shadow_<hash>"`, `initial_state: off` so its triggers never fire on their own).
-2. Fire it via `automation.trigger` (options: `--skip-conditions`, `--vars k=v`). Note HA's
-   `skip_condition` defaults to **true**; Hassle passes `skip_condition: false` unless
+   (`id="hassle_shadow_<hash>"`), **enabled**, with its own trigger list replaced by a single
+   event trigger on a run-unique event type (`hassle_shadow_never_<uuid>`) that nothing on the
+   real event bus will ever fire — the same "its triggers never fire on their own" guarantee,
+   without disabling the automation. *(Revised post-M7: the original design used
+   `initial_state: off` instead; live verification against real HA (docs/ha-api-notes.md §27
+   addendum) found the integration test that would have caught problems with that mechanism was
+   itself broken from the day it was written by an unrelated test bug, so the disabled-shadow
+   path had never actually run against real HA. HA source confirms a disabled automation's forced
+   `automation.trigger` call DOES execute and DOES record a trace — so `initial_state: off` was
+   never actually broken either — but the never-fires-event-trigger design removes the dependency
+   on that indirect property entirely and is simpler to reason about.)*
+2. Fire it via `automation.trigger`, targeting the shadow's real `entity_id` (`slug(alias)`, NOT
+   `slug(id)` — §4/§10.2's quirk; resolve it by matching `attributes.id` on `/api/states`, the same
+   way the automation is enumerated elsewhere) (options: `--skip-conditions`, `--vars k=v`). Note
+   HA's `skip_condition` defaults to **true**; Hassle passes `skip_condition: false` unless
    `--skip-conditions` is given, so the default live run behaves like the real trigger would.
 3. Stream the execution trace (WS `trace/get`) and live state changes; render as a step-by-step
    timeline mapped back to DSL source lines.

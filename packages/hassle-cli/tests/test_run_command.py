@@ -39,8 +39,15 @@ def test_shadow_id_is_hash_derived_and_prefixed() -> None:
     assert shadow_id == shadow_automation_id("automation:hall_light_on_motion")
 
 
-def test_build_shadow_config_sets_initial_state_off() -> None:
-    from hassle_cli.run_live import build_shadow_config
+def test_build_shadow_config_replaces_triggers_with_never_fires_event() -> None:
+    """Revised design (docs/ha-api-notes.md §27 addendum): the shadow is
+    created ENABLED (no `initial_state`) with its own trigger list replaced
+    by a single event trigger using a run-unique event type nothing on the
+    real bus will ever fire -- the same "never fires on its own" guarantee
+    DESIGN §10.4 point 1 wants, without relying on disabled-automation
+    semantics (which turned out not to be what actually broke `run --live`;
+    see the addendum for the real root cause)."""
+    from hassle_cli.run_live import SHADOW_ID_PREFIX, build_shadow_config
 
     body = {
         "id": "hall_light_on_motion",
@@ -51,8 +58,30 @@ def test_build_shadow_config_sets_initial_state_off() -> None:
         "mode": "single",
     }
     shadow = build_shadow_config("automation:hall_light_on_motion", body)
-    assert shadow["initial_state"] is False
-    assert shadow["id"].startswith("hassle_shadow_")
+    assert "initial_state" not in shadow
+    assert shadow["id"].startswith(SHADOW_ID_PREFIX)
+    assert len(shadow["triggers"]) == 1
+    trigger = shadow["triggers"][0]
+    assert trigger["trigger"] == "event"
+    assert trigger["event_type"].startswith("hassle_shadow_never_")
+    # The original trigger (state on binary_sensor.hall_motion) must be gone
+    # -- that's the whole point: nothing on the real bus can fire this.
+    assert "entity_id" not in trigger
+    # Conditions/actions/mode are preserved unchanged -- only triggers +
+    # id + (absence of) initial_state are shadow-specific.
+    assert shadow["conditions"] == body["conditions"]
+    assert shadow["actions"] == body["actions"]
+    assert shadow["mode"] == body["mode"]
+
+
+def test_never_fires_event_type_is_unique_per_call() -> None:
+    from hassle_cli.run_live import never_fires_event_type
+
+    a = never_fires_event_type()
+    b = never_fires_event_type()
+    assert a != b
+    assert a.startswith("hassle_shadow_never_")
+    assert b.startswith("hassle_shadow_never_")
 
 
 def test_trigger_payload_defaults_skip_condition_false() -> None:
