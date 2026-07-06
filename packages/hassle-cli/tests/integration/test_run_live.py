@@ -8,11 +8,60 @@ also on failure (inject a trace-stream error; assert cleanup).
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
 from hassle.backend import DirectBackend
+
+
+def test_cli_runner_invoke_rejects_cwd_kwarg_regression(tmp_path: Path) -> None:
+    """CI regression (root cause of the FAILED test_run_live_creates_shadow_
+    triggers_and_cleans_up on both HA stable and dev): `click.testing.
+    CliRunner.invoke` has never accepted a `cwd` kwarg -- `**extra` is
+    forwarded all the way to `click.Context.__init__`, which raises
+    `TypeError: Context.__init__() got an unexpected keyword argument 'cwd'`
+    before the command body runs at all. This is a click-API misuse in the
+    test, not an HA-version behavior difference (the CI logs show the
+    identical failure on both `HA stable` and `HA dev` runners) -- this unit
+    test reproduces it without touching the network so it runs in the
+    ordinary (non-integration) unit job.
+    """
+    import click
+    from click.testing import CliRunner
+
+    @click.command()
+    def _noop() -> None:
+        click.echo("ran")
+
+    runner = CliRunner()
+    result = runner.invoke(_noop, [], cwd=str(tmp_path))
+    assert result.exit_code != 0
+    assert isinstance(result.exception, TypeError)
+    assert "cwd" in str(result.exception)
+
+
+def _invoke_in_dir(main: object, args: list[str], *, cwd: Path, env: dict[str, str]):
+    """`CliRunner.invoke` has no `cwd` support (see the regression test
+    above) -- change directory around the call instead, exactly like the
+    unit-test suite's `packages/hassle-cli/tests/conftest.py::run_cli`.
+
+    `catch_exceptions` is left at its default (`True`, unlike the unit-test
+    `run_cli` helper): `test_run_live_cleans_up_shadow_on_trace_stream_failure`
+    relies on an injected `RuntimeError` from inside the command surfacing as
+    a non-zero `Result.exit_code` rather than propagating out of `invoke` --
+    exactly what a real CLI invocation's top-level exception handling would
+    do for an unexpected error."""
+    from click.testing import CliRunner
+
+    runner = CliRunner()
+    old_cwd = Path.cwd()
+    os.chdir(cwd)
+    try:
+        return runner.invoke(main, args, env=env)
+    finally:
+        os.chdir(old_cwd)
 
 
 def _shadow_ids(ha: DirectBackend) -> list[str]:

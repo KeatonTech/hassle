@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 
 def test_pull_refuses_when_token_found_in_hassle_toml(
     git_repo: Path, cli, fake_backend, toml_writer
@@ -117,6 +119,90 @@ def test_token_falls_back_to_keyring(monkeypatch) -> None:
     monkeypatch.setattr(token_mod, "_keyring_get", lambda url: "keyring-token")
     resolved = token_mod.resolve_token("http://homeassistant.local:8123", env={})
     assert resolved == "keyring-token"
+
+
+def test_resolve_token_never_touches_keyring_for_fake_url(monkeypatch) -> None:
+    """CI regression (main red for 8 pushes, ubuntu unit job): `fake://` is the
+    test-only backend seam (see hassle_cli.backend_factory) -- the token is
+    embedded in the URL itself, so resolving it must never consult the OS
+    keyring. On headless Linux CI runners there is no keyring backend at all
+    and hitting it raises `keyring.errors.NoKeyringError`; macOS Keychain
+    masked this locally because it always answers (even with `None`)."""
+    import hassle_cli.token as token_mod
+
+    def _boom(url: str) -> str | None:
+        raise AssertionError(f"keyring must never be consulted for a fake:// url, got {url!r}")
+
+    monkeypatch.setattr(token_mod, "_keyring_get", _boom)
+    resolved = token_mod.resolve_token("fake://some-test-token", env={})
+    assert resolved == "some-test-token"
+
+
+def test_resolve_token_falls_through_to_env_when_keyring_unavailable() -> None:
+    """Headless servers (DESIGN §14) are a legit CLI environment: no keyring
+    backend installed must not crash `resolve_token` when `HASSLE_TOKEN` is
+    set -- it should be used without ever letting the keyring exception
+    escape."""
+    import keyring.errors as keyring_errors
+
+    import hassle_cli.token as token_mod
+
+    def _raise_no_keyring(url: str) -> str | None:
+        raise keyring_errors.NoKeyringError("No recommended backend was available.")
+
+    real_keyring_get = token_mod._keyring_get
+    token_mod._keyring_get = _raise_no_keyring  # type: ignore[assignment]
+    try:
+        resolved = token_mod.resolve_token(
+            "http://homeassistant.local:8123", env={"HASSLE_TOKEN": "env-token"}
+        )
+    finally:
+        token_mod._keyring_get = real_keyring_get  # type: ignore[assignment]
+    assert resolved == "env-token"
+
+
+def test_resolve_token_no_keyring_and_no_env_gives_clean_error() -> None:
+    """No keyring backend AND no `HASSLE_TOKEN` -- must not leak the raw
+    `NoKeyringError` traceback; must raise a what/where/fix `TokenResolutionError`
+    naming the headless-server fix (R6: error messages are product surface)."""
+    import keyring.errors as keyring_errors
+
+    import hassle_cli.token as token_mod
+
+    def _raise_no_keyring(url: str) -> str | None:
+        raise keyring_errors.NoKeyringError("No recommended backend was available.")
+
+    real_keyring_get = token_mod._keyring_get
+    token_mod._keyring_get = _raise_no_keyring  # type: ignore[assignment]
+    try:
+        with pytest.raises(token_mod.TokenResolutionError) as excinfo:
+            token_mod.resolve_token_or_raise("http://homeassistant.local:8123", env={})
+    finally:
+        token_mod._keyring_get = real_keyring_get  # type: ignore[assignment]
+    message = str(excinfo.value)
+    assert "keyring" in message.lower()
+    assert "HASSLE_TOKEN" in message
+    assert "http://homeassistant.local:8123" in message
+
+
+def test_cli_status_against_fake_backend_survives_headless_keyring(
+    git_repo: Path, cli, fake_backend, toml_writer, monkeypatch
+) -> None:
+    """End-to-end version of the CI regression: a `fake://`-backed `hassle
+    status` invocation must succeed even when the OS keyring is entirely
+    unavailable (simulating the ubuntu unit-test runner)."""
+    import keyring.errors as keyring_errors
+
+    def _raise(*_a: object, **_kw: object) -> None:
+        raise keyring_errors.NoKeyringError("No recommended backend was available.")
+
+    monkeypatch.setattr("keyring.get_password", _raise)
+    monkeypatch.setattr("keyring.set_password", _raise)
+
+    _backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    result = cli(["status"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
 
 
 def _patch_login_probe_and_keyring(monkeypatch) -> dict[str, str]:
