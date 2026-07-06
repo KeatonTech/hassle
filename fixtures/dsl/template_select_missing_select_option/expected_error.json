@@ -1,0 +1,4 @@
+{
+  "error_type": "MissingTemplateHelperWriteTargetError",
+  "contains": ["select_option", "helpers.py:8", "template_select"]
+}

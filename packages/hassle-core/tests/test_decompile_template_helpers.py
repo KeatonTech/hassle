@@ -91,3 +91,40 @@ def test_decompile_recompile_round_trip_is_byte_stable_for_options_body(
     recompiled_ir = {key: obj.to_ha() for key, obj in recompiled.objects.items()}
 
     assert recompiled_ir == original_ir
+
+
+def test_decompiled_write_target_helpers_recompile_without_error(tmp_path: Path) -> None:
+    """Defensive I3 test (reviewer follow-up, `MissingTemplateHelperWriteTargetError`):
+    the DECOMPILER must never produce a `template_number`/`template_select` call that
+    then fails the new compile-time required-write-target check. Golden-fixture pulled
+    template helpers always carry their `set_value`/`select_option` keys (M10
+    CI-verified) -- this test recompiles the decompiled source for exactly those two
+    write-target-bearing objects and asserts it raises nothing, and that the emitted
+    source textually carries the required kwarg (so a future decompiler change that
+    silently dropped it would fail loudly here, not just via a values-differ diff).
+    """
+    from hassle.compiler.errors import CompileError
+
+    result = compile_bundle(FIXTURE)
+    for key, required_kwarg in (
+        ("template_number:active_hvac_zones", "set_value="),
+        ("template_select:house_scene", "select_option="),
+    ):
+        obj = result.objects[key]
+        source = decompile_object(key, obj)
+        assert required_kwarg in source
+
+        bundle_dir = tmp_path / key.replace(":", "_")
+        bundle_dir.mkdir()
+        (bundle_dir / "helpers.py").write_text(
+            "from hassle import template_number, template_select\n"
+            "from hassle.registry import entities as e\n\n" + source + "\n",
+            encoding="utf-8",
+        )
+        # Must not raise MissingTemplateHelperWriteTargetError (or anything else).
+        try:
+            compile_bundle(bundle_dir)
+        except CompileError as exc:  # pragma: no cover - failure path, not the happy path
+            raise AssertionError(
+                f"decompiled {key} failed to recompile ({type(exc).__name__}: {exc})"
+            ) from exc
