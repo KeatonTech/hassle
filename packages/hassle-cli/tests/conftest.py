@@ -23,6 +23,46 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 HOME_REGISTRY = REPO_ROOT / "fixtures" / "registry" / "home.json"
 
 
+class RealKeyringUsedInUnitTestError(AssertionError):
+    """A unit test reached the real OS keyring (CI-stabilization guard).
+
+    This suite must run identically on a laptop with macOS Keychain and a
+    headless Linux CI runner with zero keyring backends installed -- the
+    latter used to raise `keyring.errors.NoKeyringError` from deep inside
+    `hassle_cli.token.resolve_token` on every `fake://`-backed CLI test,
+    which macOS silently masked (Keychain always answers). Tests that
+    legitimately want to exercise keyring-touching code paths (`hassle
+    login`, `hassle_cli.token` unit tests) monkeypatch `hassle_cli.token`'s
+    `_keyring_get`/`_keyring_set`/`_keyring_delete` directly -- that is the
+    supported opt-in seam and never reaches this guard. Anything that
+    reaches the real `keyring` module in a unit test is a bug: either a
+    missing `fake://` short-circuit (see `hassle_cli.token.resolve_token`)
+    or a test that forgot to use the `fake_backend`/`toml_writer` fixtures.
+    """
+
+
+def _raise_real_keyring_used(*args: object, **kwargs: object) -> None:
+    raise RealKeyringUsedInUnitTestError(
+        "a unit test reached the real OS keyring via the `keyring` package. "
+        "Fix: `fake://` URLs must resolve without the keyring (see "
+        "hassle_cli.token.resolve_token), and tests that intentionally exercise "
+        "keyring-touching code must monkeypatch hassle_cli.token._keyring_get/"
+        "_keyring_set/_keyring_delete instead of relying on a real backend."
+    )
+
+
+@pytest.fixture(autouse=True)
+def _forbid_real_keyring_access(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Autouse guard (CI stabilization): replace the real `keyring` module's
+    entry points with a fake that RAISES on any use, for every test in this
+    suite. No unit test may depend on a real OS keyring being present --
+    that dependency is exactly what made main red on ubuntu CI while staying
+    green on macOS (Keychain silently masks a missing keyring backend)."""
+    monkeypatch.setattr("keyring.get_password", _raise_real_keyring_used)
+    monkeypatch.setattr("keyring.set_password", _raise_real_keyring_used)
+    monkeypatch.setattr("keyring.delete_password", _raise_real_keyring_used)
+
+
 @pytest.fixture
 def registry_snapshot_json() -> dict[str, Any]:
     return json.loads(HOME_REGISTRY.read_text(encoding="utf-8"))

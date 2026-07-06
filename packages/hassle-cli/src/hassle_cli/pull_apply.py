@@ -61,35 +61,50 @@ never raises); the self-check saw a clean compile and let it through, and the
 character-explosion shape survived to disk on the owner's real bundle. Both
 self-checks now ALSO recompile every adopted/refreshed object and compare it
 against the ORIGINAL stored `remote` config it was decompiled from --
-:class:`DecompiledBatchDoesNotCompileError` is raised for a value mismatch
-too, not just a raised exception, with the cause message spelling out that the
+:class:`DecompiledValueMismatchError` is raised for a value mismatch too, not
+just a raised exception, with the cause message spelling out that the
 recompiled value differs from the original (never a user mistake: the input
 was real, already-stored HA config).
 
-**Why DSL-source comparison, not a raw canonical-hash equality check:** a raw
-hash comparison (the first thing tried) false-positived across the whole
-fixture corpus -- the decompiler performs well-known, deliberate, COSMETIC
-modernizations on every recompile (legacy `platform:`/`service:` key spelling,
-a string/numeric `delay:` reformatted to the dict-of-units form --
-`packages/hassle-core/tests/test_roundtrip_corpus.py`'s `_modernized` helper,
-docs/ha-api-notes.md's M2 findings), which are NOT decompiler bugs and must
-never trip this self-check. The fix: decompile BOTH the recompiled object and
-the original stored config to DSL source and compare the TEXT -- the exact
-same technique `hassle_cli.diffing.is_modernization_only_diff` already uses
-to answer this identical question on the plan side ("do these two configs
-differ only in modernization-eligible schema shape, or for real"). If both
-sides decompile to identical DSL, any raw-JSON difference between them is
-exactly one of the known modernizations; if they decompile to DIFFERENT DSL,
-something real changed -- which is precisely what the `for_each` bug did
-(the buggy source decompiles to a giant character-list literal, never the
-same DSL as the template-string form). See
-`packages/hassle-cli/tests/test_pull_adopt_batch_self_check.py`'s new
-regression test (constructed from a hand-rolled "explodes for_each into a
-character list" fake decompiler -- proven to fail before this widening, and
-to be caught by it after) and
-`packages/hassle-core/tests/test_roundtrip_corpus.py`'s new
-`repeat_for_each_template_string` corpus fixture, which exercises the ACTUAL
-bug end to end (not just the mechanism that failed to catch it).
+**Field failure, then fix (``fix/self-check-value-compare``, coordinator
+report): decompiled-TEXT comparison was ITSELF context-dependent, causing a
+false positive on the owner's live bundle.** The first attempt at the value
+comparison (decompile BOTH the recompiled object and the original stored
+config to DSL source and compare the TEXT -- the same technique
+`hassle_cli.diffing.is_modernization_only_diff` uses on the plan side) was
+wrong: decompiled TEXT is not context-free. The SAME IR value can decompile
+to different Python source depending on what ELSE is being decompiled
+alongside it in a real multi-object batch -- a sibling object's alias
+colliding forces a `_2` function-name suffix (DESIGN §7.3's deterministic
+dedup), and a same-batch script call resolves through a `CallResolver` to a
+real function call instead of `service(...)` (`ux/shared-script-calls`).
+Neither of those is a value change (a Python identifier and a call-site
+rewrite are never part of `to_ha()`), but a text comparison sees them as
+"different DSL" and raises anyway -- exactly the failure reported on the
+owner's live bundle: `hassle pull` refused to write six objects (an
+automation plus five helpers sharing its adopt batch), even though a direct
+raw-JSON comparison showed at least three of them were byte-identical to
+what was already stored. Blocking the whole batch made it worse: a
+false-positive mismatch on ONE object (the automation) aborted the write of
+every sibling in the same self-check call, including helpers that were never
+actually wrong.
+
+**The fix: compare canonical-JSON VALUES, never decompiled text.**
+:func:`hassle.ir.modernize.modernize_for_comparison` is the bounded,
+deterministic transform a decompile+recompile cycle is expected to apply --
+promoted from `test_roundtrip_corpus.py`'s `_modernized` test-only helper
+(inner `platform:` -> `trigger:`, and a string/numeric `delay:` -> the
+dict-of-units form; nothing else) -- applied to `original` before hashing
+and comparing against `recompiled.to_ha()`. This is CONTEXT-FREE by
+construction: it only ever looks at the JSON value itself, so the same input
+always modernizes to the same output regardless of what else is being
+compiled/decompiled alongside it in a batch. See
+`packages/hassle-cli/tests/test_pull_adopt_batch_self_check.py`'s regression
+tests (the ORIGINAL for_each-bug true-positive case, still caught; and the
+NEW false-positive case -- a batch-context name collision forcing a `_2`
+suffix on one object, values identical -- now correctly passes) and
+`packages/hassle-core/tests/test_ir_modernize_for_comparison.py` for the
+transform itself.
 """
 
 from __future__ import annotations
@@ -100,8 +115,10 @@ from pathlib import Path
 from typing import Any
 
 from hassle.compiler.bundle import compile_bundle
-from hassle.decompiler.codegen import ScriptRef, decompile_bundle, decompile_object
-from hassle.ir.models import parse
+from hassle.decompiler.codegen import ScriptRef, decompile_bundle
+from hassle.ir.canonical import sha256_hash
+from hassle.ir.models import IRObject, parse
+from hassle.ir.modernize import modernize_for_comparison
 from hassle.sync.models import Conflict, Plan, PlanAction, PlanEntry
 from hassle.sync.pull import PullResult
 from hassle.sync.source_writer import SourceWriter
@@ -144,17 +161,20 @@ class DecompiledBatchDoesNotCompileError(Exception):
 
 class DecompiledValueMismatchError(Exception):
     """Raised by the pre-write self-check (``ux/dsl-ergonomics``, item 4
-    investigation) when the freshly decompiled-then-recompiled object does
-    not decompile to the same DSL source as the ORIGINAL stored config it was
-    decompiled from (module docstring: "why DSL-source comparison, not a raw
-    canonical-hash equality check" -- this tolerates the decompiler's known
-    cosmetic modernizations while still catching a real semantic change).
-    Unlike :class:`DecompiledBatchDoesNotCompileError` (raised on an
-    exception), this catches a decompiler bug that compiles cleanly but
-    silently changes the object's meaning -- e.g. the `for_each`
-    template-string bug (module docstring): `list("{{ ... }}")` never raises,
-    so only a value comparison, not "did it compile", can catch it. Never a
-    user mistake: the input was real, already-stored HA config."""
+    investigation; comparison mechanism fixed in ``fix/self-check-value-
+    compare``) when a recompiled object's canonical-JSON value (module
+    docstring: :func:`values_match`) does not reproduce the ORIGINAL stored
+    config it was decompiled from, modulo the bounded, deterministic
+    modernizations a decompile+recompile cycle is expected to apply. Unlike
+    :class:`DecompiledBatchDoesNotCompileError` (raised on an exception), this
+    catches a decompiler bug that compiles cleanly but silently changes the
+    object's meaning -- e.g. the `for_each` template-string bug (module
+    docstring): `list("{{ ... }}")` never raises, so only a value comparison,
+    not "did it compile", can catch it. The comparison is CONTEXT-FREE
+    (canonical-JSON values, never decompiled DSL text) -- see the module
+    docstring's "field failure, then fix" for why the earlier text-based
+    comparison false-positived on the owner's live bundle. Never a user
+    mistake: the input was real, already-stored HA config."""
 
     def __init__(self, object_keys: list[str]) -> None:
         self.object_keys = object_keys
@@ -194,6 +214,103 @@ def _refresh(entry: PlanEntry, source_writer: SourceWriter) -> None:
     )
 
 
+# Mirrors `hassle.decompiler.codegen._automation_source`'s own
+# `_ALLOWED_TOP_LEVEL` gate (the set of top-level keys a typed `@automation`
+# can express at all -- anything else forces the whole-object `raw_automation`
+# fallback, DESIGN §5.8), widened with the legacy SINGULAR block-key spellings
+# (`trigger`/`condition`/`action`) since `values_match` checks ``original``
+# BEFORE `normalize_ha` pluralizes them (`codegen.py`'s own check runs after).
+_TYPED_AUTOMATION_TOP_LEVEL_KEYS: frozenset[str] = frozenset(
+    {
+        "id",
+        "alias",
+        "description",
+        "mode",
+        "max",
+        "max_exceeded",
+        "initial_state",
+        "triggers",
+        "conditions",
+        "actions",
+        "trigger",
+        "condition",
+        "action",
+        "trigger_variables",
+        "variables",
+    }
+)
+
+
+def values_match(recompiled: IRObject, original: dict[str, Any]) -> bool:
+    """Context-free value comparison (``fix/self-check-value-compare``,
+    coordinator field-failure fix): True if ``recompiled`` (an already-compiled
+    IR object) reproduces ``original`` (the raw stored config it was decompiled
+    from), modulo the bounded, deterministic modernizations a decompile+
+    recompile cycle is expected to apply (:func:`~hassle.ir.modernize.
+    modernize_for_comparison` -- inner `platform:` -> `trigger:`, string/numeric
+    `delay:` -> the dict-of-units form; nothing else).
+
+    Compares CANONICAL-JSON VALUES (`sha256_hash`), never decompiled DSL text --
+    see this module's docstring ("field failure, then fix") for why a text
+    comparison is NOT context-free: the same IR value can decompile to
+    different Python source depending on what else is being decompiled
+    alongside it (a batch-context name-collision `_2` suffix, a same-batch
+    script-call rewrite), neither of which is a value change. This function is
+    the single shared comparison both pull-side self-checks
+    (`_self_check_adopt_batches` below, and `hassle_cli.cli.pull`'s post-write
+    backstop) use, so they can never disagree on what counts as a mismatch.
+
+    Two further bounded, deterministic adjustments to ``original`` before
+    modernizing -- both already precedented by `test_roundtrip_corpus.py`'s own
+    test-side expectation adjustment for the identical comparison, and both
+    artifacts of hand-authored docs-example fixtures rather than anything a
+    real HA install ever actually stores (real HA always returns `id` and
+    always returns all three block keys, even empty -- these only arise via
+    `FakeBackend`-seeded corpus fixtures in tests):
+
+    - An automation ``original`` with no ``id`` at all gets ``recompiled.identity``
+      backfilled (the compiler always materializes an explicit ``id`` --
+      `options.get("id") or func.__name__`, docs/ha-api-notes.md's M2 finding --
+      so a stored automation missing `id` entirely only ever arises from a
+      docs-example fixture whose identity is extrinsic, a ``key_hint``).
+    - A TYPED ``@automation`` always materializes ``triggers``/``conditions``/
+      ``actions``, even empty (bundle.py's `_build_automation`) -- ``original``
+      missing one of these three keys gets it defaulted to ``[]``, but ONLY
+      when ``original``'s own top-level keys are all typed-automation-
+      expressible (:data:`_TYPED_AUTOMATION_TOP_LEVEL_KEYS`, mirroring
+      `hassle.decompiler.codegen._automation_source`'s own gate). An object
+      whose top-level shape forces the whole-object `raw_automation` fallback
+      (DESIGN §5.8 -- e.g. the ancient inline `platform:`/`entity_id:`/`to:`
+      form with no `trigger:`/`triggers:` wrapper at all,
+      `automation_legacy_platform_naming.json`) preserves its body VERBATIM,
+      with no materialized empty blocks at all -- defaulting one in for it
+      would be exactly the false positive this fix removes, just from the
+      other direction (adding a key that was never really implied).
+
+    Neither adjustment mutates the caller's ``original``.
+    """
+    comparable_original = original
+    if recompiled.kind() == "automation":
+        if "id" not in comparable_original:
+            comparable_original = {**comparable_original, "id": recompiled.identity}
+        if set(comparable_original) <= _TYPED_AUTOMATION_TOP_LEVEL_KEYS:
+            # Check BOTH spellings (`trigger`/`triggers`, ...) -- `original` may
+            # still be in the legacy singular schema at this point (this runs
+            # before `modernize_for_comparison`'s own `normalize_ha` call), so
+            # defaulting on the plural spelling alone would add a SECOND,
+            # conflicting key alongside an already-present singular one.
+            for singular, plural in (
+                ("trigger", "triggers"),
+                ("condition", "conditions"),
+                ("action", "actions"),
+            ):
+                if singular not in comparable_original and plural not in comparable_original:
+                    comparable_original = {**comparable_original, plural: []}
+    return sha256_hash(
+        modernize_for_comparison(comparable_original, kind=recompiled.kind())
+    ) == sha256_hash(recompiled.to_ha())
+
+
 def _self_check_adopt_batches(
     batch_sources: dict[Path, str],
     object_keys: list[str],
@@ -211,25 +328,16 @@ def _self_check_adopt_batches(
     destination path and object key involved -- nothing has been written to
     the real bundle yet.
 
-    ``original_configs`` (``ux/dsl-ergonomics``, item 4 investigation, module
-    docstring: "self-check widened to compare values"): every recompiled
-    object is ALSO compared against the ORIGINAL stored config it was
-    decompiled from -- "does it compile" alone cannot catch a decompiler bug
-    that compiles cleanly but silently changes an object's meaning
-    (`list("{{ template }}")` never raises). The comparison decompiles BOTH
-    sides to DSL source and compares the source text (the same technique
-    ``hassle_cli.diffing.is_modernization_only_diff`` already uses for the
-    plan-side equivalent of this exact question) rather than a raw canonical-
-    hash equality check: a raw hash comparison would false-positive on the
-    well-known, deliberate, cosmetic modernizations the decompiler always
-    performs (legacy `platform:`/`service:` key spelling, string/numeric
-    `delay:` format -- see `test_roundtrip_corpus.py`'s `_modernized` helper
-    and docs/ha-api-notes.md's M2 findings) -- those are NOT decompiler bugs
-    and must not trip this self-check. If both sides decompile to the same
-    DSL source, any raw-JSON difference between them is exactly one of those
-    known modernizations, not a real value change.
-    :class:`DecompiledValueMismatchError` is raised for a genuine mismatch,
-    naming every object_key whose value changed.
+    ``original_configs`` (``ux/dsl-ergonomics``, item 4 investigation, widened
+    in ``fix/self-check-value-compare``, module docstring: "the fix: compare
+    canonical-JSON VALUES, never decompiled text"): every recompiled object is
+    ALSO compared against the ORIGINAL stored config it was decompiled from,
+    via :func:`values_match` -- "does it compile" alone cannot catch a
+    decompiler bug that compiles cleanly but silently changes an object's
+    meaning (`list("{{ template }}")` never raises), and a decompiled-TEXT
+    comparison is not context-free (the field failure this module docstring
+    documents). :class:`DecompiledValueMismatchError` is raised for a genuine
+    mismatch, naming every object_key whose value changed.
     """
     if not batch_sources:
         return
@@ -249,9 +357,7 @@ def _self_check_adopt_batches(
             recompiled = result.objects.get(object_key)
             if recompiled is None:
                 continue  # not part of this self-check's batch
-            recompiled_src = decompile_object(object_key, recompiled)
-            original_src = decompile_object(object_key, _parsed(object_key, original))
-            if recompiled_src != original_src:
+            if not values_match(recompiled, original):
                 mismatched.append(object_key)
         if mismatched:
             raise DecompiledValueMismatchError(sorted(mismatched))

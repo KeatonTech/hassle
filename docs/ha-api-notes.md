@@ -1736,3 +1736,263 @@ per the standing instruction. If the orchestrator's next CI run reproduces
 it with full logs, the actual assertion/exception message will settle
 whether it's a `dev`-image regression (HA version drift in trace behavior)
 or flaky timing, neither of which this milestone's diff plausibly causes.
+
+**Merge-time addendum (2026-07-06):** the failure was subsequently root-caused and
+fixed on `main` — see §29 (`automation.trigger` targeted a nonexistent entity_id, then
+a trace-settle race, then HA's per-item_id trace retention across shadow
+delete/recreate). It was indeed unrelated to this milestone's diff, as diagnosed.
+
+## 28. CI stabilization (`fix/ci-stabilization`): two unrelated root causes for 8 pushes of red `main`
+
+Main was red on every push for a while; the two failures had nothing to do with each other and
+neither was actually the "HA behavior changed" story one might guess from the job names.
+
+**Finding A — ubuntu-only unit job: `keyring.errors.NoKeyringError` from `fake://`-backed CLI
+tests.** `hassle_cli.token.resolve_token(ha_url)` was called unconditionally by
+`_require_backend_config` (`hassle_cli.cli`) for every command, including when `ha_url` was the
+`fake://<token>` test-only seam (`hassle_cli.backend_factory`) — the `startswith("fake://")` check
+only skipped the *subsequent* "no token" error message, not the keyring lookup itself. On macOS,
+`keyring.get_password` always resolves to the Keychain backend (returns `None` for an unknown
+entry, never raises), so this was invisible locally. On the headless ubuntu-latest GitHub runner
+there is no keyring backend installed at all, so the same call raises
+`keyring.errors.NoKeyringError`, which propagated as an unhandled exception out of `hassle_cli.
+cli.py::status/plan/push/pull` and anything else going through `_require_backend_config` — i.e.
+most of `test_cli_commands.py` and `test_agents_md_scaffold.py`. This is not an HA API/version
+finding — it's a pure test-isolation bug — but is recorded here per the standing instruction to
+log any finding discovered while stabilizing the shared CI pipeline.
+
+Fix, both layers as required:
+- **Product** (`packages/hassle-cli/src/hassle_cli/token.py`): `resolve_token` now short-circuits
+  on `fake://` URLs before ever importing/calling `keyring` (the token is embedded in the URL —
+  there is nothing to look up), and separately catches `keyring.errors.NoKeyringError` for real
+  URLs, treating "no keyring backend installed" the same as "no token found" rather than letting
+  it crash. A new `resolve_token_or_raise` + `TokenResolutionError` (what/where/fix, one paragraph)
+  is what `_require_backend_config` uses to turn "token not found anywhere" into a clean CLI error
+  that explicitly names the headless-server fix (`export HASSLE_TOKEN=...`) alongside the desktop
+  one (`hassle login`).
+- **Test** (`packages/hassle-cli/tests/conftest.py`): a new autouse `_forbid_real_keyring_access`
+  fixture monkeypatches `keyring.get_password`/`set_password`/`delete_password` to raise
+  `RealKeyringUsedInUnitTestError` for every test in the suite, unconditionally — no unit test may
+  ever depend on a real OS keyring existing again. Tests that intentionally exercise
+  keyring-touching code (`hassle login`, the `hassle_cli.token` unit tests) monkeypatch
+  `hassle_cli.token._keyring_get`/`_keyring_set` directly instead, which is unaffected by this
+  guard (it patches a different, module-internal seam).
+- Regression tests added to `packages/hassle-cli/tests/test_token_and_secrets.py`:
+  `test_resolve_token_never_touches_keyring_for_fake_url`,
+  `test_resolve_token_falls_through_to_env_when_keyring_unavailable`,
+  `test_resolve_token_no_keyring_and_no_env_gives_clean_error`,
+  `test_cli_status_against_fake_backend_survives_headless_keyring` (the last one reproduces the
+  exact CI failure end-to-end by monkeypatching `keyring.get_password`/`set_password` to raise
+  `NoKeyringError`, confirmed red before the fix).
+
+**Finding B — `integration · HA stable` and `integration · HA dev`, identically:
+`packages/hassle-cli/tests/integration/test_run_live.py::test_run_live_creates_shadow_triggers_
+and_cleans_up` — `TypeError: Context.__init__() got an unexpected keyword argument 'cwd'`.** The
+task description hypothesized an HA-dev trace/shadow behavior change or a timing/settle issue;
+neither is correct. `gh run view 28765559755 --log-failed` shows the identical `AssertionError:
+assert 1 == 0` / `TypeError` on **both** the `stable` and `dev` matrix legs, which rules out an
+HA-version-specific behavior change outright (a dev-only regression cannot reproduce byte-for-byte
+on stable too). The actual cause: the test called
+`click.testing.CliRunner.invoke(main, args, env=..., cwd=str(bundle))` — but `CliRunner.invoke`
+has never supported a `cwd` kwarg; `**extra` is forwarded through `Command.main` into
+`click.Context.__init__`, which raises `TypeError` for the unrecognized keyword *before the command
+body ever runs*. `catch_exceptions` defaults to `True`, so the `TypeError` is swallowed into
+`Result.exit_code == 1` — the shadow-automation body (create/trigger/trace/cleanup) never executed
+at all, on either HA version. This also means
+`test_run_live_cleans_up_shadow_on_trace_stream_failure` (which only asserts `exit_code != 0`) was
+passing for the wrong reason — the same `TypeError` satisfies its assertion regardless of whether
+the injected `stream_trace` failure ever ran.
+
+Fix (a genuine bug fix, not an xfail — the failure is fully diagnosable and platform-independent):
+replaced the invalid `cwd=` kwarg with an `os.chdir()`-around-the-call helper
+(`_invoke_in_dir` in `test_run_live.py`), matching the pattern the unit-test suite's
+`packages/hassle-cli/tests/conftest.py::run_cli` already uses for the same reason. A new unit test,
+`test_cli_runner_invoke_rejects_cwd_kwarg_regression` (no network, runs in the ordinary unit job),
+pins down the root cause directly against a trivial `click.command()` so this class of mistake
+gets caught immediately in the unit job next time instead of silently no-op'ing an integration
+test. No DESIGN.md or MILESTONES.md change needed — DESIGN §10.4 / MILESTONES M7 test 5's
+intended behavior (shadow created, triggered, trace rendered, cleaned up) is unchanged; only the
+test's own Click API usage was wrong. Not independently re-verified against live HA in this PR (no
+Docker/HA access in this environment) — the orchestrator's CI run against both `stable` and `dev`
+is the actual green/red signal for this fix, per the task's definition of done.
+
+## 29. `run --live` trace-settle race (`fix/run-live-trace-settle`): a real trace vanished silently
+
+**The finding.** Once Finding B (§28) was fixed and `run --live`'s shadow-automation body actually
+executed against real HA, a new, legible failure appeared identically on `HA stable` and `HA dev`:
+the command completed cleanly (`shadow run complete: hassle_shadow_...`) but rendered **no trace
+timeline at all** — DESIGN §10.4 point 3's whole point. Root cause, in
+`hassle_cli.commands.run_live_command.execute_live_run`'s `get_trace_fn`: it called `trace/list`
+exactly once, immediately after `automation.trigger` returned, and returned `{}` straight through
+if that single call came back empty. HA persists a trace **asynchronously** after a trigger — the
+same class of async-settling race already documented for the config-REST reload
+(`DirectBackend._await_config_entity`, §17.7) — so a `trace/list` issued too early routinely
+returns `[]` even though the run is about to have a trace. `execute_live_run`'s
+`if result.trace:` then simply skipped the whole rendering block for a falsy `{}`, with **zero**
+indication to the user that anything was ever wrong — indistinguishable from "there was nothing to
+show," which is never true for a triggered automation.
+
+**Rejected alternate theory (ruled out explicitly, as asked).** A wrong `item_id` (e.g. passing the
+shadow's full `entity_id`, `"automation.hassle_shadow_..."`, instead of its bare automation `id`)
+would produce the exact same symptom — an empty `trace/list`/`trace/get` — and needed to be ruled
+out separately from the timing race. Re-verified against the §7 capture shape
+(`trace/list`/`trace/get` take `domain` + `item_id`, where `item_id` is the bare automation `id`,
+e.g. `"hassle_skipcond"`) and pinned down with a dedicated unit test
+(`test_execute_live_run_uses_bare_automation_id_not_entity_id_for_trace_lookup`,
+`packages/hassle-cli/tests/test_run_live_command.py`): `get_trace_fn`/`list_traces`/`get_trace`
+were already using the bare `shadow_id` correctly — only `trigger_fn`'s `automation.trigger`
+service call needs the full `entity_id` (a service-call target, not a trace lookup), and it already
+had it right. The bug was purely the missing poll/no-feedback path, not a parameter mistake.
+
+**Fix.**
+- `hassle_cli/run_live.py`: `stream_trace` now bounded-polls `get_trace_fn` (default 5 s budget,
+  0.25 s interval, both overridable and read off the module at call time so they're
+  monkeypatchable) instead of accepting a single empty response — matching the `DirectBackend`
+  reload-settle pattern's own bounded-polling shape. `sleep_fn`/`monotonic_fn` are injected (default
+  `time.sleep`/`time.monotonic`) so this is genuinely live-transport I/O (R8's "no wall-clock"
+  governs core compiler/simulator logic, not this) while unit tests use a fake clock and take zero
+  real wall-clock time. Added `render_trace_timeline` (a real step-by-step timeline keyed off
+  `trace["trace"]`'s step paths — `trigger`/`condition/0`/`action/0`/… — DESIGN §10.4 point 3;
+  full DSL-source-line mapping remains a separate, not-yet-built feature).
+- `hassle_cli/commands/run_live_command.py`: renders the timeline when a trace eventually shows up;
+  when it still doesn't after the full poll window, prints an explicit yellow warning naming the
+  run id and pointing at Settings → Automations → Traces in the HA UI — never silence, whether the
+  cause is a slower-than-usual settle or a genuine absence.
+- Regression tests: `test_stream_trace_polls_until_trace_appears` /
+  `test_stream_trace_gives_up_after_poll_timeout_returns_empty` (fake clock, `packages/hassle-cli/
+  tests/test_run_command.py`); `render_trace_timeline` structural tests (same file); CLI-level
+  `test_execute_live_run_renders_timeline_once_trace_settles` /
+  `test_execute_live_run_warns_explicitly_when_trace_never_appears` /
+  `test_execute_live_run_uses_bare_automation_id_not_entity_id_for_trace_lookup` (new file,
+  `packages/hassle-cli/tests/test_run_live_command.py`, against a hand-rolled stub `Backend` with
+  the trace/`call_service` surface `FakeBackend` doesn't have). The one integration test's
+  assertion was tightened from the bare word `"trace"` to a structural check (`action/0` step path
+  present, the explicit-warning text absent) plus the mirror assertion in the "never appears" case.
+- No DESIGN.md/MILESTONES.md change: DESIGN §10.4 point 3 already specified a rendered timeline;
+  this fixes an implementation gap, not a design gap. Not re-verified against live HA in this PR
+  (no Docker/HA access here) — the orchestrator's CI run is the actual green signal.
+
+### 27 addendum (`fix/run-live-enabled-shadow`): the real root cause was `entity_id` targeting, not disabled-automation semantics
+
+**Round-2 CI evidence.** With §29's bounded poll + never-silent warning in place, the warning
+fired cleanly on both `HA stable` and `HA dev`: a genuine 5-second poll, never a single trace. This
+proved the trace really never appears — not a race — and prompted the hypothesis that a *disabled*
+shadow automation (`initial_state: off`, DESIGN §10.4 point 1's original mechanism) might not
+execute `automation.trigger`'s forced trigger, or might not have it traced, on the current HA `dev`
+line. That hypothesis is the reason this addendum exists: it needed to be checked against HA's
+actual source before touching anything, and it turned out to be **wrong**, but the underlying
+symptom was real and had a different, definitive cause.
+
+**HA source verification (read directly from `home-assistant/core`, `dev` branch,
+`homeassistant/components/automation/__init__.py` + `trace.py` + `homeassistant/helpers/service.py`
++ `homeassistant/components/trace/{util.py,websocket_api.py}`, 2026-07):**
+
+- `automation.trigger` (`SERVICE_TRIGGER`, registered in `async_setup`) is wired directly to
+  `AutomationEntity.async_trigger(...)` — **not** to `_async_trigger_if_enabled`, which is a
+  separate method that gates on `self._is_enabled` and is *only* wired into
+  `_async_attach_triggers` (i.e. the automation's own configured trigger-listener machinery, which
+  a disabled/`initial_state: off` automation never even attaches — `_async_enable_automation`
+  returns immediately `if not self._is_enabled`). `async_trigger` itself contains **no
+  `self._is_enabled` check anywhere** in its body (confirmed by reading the full method,
+  `__init__.py` lines ~677–818 of the fetched source): it unconditionally opens
+  `trace_automation(...)` and unconditionally runs `self.action_script.async_run(...)`.
+- `trace_automation` (`trace.py`) calls `async_store_trace` unconditionally, keyed only by
+  `automation_id` (`self.unique_id`) — no enabled-state check.
+- `AutomationEntity` never overrides `_attr_available`; only `UnavailableAutomationEntity` (config
+  validation failures) does. A disabled-but-valid automation stays `available = True`, so entity
+  service-call resolution (`helpers/service.py`'s `.available` filter) never excludes it either.
+- `trace/list`/`trace/get` (`components/trace/util.py`, `websocket_api.py`) key purely by the
+  `f"{domain}.{item_id}"` string; no enabled-state involvement anywhere in that path either.
+- **Conclusion, stated plainly: a disabled automation's forced `automation.trigger` service call
+  DOES execute the action script and DOES get a trace recorded, on the `dev` branch read here.**
+  `initial_state: off` was never actually the bug. (If a future HA release changes this, the
+  never-fires-event-trigger redesign below no longer depends on it either way, which is part of
+  why it was still worth making.)
+
+**The actual root cause: already-documented Hassle-side bug, §10.2's exact quirk.** §10.2 above
+(from the original M0.V spike) states plainly: *"the automation `entity_id` is `slug(alias)`, not
+`slug(id)` … Enumerate/trigger by matching `attributes.id`, never by assuming `automation.<id>`."*
+`hassle_cli.commands.run_live_command.execute_live_run`'s `trigger_fn` did exactly the thing this
+note warns against:
+
+```python
+backend.call_service("automation", "trigger", entity_id=f"automation.{shadow_id}", **payload)
+```
+
+`build_shadow_config` copies the *original* automation's `alias` unchanged into the shadow (only
+`id`/`initial_state` were overridden) — so the shadow's real `entity_id` is `slug(alias)` of that
+unchanged alias (e.g. `automation.live_test_automation`), never `automation.hassle_shadow_<hash>`.
+Every live trigger was silently targeting an entity that doesn't exist — `automation.trigger`
+against a nonexistent `entity_id` matches zero entities and does nothing — so of course no trace
+ever appeared, on any HA version, disabled or not. This fully explains the empirical symptom
+without needing the disabled-automation hypothesis at all, and explains why it's identical on
+`stable` and `dev`: it isn't HA-version-dependent, it's a Hassle bug that was simply never
+exercised until the `cwd=` bug (§28) was fixed and the shadow flow ran against real HA for the
+first time.
+
+**Fix (both parts landed together, `fix/run-live-enabled-shadow`):**
+- `hassle_cli/run_live.py`'s `build_shadow_config`: the shadow is now created **enabled** (no
+  `initial_state` key at all) with its trigger list replaced by a single event trigger on a
+  run-unique event type (`never_fires_event_type()` → `hassle_shadow_never_<uuid4>`) that nothing
+  on the real event bus will ever fire — the same "never fires on its own" guarantee DESIGN §10.4
+  point 1 wants, without depending on disabled-automation semantics being what they turned out to
+  already correctly be.
+- `hassle_cli/commands/run_live_command.py`: added `resolve_shadow_entity_id`, which resolves the
+  shadow's real `entity_id` by matching `attributes.id` against `/api/states` (mirroring
+  `DirectBackend._alist_automations`'s own enumeration logic) before calling `automation.trigger` —
+  replacing the naive, wrong `f"automation.{shadow_id}"`. `list_traces`/`get_trace`'s `item_id`
+  usage was already correct (keyed by the bare config id, per §7/§10.2) and is unchanged.
+- DESIGN §10.4 point 1/2 and MILESTONES M7 test 5 updated in the same series to describe the
+  enabled-shadow-with-never-fires-trigger design and the `entity_id`-resolution requirement (this
+  revises a previously-designed mechanism with live evidence, per the standing instruction).
+- Integration test strengthened (coordinator ask): the shadow's action now also increments a
+  counter helper created for the test (M0.V pattern), and the test asserts the counter's value
+  changed — separating "the service call was accepted" from "the automation's action actually
+  executed," the exact ambiguity that let this hide as long as it did. Unit tests updated for the
+  new shadow shape (`test_build_shadow_config_replaces_triggers_with_never_fires_event`,
+  `test_never_fires_event_type_is_unique_per_call`) and for the entity_id-resolution fix
+  (`test_execute_live_run_uses_bare_automation_id_not_entity_id_for_trace_lookup`'s assertion now
+  pins the REAL resolved entity_id, not the old naive one).
+- Not re-verified against live HA in this PR (no Docker/HA access here) — the orchestrator's CI run
+  against `HA stable` + `HA dev` is the actual green signal.
+
+### 27 addendum, round 3 (`fix/run-live-fixture-condition`): the entity_id fix worked; the remaining failure was pure test fixture
+
+**Round-3 CI evidence.** With the enabled-shadow + real-`entity_id` fix from the previous round
+landed, the full live pipeline executed for the first time ever: shadow created enabled, entity
+resolved correctly, triggered, traced, and the timeline rendered —
+`trace: run 554711d1... (failed_conditions) / trigger / condition/0 / condition/0/entity_id/0`.
+This is a strong, if accidental, positive result: `failed_conditions` in the trace is direct proof
+that Hassle's `skip_condition: false` default (DESIGN §10.4 point 2) is actually taking effect
+against real HA — HA's own default (`skip_condition: true`) would have skipped straight to
+`action/0` regardless of the condition. But it was accidental: the remaining test failure
+(`action/0` not appearing, so the counter-increment assertion failed) was because
+`_write_bundle`'s automation gates on `input_boolean.hassle_flag_2` via `only_if`, and the test
+created that helper but never set it to `"on"` — HA's own default for a freshly created
+`input_boolean` is `"off"` (§4), so the condition was unsatisfiable by construction. Not an HA
+behavior question at all; a test-fixture bug.
+
+**Fix.** `test_run_live_creates_shadow_triggers_and_cleans_up`
+(`packages/hassle-cli/tests/integration/test_run_live.py`) is now two-phase, turning the accident
+into deliberate, documented coverage of the entire §10.4 semantic surface in one test:
+
+1. **Phase 1 (condition unsatisfied):** trigger with `input_boolean.hassle_flag_2` still at HA's
+   default `"off"` — assert the trace shows `failed_conditions` AND the counter helper's value did
+   NOT change. This is the positive-proof half that was missing before: a trace merely rendering
+   isn't proof `skip_condition: false` gates anything (a vacuously-satisfied condition would look
+   the same); the counter staying put is what proves the action genuinely didn't run.
+2. **Phase 2 (condition satisfied):** `ha.call_service("input_boolean", "turn_on", entity_id=
+   "input_boolean.hassle_flag_2")`, trigger again — assert `action/0` in the rendered timeline and
+   the counter incremented, exactly as intended by the original (round-2) design.
+
+A new unit test, `test_render_trace_timeline_failed_conditions_has_no_action_step`
+(`packages/hassle-cli/tests/test_run_command.py`), pins the rendering shape a `failed_conditions`
+trace actually produces (`trigger` + `condition/0` + `condition/0/entity_id/0` steps, no `action/*`
+step at all, per the M0.V §7 capture shape) — this is the local, network-free proof that the new
+integration test's phase-1 structural assertions (`"failed_conditions" in output`, `"action/0" not
+in output`) are checking something real rather than an unverified guess about HA's trace shape.
+No product code changed in this round — `render_trace_timeline`/`resolve_shadow_entity_id`/
+`build_shadow_config` were already correct; this closes out the last gap with a test fix only. Not
+re-verified against live HA in this PR (no Docker/HA access here) — the orchestrator's CI run is
+the actual green signal, and is expected to be the first fully-green run of this test across all
+three rounds.

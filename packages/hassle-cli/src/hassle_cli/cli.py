@@ -77,7 +77,7 @@ def _relative_finding_path(file: str | None, root: Path) -> str | None:
 def _require_backend_config(root: Path) -> tuple[str, str]:
     import os
 
-    from hassle_cli.token import resolve_token
+    from hassle_cli.token import TokenResolutionError, resolve_token_or_raise
 
     # HASSLE_HA_URL + HASSLE_TOKEN env override (same convention as the M6
     # integration suite's HASSLE_TEST_HA_URL/_TOKEN): lets `run --live`'s one
@@ -96,16 +96,12 @@ def _require_backend_config(root: Path) -> tuple[str, str]:
             err=True,
         )
         raise SystemExit(2)
-    token = resolve_token(config.ha_url)
-    if token is None and not config.ha_url.startswith("fake://"):
-        click.echo(
-            "hassle: no token found for this HA instance (checked HASSLE_TOKEN and the "
-            "system keyring). Fix: run `hassle login --url "
-            f"{config.ha_url}` to store one.",
-            err=True,
-        )
-        raise SystemExit(2)
-    return config.ha_url, token or ""
+    try:
+        token = resolve_token_or_raise(config.ha_url)
+    except TokenResolutionError as exc:
+        click.echo(str(exc), err=True)
+        raise SystemExit(2) from exc
+    return config.ha_url, token
 
 
 @click.group()
@@ -192,7 +188,7 @@ def pull(allow_dirty: bool) -> None:
     """Merge UI-side edits into the working tree (never writes to HA)."""
     from hassle.ir.keys import OBJECT_KINDS
     from hassle.sync.plan import compute_plan
-    from hassle.sync.source_writer import WholeFileSourceWriter
+    from hassle.sync.source_writer import SplicingSourceWriter
     from hassle_cli import backend_factory
     from hassle_cli.doctor import find_committed_tokens
     from hassle_cli.git_support import commit_message_for_pull
@@ -292,7 +288,15 @@ def pull(allow_dirty: bool) -> None:
         }
     )
 
-    writer = WholeFileSourceWriter()
+    # The REAL splicer-backed writer: REFRESH/DROP touch exactly one object's
+    # statement, so sibling objects sharing a source file survive (I6 -- the
+    # `test_pull_refresh_splice.py` regression: `WholeFileSourceWriter` here
+    # rewrote the whole file per refreshed object). The marker date is stamped
+    # at this CLI edge (R8 keeps wall-clock out of core logic only, same as
+    # `manifest_io`'s `last_synced`).
+    from datetime import UTC, datetime
+
+    writer = SplicingSourceWriter(updated_on=datetime.now(UTC).strftime("%Y-%m-%d"))
     # `apply_pull_with_decompiler` self-checks every ADOPT destination
     # together BEFORE writing any of them (`hassle_cli.pull_apply` module
     # docstring, coordinator task 4) -- a decompiler coordination bug here is
@@ -330,10 +334,15 @@ def pull(allow_dirty: bool) -> None:
     # compiles cleanly but silently changes an object's meaning. Every
     # REFRESH/ADOPT entry's original stored `remote` config is compared
     # against what the bundle just written recompiles to -- via
-    # `is_modernization_only_diff`'s decompiled-DSL-source comparison (same
-    # technique, same reason: tolerate the decompiler's known cosmetic
-    # modernizations, never a raw canonical-hash equality check, which would
-    # false-positive on those).
+    # `hassle_cli.pull_apply.values_match` (canonical-JSON value comparison,
+    # ``fix/self-check-value-compare``). This backstop used to call
+    # `is_modernization_only_diff`, which decompiles both sides to DSL TEXT --
+    # not context-free (the field failure `pull_apply`'s module docstring
+    # documents: the same value can decompile to different text depending on
+    # what else is in the same batch), and this exact code path is what
+    # produced it on the owner's live bundle. `values_match` is the single
+    # shared comparison both this backstop and the pre-write self-check use,
+    # so they can never disagree.
     try:
         _, post_write_result = bundle_ops.compile_local_objects(root)
     except Exception as exc:
@@ -349,9 +358,8 @@ def pull(allow_dirty: bool) -> None:
         )
         raise SystemExit(1) from exc
 
-    from hassle.ir.canonical import sha256_hash
     from hassle.sync.models import ManifestEntry, PlanAction
-    from hassle_cli.diffing import is_modernization_only_diff
+    from hassle_cli.pull_apply import values_match
 
     mismatched_keys = [
         entry.object_key
@@ -359,13 +367,7 @@ def pull(allow_dirty: bool) -> None:
         if entry.action in (PlanAction.REFRESH, PlanAction.ADOPT)
         and entry.remote is not None
         and entry.object_key in post_write_result.objects
-        and not is_modernization_only_diff(
-            entry.object_key,
-            entry.kind,
-            post_write_result.objects[entry.object_key].to_ha(),
-            entry.remote,
-        )
-        and post_write_result.objects[entry.object_key].to_ha() != entry.remote
+        and not values_match(post_write_result.objects[entry.object_key], entry.remote)
     ]
     if mismatched_keys:
         keys = ", ".join(sorted(mismatched_keys))
@@ -398,6 +400,8 @@ def pull(allow_dirty: bool) -> None:
     # adopt/create. Advancing the manifest for pull-side actions is this
     # CLI's own bookkeeping (no core-layer test covers it: `apply_pull`
     # deliberately never accepts a manifest, MILESTONES M5 test 2).
+    from hassle.ir.canonical import sha256_hash
+
     new_objects = dict(manifest.objects)
     for entry in plan.entries:
         if entry.action in (PlanAction.REFRESH, PlanAction.ADOPT):
