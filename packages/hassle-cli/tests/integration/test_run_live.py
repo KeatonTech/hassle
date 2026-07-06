@@ -1,9 +1,13 @@
 """MILESTONES M7 test 5: `run --live` integration test (Dockerized HA).
 
-Shadow automation created with `initial_state: off`, triggered with
+Shadow automation created ENABLED with a never-fires event trigger (revised
+design, docs/ha-api-notes.md §27 addendum -- NOT `initial_state: off`, which
+turned out not to be what actually mattered here), triggered with
 `skip_condition: false` by default (HA's own default is `true` -- assert we
-override it), trace rendered with correct source lines, shadow deleted --
-also on failure (inject a trace-stream error; assert cleanup).
+override it), trace rendered with correct source lines, the action's real
+side effect observed (a counter helper increments -- M0.V pattern, proves the
+automation actually RAN, not just that the service call was accepted), shadow
+deleted -- also on failure (inject a trace-stream error; assert cleanup).
 """
 
 from __future__ import annotations
@@ -72,26 +76,39 @@ def _shadow_ids(ha: DirectBackend) -> list[str]:
     ]
 
 
-def _write_bundle(tmp_path: Path) -> Path:
+def _write_bundle(tmp_path: Path, *, counter_entity_id: str) -> Path:
     root = tmp_path / "live-bundle"
     root.mkdir()
     (root / "hassle.toml").write_text("format_version = 1\nmirror = false\n", encoding="utf-8")
     # A flat bundle (DSL sources directly at the bundle root) is still fully
     # supported (docs/ha-api-notes.md §17.9 RESOLVED: the loader also
     # recurses into subdirectories now, but never requires them).
+    # The counter.increment action (M0.V pattern, coordinator ask point 3):
+    # separates "the automation.trigger service call was accepted" from "the
+    # automation's action script actually ran" -- the ambiguity that let the
+    # missing-trace bug hide as long as it did. A trace appearing is now
+    # corroborated by an independently observable side effect.
     (root / "a.py").write_text(
-        """
+        f"""
 from hassle import automation, only_if, service, state, when
 
 @automation(id="live_test_automation", alias="Live test automation")
 def live_test_automation():
     when(state("input_boolean.hassle_flag").to("on"))
     only_if(state("input_boolean.hassle_flag_2").is_("on"))
-    service("input_boolean.turn_off", target={"entity_id": "input_boolean.hassle_flag"})
+    service("input_boolean.turn_off", target={{"entity_id": "input_boolean.hassle_flag"}})
+    service("counter.increment", target={{"entity_id": "{counter_entity_id}"}})
 """,
         encoding="utf-8",
     )
     return root
+
+
+def _counter_value(ha: DirectBackend, entity_id: str) -> int:
+    for state in ha.states():  # type: ignore[attr-defined]
+        if state.get("entity_id") == entity_id:
+            return int(state["state"])
+    raise AssertionError(f"{entity_id} not found in /api/states")
 
 
 @pytest.mark.integration
@@ -103,8 +120,11 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     url, token = ha_url_token
     ha.create("input_boolean", {"name": "Hassle Flag", "icon": "mdi:flag"})
     ha.create("input_boolean", {"name": "Hassle Flag 2", "icon": "mdi:flag"})
+    counter_id = ha.create("counter", {"name": "Hassle Live Run Counter"})
+    counter_entity_id = f"counter.{counter_id}"
+    before = _counter_value(ha, counter_entity_id)
 
-    bundle = _write_bundle(tmp_path)
+    bundle = _write_bundle(tmp_path, counter_entity_id=counter_entity_id)
     result = _invoke_in_dir(
         main,
         ["run", "a.py::live_test_automation", "--live", "--yes"],
@@ -121,6 +141,12 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     # tested here).
     assert "action/0" in result.output
     assert "no trace became available" not in result.output.lower()
+    # §27 addendum (coordinator ask point 3): a rendered trace alone doesn't
+    # prove the automation's action actually EXECUTED against real HA (that
+    # ambiguity -- "service call accepted" vs "automation ran" -- is exactly
+    # what let the entity_id-mismatch bug hide) -- an independently
+    # observable side effect (M0.V pattern) closes that gap.
+    assert _counter_value(ha, counter_entity_id) == before + 1
     # Shadow cleaned up on success.
     assert _shadow_ids(ha) == []
 
@@ -138,13 +164,14 @@ def test_run_live_cleans_up_shadow_on_trace_stream_failure(
     url, token = ha_url_token
     ha.create("input_boolean", {"name": "Hassle Flag", "icon": "mdi:flag"})
     ha.create("input_boolean", {"name": "Hassle Flag 2", "icon": "mdi:flag"})
+    counter_id = ha.create("counter", {"name": "Hassle Live Run Counter"})
 
     def _boom(*args: object, **kwargs: object) -> None:
         raise RuntimeError("injected trace-stream failure")
 
     monkeypatch.setattr(run_live, "stream_trace", _boom)
 
-    bundle = _write_bundle(tmp_path)
+    bundle = _write_bundle(tmp_path, counter_entity_id=f"counter.{counter_id}")
     result = _invoke_in_dir(
         main,
         ["run", "a.py::live_test_automation", "--live", "--yes"],

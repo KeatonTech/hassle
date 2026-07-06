@@ -1510,3 +1510,87 @@ had it right. The bug was purely the missing poll/no-feedback path, not a parame
 - No DESIGN.md/MILESTONES.md change: DESIGN §10.4 point 3 already specified a rendered timeline;
   this fixes an implementation gap, not a design gap. Not re-verified against live HA in this PR
   (no Docker/HA access here) — the orchestrator's CI run is the actual green signal.
+
+### 27 addendum (`fix/run-live-enabled-shadow`): the real root cause was `entity_id` targeting, not disabled-automation semantics
+
+**Round-2 CI evidence.** With §27's bounded poll + never-silent warning in place, the warning
+fired cleanly on both `HA stable` and `HA dev`: a genuine 5-second poll, never a single trace. This
+proved the trace really never appears — not a race — and prompted the hypothesis that a *disabled*
+shadow automation (`initial_state: off`, DESIGN §10.4 point 1's original mechanism) might not
+execute `automation.trigger`'s forced trigger, or might not have it traced, on the current HA `dev`
+line. That hypothesis is the reason this addendum exists: it needed to be checked against HA's
+actual source before touching anything, and it turned out to be **wrong**, but the underlying
+symptom was real and had a different, definitive cause.
+
+**HA source verification (read directly from `home-assistant/core`, `dev` branch,
+`homeassistant/components/automation/__init__.py` + `trace.py` + `homeassistant/helpers/service.py`
++ `homeassistant/components/trace/{util.py,websocket_api.py}`, 2026-07):**
+
+- `automation.trigger` (`SERVICE_TRIGGER`, registered in `async_setup`) is wired directly to
+  `AutomationEntity.async_trigger(...)` — **not** to `_async_trigger_if_enabled`, which is a
+  separate method that gates on `self._is_enabled` and is *only* wired into
+  `_async_attach_triggers` (i.e. the automation's own configured trigger-listener machinery, which
+  a disabled/`initial_state: off` automation never even attaches — `_async_enable_automation`
+  returns immediately `if not self._is_enabled`). `async_trigger` itself contains **no
+  `self._is_enabled` check anywhere** in its body (confirmed by reading the full method,
+  `__init__.py` lines ~677–818 of the fetched source): it unconditionally opens
+  `trace_automation(...)` and unconditionally runs `self.action_script.async_run(...)`.
+- `trace_automation` (`trace.py`) calls `async_store_trace` unconditionally, keyed only by
+  `automation_id` (`self.unique_id`) — no enabled-state check.
+- `AutomationEntity` never overrides `_attr_available`; only `UnavailableAutomationEntity` (config
+  validation failures) does. A disabled-but-valid automation stays `available = True`, so entity
+  service-call resolution (`helpers/service.py`'s `.available` filter) never excludes it either.
+- `trace/list`/`trace/get` (`components/trace/util.py`, `websocket_api.py`) key purely by the
+  `f"{domain}.{item_id}"` string; no enabled-state involvement anywhere in that path either.
+- **Conclusion, stated plainly: a disabled automation's forced `automation.trigger` service call
+  DOES execute the action script and DOES get a trace recorded, on the `dev` branch read here.**
+  `initial_state: off` was never actually the bug. (If a future HA release changes this, the
+  never-fires-event-trigger redesign below no longer depends on it either way, which is part of
+  why it was still worth making.)
+
+**The actual root cause: already-documented Hassle-side bug, §10.2's exact quirk.** §10.2 above
+(from the original M0.V spike) states plainly: *"the automation `entity_id` is `slug(alias)`, not
+`slug(id)` … Enumerate/trigger by matching `attributes.id`, never by assuming `automation.<id>`."*
+`hassle_cli.commands.run_live_command.execute_live_run`'s `trigger_fn` did exactly the thing this
+note warns against:
+
+```python
+backend.call_service("automation", "trigger", entity_id=f"automation.{shadow_id}", **payload)
+```
+
+`build_shadow_config` copies the *original* automation's `alias` unchanged into the shadow (only
+`id`/`initial_state` were overridden) — so the shadow's real `entity_id` is `slug(alias)` of that
+unchanged alias (e.g. `automation.live_test_automation`), never `automation.hassle_shadow_<hash>`.
+Every live trigger was silently targeting an entity that doesn't exist — `automation.trigger`
+against a nonexistent `entity_id` matches zero entities and does nothing — so of course no trace
+ever appeared, on any HA version, disabled or not. This fully explains the empirical symptom
+without needing the disabled-automation hypothesis at all, and explains why it's identical on
+`stable` and `dev`: it isn't HA-version-dependent, it's a Hassle bug that was simply never
+exercised until the `cwd=` bug (§26) was fixed and the shadow flow ran against real HA for the
+first time.
+
+**Fix (both parts landed together, `fix/run-live-enabled-shadow`):**
+- `hassle_cli/run_live.py`'s `build_shadow_config`: the shadow is now created **enabled** (no
+  `initial_state` key at all) with its trigger list replaced by a single event trigger on a
+  run-unique event type (`never_fires_event_type()` → `hassle_shadow_never_<uuid4>`) that nothing
+  on the real event bus will ever fire — the same "never fires on its own" guarantee DESIGN §10.4
+  point 1 wants, without depending on disabled-automation semantics being what they turned out to
+  already correctly be.
+- `hassle_cli/commands/run_live_command.py`: added `resolve_shadow_entity_id`, which resolves the
+  shadow's real `entity_id` by matching `attributes.id` against `/api/states` (mirroring
+  `DirectBackend._alist_automations`'s own enumeration logic) before calling `automation.trigger` —
+  replacing the naive, wrong `f"automation.{shadow_id}"`. `list_traces`/`get_trace`'s `item_id`
+  usage was already correct (keyed by the bare config id, per §7/§10.2) and is unchanged.
+- DESIGN §10.4 point 1/2 and MILESTONES M7 test 5 updated in the same series to describe the
+  enabled-shadow-with-never-fires-trigger design and the `entity_id`-resolution requirement (this
+  revises a previously-designed mechanism with live evidence, per the standing instruction).
+- Integration test strengthened (coordinator ask): the shadow's action now also increments a
+  counter helper created for the test (M0.V pattern), and the test asserts the counter's value
+  changed — separating "the service call was accepted" from "the automation's action actually
+  executed," the exact ambiguity that let this hide as long as it did. Unit tests updated for the
+  new shadow shape (`test_build_shadow_config_replaces_triggers_with_never_fires_event`,
+  `test_never_fires_event_type_is_unique_per_call`) and for the entity_id-resolution fix
+  (`test_execute_live_run_uses_bare_automation_id_not_entity_id_for_trace_lookup`'s assertion now
+  pins the REAL resolved entity_id, not the old naive one).
+- Not re-verified against live HA in this PR (no Docker/HA access here) — the orchestrator's CI run
+  against `HA stable` + `HA dev` is the actual green signal.

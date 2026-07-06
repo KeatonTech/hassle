@@ -21,13 +21,27 @@ import pytest
 from rich.console import Console
 
 
+def _slugify(text: str) -> str:
+    """Toy slugify good enough for these tests -- real HA's is more thorough,
+    but the point (entity_id derived from alias, NOT from id) only needs
+    lowercase + underscores here."""
+    return "".join(ch if ch.isalnum() else "_" for ch in text.lower()).strip("_")
+
+
 class _StubTraceBackend:
     """Minimal stand-in for `DirectBackend`'s trace-relevant surface
     (`create`/`delete` for the shadow automation lifecycle, `call_service`
-    for the trigger, `list_traces`/`get_trace` for the trace poll).
-    `register_fake_backend` accepts anything shaped like the `Backend`
-    protocol -- no isinstance check -- so this doesn't need to BE a
-    `FakeBackend`.
+    for the trigger, `list_traces`/`get_trace` for the trace poll, `states`
+    for entity_id resolution). `register_fake_backend` accepts anything
+    shaped like the `Backend` protocol -- no isinstance check -- so this
+    doesn't need to BE a `FakeBackend`.
+
+    `states()` deliberately reproduces the real (and, before this fix,
+    Hassle-mishandled) HA quirk docs/ha-api-notes.md §10.2 documents:
+    `entity_id` is `slug(alias)`, NOT `slug(id)` -- so a stub that just used
+    `automation.{id}` here would make `test_execute_live_run_uses_bare_
+    automation_id_not_entity_id_for_trace_lookup`'s entity_id assertion
+    vacuously true even with the old, broken `trigger_fn`.
     """
 
     def __init__(self, *, empty_polls_before_trace: int | None) -> None:
@@ -47,6 +61,21 @@ class _StubTraceBackend:
 
     def delete(self, kind: str, identity: str) -> None:
         self.deleted.append((kind, identity))
+
+    def states(self) -> list[dict[str, Any]]:
+        out = []
+        for kind, config in self.created:
+            if kind != "automation":
+                continue
+            alias = config.get("alias") or config["id"]
+            out.append(
+                {
+                    "entity_id": f"automation.{_slugify(alias)}",
+                    "state": "on",
+                    "attributes": {"id": config["id"]},
+                }
+            )
+        return out
 
     def call_service(self, domain: str, service: str, **data: Any) -> None:
         self.triggered.append((f"{domain}.{service}", data))
@@ -156,9 +185,13 @@ def test_execute_live_run_uses_bare_automation_id_not_entity_id_for_trace_lookup
     exact params `trace/list`/`trace/get` receive against the M0.V capture
     shape (docs/ha-api-notes.md §7: `domain` + `item_id` + `run_id`, where
     `item_id` is the automation's own `id`, e.g. `"hassle_skipcond"` -- NOT
-    `"automation.hassle_skipcond"`) while `automation.trigger`'s service call
-    correctly targets the full `entity_id` (that one DOES need the
-    `automation.` prefix -- it's a service-call target, not a trace lookup)."""
+    `"automation.hassle_skipcond"`).
+
+    Also pins the §27 addendum fix: `automation.trigger`'s service call must
+    target the REAL entity_id -- `slug(alias)`, docs/ha-api-notes.md §10.2 --
+    resolved via `/api/states`, not the naive-and-wrong `automation.{shadow_id}`
+    (the actual root cause of the missing-trace symptom: that entity never
+    existed, so the trigger silently hit nothing)."""
     from hassle_cli import run_live
     from hassle_cli.commands.run_live_command import execute_live_run
 
@@ -189,11 +222,16 @@ def test_execute_live_run_uses_bare_automation_id_not_entity_id_for_trace_lookup
         assert item_id == shadow_id
         assert run_id == "run-xyz"
 
-    # automation.trigger's service call, by contrast, DOES need the full
-    # entity_id -- that's a different API (service call, not a trace lookup).
+    # automation.trigger's service call: the REAL entity_id (slug(alias)),
+    # NOT the naive-and-wrong f"automation.{shadow_id}" -- the alias is
+    # unchanged from the original automation ("Live test automation"), so
+    # the shadow's entity_id is automation.live_test_automation, which does
+    # NOT textually match automation.hassle_shadow_<hash>. This is exactly
+    # the mismatch that silently broke every live trigger before the fix.
     assert backend.triggered
     _service, data = backend.triggered[0]
-    assert data["entity_id"] == f"automation.{shadow_id}"
+    assert data["entity_id"] != f"automation.{shadow_id}"
+    assert data["entity_id"] == "automation.live_test_automation"
 
 
 def test_execute_live_run_warns_explicitly_when_trace_never_appears(

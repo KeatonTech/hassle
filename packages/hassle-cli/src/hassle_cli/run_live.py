@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -49,14 +50,43 @@ def shadow_automation_id(object_key: str) -> str:
 SHADOW_ID_PREFIX = "hassle_shadow_"
 
 
+def never_fires_event_type(run_id: str | None = None) -> str:
+    """A unique-per-run event type no real event on the bus will ever fire
+    (`hass.bus.async_fire` needs an explicit, deliberate call with this exact
+    string) -- `run_id` defaults to a fresh UUID4 so two concurrent/successive
+    `run --live` invocations never share one, closing off even a
+    vanishingly-unlikely collision with a real integration's event type."""
+    return f"hassle_shadow_never_{run_id or uuid.uuid4().hex}"
+
+
 def build_shadow_config(object_key: str, body: dict[str, Any]) -> dict[str, Any]:
-    """The automation body to push as a shadow: same triggers/conditions/
-    actions, but `initial_state: off` (DESIGN §10.4 point 1: "its triggers
-    never fire on their own") and a shadow-prefixed id."""
+    """The automation body to push as a shadow: same conditions/actions, but
+    its OWN trigger list replaced by a single event trigger that can never
+    fire on its own (a unique-per-run event type, see `never_fires_event_type`)
+    and a shadow-prefixed id.
+
+    Revised design (docs/ha-api-notes.md §27 addendum): DESIGN §10.4 point 1
+    originally said "its triggers never fire on their own" via
+    `initial_state: off` (a *disabled* shadow). Live evidence + HA source
+    reading showed that mechanism was never actually exercised -- the
+    integration test that would have caught it was broken by an unrelated
+    `CliRunner.invoke(cwd=...)` bug (docs/ha-api-notes.md §26) from the day it
+    was written, so `run --live`'s shadow flow had never run against real HA
+    before. A disabled automation's `entity_id` targeting turned out to be
+    broken for an unrelated reason (§27 addendum: `entity_id` is `slug(alias)`,
+    not `slug(id)` -- already documented in §10.2 -- so `trigger_fn`'s
+    `automation.{shadow_id}` never matched the real entity at all). Rather
+    than depend on "disabled automations still record traces for a forced
+    trigger" (true per HA source, but an indirect, easy-to-doubt property),
+    the shadow is now created ENABLED with a trigger that structurally cannot
+    self-fire -- the same never-fires guarantee DESIGN §10.4 point 1 wants,
+    without relying on disabled-automation semantics at all.
+    """
     shadow_id = shadow_automation_id(object_key)
     shadow = dict(body)
     shadow["id"] = shadow_id
-    shadow["initial_state"] = False
+    shadow.pop("initial_state", None)
+    shadow["triggers"] = [{"trigger": "event", "event_type": never_fires_event_type()}]
     return shadow
 
 
