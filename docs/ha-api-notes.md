@@ -2350,8 +2350,63 @@ tests, `FakeBackend`-only, `apply_plan`-level), `packages/hassle-core/tests/
 test_direct_backend_category_writeback.py` (WS payload shapes for `create_category`/
 `assign_category`, monkeypatched `_client`, no network), `packages/hassle-cli/tests/
 test_push_category_writeback.py` (end-to-end `hassle push` against `FakeBackend`, including the
-warning text in `hassle push`'s stdout). No integration test was added for the real WS commands
-above (the same category as §22's own "not added" integration TODO for `category_registry`
-create/assign — scripting a real category create+assign+verify round-trip generically is
-nontrivial, and CI's Docker HA run is the actual live-verification signal for whatever the
-orchestrator runs next); this is the recommended follow-up flagged to the human, same as §22's.
+warning text in `hassle push`'s stdout), and — added in the round below —
+`packages/hassle-core/tests/integration/test_m11_category_writeback.py` (real Docker HA, both
+`stable`/`dev`).
+
+### 30 addendum: integration coverage added, one settle-race fixed pre-emptively (round 2, same PR)
+
+**Why this addendum exists.** MILESTONES M11 test 1's own text ends with "CI integration verifies
+live" — the first round of this PR shipped only unit tests (`FakeBackend`-level and
+monkeypatched-`_client`-level), which never actually drives `config/category_registry/create` or
+`config/entity_registry/update` against a real instance. Given M10's own history (§26.0-§26.10:
+six CI rounds where source-inferred flow shapes turned out wrong), shipping M11 without live
+coverage of its own two newly-inferred WS commands would repeat exactly that mistake. Flagged by
+review before merge; fixed in this same PR/commit rather than a follow-up.
+
+**Added:** `test_m11_category_writeback.py`, four tests (module docstring has the full list) —
+create-and-assign with no pre-existing category, reuse of an existing matching category (never
+duplicated), the script-scope variant (the specific worry: does a `script.<object_id>` entity's
+`unique_id` really equal the script's object id, the same way an automation's does?), and an
+other-object/other-scope non-interference check (I6) — real HA's category registry only has the
+two scopes DESIGN §7.3 places by, and a single object can only ever be in one of them, so there is
+no way to seed a second scope's category on the SAME object; the test instead seeds a script's
+category first and confirms it survives a *different* object's (an automation's) category
+assignment, which still exercises the same `config/entity_registry/list` read-every-row +
+client-side-merge code path a same-object two-scope case would. Documented as a limitation of HA's
+actual scope set, not a gap in the test.
+
+Every test owns a globally-unique (`uuid4`-suffixed) category-name slug and object identity, and
+best-effort deletes the category in teardown — **`config/category_registry/delete` was not
+confirmed to exist while writing this suite** (no HA source access for this specific command
+in this pass; `contextlib.suppress` makes teardown a no-op rather than a failure if it doesn't).
+This is the one still-open "not live-verified" item from this section: if CI's teardown step
+errors loudly (rather than silently no-op'ing), that is itself the live confirmation the command
+doesn't exist as named, and should be recorded as a further correction here. The globally-unique
+slug is what actually prevents collisions across reruns regardless of whether delete works.
+
+**Pre-emptive fix: `_aassign_category` now bounded-polls for the entity-registry row.**
+Re-reading `_await_config_entity` (§17.7) while writing the integration tests surfaced a real gap:
+`create()` for an automation/script already waits for the entity to appear in `/api/states` before
+returning, but `apply_plan` then immediately calls `attempt_category_writeback` ->
+`_aassign_category`, which looks the entity up via a SEPARATE call
+(`config/entity_registry/list`). "Visible in `/api/states`" and "visible in
+`config/entity_registry/list`" are two different HA-internal signals with no guarantee they settle
+on the same tick — exactly the async-settling class §17.7/§29 already document for other
+HA-internal transitions. Rather than wait for CI to discover this as a flaky `LookupError` (the
+same way §29's trace-settle race was originally discovered by symptom), `_aassign_category` now
+bounded-polls (`self._reload_timeout`/`self._reload_interval`, the same knobs `_await_config_entity`
+uses — no new wait budget invented) until the row appears or the deadline passes, at which point it
+raises the same `LookupError` as before (still just a warning at the `attempt_category_writeback`
+call site, I6). Unit-tested (`test_assign_category_polls_until_entity_registry_row_appears`, a fake
+client whose `config/entity_registry/list` response starts empty and "appears" after N calls) —
+this is a pre-emptive hardening based on the documented pattern, not something CI actually caught
+failing yet; if live CI shows the row is always immediately visible (no settling needed at all),
+the poll is harmless (succeeds on its first iteration) and this note should be updated to say so.
+
+**Still not live-verified as of this addendum** (both flagged in the original §30 text above, both
+now covered by tests that will confirm or refute them once CI runs): whether
+`config/category_registry/create`'s exact `{scope, name}` argument shape and
+`config/entity_registry/update`'s wholesale-replace-vs-merge `categories` semantics match what
+this section infers. If CI finds either wrong, fix `DirectBackend` + this section in the same PR
+as §26 did, and downgrade the corresponding unit test's docstring claim accordingly.
