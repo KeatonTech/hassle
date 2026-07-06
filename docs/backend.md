@@ -211,6 +211,46 @@ M7 owns real conflict UX (a rich 3-way *DSL*-level diff, DESIGN §8.2); this
 format only exists so a human (or M7, at integration time) can see both sides
 of a conflict from M5's output today.
 
+## 3.1. Config-entry template-helper addendum (M10, additive — `Backend` unchanged)
+
+MILESTONES M10 adds the first config-entry `ObjectType` plugin (DESIGN §13),
+scoped to the `template` domain (`hassle.ir.TEMPLATE_DOMAINS`:
+`template_number`/`template_sensor`/`template_binary_sensor`/
+`template_select`). This needed **zero changes to the `Backend` Protocol**:
+`list_remote`/`create`/`update`/`delete` are exactly the same four methods,
+addressed the same `(kind, identity)` way. What differs is entirely internal
+to `FakeBackend`/`DirectBackend`:
+
+- **Identity.** `identity` is the declared `unique_id` (the DSL's `id=`
+  kwarg) — frozen as the object-key identity in the M10 PR. HA's own
+  config-entry identity, the `entry_id` it assigns on creation
+  (docs/ha-api-notes.md §26), is transport-side only.
+- **`ManifestEntry.entry_id`** (additive optional field, `hassle.sync.models`):
+  where the `entry_id` is tracked — never in the IR body, never in the
+  object key. `apply.py`'s `_advance_manifest` populates it by calling an
+  **additive, non-Protocol** `entry_id_for(kind, identity) -> str | None`
+  method both `FakeBackend` and `DirectBackend` expose (probed defensively
+  via `getattr`, the same pattern `fetch_registry_snapshot` already
+  established for backend extras outside F2) — a `Backend` implementer that
+  doesn't expose it (hypothetically, a backend with no config-entry kinds at
+  all) simply gets `entry_id=None` forever, which is harmless: nothing else
+  reads it except a future DirectBackend needing it to address
+  `config_entries/options/flow` by entry_id rather than re-deriving it.
+- **Internally:** `create`/`update` drive a simulated (`FakeBackend`) or real
+  (`DirectBackend`, M10) multi-step `config_entries/flow` /
+  `config_entries/options/flow` to completion inside the single synchronous
+  method call — the Protocol's caller (the sync engine) never sees the
+  intermediate flow steps, exactly as it never sees the helper `{domain}_id`
+  payload-key convention (quirk #1) either. `delete` is a plain
+  `config_entries/remove` by `entry_id`.
+- **Apply order** (`hassle.sync.apply._KIND_ORDER`): the four template
+  domains slot in after the nine storage helpers, before scripts — same
+  dependency-ordering rationale (an automation/script may reference a
+  template helper's entity id, so it must exist first).
+
+See docs/ha-api-notes.md §26 for the full flow-shape capture notes and the
+rollback entry_id-changes caveat.
+
 ## 4. Where things live
 
 - `hassle.backend` — `Backend` Protocol (`protocol.py`), `FakeBackend`

@@ -117,13 +117,23 @@ class Plan(BaseModel):
 
 
 class ManifestEntry(BaseModel):
-    """One object's entry in `manifest.lock` (DESIGN §8.1)."""
+    """One object's entry in `manifest.lock` (DESIGN §8.1).
+
+    ``entry_id`` (M10 addition, additive/optional): for a config-entry
+    template-helper object (``hassle.ir.TEMPLATE_DOMAINS``), the HA-assigned
+    config entry id (docs/ha-api-notes.md §26.5) -- transport-side identity
+    only, never the object-key identity (``unique_id``) and never part of the
+    IR body (docs/backend.md's config-entry addendum). ``None`` for every
+    other kind (automation/script/storage-collection helper), which have no
+    such secondary identity to track.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     source: str | None
     compiled_hash: str
     kind: str = "dsl"  # dsl | raw | blueprint
+    entry_id: str | None = None
 
 
 class Manifest(BaseModel):

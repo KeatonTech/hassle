@@ -150,7 +150,9 @@ class TemplateHelperConfig(IRObject):
 
     def kind(self) -> str:
         if not self._domain:
-            raise ValueError("TemplateHelperConfig has no domain; parse it with kind=<template domain>")
+            raise ValueError(
+                "TemplateHelperConfig has no domain; parse it with kind=<template domain>"
+            )
         return self._domain
 
     @property

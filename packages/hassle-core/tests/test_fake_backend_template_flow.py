@@ -136,18 +136,14 @@ def test_template_number_recreate_after_delete_gets_fresh_entry_id() -> None:
     )
     first_entry_id = backend.entry_id_for("template_number", identity)
     backend.delete("template_number", identity)
-    backend.create(
-        "template_number", {"unique_id": "zones", "name": "Zones", "state": "{{ 1 }}"}
-    )
+    backend.create("template_number", {"unique_id": "zones", "name": "Zones", "state": "{{ 1 }}"})
     second_entry_id = backend.entry_id_for("template_number", identity)
     assert second_entry_id != first_entry_id
 
 
 def test_template_create_collision_raises() -> None:
     backend = FakeBackend()
-    backend.create(
-        "template_number", {"unique_id": "zones", "name": "Zones", "state": "{{ 1 }}"}
-    )
+    backend.create("template_number", {"unique_id": "zones", "name": "Zones", "state": "{{ 1 }}"})
     with pytest.raises(ConfigEntryFlowError):
         backend.create(
             "template_number", {"unique_id": "zones", "name": "Zones 2", "state": "{{ 2 }}"}

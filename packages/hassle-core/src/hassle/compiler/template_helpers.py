@@ -66,7 +66,8 @@ def _render_state(state: Any) -> Any:
 def _declare_template_helper(domain: str, id: str, **fields: Any) -> EntityRef:
     if domain not in TEMPLATE_DOMAINS:
         raise ValueError(
-            f"unknown template helper domain {domain!r} (expected one of {sorted(TEMPLATE_DOMAINS)})"
+            f"unknown template helper domain {domain!r} "
+            f"(expected one of {sorted(TEMPLATE_DOMAINS)})"
         )
     body: dict[str, Any] = {
         "unique_id": id,

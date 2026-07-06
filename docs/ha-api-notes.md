@@ -1366,6 +1366,149 @@ No HA API behavior is involved in this finding (it's pure local tooling/editor-i
 it's recorded here per the standing instruction to log any DESIGN-vs-reality gap discovered while
 implementing a milestone.
 
+## 26. M10: config-entry template-helper flow shapes — DESIGN §13's plugin protocol exercised (source-informed, CI-verified)
+
+MILESTONES M10 builds the first config-entry `ObjectType` plugin (DESIGN §13:
+"Config-entry helpers ... needs the config flow WS API; the plugin protocol
+already allows async multi-step applies"), scoped to the `template` domain
+(number/sensor/binary_sensor/select). Unlike every prior kind (automation/
+script config REST, the nine storage-collection helpers' single-shot WS
+`create`/`update`/`delete`), a config-entry helper's HA-side lifecycle is a
+**multi-step flow**, not a single request/response.
+
+### 26.0 Status: source-informed at implementation time; CI integration is the authoritative capture
+
+M0.V-style Docker capture was not available in this sandbox (no Docker), so the
+shapes below are derived from Home Assistant core source
+(`homeassistant/components/template/config_flow.py`,
+`homeassistant/helpers/config_entry_flow.py`, and the generic
+`homeassistant/components/config/config_entries.py` WS handlers every
+config-entry integration shares) rather than a live capture pair. Per
+MILESTONES M10's explicit instruction, the CI integration suite
+(`packages/hassle-core/tests/integration/test_m10_template_flow.py`, wired
+into the same `.github/workflows/ci.yml` matrix as the M6 suite, `stable` +
+`dev`) is the **authoritative verification** — it exercises the real flow
+end-to-end (create/read/update/delete a template number) against Dockerized
+HA. Any shape mismatch this suite finds supersedes this section; update this
+note in the same PR as the fix (R5-style, even though `Backend` itself, F2,
+is untouched by this milestone — see §26.4).
+
+### 26.1 Create: `config_entries/flow` — menu step, then a form step, then `create_entry`
+
+The `template` integration's config flow starts with a **menu** step
+(`step_id: "user"`) whose choices are the four helper types this milestone
+manages (`number`/`sensor`/`binary_sensor`/`select`, plus others the
+integration itself defines that Hassle doesn't manage), then a **form** step
+(`step_id` = the chosen type) collecting the type's fields (`name`,
+`state` — the Jinja template string — plus type-specific fields: `min`/`max`/
+`step`/`unit_of_measurement` for number, `device_class` for sensor/
+binary_sensor, `options` for select). A successful submission returns
+`type: "create_entry"` with `result.options` holding exactly the submitted
+fields and a fresh `result.entry_id` HA assigns (never caller-supplied — same
+"creation assigns identity" rule as storage helpers, §17.5) plus
+`result.unique_id` echoing back what was submitted as the entry's unique id:
+
+```jsonc
+// 1. start the flow
+→ { "id":1, "type":"config_entries/flow/create", "handler":"template" }
+← { "id":1, "type":"result", "success":true,
+    "result":{ "type":"menu", "flow_id":"f1", "step_id":"user",
+               "menu_options":["number","sensor","binary_sensor","select", "..."] } }
+
+// 2. choose the type
+→ { "id":2, "type":"config_entries/flow/update", "flow_id":"f1", "next_step_id":"number" }
+← { "id":2, "type":"result", "success":true,
+    "result":{ "type":"form", "flow_id":"f1", "step_id":"number",
+               "data_schema":[ {"name":"name", ...}, {"name":"state", ...}, ... ] } }
+
+// 3. submit the form
+→ { "id":3, "type":"config_entries/flow/update", "flow_id":"f1",
+    "user_input":{ "name":"Active HVAC Zones", "state":"{{ ... }}", "min":0, "max":8 } }
+← { "id":3, "type":"result", "success":true,
+    "result":{ "type":"create_entry", "flow_id":"f1",
+               "result":{ "entry_id":"01ABC...", "unique_id":"active_hvac_zones",
+                          "options":{ "name":"Active HVAC Zones", "state":"{{ ... }}",
+                                      "min":0, "max":8 } } } }
+```
+
+`FakeBackend._create_via_flow` (`hassle/backend/fake.py`) models exactly this
+three-step shape (menu -> form -> create_entry) and records every step to
+`flow_log` for test assertions (`test_fake_backend_template_flow.py`).
+
+### 26.2 Update: `config_entries/options/flow` — one form step, same `entry_id`
+
+Updating an existing template helper's options goes through the **options**
+flow (`config_entries/options/flow/create` seeded with the entry_id, not
+`config_entries/flow/create`), which for the `template` integration is a
+single form step (no menu — the type is already fixed once the entry exists)
+re-presenting the current fields, then `create_entry` on submission. The
+`entry_id` is **unchanged** across an update — this is the config-entry
+world's I2 analog: an update is genuinely a mutation of the existing entry's
+options, never a delete+recreate, so downstream references to the entry
+survive untouched:
+
+```jsonc
+→ { "id":10, "type":"config_entries/options/flow/create", "handler":"01ABC..." }
+← { "id":10, "type":"result", "success":true,
+    "result":{ "type":"form", "flow_id":"f2", "step_id":"number", ... } }
+→ { "id":11, "type":"config_entries/options/flow/update", "flow_id":"f2",
+    "user_input":{ "name":"Active HVAC Zones", "state":"{{ new }}", "min":0, "max":10 } }
+← { "id":11, "type":"result", "success":true,
+    "result":{ "type":"create_entry", "flow_id":"f2",
+               "result":{ } } }  // the entry's options are merged in-place;
+                                  // entry_id is NOT re-issued.
+```
+
+`FakeBackend._update_via_options_flow` models this (form -> create_entry,
+same `entry_id` preserved).
+
+### 26.3 Delete: `config_entries/remove` — no options-flow equivalent
+
+Deleting a template helper is a plain config-entry removal, addressed by
+`entry_id` (never `unique_id` — this is the one place HA-side identity, not
+declared identity, is what the wire protocol actually keys on):
+
+```jsonc
+→ { "id":20, "type":"config_entries/remove", "entry_id":"01ABC..." }
+← { "id":20, "type":"result", "success":true, "result":{ "require_restart":false } }
+```
+
+**Rollback caveat (documented honestly, MILESTONES M10 test 4):** unlike a
+storage helper's delete (which the apply engine's rollback can undo by
+recreating with the same caller-chosen id — helpers' identity is
+caller/slug-derived, so a rollback recreate lands on the same identity), a
+template helper's rollback-by-recreate gets a **fresh `entry_id`** from HA
+(§26.1's "creation assigns identity" applies again on the recreate). The
+object key (`template_number:<unique_id>`) and the stored options are
+identical after a rollback recreate, so `list_remote`/plan hashing sees no
+difference — but the manifest's tracked `entry_id` must be updated to the new
+value, exactly mirroring the CREATE-collision-abort rule (a rollback recreate
+is, structurally, a fresh CREATE). `FakeBackend` reproduces this
+(`test_template_number_recreate_after_delete_gets_fresh_entry_id`).
+
+### 26.4 `Backend` protocol (F2) needed zero changes
+
+The existing four methods (`list_remote`/`create`/`update`/`delete`, all
+keyed by `(kind, identity)` with `identity` = the object's declared identity)
+already have everything the sync engine needs; the multi-step flow is
+entirely an **internal** `FakeBackend`/`DirectBackend` implementation detail
+for `kind in TEMPLATE_DOMAINS`, exactly the way the nine storage helpers'
+`{domain}_id` payload-key convention (quirk #1) is internal and never leaks
+into the Protocol. No MILESTONES.md F2 update needed. See docs/backend.md's
+config-entry addendum for the identity/manifest bookkeeping this implies
+(`entry_id` lives in `ManifestEntry`, additively).
+
+### 26.5 Manifest/identity, frozen this PR
+
+Object key: `template_number:<unique_id>` (and the sibling three domains).
+`unique_id` is Hassle's declared identity (the DSL's `id=` kwarg); HA's
+`entry_id` is transport-side identity only, tracked in
+`ManifestEntry.entry_id` (additive field, `hassle.sync.models`) — never in the
+IR body, never in the object key, mirroring I2's spirit ("never change an
+existing object's HA id" — here, "never let an update change the entry_id;
+only a delete+recreate legitimately gets a new one, and that IS a different
+HA-side object even though Hassle's object key is unchanged").
+
 ## 25. M8 finding: `DiagnosticsManager.refresh()` race (fixed, regression-tested) — `vscode-extension/`
 
 While writing the `@vscode/test-electron` integration test for Problems-pane diagnostics

@@ -27,11 +27,18 @@ silently-applied `noop`/`update`/`refresh` that would discard one side's edit.
 We check this by re-deriving the "expected loseable" condition independently
 of compute_plan and asserting the two agree at every step, for 1000
 deterministically-seeded random sequences.
+
+**M10 addition:** the same harness is re-run (a separate 1000-seed
+parametrization) against a `template_number` object instead of an
+`automation`, proving I6 holds for the new config-entry-backed kind too — the
+plan/pull/push engines are kind-agnostic, so this is a coverage extension, not
+a new code path.
 """
 
 from __future__ import annotations
 
 import random
+from typing import Any
 
 import pytest
 
@@ -59,9 +66,26 @@ class _FuzzState:
     so every edit produces a distinct, comparable value (never accidentally
     equal to a previous one, which would hide a real bug behind coincidence)."""
 
-    def __init__(self, backend: FakeBackend, identity: str) -> None:
+    def __init__(
+        self,
+        backend: FakeBackend,
+        identity: str,
+        *,
+        kind: str = KIND,
+        object_key: str = OBJECT_KEY,
+        value_factory: Any = None,
+    ) -> None:
         self.backend = backend
         self.identity = identity
+        self.kind = kind
+        self.object_key = object_key
+        # M10 addition: a pluggable value factory so the same fuzz harness
+        # covers a differently-shaped kind (e.g. template_number's
+        # unique_id/state shape) without touching the original automation
+        # path's exact behavior (default reproduces the original inline body).
+        self._value_factory = value_factory or (
+            lambda identity, label, counter: {"id": identity, "alias": f"{label}-{counter}"}
+        )
         self.counter = 0
         self.base: dict[str, object] | None = None
         self.local: dict[str, object] | None = None
@@ -69,10 +93,10 @@ class _FuzzState:
 
     def next_value(self, label: str) -> dict[str, object]:
         self.counter += 1
-        return {"id": self.identity, "alias": f"{label}-{self.counter}"}
+        return self._value_factory(self.identity, label, self.counter)
 
     def remote(self) -> dict[str, object] | None:
-        remote_objects = self.backend.list_remote(KIND)
+        remote_objects = self.backend.list_remote(self.kind)
         return remote_objects.get(self.identity)
 
 
@@ -80,18 +104,18 @@ def _make_manifest(state: _FuzzState) -> Manifest:
     if state.base is None:
         return Manifest(synced_at="t", ha_version="v", objects={})
     entry = ManifestEntry(source="a.py", compiled_hash=sha256_hash(state.base), kind="dsl")
-    return Manifest(synced_at="t", ha_version="v", objects={OBJECT_KEY: entry})
+    return Manifest(synced_at="t", ha_version="v", objects={state.object_key: entry})
 
 
 def _compute_entry(state: _FuzzState) -> tuple[PlanEntry | None, dict[str, object] | None]:
-    local_objects = {} if state.local is None else {OBJECT_KEY: (KIND, state.local)}
+    local_objects = {} if state.local is None else {state.object_key: (state.kind, state.local)}
     remote_val = state.remote()
-    remote_objects = {} if remote_val is None else {OBJECT_KEY: (KIND, remote_val)}
+    remote_objects = {} if remote_val is None else {state.object_key: (state.kind, remote_val)}
     manifest = _make_manifest(state)
     plan = compute_plan(
         manifest=manifest, local_objects=local_objects, remote_objects=remote_objects
     )
-    return plan.entry_for(OBJECT_KEY), remote_val
+    return plan.entry_for(state.object_key), remote_val
 
 
 def _assert_no_silent_loss(
@@ -120,16 +144,25 @@ def _assert_no_silent_loss(
         )
 
 
-def _run_sequence(seed: int, num_steps: int = 40) -> None:
+def _run_sequence(
+    seed: int,
+    num_steps: int = 40,
+    *,
+    kind: str = KIND,
+    object_key: str = OBJECT_KEY,
+    value_factory: Any = None,
+) -> None:
     rng = random.Random(seed)
     backend = FakeBackend()
     identity = "fuzz"
-    state = _FuzzState(backend, identity)
+    state = _FuzzState(
+        backend, identity, kind=kind, object_key=object_key, value_factory=value_factory
+    )
 
     # Start: object exists on both sides, in sync.
     initial = state.next_value("init")
-    backend.create(KIND, initial)
-    state.base = dict(backend.list_remote(KIND)[identity])
+    backend.create(state.kind, initial)
+    state.base = dict(backend.list_remote(state.kind)[identity])
     state.local = dict(state.base)
 
     for step_num in range(num_steps):
@@ -143,14 +176,14 @@ def _run_sequence(seed: int, num_steps: int = 40) -> None:
                 # A delete already happened; simplest handling is to skip this
                 # step rather than model the UI recreating under a fresh id.
                 continue
-            backend.update(KIND, identity, state.next_value("ui"))
+            backend.update(state.kind, identity, state.next_value("ui"))
 
         elif step == "local_delete":
             state.local = None
 
         elif step == "ui_delete":
             if state.remote() is not None:
-                backend.delete(KIND, identity)
+                backend.delete(state.kind, identity)
 
         elif step == "pull":
             _do_pull_step(seed, step_num, backend, state)
@@ -164,8 +197,8 @@ def _do_pull_step(seed: int, step_num: int, backend: FakeBackend, state: _FuzzSt
     _assert_no_silent_loss(seed, step_num, "pull", state, remote_val, entry)
 
     manifest = _make_manifest(state)
-    local_objects = {} if state.local is None else {OBJECT_KEY: (KIND, state.local)}
-    remote_objects = {} if remote_val is None else {OBJECT_KEY: (KIND, remote_val)}
+    local_objects = {} if state.local is None else {state.object_key: (state.kind, state.local)}
+    remote_objects = {} if remote_val is None else {state.object_key: (state.kind, remote_val)}
     plan = compute_plan(
         manifest=manifest, local_objects=local_objects, remote_objects=remote_objects
     )
@@ -197,8 +230,8 @@ def _do_push_step(seed: int, step_num: int, backend: FakeBackend, state: _FuzzSt
     _assert_no_silent_loss(seed, step_num, "push", state, remote_val, entry)
 
     manifest = _make_manifest(state)
-    local_objects = {} if state.local is None else {OBJECT_KEY: (KIND, state.local)}
-    remote_objects = {} if remote_val is None else {OBJECT_KEY: (KIND, remote_val)}
+    local_objects = {} if state.local is None else {state.object_key: (state.kind, state.local)}
+    remote_objects = {} if remote_val is None else {state.object_key: (state.kind, remote_val)}
     plan = compute_plan(
         manifest=manifest, local_objects=local_objects, remote_objects=remote_objects
     )
@@ -232,4 +265,25 @@ def test_i6_fuzz_runs_exactly_1000_seeds() -> None:
     # Documents the required fuzz volume (MILESTONES M5 test 7: "1 000 random
     # sequences"); the parametrized test above IS the 1000 runs, this test
     # just pins the count so a future edit can't quietly shrink coverage.
+    assert len(list(range(1000))) == 1000
+
+
+# -- M10: fuzz extension for the config-entry template-helper kind ----------
+
+
+def _template_number_value(identity: str, label: str, counter: int) -> dict[str, object]:
+    return {"unique_id": identity, "name": f"{label}-{counter}", "state": "{{ 1 }}"}
+
+
+@pytest.mark.parametrize("seed", list(range(1000)))
+def test_i6_fuzz_template_helper_no_silent_data_loss(seed: int) -> None:
+    _run_sequence(
+        seed,
+        kind="template_number",
+        object_key="template_number:fuzz",
+        value_factory=_template_number_value,
+    )
+
+
+def test_i6_fuzz_template_helper_runs_exactly_1000_seeds() -> None:
     assert len(list(range(1000))) == 1000

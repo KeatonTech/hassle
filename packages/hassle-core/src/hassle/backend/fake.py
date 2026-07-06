@@ -59,6 +59,10 @@ _TEMPLATE_FLOW_TYPE = {
 }
 
 
+def _empty_str_list() -> list[str]:
+    return []
+
+
 @dataclass
 class FlowStep:
     """One step of a simulated `config_entries/flow` (or `.../options/flow`)
@@ -68,8 +72,8 @@ class FlowStep:
     flow_id: str
     type: str
     step_id: str | None = None
-    menu_options: list[str] = field(default_factory=list)
-    data_schema: list[str] = field(default_factory=list)
+    menu_options: list[str] = field(default_factory=_empty_str_list)
+    data_schema: list[str] = field(default_factory=_empty_str_list)
     result: dict[str, Any] | None = None
 
 

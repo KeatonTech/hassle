@@ -36,9 +36,13 @@ from hassle.sync.models import (
     PlanEntry,
 )
 
-# Push-side apply order (DESIGN §8.2 / docs/ha-api-notes.md §11): helper
-# domains first (any order among themselves), then scripts, then automations
-# (automations may reference scripts/helpers, so those must exist first).
+# Push-side apply order (DESIGN §8.2 / docs/ha-api-notes.md §11): storage
+# helper domains first (any order among themselves), then the config-entry
+# template-helper domains (M10 -- also "helpers" from the dependency-ordering
+# point of view: an automation/script may reference a template helper's
+# entity id, so it must exist first, exactly like the storage helpers), then
+# scripts, then automations (automations may reference scripts/helpers, so
+# those must exist first).
 _KIND_ORDER = (
     "input_boolean",
     "input_number",
@@ -49,6 +53,10 @@ _KIND_ORDER = (
     "counter",
     "timer",
     "schedule",
+    "template_number",
+    "template_sensor",
+    "template_binary_sensor",
+    "template_select",
     "script",
     "automation",
 )
@@ -193,9 +201,25 @@ def _advance_manifest(
             source=existing.source if existing is not None else None,
             compiled_hash=sha256_hash(current),
             kind=existing.kind if existing is not None else "dsl",
+            entry_id=_entry_id_of(backend, entry.kind, identity),
         )
     return Manifest(
         synced_at=synced_at if synced_at is not None else manifest.synced_at,
         ha_version=manifest.ha_version,
         objects=new_objects,
     )
+
+
+def _entry_id_of(backend: Backend, kind: str, identity: str) -> str | None:
+    """The config entry's HA-assigned `entry_id` for a template-helper kind
+    (docs/ha-api-notes.md §26.5), tracked in the manifest -- `None` for every
+    other kind. `entry_id_for` is NOT part of the frozen `Backend` Protocol
+    (F2): it's an additive, defensively-probed extra method both `FakeBackend`
+    and `DirectBackend` happen to expose, the same pattern
+    `fetch_registry_snapshot` already established for non-F2 backend extras.
+    """
+    lookup = getattr(backend, "entry_id_for", None)
+    if lookup is None:
+        return None
+    result = lookup(kind, identity)
+    return str(result) if result is not None else None

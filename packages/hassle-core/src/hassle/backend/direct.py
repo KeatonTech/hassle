@@ -32,9 +32,19 @@ from typing import Any, cast
 from hassle.backend.client import HaClient
 from hassle.backend.errors import HaApiError
 from hassle.backend.version import version_warning
-from hassle.ir.keys import HELPER_DOMAINS, OBJECT_KINDS
+from hassle.ir.keys import HELPER_DOMAINS, OBJECT_KINDS, TEMPLATE_DOMAINS
 from hassle.ir.keys import slugify as _slugify
 from hassle.registry.snapshot import PurposeVocabulary, RegistrySnapshot
+
+# The template integration's config-flow menu step_id per domain (M10,
+# docs/ha-api-notes.md §26.1) -- source-informed; the CI integration suite is
+# the authoritative verification (`test_m10_template_flow.py`).
+_TEMPLATE_FLOW_TYPE = {
+    "template_number": "number",
+    "template_sensor": "sensor",
+    "template_binary_sensor": "binary_sensor",
+    "template_select": "select",
+}
 
 
 class DirectBackend:
@@ -58,6 +68,12 @@ class DirectBackend:
         self._ha_version: str | None = None
         self._reload_timeout = reload_timeout
         self._reload_interval = reload_interval
+        # M10: (kind, unique_id) -> HA-assigned entry_id, discovered via
+        # list_remote/create and consumed by update/delete (which the real
+        # config_entries WS API addresses by entry_id, not unique_id --
+        # docs/ha-api-notes.md §26). Process-local cache; a fresh DirectBackend
+        # rebuilds it from `_alist_template_helpers` on first list_remote.
+        self._template_entry_ids: dict[tuple[str, str], str] = {}
 
     # -- lifecycle / bridge ------------------------------------------------
 
@@ -113,6 +129,8 @@ class DirectBackend:
             return self._run(self._alist_automations())
         if kind == "script":
             return self._run(self._alist_scripts())
+        if kind in TEMPLATE_DOMAINS:
+            return self._run(self._alist_template_helpers(kind))
         return self._run(self._alist_helpers(kind))
 
     def create(self, kind: str, config: dict[str, Any]) -> str:
@@ -121,6 +139,8 @@ class DirectBackend:
             return self._run(self._awrite_automation(config))
         if kind == "script":
             return self._run(self._awrite_script(config))
+        if kind in TEMPLATE_DOMAINS:
+            return self._run(self._acreate_template_helper(kind, config))
         return self._run(self._acreate_helper(kind, config))
 
     def update(self, kind: str, identity: str, config: dict[str, Any]) -> None:
@@ -129,6 +149,8 @@ class DirectBackend:
             self._run(self._awrite_automation({**config, "id": identity}))
         elif kind == "script":
             self._run(self._awrite_script({**config, "id": identity}))
+        elif kind in TEMPLATE_DOMAINS:
+            self._run(self._aupdate_template_helper(kind, identity, config))
         else:
             self._run(self._aupdate_helper(kind, identity, config))
 
@@ -138,8 +160,16 @@ class DirectBackend:
             self._run(self._adelete_config("automation", identity))
         elif kind == "script":
             self._run(self._adelete_config("script", identity))
+        elif kind in TEMPLATE_DOMAINS:
+            self._run(self._adelete_template_helper(kind, identity))
         else:
             self._run(self._client.ws_command(f"{kind}/delete", **{f"{kind}_id": identity}))
+
+    def entry_id_for(self, kind: str, identity: str) -> str | None:
+        """Additive, non-`Backend`-Protocol lookup (docs/backend.md §3.1):
+        the config entry_id for a template-helper kind, `None` for any other
+        kind or an identity DirectBackend hasn't seen this process."""
+        return self._template_entry_ids.get((kind, identity))
 
     # -- config-REST reload settling --------------------------------------
     #
@@ -240,6 +270,101 @@ class DirectBackend:
     async def _aupdate_helper(self, kind: str, identity: str, config: dict[str, Any]) -> None:
         payload = {k: v for k, v in config.items() if k != "id"}
         await self._client.ws_command(f"{kind}/update", **{f"{kind}_id": identity}, **payload)
+
+    # -- config-entry template helpers (M10, docs/ha-api-notes.md §26) ----
+    #
+    # `config_entries/list` filtered to `handler="template"` enumerates every
+    # template config entry; each entry's `options` dict holds the fields
+    # this milestone manages, keyed by `entry_id`. Hassle's declared identity
+    # (`unique_id`) is `options.get("name")`-independent -- the template
+    # integration's config entries don't carry a separate `unique_id` field
+    # on the entry itself the way storage helpers do, so DirectBackend uses
+    # the entry's own `entry_id` internally and derives the object identity
+    # from the *options* body's own declared identity, mirroring how a
+    # caller's `unique_id` field round-trips through `options` verbatim
+    # (FakeBackend's `_create_via_flow` stores it the same way).
+
+    async def _alist_template_helpers(self, kind: str) -> dict[str, dict[str, Any]]:
+        entries = await self._client.ws_command("config_entries/get")
+        out: dict[str, dict[str, Any]] = {}
+        for entry in entries:
+            if entry.get("domain") != "template":
+                continue
+            options = dict(entry.get("options", {}))
+            if _TEMPLATE_FLOW_TYPE.get(kind) != options.get("_template_type", options.get("type")):
+                # Distinguish which of the four template sub-kinds this entry
+                # is. Real HA's template config entry doesn't expose a bare
+                # "type" field on `options` outside of what the flow itself
+                # asked for; Hassle stores the sub-kind alongside the entry
+                # via the create flow's chosen menu step (`next_step_id`,
+                # §26.1) -- tracked here so a mixed bundle's four domains
+                # don't collide when listing.
+                continue
+            unique_id = options.get("unique_id")
+            if not unique_id:
+                continue
+            entry_id = str(entry["entry_id"])
+            identity = str(unique_id)
+            self._template_entry_ids[(kind, identity)] = entry_id
+            stored = {k: v for k, v in options.items() if k != "_template_type"}
+            out[identity] = stored
+        return out
+
+    async def _acreate_template_helper(self, kind: str, config: dict[str, Any]) -> str:
+        unique_id = config.get("unique_id")
+        if not unique_id:
+            raise ValueError(
+                f"{kind} config has no 'unique_id' (required to start the config-entry flow)"
+            )
+        identity = str(unique_id)
+        step_id = _TEMPLATE_FLOW_TYPE[kind]
+
+        flow = await self._client.ws_command("config_entries/flow/create", handler="template")
+        flow_id = flow["flow_id"]
+        if flow.get("type") == "menu":
+            flow = await self._client.ws_command(
+                "config_entries/flow/update", flow_id=flow_id, next_step_id=step_id
+            )
+        user_input = {"_template_type": step_id, **{k: v for k, v in config.items()}}
+        result = await self._client.ws_command(
+            "config_entries/flow/update", flow_id=flow_id, user_input=user_input
+        )
+        entry_result = result.get("result", {})
+        entry_id = str(entry_result.get("entry_id", flow_id))
+        self._template_entry_ids[(kind, identity)] = entry_id
+        return identity
+
+    async def _aupdate_template_helper(
+        self, kind: str, identity: str, config: dict[str, Any]
+    ) -> None:
+        entry_id = self._template_entry_ids.get((kind, identity))
+        if entry_id is None:
+            # Rebuild the entry_id cache from a fresh list (e.g. a DirectBackend
+            # that never listed this kind yet in this process).
+            await self._alist_template_helpers(kind)
+            entry_id = self._template_entry_ids.get((kind, identity))
+        if entry_id is None:
+            raise ValueError(
+                f"no config entry found for {kind}:{identity} -- an UPDATE must "
+                "target an existing entry (options-flow update, never a recreate, I2 analog)"
+            )
+        flow = await self._client.ws_command("config_entries/options/flow/create", handler=entry_id)
+        flow_id = flow["flow_id"]
+        step_id = _TEMPLATE_FLOW_TYPE[kind]
+        user_input = {"_template_type": step_id, **{k: v for k, v in config.items()}}
+        await self._client.ws_command(
+            "config_entries/options/flow/update", flow_id=flow_id, user_input=user_input
+        )
+
+    async def _adelete_template_helper(self, kind: str, identity: str) -> None:
+        entry_id = self._template_entry_ids.get((kind, identity))
+        if entry_id is None:
+            await self._alist_template_helpers(kind)
+            entry_id = self._template_entry_ids.get((kind, identity))
+        if entry_id is None:
+            return  # already gone / never existed -- delete is idempotent
+        await self._client.ws_command("config_entries/remove", entry_id=entry_id)
+        self._template_entry_ids.pop((kind, identity), None)
 
     # -- registry snapshot (DESIGN §9.2) ----------------------------------
 

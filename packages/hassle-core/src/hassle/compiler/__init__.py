@@ -75,13 +75,6 @@ from hassle.compiler.helpers import (
     timer,
 )
 from hassle.compiler.macros import macro
-from hassle.compiler.template_helpers import (
-    declared_template_helpers,
-    template_binary_sensor,
-    template_number,
-    template_select,
-    template_sensor,
-)
 from hassle.compiler.math_expr import (
     E_,
     PI,
@@ -166,6 +159,13 @@ from hassle.compiler.scripts import (
     shared_script,
 )
 from hassle.compiler.spans import SourceSpan, capture_span
+from hassle.compiler.template_helpers import (
+    declared_template_helpers,
+    template_binary_sensor,
+    template_number,
+    template_select,
+    template_sensor,
+)
 from hassle.compiler.templates import PythonMathMisuseError, TemplateExpr, expr, template, var
 from hassle.compiler.triggers import (
     CalendarTrigger,
@@ -280,6 +280,7 @@ __all__ = [
     "current_registry",
     "declared_helpers",
     "declared_raw_automations",
+    "declared_template_helpers",
     "delay",
     "device",
     "device_id",
