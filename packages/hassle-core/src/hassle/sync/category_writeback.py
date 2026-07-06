@@ -45,7 +45,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from hassle.ir.keys import humanize_slug
+from hassle.ir.keys import category_shaped_stem, humanize_slug
 
 # Only automations/scripts have a category-registry scope in HA (DESIGN §7.3);
 # helpers keep the plain domain-default `helpers/misc.py` placement and never
@@ -68,24 +68,23 @@ def _category_slug_from_source_path(kind: str, source_path: str | None) -> str |
     path, the bundle root, or any name other than the expected tree) or names
     the ``misc`` fallback file (MILESTONES M11 test 2: `misc.py` -> no
     category action, exactly mirroring the pull-side placement's own
-    "uncategorized -> misc.py" fallback in `bundle_ops.default_source_path`)."""
+    "uncategorized -> misc.py" fallback in `bundle_ops.default_source_path`).
+
+    Delegates the path-shape check to :func:`hassle.ir.keys.category_shaped_stem`
+    (MILESTONES M12 reviewer finding: one shared, kind-independent predicate,
+    never duplicated across this module / the compiler's CATEGORY-global
+    capture / the validator) -- this wrapper adds the one thing that IS
+    specific to a just-created object: its `kind` must match the tree the
+    path is actually under (an automation's source path can never imply a
+    `scripts/` category, and vice versa)."""
     if source_path is None:
         return None
     tree = _TREE_FOR_KIND.get(kind)
     if tree is None:
         return None
-    prefix = f"{tree}/"
-    if not source_path.startswith(prefix) or not source_path.endswith(".py"):
+    if not source_path.startswith(f"{tree}/"):
         return None
-    rest = source_path[len(prefix) : -len(".py")]
-    # Must be a direct child of the tree (no further "/subdir/" nesting) --
-    # a deeper path is a user's own organization choice, not a category-shaped
-    # placement, so it's left alone.
-    if not rest or "/" in rest:
-        return None
-    if rest == "misc":
-        return None
-    return rest
+    return category_shaped_stem(source_path)
 
 
 def _category_id_for_slug(categories: dict[str, str], slug: str) -> str | None:
