@@ -237,6 +237,32 @@ def test_render_trace_timeline_empty_steps_says_so() -> None:
     assert "no steps recorded" in rendered.lower()
 
 
+def test_render_trace_timeline_failed_conditions_has_no_action_step() -> None:
+    """Round-3 coordinator finding: the live integration test's condition
+    gated on an entity left at HA's own default state, so the run always hit
+    `failed_conditions` -- the trace WAS real, just never reached `action/0`.
+    Pins the rendering shape a `failed_conditions` run actually produces
+    (M0.V §7 capture: `trigger` + `condition/0` + `condition/0/entity_id/0`,
+    no `action/*` steps at all) so the integration test's phase-1 assertions
+    (`"failed_conditions" in output`, `"action/0" not in output`) are
+    verified against real rendering behavior, not just asserted blind."""
+    from hassle_cli.run_live import render_trace_timeline
+
+    trace = {
+        "run_id": "554711d1",
+        "script_execution": "failed_conditions",
+        "trace": {
+            "trigger": [{}],
+            "condition/0": [{}],
+            "condition/0/entity_id/0": [{}],
+        },
+    }
+    rendered = render_trace_timeline(trace)
+    assert "failed_conditions" in rendered
+    assert "condition/0" in rendered
+    assert "action/0" not in rendered
+
+
 def test_live_session_cleans_up_shadow_on_trace_failure(fake_backend) -> None:
     from hassle_cli.run_live import run_shadow_session
 

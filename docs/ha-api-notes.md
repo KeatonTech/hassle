@@ -1594,3 +1594,44 @@ first time.
   pins the REAL resolved entity_id, not the old naive one).
 - Not re-verified against live HA in this PR (no Docker/HA access here) — the orchestrator's CI run
   against `HA stable` + `HA dev` is the actual green signal.
+
+### 27 addendum, round 3 (`fix/run-live-fixture-condition`): the entity_id fix worked; the remaining failure was pure test fixture
+
+**Round-3 CI evidence.** With the enabled-shadow + real-`entity_id` fix from the previous round
+landed, the full live pipeline executed for the first time ever: shadow created enabled, entity
+resolved correctly, triggered, traced, and the timeline rendered —
+`trace: run 554711d1... (failed_conditions) / trigger / condition/0 / condition/0/entity_id/0`.
+This is a strong, if accidental, positive result: `failed_conditions` in the trace is direct proof
+that Hassle's `skip_condition: false` default (DESIGN §10.4 point 2) is actually taking effect
+against real HA — HA's own default (`skip_condition: true`) would have skipped straight to
+`action/0` regardless of the condition. But it was accidental: the remaining test failure
+(`action/0` not appearing, so the counter-increment assertion failed) was because
+`_write_bundle`'s automation gates on `input_boolean.hassle_flag_2` via `only_if`, and the test
+created that helper but never set it to `"on"` — HA's own default for a freshly created
+`input_boolean` is `"off"` (§4), so the condition was unsatisfiable by construction. Not an HA
+behavior question at all; a test-fixture bug.
+
+**Fix.** `test_run_live_creates_shadow_triggers_and_cleans_up`
+(`packages/hassle-cli/tests/integration/test_run_live.py`) is now two-phase, turning the accident
+into deliberate, documented coverage of the entire §10.4 semantic surface in one test:
+
+1. **Phase 1 (condition unsatisfied):** trigger with `input_boolean.hassle_flag_2` still at HA's
+   default `"off"` — assert the trace shows `failed_conditions` AND the counter helper's value did
+   NOT change. This is the positive-proof half that was missing before: a trace merely rendering
+   isn't proof `skip_condition: false` gates anything (a vacuously-satisfied condition would look
+   the same); the counter staying put is what proves the action genuinely didn't run.
+2. **Phase 2 (condition satisfied):** `ha.call_service("input_boolean", "turn_on", entity_id=
+   "input_boolean.hassle_flag_2")`, trigger again — assert `action/0` in the rendered timeline and
+   the counter incremented, exactly as intended by the original (round-2) design.
+
+A new unit test, `test_render_trace_timeline_failed_conditions_has_no_action_step`
+(`packages/hassle-cli/tests/test_run_command.py`), pins the rendering shape a `failed_conditions`
+trace actually produces (`trigger` + `condition/0` + `condition/0/entity_id/0` steps, no `action/*`
+step at all, per the M0.V §7 capture shape) — this is the local, network-free proof that the new
+integration test's phase-1 structural assertions (`"failed_conditions" in output`, `"action/0" not
+in output`) are checking something real rather than an unverified guess about HA's trace shape.
+No product code changed in this round — `render_trace_timeline`/`resolve_shadow_entity_id`/
+`build_shadow_config` were already correct; this closes out the last gap with a test fix only. Not
+re-verified against live HA in this PR (no Docker/HA access here) — the orchestrator's CI run is
+the actual green signal, and is expected to be the first fully-green run of this test across all
+three rounds.
