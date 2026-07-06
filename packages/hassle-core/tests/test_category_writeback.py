@@ -348,3 +348,23 @@ def test_adopt_action_never_touches_categories() -> None:
     assert result.succeeded is True
     assert backend.writes_since_reset() == 0
     assert backend.categories_for("automation", identity) == {}
+
+
+# -- MILESTONES M15 item 3: config/category_registry/delete -----------------
+
+
+def test_delete_category_removes_row_and_clears_assignments() -> None:
+    """MILESTONES M15 item 3: `config/category_registry/delete` is now
+    confirmed to exist (docs/ha-api-notes.md §31.5c) -- it removes the
+    category registry row AND strips the assignment from every entity
+    carrying it (real HA's `async_clear_category_id`, §31.3)."""
+    backend = FakeBackend()
+    category_id = backend.create_category("automation", "Automatic HVAC")
+    identity = backend.create("automation", {"id": "auto_hvac_1", "alias": "Keep temp steady"})
+    backend.assign_category("automation", identity, "automation", category_id)
+    assert backend.categories_for("automation", identity) == {"automation": category_id}
+
+    backend.delete_category("automation", category_id)
+
+    assert backend.list_categories("automation") == {}
+    assert backend.categories_for("automation", identity) == {}

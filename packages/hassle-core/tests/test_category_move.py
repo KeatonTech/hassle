@@ -68,9 +68,7 @@ def _manifest_with_category(
         synced_at="t",
         ha_version="v",
         objects={
-            object_key: ManifestEntry(
-                source=source, compiled_hash=compiled_hash, category=category
-            )
+            object_key: ManifestEntry(source=source, compiled_hash=compiled_hash, category=category)
         },
     )
 
@@ -143,7 +141,9 @@ def test_move_to_misc_unassigns_category() -> None:
 
     assert result.succeeded is True
     assert result.category_conflicts == []
-    assert backend.categories_for("automation", identity) == {"automation": None}
+    # Real HA's per-scope unset REMOVES the scope key entirely (§31.3) --
+    # never a lingering `{"automation": None}` entry.
+    assert backend.categories_for("automation", identity) == {}
     new_entry = result.manifest.objects["automation:auto_1"]  # type: ignore[union-attr]
     assert new_entry.category is None
 

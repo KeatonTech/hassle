@@ -557,9 +557,14 @@ class DirectBackend:
     def fetch_registry_snapshot(self) -> RegistrySnapshot:
         return self._run(self._afetch_registry_snapshot())
 
-    # Scopes DESIGN §7.3 places by category: automations and scripts (helpers
-    # have no category-registry scope in HA -- they place by domain default).
-    _CATEGORY_SCOPES = ("automation", "script")
+    # Scopes to fetch into the registry snapshot (docs/ha-api-notes.md
+    # §31.2/§31.6, source-verified -- corrects the earlier "helpers have no
+    # category-registry scope" belief, §31.5a): `automation`/`script` place
+    # by their own scope; ALL 13 helper kinds share the one `"helpers"` scope.
+    # Bundle PLACEMENT for helpers is unchanged this round (M15 work item A;
+    # work item B's job) -- this is just the read path making the data
+    # available in the snapshot.
+    _CATEGORY_SCOPES = ("automation", "script", "helpers")
 
     async def _afetch_registry_snapshot(self) -> RegistrySnapshot:
         entities = await self._client.ws_command("config/entity_registry/list")
@@ -615,11 +620,11 @@ class DirectBackend:
     #
     # Additive, non-`Backend`-Protocol surface (same `entry_id_for`/
     # `fetch_registry_snapshot` pattern) driving `hassle.sync.
-    # category_writeback.attempt_category_writeback`. Shapes are inferred
-    # from HA core's `homeassistant/components/config/category_registry.py`
-    # / `entity_registry.py` (NOT live-verified in this PR -- docs/
-    # ha-api-notes.md §30 records the caveat, mirroring §22's own "not
-    # re-verified live" flag for `category_registry/list`'s `scope` param).
+    # category_writeback.attempt_category_writeback` (CREATE) and `hassle.
+    # sync.category_move.sync_category_on_move` (UPDATE, M15). Shapes are
+    # source-verified against HA core's `homeassistant/components/config/
+    # category_registry.py` / `entity_registry.py` (docs/ha-api-notes.md §31 --
+    # corrects §30's inferred-but-untested wholesale-replace assumption).
 
     def list_categories(self, scope: str) -> dict[str, str]:
         return self._run(self._alist_categories(scope))
@@ -637,22 +642,48 @@ class DirectBackend:
         )
         return str(result["category_id"])
 
-    def assign_category(self, kind: str, identity: str, scope: str, category_id: str) -> None:
+    def delete_category(self, scope: str, category_id: str) -> None:
+        """`config/category_registry/delete` -- additive, test/CLI-facing
+        (docs/ha-api-notes.md §31.5c: confirmed to exist,
+        `websocket_delete_category`, `{scope, category_id}` -- corrects §30's
+        "not confirmed" caveat that had integration teardown suppressing any
+        error from calling it)."""
+        self._run(self._adelete_category(scope, category_id))
+
+    async def _adelete_category(self, scope: str, category_id: str) -> None:
+        await self._client.ws_command(
+            "config/category_registry/delete", scope=scope, category_id=category_id
+        )
+
+    def assign_category(
+        self, kind: str, identity: str, scope: str, category_id: str | None
+    ) -> None:
         self._run(self._aassign_category(kind, identity, scope, category_id))
 
     async def _aassign_category(
-        self, kind: str, identity: str, scope: str, category_id: str
+        self, kind: str, identity: str, scope: str, category_id: str | None
     ) -> None:
-        """Find `kind:identity`'s entity-registry row (matched by `unique_id
-        == identity`, the same id<->unique_id anchor `bundle_ops.
-        _category_source_path` uses on the pull side, docs/ha-api-notes.md
-        §2/§22) and update its `categories` map.
+        """Find `kind:identity`'s entity-registry row and update its
+        `categories` map for `scope`.
 
-        HA's entity-registry update replaces `categories` wholesale rather
-        than merging per-scope server-side (inferred, §30) -- so the
-        existing map is read first and merged client-side before resubmit,
-        never dropping an assignment under a DIFFERENT scope this call isn't
-        about (I6).
+        **Single-scope merge payload, no read-first** (docs/ha-api-notes.md
+        §31.3/§31.5b, source-verified -- corrects §30's inferred
+        wholesale-replace assumption): `config/entity_registry/update`'s
+        `categories` handler merges per-scope SERVER-SIDE ("If passed in, we
+        update/adjust only the provided scope(s). Other category scopes in
+        the entity, are left as is." -- HA core's own comment). M11's
+        original client-side read-then-merge is therefore unnecessary (though
+        harmless/idempotent, §30's own pre-declared contingency) -- this just
+        sends `{scope: category_id}`, and `category_id=None` UNSETS that
+        scope (the `{scope: None}` primitive §31.3 confirms), used by
+        `hassle.sync.category_move` for a local move to the `misc.py`
+        fallback.
+
+        **Identity anchor** (docs/ha-api-notes.md §2/§22, widened by M15
+        §31.6): `unique_id == identity` for automations/scripts/storage
+        helpers; a TEMPLATE_DOMAINS kind has no settable `unique_id` at all
+        (§26.6) and is instead found via `config_entry_id` -> the cached
+        HA-assigned `entry_id` (`self._template_entry_ids`).
 
         **Bounded-polls for the entity-registry row itself** (same class of
         async-settling wait as `_await_config_entity`, §17.7): by the time
@@ -665,43 +696,67 @@ class DirectBackend:
         `self._reload_interval` (the same knobs `_await_config_entity` uses)
         rather than inventing a second wait budget.
         """
-        entity_id, existing_categories = await self._await_entity_registry_row(kind, identity)
-        merged = {**existing_categories, scope: category_id}
+        entity_id = await self._await_entity_registry_row(kind, identity)
         await self._client.ws_command(
-            "config/entity_registry/update", entity_id=entity_id, categories=merged
+            "config/entity_registry/update", entity_id=entity_id, categories={scope: category_id}
         )
 
-    async def _find_entity_registry_row(self, identity: str) -> tuple[str, dict[str, str]] | None:
+    def _entity_registry_matcher(self, kind: str, identity: str):
+        """The predicate identifying `kind:identity`'s entity-registry row
+        among `config/entity_registry/list`'s rows (docs/ha-api-notes.md
+        §31.6): `config_entry_id` for a TEMPLATE_DOMAINS kind (no settable
+        `unique_id`, §26.6), else `unique_id == identity`."""
+        if kind in TEMPLATE_DOMAINS:
+            entry_id = self._template_entry_ids.get((kind, identity))
+            if entry_id is None:
+                return None
+
+            def _matches_entry(entity: dict[str, Any]) -> bool:
+                return str(entity.get("config_entry_id")) == entry_id
+
+            return _matches_entry
+
+        def _matches_unique_id(entity: dict[str, Any]) -> bool:
+            return str(entity.get("unique_id")) == identity
+
+        return _matches_unique_id
+
+    async def _find_entity_registry_row(self, kind: str, identity: str) -> str | None:
+        matcher = self._entity_registry_matcher(kind, identity)
+        if matcher is None:
+            return None
         entities = await self._client.ws_command("config/entity_registry/list")
         for entity in entities:
-            if str(entity.get("unique_id")) == identity:
-                return str(entity.get("entity_id")), dict(entity.get("categories") or {})
+            if matcher(entity):
+                return str(entity.get("entity_id"))
         return None
 
-    async def _await_entity_registry_row(
-        self, kind: str, identity: str
-    ) -> tuple[str, dict[str, str]]:
+    async def _await_entity_registry_row(self, kind: str, identity: str) -> str:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self._reload_timeout
         while True:
-            found = await self._find_entity_registry_row(identity)
+            found = await self._find_entity_registry_row(kind, identity)
             if found is not None:
                 return found
             if loop.time() >= deadline:
                 raise LookupError(
-                    f"no entity-registry row found with unique_id={identity!r} for "
-                    f"{kind}:{identity} after waiting {self._reload_timeout}s -- cannot assign "
-                    "its HA UI category (the object was created successfully; only this "
-                    "metadata step failed)"
+                    f"no entity-registry row found for {kind}:{identity} after waiting "
+                    f"{self._reload_timeout}s -- cannot assign its HA UI category (the object "
+                    "was created successfully; only this metadata step failed)"
                 )
             await asyncio.sleep(self._reload_interval)
 
     def categories_for(self, kind: str, identity: str) -> dict[str, str]:
         """Test/CLI-facing lookup: the entity-registry row's current
-        `categories` map for `kind:identity` (empty if not found/uncategorized)."""
+        `categories` map for `kind:identity` (empty if not found/uncategorized).
+        Same identity anchor as `_aassign_category` (§31.6): `config_entry_id`
+        for a TEMPLATE_DOMAINS kind, else `unique_id == identity`."""
+        matcher = self._entity_registry_matcher(kind, identity)
+        if matcher is None:
+            return {}
         entities = self._run(self._client.ws_command("config/entity_registry/list"))
         for entity in entities:
-            if str(entity.get("unique_id")) == identity:
+            if matcher(entity):
                 return dict(entity.get("categories") or {})
         return {}
 

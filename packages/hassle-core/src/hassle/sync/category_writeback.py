@@ -24,6 +24,15 @@ freshly-succeeded CREATE. It has no opinion about UPDATE/REFRESH/ADOPT and
 `apply_plan` never calls it for those actions — existing/adopted objects'
 categories are simply never touched by this code path at all.
 
+**MILESTONES M15 work item A (docs/ha-api-notes.md §31) widens the scope map
+this module owns (`_SCOPE_FOR_KIND`/`_TREE_FOR_KIND`) to cover all 13 helper
+kinds under the shared `"helpers"` scope** — §31.5a source-corrects the
+earlier (wrong) belief that HA's category registry only ever had the
+`automation`/`script` scopes. This module's own CREATE-only behavior is
+otherwise unchanged; the sibling module `hassle.sync.category_move` is where
+M15's new UPDATE-side ("moving an existing object") sync logic lives, reusing
+this module's scope map and slug-derivation helper.
+
 Backend surface used (additive, NOT part of the frozen `Backend` Protocol F2 —
 same `getattr`-probed pattern as `entry_id_for`/`fetch_registry_snapshot`,
 docs/backend.md §3.1):
@@ -31,7 +40,8 @@ docs/backend.md §3.1):
 - ``list_categories(scope) -> dict[category_id, name]``
 - ``create_category(scope, name) -> category_id``
 - ``categories_for(kind, identity) -> dict[scope, category_id]``
-- ``assign_category(kind, identity, scope, category_id) -> None``
+- ``assign_category(kind, identity, scope, category_id: str | None) -> None``
+  (M15: ``category_id=None`` unsets that scope entirely, §31.3)
 
 `FakeBackend` and `DirectBackend` both implement all four (`hassle.backend.
 fake`, `hassle.backend.direct`); a hand-rolled test `Backend` stub that lacks
@@ -45,13 +55,26 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from hassle.ir.keys import category_shaped_stem, humanize_slug
+from hassle.ir.keys import HELPER_DOMAINS, TEMPLATE_DOMAINS, category_shaped_stem, humanize_slug
 
-# Only automations/scripts have a category-registry scope in HA (DESIGN §7.3);
-# helpers keep the plain domain-default `helpers/misc.py` placement and never
-# participate in category write-back.
+# Every object kind's HA UI category-registry scope (docs/ha-api-notes.md
+# §31.2/§31.6, source-verified -- corrects §22/§30's belief that only
+# automations/scripts have a category-registry scope at all: real HA's
+# category registry has no scope allowlist whatsoever, §31.1, and the
+# frontend's helpers page shares ONE scope, `"helpers"`, across all 13 helper
+# kinds -- 9 storage-collection (`HELPER_DOMAINS`) + 4 template config-entry
+# (`TEMPLATE_DOMAINS`)). Bundle PLACEMENT for helpers is UNCHANGED this round
+# (M15 work item A; work item B's job) -- every helper still lands at the
+# flat `helpers/misc.py`, so `category_shaped_stem` (which only recognizes
+# the `automations/`/`scripts/` trees) never actually matches a helper's
+# source path yet; this map exists so the write-back MECHANISM already
+# understands every kind's scope once work item B gives helpers real
+# category-shaped files.
 _SCOPE_FOR_KIND = {"automation": "automation", "script": "script"}
+_SCOPE_FOR_KIND.update({kind: "helpers" for kind in HELPER_DOMAINS | TEMPLATE_DOMAINS})
+
 _TREE_FOR_KIND = {"automation": "automations", "script": "scripts"}
+_TREE_FOR_KIND.update({kind: "helpers" for kind in HELPER_DOMAINS | TEMPLATE_DOMAINS})
 
 
 @dataclass(frozen=True)
@@ -131,7 +154,9 @@ def attempt_category_writeback(
     """
     scope = _SCOPE_FOR_KIND.get(kind)
     if scope is None:
-        return CategoryWritebackResult(attempted=False)  # helper: no category scope in HA
+        # Unknown kind (defensive -- every real OBJECT_KINDS entry has a
+        # scope, §31.2/§31.6): nothing to do.
+        return CategoryWritebackResult(attempted=False)
 
     slug = _category_slug_from_source_path(kind, source_path)
     if slug is None:

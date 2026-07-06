@@ -79,6 +79,19 @@ def test_create_category_sends_scope_and_name() -> None:
     assert payload == {"scope": "automation", "name": "Automatic HVAC"}
 
 
+def test_delete_category_sends_scope_and_category_id() -> None:
+    """MILESTONES M15 item 3: `config/category_registry/delete` is now
+    confirmed to exist (docs/ha-api-notes.md §31.5c) -- `delete_category` is
+    the additive surface integration teardown drives, no more suppressed."""
+    client = _FakeClient()
+    backend = _make_backend(client)
+
+    asyncio.run(backend._adelete_category("automation", "cat_hvac"))  # type: ignore[attr-defined]
+
+    ((_cmd, payload),) = [c for c in client.calls if c[0] == "config/category_registry/delete"]
+    assert payload == {"scope": "automation", "category_id": "cat_hvac"}
+
+
 def test_assign_category_looks_up_entity_by_unique_id_and_updates() -> None:
     client = _FakeClient(
         {

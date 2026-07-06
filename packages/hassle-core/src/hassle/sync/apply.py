@@ -30,13 +30,29 @@ metadata, and a failure here is surfaced as a warning in
 `ApplyResult.category_warnings`, never an aborted/rolled-back object,
 MILESTONES M11 test 3) and is never attempted for any action besides a
 freshly-succeeded CREATE (MILESTONES M11 test 4).
+
+**M15 work item A: category-on-move sync on UPDATE.** Immediately after an
+UPDATE succeeds, `hassle.sync.category_move.sync_category_on_move` three-way
+compares the object's local category (derived from `PlanEntry.source_path`),
+the manifest's recorded base category (`ManifestEntry.category`), and the
+live remote category, and pushes a category reassignment if the bundle moved
+the object to a different category file since base. Like M11's write-back,
+this is metadata-only and never affects `outcomes`/rollback for the object's
+own content update; a conflict (both sides changed, to different values) is
+reported via `ApplyResult.category_conflicts` (I6 -- never silently
+overwritten in either direction) and leaves the manifest's base category
+UNCHANGED so the next plan/push surfaces the identical conflict again.
 """
 
 from __future__ import annotations
 
 from hassle.backend.protocol import Backend
 from hassle.ir.canonical import sha256_hash
-from hassle.sync.category_writeback import attempt_category_writeback
+from hassle.sync.category_move import local_category_for_source_path, sync_category_on_move
+from hassle.sync.category_writeback import (
+    _SCOPE_FOR_KIND,  # pyright: ignore[reportPrivateUsage]
+    attempt_category_writeback,
+)
 from hassle.sync.models import (
     ApplyOutcome,
     ApplyResult,
@@ -113,6 +129,13 @@ def apply_plan(
     snapshots: list[tuple[str, str, dict[str, object] | None]] = []
     applied: list[str] = []  # object_keys successfully applied, in apply order
     category_warnings: list[str] = []  # M11: never fails/rolls back apply (I6)
+    category_conflicts: list[str] = []  # M15: never fails/rolls back apply (I6)
+    # M15: object_key -> the category slug ManifestEntry.category should
+    # advance to (never touched at all for an object not in this dict --
+    # `_advance_manifest` then falls back to the existing manifest entry's
+    # own `category`, e.g. a plain content-only UPDATE with no category
+    # change, or a conflict/failure that must not silently advance the base).
+    resolved_categories: dict[str, str | None] = {}
 
     for entry in push_entries:
         identity = _identity_of(entry.object_key)
@@ -161,13 +184,55 @@ def apply_plan(
             )
             if result.warning is not None:
                 category_warnings.append(result.warning)
+            elif result.attempted:
+                # The category slug just assigned becomes this object's base
+                # (M15 F2 amendment) -- so a FUTURE local move away from it is
+                # correctly detected as "local changed since base", not
+                # perpetually invisible.
+                resolved_categories[entry.object_key] = local_category_for_source_path(
+                    entry.kind, entry.source_path
+                )
 
-    new_manifest = _advance_manifest(manifest, backend, push_entries, synced_at)
+        elif entry.action is PlanAction.UPDATE:
+            # M15 work item A: category-on-move sync -- metadata-only,
+            # best-effort, never affects `outcomes`/rollback for the object's
+            # own content update that just succeeded (I6). Only attempted
+            # when there IS a recorded manifest entry for this object: an
+            # UPDATE with no manifest entry at all means there is no known
+            # base to three-way against (in practice `compute_plan` never
+            # produces this combination -- UPDATE always implies a manifest
+            # entry -- but apply_plan accepts hand-built plans too, and the
+            # safe, conservative choice with zero sync history on record is
+            # to take no action rather than force-assign based on placement
+            # alone, mirroring `compute_plan`'s own "no base -> CREATE/ADOPT,
+            # never UPDATE" rule).
+            existing_entry = manifest.objects.get(entry.object_key)
+            if existing_entry is not None:
+                local_category = local_category_for_source_path(entry.kind, entry.source_path)
+                move_result = sync_category_on_move(
+                    backend,
+                    entry.kind,
+                    identity,
+                    local_category=local_category,
+                    base_category=existing_entry.category,
+                    scope=_SCOPE_FOR_KIND.get(entry.kind),
+                )
+                if move_result.warning is not None:
+                    category_warnings.append(move_result.warning)
+                if move_result.conflict_message is not None:
+                    category_conflicts.append(move_result.conflict_message)
+                if not move_result.base_unchanged:
+                    resolved_categories[entry.object_key] = move_result.new_base_category
+
+    new_manifest = _advance_manifest(
+        manifest, backend, push_entries, synced_at, resolved_categories
+    )
     return ApplyResult(
         outcomes=outcomes,
         succeeded=True,
         manifest=new_manifest,
         category_warnings=category_warnings,
+        category_conflicts=category_conflicts,
     )
 
 
@@ -232,7 +297,11 @@ def _rollback(backend: Backend, snapshots: list[tuple[str, str, dict[str, object
 
 
 def _advance_manifest(
-    manifest: Manifest, backend: Backend, push_entries: list[PlanEntry], synced_at: str | None
+    manifest: Manifest,
+    backend: Backend,
+    push_entries: list[PlanEntry],
+    synced_at: str | None,
+    resolved_categories: dict[str, str | None],
 ) -> Manifest:
     new_objects = dict(manifest.objects)
     for entry in push_entries:
@@ -244,11 +313,20 @@ def _advance_manifest(
         if current is None:
             continue
         existing = manifest.objects.get(entry.object_key)
+        if entry.object_key in resolved_categories:
+            category = resolved_categories[entry.object_key]
+        else:
+            # No category change this run (a plain content-only UPDATE, a
+            # conflict, or a category-sync failure) -- carry the existing
+            # base forward unchanged (M15 F2 amendment: never silently
+            # advance past a conflict/failure, I6).
+            category = existing.category if existing is not None else None
         new_objects[entry.object_key] = ManifestEntry(
             source=existing.source if existing is not None else None,
             compiled_hash=sha256_hash(current),
             kind=existing.kind if existing is not None else "dsl",
             entry_id=_entry_id_of(backend, entry.kind, identity),
+            category=category,
         )
     return Manifest(
         synced_at=synced_at if synced_at is not None else manifest.synced_at,

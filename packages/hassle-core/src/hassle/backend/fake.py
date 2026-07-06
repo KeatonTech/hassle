@@ -419,13 +419,23 @@ class FakeBackend:
         self._categories.setdefault(scope, {})[category_id] = name
         return category_id
 
-    def assign_category(self, kind: str, identity: str, scope: str, category_id: str) -> None:
-        """`config/entity_registry/update`'s `categories` field, scoped merge
-        (never drops another scope's existing assignment on the same object,
-        I6 -- mirrors the merge `DirectBackend._aassign_category` does against
-        the real entity-registry row before resubmitting the whole dict)."""
+    def assign_category(
+        self, kind: str, identity: str, scope: str, category_id: str | None
+    ) -> None:
+        """`config/entity_registry/update`'s `categories` field, a per-scope
+        SERVER-SIDE merge (never drops another scope's existing assignment on
+        the same object, I6 -- docs/ha-api-notes.md §31.3, source-verified:
+        "update/adjust only the provided scope(s); other category scopes ...
+        are left as is"). ``category_id=None`` UNSETS `scope` entirely (M15,
+        §31.3's `{scope: None}` primitive -- used by `hassle.sync.
+        category_move` for a local move to the `misc.py` fallback), matching
+        real HA's per-scope delete-or-set handler exactly (never a lingering
+        `{scope: None}` entry -- the key itself is removed)."""
         existing = dict(self._entity_categories.get((kind, identity), {}))
-        existing[scope] = category_id
+        if category_id is None:
+            existing.pop(scope, None)
+        else:
+            existing[scope] = category_id
         self._entity_categories[(kind, identity)] = existing
 
     def categories_for(self, kind: str, identity: str) -> dict[str, str]:
@@ -439,6 +449,16 @@ class FakeBackend:
         stable `category_id` rather than the auto-generated `cat_NNNN` shape
         `create_category` would assign."""
         self._categories.setdefault(scope, {})[category_id] = name
+
+    def delete_category(self, scope: str, category_id: str) -> None:
+        """`config/category_registry/delete` (M15, docs/ha-api-notes.md
+        §31.5c: confirmed to exist on real HA) -- removes the category
+        registry row AND strips it from every entity's `categories`
+        assignment (real HA's `async_clear_category_id`, §31.3)."""
+        self._categories.get(scope, {}).pop(category_id, None)
+        for assigned in self._entity_categories.values():
+            if assigned.get(scope) == category_id:
+                del assigned[scope]
 
     def _stored_body(self, kind: str, identity: str, normalized: dict[str, Any]) -> dict[str, Any]:
         """The exact body real HA stores for one object of ``kind`` (the

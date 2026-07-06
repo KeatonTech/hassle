@@ -40,9 +40,10 @@ Covers:
 
 Every test owns its own category (globally-unique, randomized name, so
 concurrent/rerun CI jobs against a persistent instance never collide) and
-best-effort deletes it during teardown -- `config/category_registry/delete`
-is not confirmed to exist (docs/ha-api-notes.md §30 addendum below), so
-teardown is wrapped in `contextlib.suppress` and never fails the test.
+deletes it during teardown via `DirectBackend.delete_category`
+(`config/category_registry/delete`, confirmed to exist, docs/ha-api-notes.md
+§31.5c -- M15 item 3 removes the earlier `contextlib.suppress`-masked no-op
+this fixture used while the command's existence was still unconfirmed).
 
 5. `test_push_create_with_category_global_uses_exact_display_name` (MILESTONES
    M12) -- a push-create carrying a `category_overrides` entry for its source
@@ -106,12 +107,15 @@ def _unique_slug(prefix: str) -> str:
 
 @pytest.fixture
 def cleanup_category(ha: DirectBackend):
-    """Best-effort category cleanup for a (scope, category_id) pair -- HA's
-    `config/category_registry/delete` command existence was not confirmed
-    while writing this suite (docs/ha-api-notes.md §30 addendum); if it
-    exists this actually deletes the category, if not this is a no-op and the
-    globally-unique slug (`_unique_slug`) is what actually keeps reruns from
-    colliding."""
+    """Category cleanup for a (scope, category_id) pair -- `config/
+    category_registry/delete` is now CONFIRMED to exist (docs/ha-api-notes.md
+    §31.5c, source-verified: `websocket_delete_category`), so teardown calls
+    it for real via `DirectBackend.delete_category` -- no more
+    `contextlib.suppress`-masked no-op (§30's addendum flagged this exact
+    gap: "if CI's teardown step errors loudly ... that is itself the live
+    confirmation the command doesn't exist"). The globally-unique slug
+    (`_unique_slug`) is still what actually prevents cross-run collisions;
+    this is best-effort cleanup, not correctness-load-bearing."""
     created: list[tuple[str, str]] = []
 
     def _track(scope: str, category_id: str) -> None:
@@ -120,12 +124,7 @@ def cleanup_category(ha: DirectBackend):
     yield _track
 
     for scope, category_id in created:
-        with contextlib.suppress(Exception):
-            ha._run(  # type: ignore[attr-defined]
-                ha._client.ws_command(  # type: ignore[attr-defined]
-                    "config/category_registry/delete", scope=scope, category_id=category_id
-                )
-            )
+        ha.delete_category(scope, category_id)
 
 
 def test_push_create_assigns_category_creating_it_first(
@@ -456,9 +455,7 @@ def test_helper_category_assign_and_readback_storage_and_template(
         ha.assign_category("template_number", template_identity, "helpers", category_id)
 
         assert ha.categories_for("input_boolean", storage_identity) == {"helpers": category_id}
-        assert ha.categories_for("template_number", template_identity) == {
-            "helpers": category_id
-        }
+        assert ha.categories_for("template_number", template_identity) == {"helpers": category_id}
     finally:
         with contextlib.suppress(Exception):
             ha.delete("input_boolean", storage_identity)

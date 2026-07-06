@@ -80,11 +80,16 @@ def _category_source_path(object_key: str, registry: RegistrySnapshot) -> str | 
     """DESIGN §7.3's placement default, the category-registry half: an
     object's entity-registry entry (matched by `unique_id == identity`, the
     id<->unique_id anchor, docs/ha-api-notes.md §2) may carry a UI category
-    for its scope (``"automation"``/``"script"`` -- the only two scopes HA's
-    category registry covers); if so, place it under
+    for its own scope (``"automation"``/``"script"``); if so, place it under
     ``<tree>/<slug(category name)>.py`` instead of the flat ``misc.py``.
-    Helpers have no category-registry scope, so this always returns None for
-    them (they keep the plain domain-default fallback)."""
+
+    Helper kinds always return `None` here (they keep the plain
+    domain-default `helpers/misc.py` fallback) -- NOT because helpers lack a
+    category-registry scope (docs/ha-api-notes.md §31.5a source-corrects that
+    belief: helpers DO have one, the shared `"helpers"` scope, §31.2/§31.6),
+    but because M15 work item A does not change bundle PLACEMENT at all
+    (work item B's job); this function is scoped to the two kinds whose
+    category-shaped placement already exists."""
     kind, _, identity = object_key.partition(":")
     if kind not in ("automation", "script"):
         return None
@@ -136,15 +141,18 @@ def default_source_path(object_key: str, *, registry: RegistrySnapshot | None = 
 
     DESIGN §7.3's placement default: "one file per HA category/label if set,
     else ``automations/misc.py``". When `registry` is supplied and the object
-    has a UI-assigned category (automations/scripts only), it lands under
-    ``<tree>/<slug(category name)>.py``; otherwise (no registry, no category
-    registry scope for this kind, or the object is uncategorized) it falls
-    back to one ``misc.py`` per kind's tree subdirectory (``automations/``,
-    ``scripts/``, ``helpers/``), matching what `hassle init` scaffolds and
-    what the M7.1 loader (which now recurses, docs/ha-api-notes.md §17.9
-    RESOLVED) actually imports. After this first placement the object stays
-    wherever the user moves it (tracked by the manifest); this is only the
-    *initial* landing spot for an object nobody has ever pulled before.
+    is an automation/script with a UI-assigned category, it lands under
+    ``<tree>/<slug(category name)>.py`` (`_category_source_path` -- the only
+    kinds with category-shaped PLACEMENT as of M15 work item A; work item B
+    extends this to helpers too, docs/ha-api-notes.md §31.6); otherwise (no
+    registry, a kind whose placement doesn't consult category yet, or the
+    object is uncategorized) it falls back to one ``misc.py`` per kind's tree
+    subdirectory (``automations/``, ``scripts/``, ``helpers/``), matching
+    what `hassle init` scaffolds and what the M7.1 loader (which now
+    recurses, docs/ha-api-notes.md §17.9 RESOLVED) actually imports. After
+    this first placement the object stays wherever the user moves it
+    (tracked by the manifest); this is only the *initial* landing spot for an
+    object nobody has ever pulled before.
 
     M10: the four config-entry template-helper domains (``TEMPLATE_DOMAINS``)
     place under ``helpers/misc.py`` exactly like the nine storage-collection

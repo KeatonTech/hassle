@@ -2652,3 +2652,45 @@ registry row, so category assignment for it fails into the existing
 config-entry helpers goes via `config_entry_id` → registry row rather than the
 `unique_id == object_id` anchor used for automations/scripts/storage helpers —
 `DirectBackend`'s helper-side assign needs that variant.
+
+### 31.7 M15 work item A: implementation notes (`m15/category-sync`)
+
+Two decisions the binding spec left to the implementer, recorded here per this
+doc's own convention:
+
+- **Conflict-surfacing mechanism.** The spec requires a local-move-vs-remote-
+  recategorization conflict to be "surfaced as a conflict (I6), never silently
+  overwritten" but doesn't mandate *how*. Implemented as an additive
+  `ApplyResult.category_conflicts: list[str]` (parallel to M11's
+  `category_warnings`), populated by the new `hassle.sync.category_move`
+  module and printed by `hassle push` in red — **not** folded into the
+  existing `PlanAction.CONFLICT`/`--accept-local`/`--accept-remote` machinery,
+  because a category conflict is metadata-only and detected too late for that
+  (only known after a live `categories_for` read during `apply_plan`, not at
+  `compute_plan` time, since an object's category isn't part of its hashed
+  config body). On a conflict the manifest's base `category` is left
+  unchanged, so the identical conflict resurfaces on every subsequent
+  push/pull until a human resolves it one way or the other (no CLI flag to
+  force a side yet — a natural follow-on, not required by work item A's test
+  contract).
+- **`assign_category`'s signature widens to `category_id: str | None`**
+  (`DirectBackend`/`FakeBackend`), with `None` meaning "unset this scope
+  entirely" — §31.3 confirms the real per-scope delete-or-set handler
+  supports this directly; needed for "move to `misc.py`" (unassign). Real
+  HA's unset REMOVES the scope key from `categories` (never leaves a
+  lingering `{scope: None}` entry) — `FakeBackend.assign_category` mirrors
+  that exactly (`.pop(scope, None)` rather than storing `None`).
+- **`delete_category` is a new additive method** (`DirectBackend`/
+  `FakeBackend`, same non-Protocol pattern as `list_categories`/
+  `assign_category`), added so integration teardown can call the
+  now-confirmed `config/category_registry/delete` directly instead of
+  reaching into `DirectBackend._client` privately — the pre-M15 teardown
+  fixture did the latter specifically because there was no public method for
+  it yet.
+- **Pull-side manifest advance now also records `category`**
+  (`hassle_cli.cli`'s `_do_pull`/REFRESH+ADOPT manifest-update block, not
+  `hassle.sync.apply`): a freshly-refreshed/adopted automation/script's base
+  category is set from its OWN placement (`local_category_for_source_path`),
+  so the very next push's category-move sync starts from the correct base
+  instead of `None` (which would otherwise misfire as "moved locally" on the
+  very first push after every pull).

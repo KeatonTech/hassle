@@ -126,6 +126,17 @@ class ManifestEntry(BaseModel):
     IR body (docs/backend.md's config-entry addendum). ``None`` for every
     other kind (automation/script/storage-collection helper), which have no
     such secondary identity to track.
+
+    ``category`` (MILESTONES M15 F2 amendment, additive/optional): the
+    object's HA UI category **slug** as of the last successful sync (base,
+    in the three-way sense) -- ``None`` means "uncategorized as of base"
+    (including every pre-M15 manifest, which parses with this field absent).
+    `hassle.sync.category_move` uses this to detect a local file move vs. a
+    remote (HA UI) recategorization since base, and to surface a conflict
+    (I6) rather than silently letting either side win when both changed to
+    different values. Never the display name (that's transient HA-side
+    state, not tracked here) -- just the slug `bundle_ops`'s placement
+    already anchors on (docs/ha-api-notes.md §22/§30).
     """
 
     model_config = ConfigDict(frozen=True)
@@ -134,6 +145,7 @@ class ManifestEntry(BaseModel):
     compiled_hash: str
     kind: str = "dsl"  # dsl | raw | blueprint
     entry_id: str | None = None
+    category: str | None = None
 
 
 class Manifest(BaseModel):
@@ -181,3 +193,13 @@ class ApplyResult(BaseModel):
     # category-assignment failure is metadata-only, surfaced here rather than
     # silently dropped, but never fails or rolls back the object it's about).
     category_warnings: list[str] = []
+    # M15 (additive): category-on-move conflicts (`hassle.sync.category_move`)
+    # -- an object whose LOCAL category (derived from its source file) and
+    # REMOTE category (HA UI) both changed since the manifest's recorded base,
+    # to DIFFERENT values. Distinct from `category_warnings` (a failure to
+    # apply an otherwise-uncontested change): a conflict is never even
+    # attempted in either direction (I6 -- "never silently overwritten"), and
+    # the manifest's base category is left UNCHANGED so the next plan/push
+    # surfaces the same conflict again rather than quietly resolving it.
+    # Never affects `succeeded`/rollback for the object's own content update.
+    category_conflicts: list[str] = []

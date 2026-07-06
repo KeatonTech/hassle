@@ -459,16 +459,24 @@ def pull(allow_dirty: bool) -> None:
     # CLI's own bookkeeping (no core-layer test covers it: `apply_pull`
     # deliberately never accepts a manifest, MILESTONES M5 test 2).
     from hassle.ir.canonical import sha256_hash
+    from hassle.sync.category_move import local_category_for_source_path
 
     new_objects = dict(manifest.objects)
     for entry in plan.entries:
         if entry.action in (PlanAction.REFRESH, PlanAction.ADOPT):
             assert entry.remote is not None
             existing = manifest.objects.get(entry.object_key)
+            source_path = source_paths.get(entry.object_key)
             new_objects[entry.object_key] = ManifestEntry(
-                source=source_paths.get(entry.object_key),
+                source=source_path,
                 compiled_hash=sha256_hash(entry.remote),
                 kind=existing.kind if existing is not None else "dsl",
+                # M15 work item A: the base category this object was JUST
+                # placed under on this pull -- so the very next push's
+                # category-on-move sync (`hassle.sync.category_move`) starts
+                # from the right base instead of `None` (which would
+                # misfire as "local changed" even though nothing moved yet).
+                category=local_category_for_source_path(entry.kind, source_path),
             )
         elif entry.action is PlanAction.DROP:
             new_objects.pop(entry.object_key, None)
@@ -693,6 +701,14 @@ def push(
     # already succeeded (checked above); these are printed, never fatal.
     for warning in result.category_warnings:
         console.print(f"[yellow]{warning}[/yellow]")
+
+    # M15 work item A: category-on-move conflicts (I6 -- never silently
+    # resolved in either direction) are printed too, never fatal for a push
+    # that otherwise succeeded -- the object's own content update already
+    # applied; only its category grouping is left exactly as it was pending
+    # the user resolving which side should win.
+    for conflict_message in result.category_conflicts:
+        console.print(f"[bold red]{conflict_message}[/bold red]")
 
     summary = plan_summary(resolved_plan)
     console.print(f"[green]hassle push: applied {sum(summary.values())} change(s)[/green]")
