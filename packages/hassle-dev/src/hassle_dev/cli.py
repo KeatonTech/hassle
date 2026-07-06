@@ -3,6 +3,7 @@
 Subcommands:
   corpus-stats   Report fixture-corpus construct coverage; enforce the M0 contract.
   goldens        Manage golden files (DSL↔IR pairs land in M1; M0 is the baseline).
+  docs           Build/check docs/DSL.md + docs/COOKBOOK.md (MILESTONES M9 tests 1-2).
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from pathlib import Path
 
 from hassle_dev.corpus import analyze, find_configs_dir
 from hassle_dev.decompile_coverage import run_decompile_coverage
+from hassle_dev.docs import find_repo_root, run_docs
 from hassle_dev.goldens import find_dsl_dir, run_goldens
 
 
@@ -94,6 +96,47 @@ def _cmd_decompile_coverage(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def _cmd_docs(args: argparse.Namespace) -> int:
+    repo_root: Path | None = args.repo_root or find_repo_root()
+    if repo_root is None:
+        print("docs: could not locate the repo root (pass --repo-root DIR)")
+        return 2
+
+    report = run_docs(repo_root, update=args.update)
+
+    if report.missing_dsl_names:
+        print(f"docs: MISSING golden pair for {len(report.missing_dsl_names)} name(s):")
+        for name in sorted(report.missing_dsl_names):
+            print(f"  {name}")
+
+    print(f"docs: cookbook has {report.cookbook_recipe_count} recipe(s) (gate: >= 20)")
+    if report.cookbook_recipe_count < 20:
+        print("  COOKBOOK GATE NOT MET (< 20 recipes)")
+
+    if report.cookbook_findings:
+        print(f"docs: cookbook bundle has {len(report.cookbook_findings)} validation finding(s):")
+        for finding in report.cookbook_findings:
+            print(f"  {finding}")
+
+    if not report.cookbook_tests_passed:
+        print("docs: cookbook simulator tests FAILED:")
+        print(report.cookbook_test_output)
+
+    if args.update:
+        print("docs: wrote docs/DSL.md and docs/COOKBOOK.md")
+        return 0
+
+    if report.dsl_drifted:
+        print("docs: docs/DSL.md is stale (run `hassle-dev docs --update`)")
+    if report.cookbook_drifted:
+        print("docs: docs/COOKBOOK.md is stale (run `hassle-dev docs --update`)")
+
+    if report.ok and report.cookbook_recipe_count >= 20:
+        print("docs up to date, all gates satisfied ✓")
+        return 0
+    return 1
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="hassle-dev")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -115,6 +158,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--out", type=Path, required=True, help="path to write the JSON coverage report"
     )
     p_cov.set_defaults(func=_cmd_decompile_coverage)
+
+    p_docs = sub.add_parser(
+        "docs", help="build/check docs/DSL.md + docs/COOKBOOK.md (MILESTONES M9)"
+    )
+    p_docs.add_argument("--update", action="store_true", help="write docs/*.md in place")
+    p_docs.add_argument("--repo-root", type=Path, default=None, help="path to the repo root")
+    p_docs.set_defaults(func=_cmd_docs)
 
     args = parser.parse_args(argv)
     return int(args.func(args))
