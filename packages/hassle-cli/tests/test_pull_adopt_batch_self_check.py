@@ -15,6 +15,21 @@ another file's real content, which isn't available in isolation, so a
 same-file-only self-check there would be incomplete without also being
 misleadingly reassuring -- the CLI-level whole-bundle backstop remains the
 correct (and sufficient) backstop for that path.
+
+**Value-comparison widening, then a field-failure fix (``ux/dsl-ergonomics``
+item 4, then ``fix/self-check-value-compare``):** the self-check was widened
+to compare recompiled VALUES against the original stored config, not just
+"does it compile" (`test_adopt_batch_self_check_catches_value_mismatch_that_
+still_compiles` -- the true-positive case, the `for_each` template-string
+bug). The FIRST value-comparison mechanism (decompiled DSL TEXT) was itself
+buggy: it wasn't context-free, and false-positived on the owner's live bundle
+(`test_adopt_batch_self_check_does_not_false_positive_on_batch_context_text_
+diff` -- pins the fix: a name-collision `_2` suffix or a same-batch
+script-call rewrite changes decompiled TEXT without changing the underlying
+HA value, and the self-check must not care). `test_owner_bundle_shape_class_
+pulls_clean_via_cli` is the end-to-end reproduction of the owner's actual
+reported shape (helpers + an automation calling a same-batch shared script)
+via the real CLI + `FakeBackend`.
 """
 
 from __future__ import annotations
@@ -149,3 +164,142 @@ def test_adopt_batch_self_check_catches_value_mismatch_that_still_compiles(monke
     assert "automation:a1" in str(excinfo.value)
     # Nothing written -- this fires before any adopt destination is touched.
     assert Path("automations/misc.py") not in writer.written_files
+
+
+def test_adopt_batch_self_check_does_not_false_positive_on_batch_context_text_diff(
+    monkeypatch,
+) -> None:
+    """Field-failure fix (coordinator report, `fix/self-check-value-compare`):
+    the self-check's comparison must be context-free -- it must not care that
+    the SAME object's decompiled TEXT differs between the real batch context
+    (name-collision `_2` dedup suffix, or a same-batch script-call rewrite)
+    and a solo re-decompile of the original config (fresh naming, no resolver).
+    Reproduced here with a hand-rolled fake `decompile_bundle`: the batch
+    output uses a `_2`-suffixed function name (as a real batch would, when a
+    second object's alias collides) for `automation:a1`, but a solo
+    `decompile_object` of the SAME stored config always names it fresh
+    (`a1`, no collision partner) -- a pure Python-identifier difference that
+    can never appear in `to_ha()` (the function name is not part of the HA
+    value at all). The OLD text-comparison self-check would have treated
+    this as a value mismatch and blocked the whole batch (the coordinator's
+    field failure: six objects refused, only one of which -- if any --
+    was a real problem); the value-comparison self-check must not.
+    """
+    import hassle_cli.pull_apply as pull_apply_mod
+
+    def _batch_context_name_collision_decompile_bundle(objects, *, script_refs=None):
+        # Simulates what a real batch compile would emit when a SIBLING
+        # object's alias collides and forces this one to a `_2` suffix --
+        # the value (`to_ha()`) is untouched, only the Python identifier.
+        return (
+            "from hassle import *\n\n"
+            "from hassle.registry import entities as e\n\n\n"
+            "@automation(id='a1', alias='A1')\n"
+            "def a1_2():\n"
+            '    service("light.turn_on")\n'
+        )
+
+    monkeypatch.setattr(
+        pull_apply_mod, "decompile_bundle", _batch_context_name_collision_decompile_bundle
+    )
+
+    entries = [
+        _adopt_entry(
+            "automation:a1",
+            "automation",
+            {
+                "id": "a1",
+                "alias": "A1",
+                "triggers": [],
+                "conditions": [],
+                "actions": [{"action": "light.turn_on"}],
+            },
+            "automations/misc.py",
+        )
+    ]
+    writer = RecordingSourceWriter()
+
+    apply_pull_with_decompiler(Plan(entries=entries), writer)  # must NOT raise
+
+    assert "a1_2" in writer.written_files[Path("automations/misc.py")]
+
+
+def test_owner_bundle_shape_class_pulls_clean_via_cli(
+    git_repo, cli, fake_backend, toml_writer
+) -> None:
+    """End-to-end (real CLI + FakeBackend, no monkeypatching): the owner's
+    actual reported shape class -- an automation with a same-batch
+    shared-script call, adopted together with five sibling helpers (two
+    `input_datetime`, two `input_number`, one `input_text`) in one pull --
+    must pull clean. This is the exact class of object the field failure
+    blocked (six objects refused; `hassle pull` left the owner's bundle
+    empty). Fixed via `values_match`'s context-free canonical-JSON
+    comparison (`fix/self-check-value-compare`)."""
+    import subprocess
+
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    subprocess.run(["git", "add", "-A"], cwd=git_repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-q", "-m", "point at fake backend"],
+        cwd=git_repo,
+        check=True,
+        capture_output=True,
+    )
+
+    backend.create(
+        "input_datetime", {"name": "Notification Shown At", "has_date": True, "has_time": True}
+    )
+    backend.create(
+        "input_datetime", {"name": "Notification Dismissed At", "has_date": True, "has_time": True}
+    )
+    backend.create("input_number", {"name": "Notification Count", "min": 0, "max": 100, "step": 1})
+    backend.create(
+        "input_number", {"name": "Notification Retry Count", "min": 0, "max": 10, "step": 1}
+    )
+    backend.create("input_text", {"name": "Last Shown Notification", "max": 255})
+    backend.create(
+        "script",
+        {
+            "alias": "Dismiss notification",
+            "fields": {"notification_id": {"default": ""}},
+            "sequence": [
+                {
+                    "action": "persistent_notification.dismiss",
+                    "data": {"notification_id": "{{ notification_id }}"},
+                }
+            ],
+        },
+    )
+    backend.create(
+        "automation",
+        {
+            "id": "1776572725931",
+            "alias": "Dismiss guest reminder",
+            "triggers": [
+                {"trigger": "state", "entity_id": ["input_boolean.guest_mode"], "to": "off"}
+            ],
+            "conditions": [],
+            "actions": [
+                {
+                    "action": "script.dismiss_notification",
+                    "data": {"notification_id": "guest_reminder"},
+                    "metadata": {},
+                }
+            ],
+            "mode": "single",
+        },
+    )
+
+    result = cli(["pull"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+    for expected in (
+        "adopt  automation:1776572725931",
+        "adopt  input_datetime:notification_dismissed_at",
+        "adopt  input_datetime:notification_shown_at",
+        "adopt  input_number:notification_count",
+        "adopt  input_number:notification_retry_count",
+        "adopt  input_text:last_shown_notification",
+        "adopt  script:dismiss_notification",
+    ):
+        assert expected in result.output, result.output
