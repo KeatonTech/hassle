@@ -12,9 +12,10 @@ them, not left buried in code comments.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from hassle.docs.agents_md import generate_agents_md
 from hassle.docs.dsl_reference import generate_dsl_reference
-from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DSL_FIXTURES = REPO_ROOT / "fixtures" / "dsl"

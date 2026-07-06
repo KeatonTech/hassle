@@ -23,7 +23,7 @@ from pathlib import Path
 import click
 
 from hassle_cli import bundle_ops, git_support, init_cmd, manifest_io
-from hassle_cli.config import find_bundle_root, load_config
+from hassle_cli.config import CURRENT_BUNDLE_FORMAT, find_bundle_root, load_config
 from hassle_cli.render import get_console
 
 
@@ -33,6 +33,20 @@ def _bundle_root_or_fail(explicit: Path | None = None) -> Path:
         click.echo(
             "hassle: no hassle.toml found in this directory or any parent. "
             "Fix: run `hassle init` here, or `cd` into your bundle directory.",
+            err=True,
+        )
+        raise SystemExit(2)
+    # MILESTONES M9 test 4: refuse a NEWER major bundle_format before doing ANY
+    # work (no partial operation) -- checked here, the single choke point every
+    # subcommand except `init`/`login` routes through, so there is no way to
+    # reach compile/validate/plan/push logic on an unrecognized format.
+    bundle_format = load_config(root).bundle_format
+    if bundle_format > CURRENT_BUNDLE_FORMAT:
+        click.echo(
+            f"hassle: this bundle's bundle_format ({bundle_format}) is NEWER than what "
+            f"this CLI build understands ({CURRENT_BUNDLE_FORMAT}). Fix: upgrade Hassle "
+            "(`uv tool upgrade hassle` or reinstall from a newer release) before running "
+            "any command against this bundle -- nothing has been read or written.",
             err=True,
         )
         raise SystemExit(2)
@@ -836,7 +850,8 @@ def mirror_push() -> None:
 @main.command()
 @click.option("--sweep-shadows", is_flag=True, default=False)
 def doctor(sweep_shadows: bool) -> None:
-    """Diagnostics: committed-secret scan, orphaned shadow sweep."""
+    """Diagnostics: committed-secret scan, orphaned shadow sweep, HA version check."""
+    from hassle.backend.version import TESTED_HA_MAX, TESTED_HA_MIN, version_warning
     from hassle_cli.doctor import find_committed_tokens, sweep_orphaned_shadows
 
     console = get_console()
@@ -853,6 +868,18 @@ def doctor(sweep_shadows: bool) -> None:
                 "system keyring, and rotate the exposed token in HA.[/red]"
             )
 
+    # MILESTONES M9 deliverable 4: "HA tested-version range surfaced in
+    # hassle doctor" -- the range itself is always shown (offline, a static
+    # constant, R2-safe). The LIVE instance's version is only ever checked
+    # when the caller explicitly opts into a connection (`--sweep-shadows`,
+    # the pre-existing connection gate) -- `doctor` must never make network
+    # I/O just because `ha_url` happens to be configured (R2; a bare
+    # `hassle doctor` is an offline diagnostic).
+    console.print(
+        f"[dim]doctor: Hassle is tested against Home Assistant "
+        f"{TESTED_HA_MIN}-{TESTED_HA_MAX}[/dim]"
+    )
+
     if sweep_shadows:
         config = load_config(root)
         if config.ha_url:
@@ -861,11 +888,20 @@ def doctor(sweep_shadows: bool) -> None:
 
             token = resolve_token(config.ha_url) or ""
             with backend_factory.connect(config.ha_url, token) as backend:
+                ha_version = getattr(backend, "ha_version", None)
                 swept = sweep_orphaned_shadows(backend)
             if swept:
                 console.print(
                     f"[yellow]doctor: swept {len(swept)} orphaned shadow automation(s)[/yellow]"
                 )
+            if ha_version:
+                warning = version_warning(ha_version)
+                if warning is not None:
+                    console.print(f"[yellow]doctor: {warning}[/yellow]")
+                else:
+                    console.print(
+                        f"[dim]doctor: connected Home Assistant {ha_version} (in range)[/dim]"
+                    )
 
     if problems:
         raise SystemExit(1)

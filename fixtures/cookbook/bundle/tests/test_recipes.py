@@ -286,9 +286,7 @@ def test_wait_then_lock_reminder_fires_after_timeout() -> None:
     sim = _sim()
     sim.state_change("binary_sensor.front_door", "closed", "open")
     sim.advance(minutes=5)
-    sim.assert_called(
-        "notify.mobile_app_keaton", message="Don't forget to lock the front door"
-    )
+    sim.assert_called("notify.mobile_app_keaton", message="Don't forget to lock the front door")
 
 
 # 20. purpose-trigger area target (fired directly, DESIGN §10.1) -------------------

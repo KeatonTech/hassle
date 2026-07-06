@@ -41,9 +41,7 @@ def test_status_refuses_newer_major_bundle_format(bundle_dir: Path, cli) -> None
     assert "upgrade" in lowered or "newer" in lowered
 
 
-def test_validate_refuses_newer_major_bundle_format_before_any_work(
-    bundle_dir: Path, cli
-) -> None:
+def test_validate_refuses_newer_major_bundle_format_before_any_work(bundle_dir: Path, cli) -> None:
     """No partial operation: the refusal must happen before compiling/validating
     anything -- a stray success message for any sub-step would mean the CLI
     ran ahead before checking the version gate."""
