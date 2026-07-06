@@ -40,6 +40,16 @@ list of action dicts (HA's own action-sequence shape); stored verbatim
 reusable here without a recording context, so these are raw HA action dicts,
 matching the ``raw_action`` escape hatch's shape).
 
+**Omitting a required write-target field is a COMPILE-TIME error (reviewer
+follow-up on the M10 merge):** previously this only surfaced as a bare backend
+``ValueError`` at APPLY time (``hassle.backend.direct``/``hassle.backend.fake``'s
+``_check_required_fields``), so ``hassle validate``/``hassle plan`` would pass
+a bundle that was guaranteed to fail on push. ``_declare_template_helper``
+(below) now raises :class:`~hassle.compiler.errors.MissingTemplateHelperWriteTargetError`
+the moment ``template_number``/``template_select`` is called without its
+required kwarg -- the backend checks are unchanged and remain a second line
+of defense for any non-DSL path that builds a `TemplateHelperConfig` directly.
+
 **``min``/``max``/``step`` are ``float``-coerced (CI round 4 finding,
 docs/ha-api-notes.md §26.10):** HA's ``template_number`` form schema types
 these three fields as ``NumberSelector``, whose validator
@@ -58,11 +68,27 @@ from __future__ import annotations
 
 from typing import Any
 
+from hassle.compiler.errors import MissingTemplateHelperWriteTargetError
 from hassle.compiler.helpers import EntityRef
 from hassle.compiler.spans import capture_span
 from hassle.ir import TEMPLATE_DOMAINS
 from hassle.ir.keys import slugify
 from hassle.ir.models import TemplateHelperConfig
+
+# Write-target fields HA's `template` config-flow form schema requires beyond
+# `name`/`state` (docs/ha-api-notes.md §26.6, mirrors `hassle.backend.direct`/
+# `hassle.backend.fake`'s `_TEMPLATE_REQUIRED_FIELDS`): a template NUMBER
+# needs `set_value` (the action run when the number is written), a template
+# SELECT needs `select_option` (the action run when an option is chosen).
+# Sensor/binary_sensor are read-only -- no extra required field. Checked here,
+# at DSL build time, so an omission is a compile-time `hassle validate`/
+# `hassle plan` finding instead of only failing at APPLY time; the backend
+# checks (`_check_required_fields`) stay in place as a second line of defense
+# for any non-DSL path that builds a `TemplateHelperConfig` directly.
+_REQUIRED_WRITE_TARGET_FIELDS: dict[str, str] = {
+    "template_number": "set_value",
+    "template_select": "select_option",
+}
 
 # All TemplateHelperConfig instances built by this module's constructor
 # functions, in declaration order, for the lifetime of the process (or since
@@ -117,6 +143,14 @@ def _declare_template_helper(domain: str, name: str, **fields: Any) -> EntityRef
             f"unknown template helper domain {domain!r} "
             f"(expected one of {sorted(TEMPLATE_DOMAINS)})"
         )
+    required_field = _REQUIRED_WRITE_TARGET_FIELDS.get(domain)
+    if required_field is not None and fields.get(required_field) is None:
+        # depth=1: skip this function's own frame, same as the registration
+        # call below, so the span points at the user's `template_number(...)`/
+        # `template_select(...)` call, not this internal helper.
+        raise MissingTemplateHelperWriteTargetError(
+            domain, name, required_field, capture_span(depth=1)
+        )
     identity = slugify(name)
     body: dict[str, Any] = {
         "name": name,
@@ -152,7 +186,9 @@ def template_number(
     action (a raw HA action dict, or a list of them) run when the number is
     set -- e.g. ``{"action": "input_number.set_value", "target": {...},
     "data": {"value": "{{ value }}"}}``, where ``{{ value }}`` is HA's
-    template variable for the submitted value.
+    template variable for the submitted value. Omitting it raises
+    :class:`~hassle.compiler.errors.MissingTemplateHelperWriteTargetError`
+    at compile time (module docstring).
 
     ``min``/``max``/``step`` are coerced to ``float`` (docs/ha-api-notes.md
     §26.10): HA's form schema (``NumberSelector``) always stores them as
@@ -233,7 +269,9 @@ def template_select(
     (extra="allow" preserves it verbatim like any other IR field, I3).
     ``select_option`` is REQUIRED by HA's form schema (module docstring): the
     action (or list of actions) run when an option is chosen, analogous to
-    ``template_number``'s ``set_value``.
+    ``template_number``'s ``set_value``. Omitting it raises
+    :class:`~hassle.compiler.errors.MissingTemplateHelperWriteTargetError`
+    at compile time (module docstring).
     """
     return _declare_template_helper(
         "template_select",

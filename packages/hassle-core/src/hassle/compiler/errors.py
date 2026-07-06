@@ -7,6 +7,8 @@ depend on them and they are snapshot-tested (tests/snapshots/errors/).
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from hassle.compiler.spans import SourceSpan
 
 
@@ -105,6 +107,53 @@ class NoRecordingContextError(CompileError):
             f"body, which the compiler runs inside a recording context. Fix: move this call "
             f"into a decorated function body; if you meant to build a value, assign the "
             f"builder to a variable instead of calling `{call}` at module scope."
+        )
+
+
+class MissingTemplateHelperWriteTargetError(CompileError):
+    """A ``template_number``/``template_select`` declaration omitted its
+    required write-target kwarg.
+
+    DESIGN §5.7 / docs/ha-api-notes.md §26.6: HA's `template` config-flow form
+    schema requires a write-target action sequence for any writable template
+    helper -- ``template_number`` needs ``set_value``, ``template_select``
+    needs ``select_option`` -- since ``state`` alone only computes the
+    displayed value. Previously this only surfaced as a bare backend
+    ``ValueError`` at APPLY time (`_check_required_fields` in
+    ``hassle.backend.direct``/``hassle.backend.fake``, kept as a second line
+    of defense for non-DSL paths); this is the compile-time product-surface
+    version so ``hassle validate``/``hassle plan`` catch it before push.
+    """
+
+    # One realistic one-line example action per write-target field, keyed by
+    # the exact kwarg name (`set_value` for `template_number`, `select_option`
+    # for `template_select`) so the fix example always matches the domain
+    # that's actually missing it.
+    _EXAMPLE_ACTION: ClassVar[dict[str, str]] = {
+        "set_value": (
+            '{"action": "input_number.set_value", "target": '
+            '{"entity_id": "input_number.example"}, "data": {"value": "{{ value }}"}}'
+        ),
+        "select_option": (
+            '{"action": "input_select.select_option", "target": '
+            '{"entity_id": "input_select.example"}, "data": {"option": "{{ option }}"}}'
+        ),
+    }
+
+    def __init__(self, domain: str, name: str, field: str, span: SourceSpan | None) -> None:
+        self.domain = domain
+        self.field = field
+        self.span = span
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        example_action = self._EXAMPLE_ACTION.get(field, "{...}")
+        super().__init__(
+            f"`{domain}(name={name!r}, ...)`{where} is missing the required `{field}=` "
+            f"keyword. HA's `template` config flow requires a write-target action "
+            f"sequence for a writable `{domain}` helper -- `state` alone only computes "
+            f"the displayed value, so the form schema rejects a submission without one. "
+            f"Fix: pass `{field}=` with the action (or list of actions) to run when the "
+            f"helper is written from the UI/a service call, e.g. "
+            f"`{domain}(name={name!r}, ..., {field}={example_action})`."
         )
 
 

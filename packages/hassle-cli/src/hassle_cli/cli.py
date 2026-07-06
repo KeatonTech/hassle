@@ -630,13 +630,44 @@ def validate(as_json: bool) -> None:
     `hassle.registry.finding.Finding`.
     """
     from hassle.compiler.bundle import compile_bundle
+    from hassle.compiler.errors import CompileError
     from hassle.registry.snapshot import RegistrySnapshot
     from hassle.registry.validate import validate_bundle
 
     console = get_console()
     root = _bundle_root_or_fail()
     registry_path = root / ".hassle" / "registry.json"
-    result = compile_bundle(root)
+    try:
+        result = compile_bundle(root)
+    except CompileError as exc:
+        # Reviewer follow-up (M10 merge): a compile-time error (e.g. a
+        # template_number/template_select missing its required set_value=/
+        # select_option=) must be reported the same clean way a tier-2/3
+        # Finding is -- not let the exception escape as a raw traceback.
+        # `compile_bundle` runs before any Finding-producing check even
+        # starts, so this is the earliest possible exit point.
+        span = getattr(exc, "span", None)
+        file = _relative_finding_path(span.file, root) if span is not None else None
+        line = span.line if span is not None else None
+        if as_json:
+            import json as _json
+
+            payload = {
+                "findings": [
+                    {
+                        "code": type(exc).__name__,
+                        "severity": "error",
+                        "file": file,
+                        "line": line,
+                        "message": str(exc),
+                        "fix": str(exc),
+                    }
+                ]
+            }
+            click.echo(_json.dumps(payload))
+        else:
+            console.print(f"[red]{type(exc).__name__}[/red]: {exc}")
+        raise SystemExit(1) from exc
     skip_notice: str | None = None
     if registry_path.is_file():
         snapshot = RegistrySnapshot.load(registry_path)
