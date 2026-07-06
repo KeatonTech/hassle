@@ -20,6 +20,7 @@ executes. One test now pins the entire §10.4 semantic surface.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -83,7 +84,9 @@ def _shadow_ids(ha: DirectBackend) -> list[str]:
     ]
 
 
-def _write_bundle(tmp_path: Path, *, counter_entity_id: str) -> Path:
+def _write_bundle(
+    tmp_path: Path, *, counter_entity_id: str, trigger_entity_id: str, gate_entity_id: str
+) -> Path:
     root = tmp_path / "live-bundle"
     root.mkdir()
     (root / "hassle.toml").write_text("format_version = 1\nmirror = false\n", encoding="utf-8")
@@ -101,14 +104,24 @@ from hassle import automation, only_if, service, state, when
 
 @automation(id="live_test_automation", alias="Live test automation")
 def live_test_automation():
-    when(state("input_boolean.hassle_flag").to("on"))
-    only_if(state("input_boolean.hassle_flag_2").is_("on"))
-    service("input_boolean.turn_off", target={{"entity_id": "input_boolean.hassle_flag"}})
+    when(state("{trigger_entity_id}").to("on"))
+    only_if(state("{gate_entity_id}").is_("on"))
+    service("input_boolean.turn_off", target={{"entity_id": "{trigger_entity_id}"}})
     service("counter.increment", target={{"entity_id": "{counter_entity_id}"}})
 """,
         encoding="utf-8",
     )
     return root
+
+
+def _owned_entities(ha: DirectBackend) -> tuple[str, str]:
+    """Create the flag entities this test's bundle references (round-5 finding:
+    the previous gate entity was seeded NOWHERE -- an eternally-false condition
+    and a silently no-op'd turn_on; every CI container is fresh, so a test may
+    assume nothing exists that it did not create)."""
+    trigger_id = ha.create("input_boolean", {"name": "Hassle Live Trigger Flag"})
+    gate_id = ha.create("input_boolean", {"name": "Hassle Live Gate Flag"})
+    return f"input_boolean.{trigger_id}", f"input_boolean.{gate_id}"
 
 
 def _counter_value(ha: DirectBackend, entity_id: str) -> int:
@@ -149,8 +162,14 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     ha.create("input_boolean", {"name": "Hassle Flag 2", "icon": "mdi:flag"})
     counter_id = ha.create("counter", {"name": "Hassle Live Run Counter"})
     counter_entity_id = f"counter.{counter_id}"
+    trigger_entity_id, gate_entity_id = _owned_entities(ha)
 
-    bundle = _write_bundle(tmp_path, counter_entity_id=counter_entity_id)
+    bundle = _write_bundle(
+        tmp_path,
+        counter_entity_id=counter_entity_id,
+        trigger_entity_id=trigger_entity_id,
+        gate_entity_id=gate_entity_id,
+    )
     run_args = ["run", "a.py::live_test_automation", "--live", "--yes"]
     run_env = {"NO_COLOR": "1", "HASSLE_HA_URL": url, "HASSLE_TOKEN": token}
 
@@ -170,8 +189,22 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
 
     # -- Phase 2: satisfy the condition, trigger again. --
     ha.call_service(  # type: ignore[attr-defined]
-        "input_boolean", "turn_on", entity_id="input_boolean.hassle_flag_2"
+        "input_boolean", "turn_on", entity_id=gate_entity_id
     )
+    # Settle-proof: the gate must be OBSERVABLY "on" before triggering, so a
+    # phase-2 failure can never be ambiguous between "condition semantics
+    # broken" and "toggle never landed".
+    gate_state = None
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        gate_state = next(
+            (st["state"] for st in ha.states() if st.get("entity_id") == gate_entity_id),  # type: ignore[attr-defined]
+            None,
+        )
+        if gate_state == "on":
+            break
+        time.sleep(0.25)
+    assert gate_state == "on", f"gate {gate_entity_id} never reached 'on' (last: {gate_state!r})"
     before_phase2 = _counter_value(ha, counter_entity_id)
     result = _invoke_in_dir(main, run_args, cwd=bundle, env=run_env)
     assert result.exit_code == 0, result.output
@@ -213,7 +246,13 @@ def test_run_live_cleans_up_shadow_on_trace_stream_failure(
 
     monkeypatch.setattr(run_live, "stream_trace", _boom)
 
-    bundle = _write_bundle(tmp_path, counter_entity_id=f"counter.{counter_id}")
+    trigger_entity_id, gate_entity_id = _owned_entities(ha)
+    bundle = _write_bundle(
+        tmp_path,
+        counter_entity_id=f"counter.{counter_id}",
+        trigger_entity_id=trigger_entity_id,
+        gate_entity_id=gate_entity_id,
+    )
     result = _invoke_in_dir(
         main,
         ["run", "a.py::live_test_automation", "--live", "--yes"],
