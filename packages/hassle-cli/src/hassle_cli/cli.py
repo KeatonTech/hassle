@@ -228,10 +228,15 @@ def pull(allow_dirty: bool) -> None:
     # DESIGN §5.6/§6: a bundle that never ran `hassle init` (or predates this
     # scaffolding) still gets `lib/README.md`/`tests/README.md` on its first
     # pull, same as init -- idempotent, never overwrites an existing file.
-    from hassle_cli.init_cmd import scaffold_lib_and_tests_readmes, scaffold_vscode_settings
+    from hassle_cli.init_cmd import (
+        scaffold_agent_docs,
+        scaffold_lib_and_tests_readmes,
+        scaffold_vscode_settings,
+    )
 
     scaffold_lib_and_tests_readmes(root)
     scaffold_vscode_settings(root)
+    scaffold_agent_docs(root)
 
     ha_url, token = _require_backend_config(root)
     config = load_config(root)

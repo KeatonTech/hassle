@@ -77,12 +77,23 @@ def _run_cookbook_tests(cookbook_bundle: Path) -> tuple[bool, str]:
     return proc.returncode == 0, proc.stdout + proc.stderr
 
 
+def _static_dir(repo_root: Path) -> Path:
+    """The `hassle` package's own bundled copy (MILESTONES M9: `hassle
+    init`/`hassle pull` write these into every bundle, but the installed
+    package doesn't carry `fixtures/` -- so a checked-in copy ships as
+    package data, refreshed by this same `--update` run, same golden-file
+    convention as `expected_ir.json` (R3): never hand-edited)."""
+    return repo_root / "packages" / "hassle-core" / "src" / "hassle" / "docs" / "_static"
+
+
 def run_docs(repo_root: Path, *, update: bool) -> DocsReport:
     """Run the M9 docs gate against ``repo_root``.
 
     ``update``: write `docs/DSL.md`/`docs/COOKBOOK.md` in place (creating
-    `docs/` if needed) rather than only checking for drift. Golden-file
-    convention (R3): the docs are only ever written through this path.
+    `docs/` if needed), AND refresh the packaged static copy under
+    `hassle/docs/_static/` that `hassle init`/`hassle pull` ship into every
+    user bundle. Golden-file convention (R3): both copies are only ever
+    written through this path.
     """
     report = DocsReport()
 
@@ -90,6 +101,7 @@ def run_docs(repo_root: Path, *, update: bool) -> DocsReport:
     cookbook_bundle = repo_root / "fixtures" / "cookbook" / "bundle"
     registry_path = repo_root / "fixtures" / "registry" / "home.json"
     docs_dir = repo_root / "docs"
+    static_dir = _static_dir(repo_root)
 
     # -- test 1: DSL.md coverage -------------------------------------------
     report.missing_dsl_names = missing_names(list(hassle.__all__))
@@ -122,5 +134,11 @@ def run_docs(repo_root: Path, *, update: bool) -> DocsReport:
         report.cookbook_drifted = cookbook_path.read_text(encoding="utf-8") != cookbook_text
     else:
         report.cookbook_drifted = True
+
+    # -- packaged static copy (shipped into every user bundle) ----------------
+    if update and static_dir.parent.is_dir():
+        static_dir.mkdir(parents=True, exist_ok=True)
+        (static_dir / "DSL.md").write_text(dsl_text, encoding="utf-8")
+        (static_dir / "COOKBOOK.md").write_text(cookbook_text, encoding="utf-8")
 
     return report
