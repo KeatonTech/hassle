@@ -338,10 +338,15 @@ def pull(allow_dirty: bool) -> None:
     # compiles cleanly but silently changes an object's meaning. Every
     # REFRESH/ADOPT entry's original stored `remote` config is compared
     # against what the bundle just written recompiles to -- via
-    # `is_modernization_only_diff`'s decompiled-DSL-source comparison (same
-    # technique, same reason: tolerate the decompiler's known cosmetic
-    # modernizations, never a raw canonical-hash equality check, which would
-    # false-positive on those).
+    # `hassle_cli.pull_apply.values_match` (canonical-JSON value comparison,
+    # ``fix/self-check-value-compare``). This backstop used to call
+    # `is_modernization_only_diff`, which decompiles both sides to DSL TEXT --
+    # not context-free (the field failure `pull_apply`'s module docstring
+    # documents: the same value can decompile to different text depending on
+    # what else is in the same batch), and this exact code path is what
+    # produced it on the owner's live bundle. `values_match` is the single
+    # shared comparison both this backstop and the pre-write self-check use,
+    # so they can never disagree.
     try:
         _, post_write_result = bundle_ops.compile_local_objects(root)
     except Exception as exc:
@@ -357,9 +362,8 @@ def pull(allow_dirty: bool) -> None:
         )
         raise SystemExit(1) from exc
 
-    from hassle.ir.canonical import sha256_hash
     from hassle.sync.models import ManifestEntry, PlanAction
-    from hassle_cli.diffing import is_modernization_only_diff
+    from hassle_cli.pull_apply import values_match
 
     mismatched_keys = [
         entry.object_key
@@ -367,13 +371,7 @@ def pull(allow_dirty: bool) -> None:
         if entry.action in (PlanAction.REFRESH, PlanAction.ADOPT)
         and entry.remote is not None
         and entry.object_key in post_write_result.objects
-        and not is_modernization_only_diff(
-            entry.object_key,
-            entry.kind,
-            post_write_result.objects[entry.object_key].to_ha(),
-            entry.remote,
-        )
-        and post_write_result.objects[entry.object_key].to_ha() != entry.remote
+        and not values_match(post_write_result.objects[entry.object_key], entry.remote)
     ]
     if mismatched_keys:
         keys = ", ".join(sorted(mismatched_keys))
@@ -406,6 +404,8 @@ def pull(allow_dirty: bool) -> None:
     # adopt/create. Advancing the manifest for pull-side actions is this
     # CLI's own bookkeeping (no core-layer test covers it: `apply_pull`
     # deliberately never accepts a manifest, MILESTONES M5 test 2).
+    from hassle.ir.canonical import sha256_hash
+
     new_objects = dict(manifest.objects)
     for entry in plan.entries:
         if entry.action in (PlanAction.REFRESH, PlanAction.ADOPT):
