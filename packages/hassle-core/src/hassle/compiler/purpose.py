@@ -17,7 +17,7 @@ Type strings pass through unvalidated here — vocabulary validation is M3.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from hassle.compiler.durations import normalize_duration
 from hassle.compiler.errors import CompileTimeBranchError
@@ -81,6 +81,36 @@ def device_id(device_id: str) -> DeviceIdTarget:
 def _target_dict(target: Any) -> dict[str, Any]:
     if isinstance(target, str):
         # Bare entity ref: "domain.object_id" -> {"entity_id": "domain.object_id"}.
+        return {"entity_id": target}
+    return target.to_target_dict()  # type: ignore[no-any-return]
+
+
+def normalize_target(target: Any) -> dict[str, Any] | None:
+    """Normalize a ``target=`` argument to HA's stored target dict shape
+    (``ux/dsl-ergonomics``, item 3: bare entity target sugar, DESIGN §5.3/§7.3).
+
+    Accepts, in addition to an already-built dict (passed through byte-identical, the
+    pre-existing behavior every ``service()`` caller relies on):
+
+    - a bare entity ref/string, or a list of them -- ``{"entity_id": ...}`` (list shape
+      preserved: a singleton list stays a list, matching the same "never collapse a stored
+      list to a scalar" rule DESIGN §5.4/docs/ha-api-notes.md §19.2 already established for
+      ``state()``'s ``entity_id``);
+    - an ``area(...)``/``floor(...)``/``label(...)``/``device_id(...)`` target helper object
+      (already used by ``on()``/``met()``, DESIGN §5.4) -- ``{"area_id": ...}`` etc.
+
+    ``None`` passes through unchanged (no ``target=`` given at all). Every case here is a
+    ``str`` subclass (``EntityRef``) or produces plain ``str`` values, so this is purely
+    cosmetic sugar -- it compiles to the identical HA value the equivalent hand-written dict
+    literal would (I3).
+    """
+    if target is None:
+        return None
+    if isinstance(target, dict):
+        return cast("dict[str, Any]", target)
+    if isinstance(target, list):
+        return {"entity_id": list(cast("list[Any]", target))}
+    if isinstance(target, str):
         return {"entity_id": target}
     return target.to_target_dict()  # type: ignore[no-any-return]
 

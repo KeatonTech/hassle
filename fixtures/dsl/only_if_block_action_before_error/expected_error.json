@@ -1,0 +1,4 @@
+{
+  "error_type": "OnlyIfBlockCoverageError",
+  "contains": ["only_if", "bad.py:13"]
+}

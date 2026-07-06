@@ -27,6 +27,7 @@ from typing import Any
 
 from hassle.compiler.errors import (
     NoRecordingContextError,
+    OnlyIfBlockCoverageError,
     UnknownAutomationOptionError,
 )
 from hassle.compiler.protocols import (
@@ -84,6 +85,12 @@ class Recorder:
     ``action_stack`` is the nested-context target stack: the top list is where the
     next recorded action lands. ``push_actions`` (used by ``with if_then(...)`` in
     the follow-on workstream) pushes a child list and pops it on exit.
+
+    ``_only_if_block_closed_at`` (``ux/dsl-ergonomics``, item 1): set once a
+    ``with only_if(...):`` block has closed, to the number of top-level actions recorded so far
+    (i.e. the block's own actions) -- so :func:`record_action` can reject any FURTHER top-level
+    action as "outside the block" (the "all actions inside the block" invariant). ``None`` means
+    no block has closed yet (either the bare form was used, or no ``only_if`` at all).
     """
 
     kind: str  # "automation" | "script"
@@ -92,6 +99,7 @@ class Recorder:
     conditions: list[RecordedNode] = field(default_factory=_empty_nodes)
     actions: list[RecordedNode] = field(default_factory=_empty_nodes)
     _action_stack: list[list[RecordedNode]] = field(default_factory=_empty_stack)
+    _only_if_block_closed_at: int | None = None
 
     def __post_init__(self) -> None:
         self._action_stack = [self.actions]
@@ -108,6 +116,18 @@ class Recorder:
             yield
         finally:
             self._action_stack.pop()
+
+    def only_if_block_has_closed(self) -> bool:
+        """True once a ``with only_if(...):`` block has closed on this recorder
+        (``ux/dsl-ergonomics``, item 1) -- the public seam :func:`record_action`
+        uses to check the "all actions inside the block" invariant, so it never
+        has to reach into the private ``_only_if_block_closed_at`` field."""
+        return self._only_if_block_closed_at is not None
+
+    def close_only_if_block(self) -> None:
+        """Mark a ``with only_if(...):`` block as closed, at the current top-level
+        action count -- called by :class:`OnlyIfBlock`'s ``__exit__``."""
+        self._only_if_block_closed_at = len(self.actions)
 
 
 _CONTEXT_STACK: ContextVar[tuple[Recorder, ...]] = ContextVar("hassle_recorders", default=())
@@ -156,7 +176,15 @@ def record_condition(builder: ConditionBuilder, *, span: SourceSpan | None = Non
 
 def record_action(builder: ActionBuilder, *, span: SourceSpan | None = None) -> None:
     rec = _require_active("action")
-    rec.current_actions.append(RecordedNode(builder.to_action(), span or capture_span(depth=1)))
+    resolved_span = span or capture_span(depth=1)
+    # `with only_if(...):` coverage check (item 1, ``ux/dsl-ergonomics``): once a block has
+    # opened and closed on this recorder, every subsequent TOP-LEVEL action is "outside" it --
+    # a nested container's own actions (recorded via `push_actions`, so `current_actions` is not
+    # `rec.actions` itself) are unaffected, since they were necessarily opened from inside the
+    # block that's still active, or don't interact with `only_if` at all.
+    if rec.only_if_block_has_closed() and rec.current_actions is rec.actions:
+        raise OnlyIfBlockCoverageError(resolved_span)
+    rec.current_actions.append(RecordedNode(builder.to_action(), resolved_span))
 
 
 # ---------------------------------------------------------------------------
@@ -169,11 +197,60 @@ def when(*triggers: TriggerBuilder) -> None:
         record_trigger(trig, span=span)
 
 
-def only_if(*conditions: ConditionBuilder) -> None:
-    """Register one or more conditions on the active automation (DESIGN §5.3)."""
+class OnlyIfBlock:
+    """The object ``only_if(...)`` returns -- usable bare (F3, unchanged) or as
+    ``with only_if(...):`` (``ux/dsl-ergonomics``, item 1, DESIGN §5.3/§5.5).
+
+    The conditions are recorded at CALL time (``only_if(...)`` itself), before ``__enter__``
+    ever runs -- so the bare-call form is byte-for-byte the pre-existing behavior (F3: a bundle
+    that never writes ``with`` in front of the call cannot tell this object exists at all,
+    since nothing about the recorded IR or the call's side effects changed). ``__enter__`` only
+    arms the "every action must be inside this block" check; ``__exit__`` disarms recording and
+    leaves a marker so a LATER top-level action (recorded after the block closes) is rejected by
+    :func:`record_action`, not silently accepted.
+
+    Only one ``with only_if(...):`` block is meaningful per automation -- there is exactly one
+    automation-level conditions list, so a second bare/with call in the same automation still
+    just appends more conditions (unchanged), but only the FIRST ``with`` use establishes the
+    "actions before this point" baseline; using ``with only_if(...):`` more than once in the
+    same automation is unusual but not specially rejected here (the coverage check still holds:
+    every action must land after the first block closes and the last block's own actions are,
+    definitionally, "inside a block").
+    """
+
+    def __init__(self, rec: Recorder) -> None:
+        self._rec = rec
+
+    def __enter__(self) -> None:
+        # Armed only if no action has been recorded yet at top level (DESIGN: "the block must
+        # contain all of the automation's actions" -- an action already recorded before this
+        # point can never retroactively become "inside" the block). `depth=0` is correct here
+        # (verified empirically, same convention as control_flow.py's module docstring): unlike
+        # the `@contextlib.contextmanager`-decorated generators in that module, `OnlyIfBlock` is
+        # a plain class -- Python's `with` statement calls `__enter__` directly, with no
+        # contextlib trampoline frame to walk past.
+        if self._rec.actions:
+            raise OnlyIfBlockCoverageError(capture_span(depth=0))
+
+    def __exit__(self, *exc: object) -> None:
+        self._rec.close_only_if_block()
+
+
+def only_if(*conditions: ConditionBuilder) -> OnlyIfBlock:
+    """Register one or more conditions on the active automation (DESIGN §5.3).
+
+    Dual-form (``ux/dsl-ergonomics``, item 1): a bare call (``only_if(cond1, cond2)``, no
+    ``with``) keeps the exact pre-existing behavior -- it records the conditions and its return
+    value is ignored, exactly as when this returned ``None``. Used as ``with only_if(...):``
+    instead, it ALSO requires that every action the automation records lives inside that block --
+    HA has no notion of a conditional subset of an automation's actions, so a bare `only_if` call
+    that "looks like an empty if" (owner feedback) is clarified by making the block form show,
+    visually, exactly what it gates: everything.
+    """
     span = capture_span(depth=0)
     for cond in conditions:
         record_condition(cond, span=span)
+    return OnlyIfBlock(_require_active("only_if"))
 
 
 def check_options(kind: str, options: dict[str, Any], span: SourceSpan | None) -> None:

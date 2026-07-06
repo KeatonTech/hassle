@@ -51,12 +51,14 @@ from hassle.compiler.control_flow import (
     wait_template,
 )
 from hassle.compiler.durations import hours, minutes, normalize_duration, seconds
+from hassle.compiler.enums import MaxExceeded, Mode
 from hassle.compiler.errors import (
     CompileError,
     CompileTimeBranchError,
     DuplicateObjectError,
     ElseWithoutIfError,
     NoRecordingContextError,
+    OnlyIfBlockCoverageError,
     UnknownAutomationOptionError,
 )
 from hassle.compiler.helpers import (
@@ -130,6 +132,7 @@ from hassle.compiler.raw_automation import (
     raw_automation,
 )
 from hassle.compiler.recording import (
+    OnlyIfBlock,
     RecordedNode,
     Recorder,
     only_if,
@@ -211,10 +214,14 @@ __all__ = [
     "GeoLocationTrigger",
     "HomeAssistantTrigger",
     "LabelTarget",
+    "MaxExceeded",
+    "Mode",
     "MqttTrigger",
     "NoParamContextError",
     "NoRecordingContextError",
     "NumericStateExpr",
+    "OnlyIfBlock",
+    "OnlyIfBlockCoverageError",
     "PersistentNotificationTrigger",
     "PurposeCondition",
     "PurposeTrigger",

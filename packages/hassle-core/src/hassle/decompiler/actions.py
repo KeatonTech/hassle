@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, cast
 
-from hassle.decompiler.exprs import decompile_condition, render_literal
+from hassle.decompiler.exprs import decompile_condition, render_entity_position, render_literal
 
 INDENT = "    "
 
@@ -259,11 +259,33 @@ def _delay_source(body: dict[str, Any]) -> str | None:
     return f"delay({', '.join(parts)})"
 
 
+def _target_src(target: Any) -> str:
+    """Render a stored ``target`` dict as the bare entity-target sugar
+    (``ux/dsl-ergonomics``, item 3, DESIGN §7.3) when it has exactly one key --
+    ``entity_id`` (a bare ref/list, reusing the entity-position renderer) or
+    ``area_id``/``floor_id``/``label_id``/``device_id`` (an ``area()``/``floor()``/
+    ``label()``/``device_id()`` call) -- else the plain dict literal (multi-key
+    targets, e.g. ``entity_id`` + ``device_id`` together, keep the dict form)."""
+    if isinstance(target, dict):
+        target_dict = cast("dict[str, Any]", target)
+        if set(target_dict) == {"entity_id"}:
+            return render_entity_position(target_dict["entity_id"])
+        if set(target_dict) == {"area_id"}:
+            return f"area({target_dict['area_id']!r})"
+        if set(target_dict) == {"floor_id"}:
+            return f"floor({target_dict['floor_id']!r})"
+        if set(target_dict) == {"label_id"}:
+            return f"label({target_dict['label_id']!r})"
+        if set(target_dict) == {"device_id"}:
+            return f"device_id({target_dict['device_id']!r})"
+    return render_literal(target)
+
+
 def _service_call(body: dict[str, Any]) -> list[str]:
     action = body["action"]
     parts = [repr(action)]
     if "target" in body:
-        parts.append(f"target={render_literal(body['target'])}")
+        parts.append(f"target={_target_src(body['target'])}")
     data = body.get("data")
     if isinstance(data, dict):
         data_dict = cast("dict[str, Any]", data)

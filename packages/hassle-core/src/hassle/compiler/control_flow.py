@@ -306,10 +306,22 @@ def repeat_until(
 
 
 def repeat_for_each(
-    items: Iterable[Any], *, alias: str | None = None, enabled: bool | None = None
+    items: str | Iterable[Any], *, alias: str | None = None, enabled: bool | None = None
 ) -> Any:
-    """``with repeat_for_each([...]): ...`` -> HA ``repeat.for_each``."""
-    return _repeat_cm("for_each", list(items), alias=alias, enabled=enabled)
+    """``with repeat_for_each([...]): ...`` -> HA ``repeat.for_each``.
+
+    ``items`` also accepts a bare Jinja template STRING (``ux/dsl-ergonomics``, item 4, owner
+    bug report, ``scripts/misc.py``): HA's ``repeat.for_each`` may be stored as a template
+    string that renders to a list at runtime (e.g. ``"{{ states.light | map(attribute='entity_id')
+    | list }}"``), not just a literal list. A plain Python ``str`` is a ``list[str]``-like
+    ``Iterable[str]`` too, so ``list(items)`` on a string SILENTLY exploded it into a list of
+    individual characters instead of passing the template through -- a real bug (found on the
+    owner's bundle) that produced a `repeat.for_each` that couldn't possibly do what the
+    template said. Fixed here: a ``str`` passes through completely verbatim; only a genuine
+    (non-string) iterable is materialized into a list.
+    """
+    value: Any = items if isinstance(items, str) else list(items)
+    return _repeat_cm("for_each", value, alias=alias, enabled=enabled)
 
 
 # ---------------------------------------------------------------------------
