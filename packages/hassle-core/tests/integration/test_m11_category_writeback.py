@@ -50,6 +50,26 @@ teardown is wrapped in `contextlib.suppress` and never fails the test.
    M12) creates the category with EXACTLY that display name, live-verified via
    `config/category_registry/list`, instead of M11's `humanize_slug`-derived
    guess.
+
+**MILESTONES M15 work item A** (docs/ha-api-notes.md §31, source-verified --
+corrects §22/§30's "helpers have no category scope" belief):
+
+6. `test_helper_category_assign_and_readback_storage_and_template` (M15 test
+   1) -- assigns a category to a storage-collection helper (`input_boolean`)
+   AND a template config-entry helper (`template_number`) via
+   `DirectBackend.assign_category`/`create_category` (the shared `"helpers"`
+   scope, §31.2) and reads both back via `categories_for` -- live proof that
+   the template-helper's `config_entry_id` anchor (§31.6, no settable
+   `unique_id`) really does resolve to the right entity-registry row on real
+   HA, not just in `FakeBackend`.
+7. `test_same_object_two_scope_category_assignment_preserved` (§31.5d) -- the
+   STRONGER I6 check §31.5d itself calls for: one automation carries a
+   category under BOTH its own `"automation"` scope AND (as a synthetic
+   second scope, proving scopes are genuinely arbitrary per §31.1) an
+   unrelated `"anything_sluggy"` scope, assigned in either order -- both
+   survive the other's assignment on the SAME entity-registry row. This
+   supersedes the pre-M15 cross-object proxy (test 4 above), now that a
+   real same-object case is actually possible.
 """
 
 from __future__ import annotations
@@ -60,10 +80,17 @@ import uuid
 import pytest
 
 from hassle.backend import DirectBackend
+from hassle.compiler.template_helpers import (
+    declared_template_helpers,
+    reset_declared_template_helpers,
+    template_number,
+)
 from hassle.ir.keys import slugify
 from hassle.sync import Plan, PlanAction, PlanEntry
 from hassle.sync.apply import apply_plan
 from hassle.sync.models import Manifest
+
+_SET_VALUE = {"action": "input_number.set_value", "data": {"value": "{{ value }}"}}
 
 
 def _manifest() -> Manifest:
@@ -386,6 +413,120 @@ def test_push_create_with_category_global_uses_exact_display_name(
         # The EXACT display name was used -- not humanize_slug(slug), and not
         # some derivative of it either.
         assert after_categories[category_id] == display_name
+    finally:
+        with contextlib.suppress(Exception):
+            ha.delete("automation", identity)
+
+
+# ---------------------------------------------------------------------------
+# MILESTONES M15 work item A
+# ---------------------------------------------------------------------------
+
+
+def test_helper_category_assign_and_readback_storage_and_template(
+    ha: DirectBackend, cleanup_category
+) -> None:
+    """M15 test 1: the shared `"helpers"` scope (docs/ha-api-notes.md §31.2)
+    round-trips for BOTH a storage-collection helper (`input_boolean`,
+    anchored by `unique_id == object_id`) and a template config-entry helper
+    (`template_number`, anchored by `config_entry_id` -- §31.6, there is no
+    settable `unique_id` for these)."""
+    slug = _unique_slug("hvac_helpers")
+    category_id = ha.create_category("helpers", slug.replace("_", " ").title())
+    cleanup_category("helpers", category_id)
+
+    storage_identity = ha.create(
+        "input_boolean", {"id": f"ib_{slug}", "name": f"Guest mode {slug}"}
+    )
+
+    reset_declared_template_helpers()
+    template_number(
+        name=f"Tank level {slug}",
+        state="{{ 3 }}",
+        set_value=_SET_VALUE,
+        min=0,
+        max=8,
+        step=1,
+    )
+    (helper,) = declared_template_helpers()
+    template_identity = ha.create("template_number", helper.to_ha())
+
+    try:
+        ha.assign_category("input_boolean", storage_identity, "helpers", category_id)
+        ha.assign_category("template_number", template_identity, "helpers", category_id)
+
+        assert ha.categories_for("input_boolean", storage_identity) == {"helpers": category_id}
+        assert ha.categories_for("template_number", template_identity) == {
+            "helpers": category_id
+        }
+    finally:
+        with contextlib.suppress(Exception):
+            ha.delete("input_boolean", storage_identity)
+        with contextlib.suppress(Exception):
+            ha.delete("template_number", template_identity)
+
+
+def test_same_object_two_scope_category_assignment_preserved(
+    ha: DirectBackend, cleanup_category
+) -> None:
+    """§31.5d: HA's category-registry `scope` is a plain, uncontrolled string
+    (§31.1) -- a SINGLE entity-registry row can carry categories under
+    multiple scopes at once. Assign this object's OWN `"automation"`-scope
+    category, then an unrelated second scope's category on the SAME
+    object -- both must survive (I6), each direction (assign order doesn't
+    matter): this is the stronger same-object check §31.5d calls for,
+    superseding the pre-M15 cross-object proxy above."""
+    slug = _unique_slug("plant_care")
+    identity = f"auto_{slug}"
+
+    plan = Plan(
+        entries=[
+            PlanEntry(
+                object_key=f"automation:{identity}",
+                kind="automation",
+                action=PlanAction.CREATE,
+                local={
+                    "id": identity,
+                    "alias": "M15 two-scope automation",
+                    "triggers": [],
+                    "conditions": [],
+                    "actions": [],
+                },
+                source_path=f"automations/{slug}.py",
+            )
+        ]
+    )
+    result = apply_plan(plan, ha, _manifest())
+    assert result.succeeded is True, result.outcomes
+    assert result.category_warnings == [], result.category_warnings
+
+    try:
+        auto_categories = ha.list_categories("automation")
+        auto_category_id = next(
+            cid for cid, name in auto_categories.items() if slugify(name) == slug
+        )
+        cleanup_category("automation", auto_category_id)
+        assert ha.categories_for("automation", identity) == {"automation": auto_category_id}
+
+        # A second, unrelated scope's category on the SAME object.
+        other_scope = "anything_sluggy"
+        other_category_id = ha.create_category(other_scope, f"Other {slug}")
+        cleanup_category(other_scope, other_category_id)
+        ha.assign_category("automation", identity, other_scope, other_category_id)
+
+        # Both scopes' assignments survive on the same entity-registry row.
+        assert ha.categories_for("automation", identity) == {
+            "automation": auto_category_id,
+            other_scope: other_category_id,
+        }
+
+        # And the reverse order: re-assigning the FIRST scope again must not
+        # drop the second scope either.
+        ha.assign_category("automation", identity, "automation", auto_category_id)
+        assert ha.categories_for("automation", identity) == {
+            "automation": auto_category_id,
+            other_scope: other_category_id,
+        }
     finally:
         with contextlib.suppress(Exception):
             ha.delete("automation", identity)

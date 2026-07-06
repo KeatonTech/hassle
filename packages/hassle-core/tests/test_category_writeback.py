@@ -20,6 +20,17 @@ Covers the milestone's four required tests:
 All against `FakeBackend` (R2: no network in unit tests) -- the FakeBackend
 category-registry/entity-registry model this milestone adds, described in
 `hassle.backend.fake`'s module docstring addendum.
+
+**M15 work item A** (docs/ha-api-notes.md §31): §31.5a source-confirms HA's
+category registry was never actually restricted to the `automation`/`script`
+scopes -- ALL 13 helper kinds (9 storage-collection + 4 template config-entry)
+carry categories under the shared frontend scope `"helpers"`, and `helpers`
+IS now a scope `_SCOPE_FOR_KIND` maps to. Bundle PLACEMENT for helpers is
+UNCHANGED this round (still the flat `helpers/misc.py`, work item B's job) --
+`category_shaped_stem` still only recognizes the `automations/`/`scripts/`
+trees, so a helper CREATE still takes no category action in practice (there is
+no category-shaped helper file yet); `test_scope_for_kind_covers_all_13_helper_kinds`
+below pins the underlying scope map directly, independent of placement.
 """
 
 from __future__ import annotations
@@ -27,8 +38,10 @@ from __future__ import annotations
 from typing import Any
 
 from hassle.backend.fake import FakeBackend
+from hassle.ir.keys import HELPER_DOMAINS, TEMPLATE_DOMAINS
 from hassle.sync import Manifest, Plan, PlanAction, PlanEntry
 from hassle.sync.apply import apply_plan
+from hassle.sync.category_writeback import _SCOPE_FOR_KIND
 
 
 def _create_entry(
@@ -168,9 +181,15 @@ def test_push_create_with_no_source_path_takes_no_category_action() -> None:
 
 
 def test_push_create_helper_takes_no_category_action() -> None:
-    """Helpers have no category-registry scope in HA (DESIGN §7.3) -- a
-    helper CREATE never attempts category write-back, whatever its source
-    file is named."""
+    """§31.5a correction: helpers DO have a category-registry scope in real
+    HA (the shared `"helpers"` scope, `_SCOPE_FOR_KIND` now maps every helper
+    kind to it) -- this is no longer "helpers have no scope". But M15 work
+    item A does not change bundle PLACEMENT for helpers (still the flat
+    `helpers/misc.py`; work item B's job): `category_shaped_stem` only
+    recognizes the `automations/`/`scripts/` trees, so a helper CREATE still
+    takes no category action in practice, whatever its (hypothetical) source
+    file is named -- there is no category-shaped helper file yet for it to
+    match."""
     backend = FakeBackend()
 
     plan = Plan(
@@ -184,6 +203,19 @@ def test_push_create_helper_takes_no_category_action() -> None:
 
     assert result.succeeded is True
     assert backend.list_categories("input_boolean") == {}
+
+
+def test_scope_for_kind_covers_all_13_helper_kinds() -> None:
+    """MILESTONES M15 work item A test 1 (unit half): every one of the 13
+    helper kinds (9 storage-collection + 4 template config-entry) maps to the
+    shared `"helpers"` scope, not the pre-M15 `None` ("no category scope at
+    all") gate -- §31.2/§31.6."""
+    helper_kinds = HELPER_DOMAINS | TEMPLATE_DOMAINS
+    assert len(helper_kinds) == 13
+    for kind in helper_kinds:
+        assert _SCOPE_FOR_KIND.get(kind) == "helpers", kind
+    assert _SCOPE_FOR_KIND["automation"] == "automation"
+    assert _SCOPE_FOR_KIND["script"] == "script"
 
 
 # -- test 3: category assignment failure never fails or rolls back apply ----
@@ -254,6 +286,16 @@ def test_category_assignment_failure_does_not_rollback_other_objects_this_run() 
 
 
 def test_existing_update_never_touches_categories() -> None:
+    """M11's original claim ("no category action for ANY update") is
+    superseded by M15 work item A's category-on-move sync (`test_category_move.py`)
+    -- but only once there is a recorded BASE category to compare against
+    (`ManifestEntry.category`, the M15 F2 amendment). This test's manifest has
+    NO entry at all for `auto_hvac_1` (as if the object was never synced
+    through `hassle`'s own manifest before) -- with no base to compare
+    against, category-move sync conservatively takes no action, exactly the
+    same "don't guess which side is right" rule M11 itself already applies
+    elsewhere. `test_category_move.py` covers the case where a base IS on
+    record."""
     backend = FakeBackend()
     backend.seed_category("automation", "cat_hvac", "Automatic HVAC")
     identity = backend.create("automation", {"id": "auto_hvac_1", "alias": "Old alias"})
@@ -277,8 +319,7 @@ def test_existing_update_never_touches_categories() -> None:
 
     assert result.succeeded is True
     assert backend.list_remote("automation")[identity]["alias"] == "New alias"
-    # No category action for an UPDATE, even though the source path matches
-    # a category-shaped file and a matching category exists.
+    # No category action for an UPDATE with no manifest-recorded base category.
     assert backend.categories_for("automation", identity) == {}
     assert backend.list_categories("automation") == {"cat_hvac": "Automatic HVAC"}
 
