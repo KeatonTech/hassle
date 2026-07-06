@@ -2269,3 +2269,89 @@ No product code changed in this round — `render_trace_timeline`/`resolve_shado
 re-verified against live HA in this PR (no Docker/HA access here) — the orchestrator's CI run is
 the actual green signal, and is expected to be the first fully-green run of this test across all
 three rounds.
+
+## 30. M11: category write-back on push-create — inferred WS shapes, not live-verified (`m11/category-writeback`)
+
+**Scope.** M11 is the reverse of §22's pull-side category placement: when `hassle push` CREATEs a
+brand-new automation/script whose source file matches the `automations/<slug>.py` /
+`scripts/<slug>.py` shape (and isn't the `misc.py` fallback), Hassle assigns the matching HA UI
+category to the new object — creating the category first if none exists yet. Implemented in
+`hassle.sync.category_writeback.attempt_category_writeback`, called from `hassle.sync.apply.
+apply_plan` immediately after a CREATE succeeds; never for UPDATE/DELETE/REFRESH/ADOPT (MILESTONES
+M11 test 4 — existing/adopted objects' categories are never retroactively touched, since this
+module is only ever invoked from the CREATE branch).
+
+**Two new WS commands, neither previously used/captured anywhere in this codebase — inferred from
+reading HA core's source, NOT re-verified against a live instance in this PR (same caveat class as
+§22's own "not live-verified" flag for `category_registry/list`'s `scope` param; no Docker/HA
+access in this sandbox):**
+
+- **`config/category_registry/create`** — `{scope, name}` → the created row, same shape as
+  `.../list`'s rows: `{category_id, name, icon}`. Inferred from
+  `homeassistant/components/config/category_registry.py`'s
+  `WebSocketCommandCategoryRegistryCreate` handler (mirrors `.../list`'s already-confirmed `scope`
+  convention, §22).
+- **`config/entity_registry/update`** — `{entity_id, categories, ...}`. Inferred from
+  `homeassistant/components/config/entity_registry.py`'s
+  `WebSocketCommandEntityRegistryUpdate` handler: `categories` (like most of that handler's other
+  optional fields — `area_id`, `labels`, etc.) is stored via `attr.evolve`, which **replaces the
+  whole `categories` dict**, not a per-scope server-side merge. `DirectBackend._aassign_category`
+  therefore reads the entity's current `categories` off `config/entity_registry/list` first (the
+  same `unique_id == identity` anchor §2/§22 already established), merges in just this call's
+  `{scope: category_id}`, and resubmits the merged dict — so assigning an automation's category
+  never silently drops an unrelated label/category the object already carries under a different
+  scope (I6). If a live capture ever shows `entity_registry/update` merging `categories`
+  server-side instead, the client-side merge here is harmless (idempotent) — only the "read first"
+  round-trip would become unnecessary, not wrong.
+
+**New category naming.** MILESTONES M11 test 2 only specifies that a missing category is "created
+... then assigned" — not what name it gets (there's no way to recover a category's original
+mixed-case display name from a bundle filename's slug). Chosen: `hassle.ir.keys.humanize_slug`
+(`"automatic_hvac"` → `"Automatic Hvac"`), a best-effort display name, not a round-trip guarantee —
+the category's identity from that point on is its HA-assigned `category_id`, matched by
+`slugify(name) == slug` on every subsequent push (same anchor `bundle_ops._category_source_path`
+already uses in the pull direction, §22). A user is free to rename the category in the HA UI
+afterward with no ill effect: Hassle only ever looks it up by `category_id` once created for a
+given object, and re-derives the slug match fresh on every push for any *other* file that might
+want the same category.
+
+**Failure isolation (MILESTONES M11 test 3).** `attempt_category_writeback` never raises past its
+own boundary — any exception from `list_categories`/`create_category`/`assign_category` (backend
+unreachable, command rejected, older HA with no category registry, anything) becomes a warning
+string on `ApplyResult.category_warnings` (additive field), never an `ApplyOutcome.FAILED`/
+`ROLLED_BACK` for the object itself. `hassle push` prints each warning (yellow) after reporting
+success — the object was genuinely created; only its HA UI grouping is affected, and re-running
+`hassle push` is a safe no-op for the object (nothing local changed) that will retry the category
+assignment.
+
+**`FakeBackend`'s model (unit-test-only simplification, flagged per this doc's own convention).**
+Real HA's entity-registry lookup is by `unique_id`; `FakeBackend` has no simulated entity_id/
+entity-registry-row layer at all for automations/scripts (nothing in this codebase's `FakeBackend`
+ever needed one before), so its `assign_category`/`categories_for` key directly by `(kind,
+identity)` instead of round-tripping through a fabricated entity row. This is an internal
+storage-organization shortcut, exactly like `FakeBackend`'s existing helper-id-from-name-slug
+shortcut (module docstring) — it does not change the *shape* `DirectBackend`/real HA use (both
+still take `entity_id`-shaped WS payloads, `DirectBackend`'s tests in
+`test_direct_backend_category_writeback.py` pin those exact payloads), only how the fake stores
+its own bookkeeping.
+
+**Backend surface (additive, NOT part of the frozen `Backend` Protocol F2 — same pattern as
+`entry_id_for`/`fetch_registry_snapshot`, docs/backend.md §3.1, probed via `getattr` so a hand-
+rolled test `Backend` stub without it simply skips write-back with no warning):**
+`list_categories(scope)`, `create_category(scope, name)`, `assign_category(kind, identity, scope,
+category_id)`, `categories_for(kind, identity)` (test/CLI-facing lookup, not used by
+`attempt_category_writeback` itself).
+
+**No F2/Backend Protocol change.** Per MILESTONES R5, since the additive-method pattern (not a
+Protocol change) was sufficient, MILESTONES.md's F2 section is untouched.
+
+**Test coverage:** `packages/hassle-core/tests/test_category_writeback.py` (the four milestone
+tests, `FakeBackend`-only, `apply_plan`-level), `packages/hassle-core/tests/
+test_direct_backend_category_writeback.py` (WS payload shapes for `create_category`/
+`assign_category`, monkeypatched `_client`, no network), `packages/hassle-cli/tests/
+test_push_category_writeback.py` (end-to-end `hassle push` against `FakeBackend`, including the
+warning text in `hassle push`'s stdout). No integration test was added for the real WS commands
+above (the same category as §22's own "not added" integration TODO for `category_registry`
+create/assign — scripting a real category create+assign+verify round-trip generically is
+nontrivial, and CI's Docker HA run is the actual live-verification signal for whatever the
+orchestrator runs next); this is the recommended follow-up flagged to the human, same as §22's.
