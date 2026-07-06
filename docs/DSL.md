@@ -7640,6 +7640,10 @@ Compiles to (canonical IR / stored HA shape):
 
 Raised when a Python `if`/`bool()` is used on a runtime state expression (DESIGN §5.5) -- Python control flow runs at *compile* time, so a native branch on a live entity state would be baked in wrong. Fix: use `with if_then(expr):` / `with else_then():` instead, which compile to HA's `if`/`choose` action.
 
+### `DanglingTemplateHelperDeclarationError`
+
+Raised when `template_number`/`template_sensor`/`template_binary_sensor`/`template_select` is called with no `state=` (the M13 decorator-form signal) but is never applied as a decorator over a function -- the call builds and registers nothing, so without this check it would compile clean with the object silently absent. Fix: either add `state=...` to make it a direct call-form declaration, or apply the call as `@template_number(...)` (etc.) over a zero-arg function that `return`s the state expression.
+
 ### `ElseWithoutIfError`
 
 `with else_then():`/`with else_if(...):` used where the immediately preceding action in the same list isn't an `if_then`/`choose`/`else_if` block. Fix: move it directly after the block it belongs to.

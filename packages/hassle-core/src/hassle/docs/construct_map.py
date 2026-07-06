@@ -39,6 +39,8 @@ EXEMPT_NAMES: frozenset[str] = frozenset(
         "OnlyIfBlockCoverageError",
         # M13: decorator-form template-helper body contract violation.
         "TemplateHelperDecoratorBodyError",
+        # M13 reviewer finding B1: dangling state=-omitted declaration guard.
+        "DanglingTemplateHelperDeclarationError",
     }
 )
 

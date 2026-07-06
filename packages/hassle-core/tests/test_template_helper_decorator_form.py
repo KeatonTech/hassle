@@ -207,6 +207,25 @@ def test_decorator_calling_a_recording_verb_raises_no_recording_context_error() 
             return expr(e.sensor.a)
 
 
+def test_decorator_body_user_exception_is_chained_under_decorator_body_error() -> None:
+    """N2 (reviewer, M13 PR #8): a plain (non-CompileError) exception raised
+    inside the decorated function -- e.g. a `ZeroDivisionError` from a bug in
+    the user's expression math -- is chained under
+    `TemplateHelperDecoratorBodyError` so the helper's `@template_sensor(...)`
+    file:line is visible, with the original exception/traceback preserved via
+    `raise ... from exc`."""
+    with pytest.raises(TemplateHelperDecoratorBodyError) as excinfo:
+
+        @template_sensor(name="Buggy Sensor")
+        def _buggy_sensor():
+            return 1 / 0  # deliberate user bug under test
+
+    msg = str(excinfo.value)
+    assert "test_template_helper_decorator_form.py" in msg
+    assert "ZeroDivisionError" in msg
+    assert isinstance(excinfo.value.__cause__, ZeroDivisionError)
+
+
 def test_decorator_returning_plain_jinja_string_is_accepted() -> None:
     """A plain `str` return (raw Jinja, not built via the Expr surface) is
     also accepted -- `state=` always took either shape in the call form

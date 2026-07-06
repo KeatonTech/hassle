@@ -68,9 +68,12 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from hassle.compiler.errors import (
+    CompileError,
+    DanglingTemplateHelperDeclarationError,
     MissingTemplateHelperWriteTargetError,
     TemplateHelperDecoratorBodyError,
 )
@@ -102,9 +105,51 @@ _REQUIRED_WRITE_TARGET_FIELDS: dict[str, str] = {
 _DECLARED: list[TemplateHelperConfig] = []
 
 
+@dataclass
+class _PendingDeclaration:
+    """Bookkeeping for one ``state=``-omitted (decorator-form-signaling)
+    builder call, tracked from creation until either consumed as a decorator
+    (``TemplateHelperDeclaration.__call__`` -> ``_finalize``, which flips
+    ``consumed``) or swept as dangling at compile end (reviewer finding B1
+    on the M13 PR, module docstring's ``_build_or_defer`` note)."""
+
+    builder: str
+    name: str
+    span: SourceSpan | None
+    consumed: bool = False
+
+
+# Every pending (state-omitted) declaration created since the last
+# `reset_declared_template_helpers()`, in creation order -- the compile-end
+# sweep (`check_no_dangling_template_helper_declarations`) walks this for any
+# entry still `consumed=False`.
+_PENDING: list[_PendingDeclaration] = []
+
+
 def reset_declared_template_helpers() -> None:
     """Clear the process-wide declared-template-helpers list (tests / repeated compiles)."""
     _DECLARED.clear()
+    _PENDING.clear()
+
+
+def check_no_dangling_template_helper_declarations() -> None:
+    """Compile-end sweep (reviewer finding B1 on the M13 PR): raise
+    :class:`~hassle.compiler.errors.DanglingTemplateHelperDeclarationError`
+    for the FIRST still-unconsumed pending declaration (deterministic, R8 --
+    creation order), or return silently if every pending declaration was
+    consumed as a decorator.
+
+    Called from :mod:`hassle.compiler.bundle`'s ``compile_registered`` (the
+    shared core both ``compile_bundle`` and any direct caller go through),
+    after every registered/prebuilt object has been processed -- so this
+    also covers a single-file/fixture compile path (golden error-case
+    fixtures included), not just the whole-bundle loader.
+    """
+    for pending in _PENDING:
+        if not pending.consumed:
+            raise DanglingTemplateHelperDeclarationError(
+                pending.builder, pending.name, pending.span
+            )
 
 
 def declared_template_helpers() -> list[TemplateHelperConfig]:
@@ -206,6 +251,17 @@ def _validate_decorator_body(
     via :class:`~hassle.compiler.errors.NoRecordingContextError` -- calling
     the function here runs it with no active recorder) a recording verb
     (``service``/``when``/``only_if``/...) called from inside it.
+
+    A plain (non-:class:`~hassle.compiler.errors.CompileError`) exception
+    raised from inside the function body -- e.g. a user ``ZeroDivisionError``/
+    ``ValueError``/assertion -- is chained under
+    :class:`TemplateHelperDecoratorBodyError` (reviewer N2 on the M13 PR) so
+    the helper's ``@template_...(name=..., ...)`` file:line is visible in the
+    traceback, not just the bare exception from deep inside the user's
+    function; the original exception and traceback are preserved via ``raise
+    ... from exc``. Any :class:`~hassle.compiler.errors.CompileError` (e.g.
+    ``NoRecordingContextError`` from a recording-verb call) already carries
+    its own accurate location and is never re-wrapped.
     """
     sig = inspect.signature(func)
     if sig.parameters:
@@ -218,7 +274,17 @@ def _validate_decorator_body(
             f"called with zero arguments.",
             span,
         )
-    result = func()
+    try:
+        result = func()
+    except CompileError:
+        raise
+    except Exception as exc:
+        raise TemplateHelperDecoratorBodyError(
+            builder,
+            name,
+            f"the decorated function `{func.__name__}` raised {type(exc).__name__}: {exc}",
+            span,
+        ) from exc
     from hassle.compiler.templates import TemplateExpr
 
     if isinstance(result, TemplateExpr) or (
@@ -304,7 +370,18 @@ def _build_or_defer(
     # `_build_or_defer` time is simplest and correct for both.
     decoration_span = capture_span(depth=2)
 
+    # Reviewer finding B1 (M13 PR): track this `state=`-omitted call as
+    # PENDING the moment it's created -- if it's never applied as a
+    # decorator, the compile-end sweep
+    # (`check_no_dangling_template_helper_declarations`) must catch it,
+    # rather than the call silently doing nothing (I6 hazard: a helper that
+    # already exists in HA would otherwise vanish from the compiled set and
+    # get scheduled for DELETE).
+    pending = _PendingDeclaration(builder=domain, name=name, span=decoration_span)
+    _PENDING.append(pending)
+
     def _finalize(func: Callable[..., Any]) -> Callable[..., Any]:
+        pending.consumed = True
         rendered = _validate_decorator_body(domain, name, func, decoration_span)
         _declare_template_helper(
             domain, name, span=decoration_span, state=_render_state(rendered), **fields

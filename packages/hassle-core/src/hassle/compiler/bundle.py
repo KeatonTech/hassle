@@ -208,6 +208,19 @@ def compile_registered(
         else:  # pragma: no cover - registry only ever holds these two kinds
             raise ValueError(f"unknown registered kind {reg.kind!r}")
         result.add(obj, spans, decl_span=reg.span, duplicate_of=reg.span)
+
+    # M13 reviewer finding B1: sweep for any `template_number`/`template_sensor`/
+    # `template_binary_sensor`/`template_select` call that omitted `state=`
+    # (the decorator-form signal) but was never actually applied as a
+    # decorator over a function -- such a call builds/registers nothing, so
+    # without this sweep it would compile clean with the object simply
+    # absent (a silent regression from the pre-M13 call form, and an I6
+    # hazard if the helper already exists in HA). Runs at the end of this
+    # shared core so both `compile_bundle` and any direct caller (e.g. a
+    # single-file/fixture compile) are covered alike.
+    from hassle.compiler.template_helpers import check_no_dangling_template_helper_declarations
+
+    check_no_dangling_template_helper_declarations()
     return result
 
 

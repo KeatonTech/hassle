@@ -1,0 +1,4 @@
+{
+  "error_type": "DanglingTemplateHelperDeclarationError",
+  "contains": ["template_sensor", "helpers.py:13", "never used as a decorator"]
+}

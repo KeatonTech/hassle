@@ -76,6 +76,17 @@ _ERROR_DOCS: dict[str, str] = {
         "templates`/`hassle.compiler.math_expr` surface (or a plain Jinja "
         "string), and do nothing else in the function body."
     ),
+    "DanglingTemplateHelperDeclarationError": (
+        "Raised when `template_number`/`template_sensor`/"
+        "`template_binary_sensor`/`template_select` is called with no "
+        "`state=` (the M13 decorator-form signal) but is never applied as a "
+        "decorator over a function -- the call builds and registers "
+        "nothing, so without this check it would compile clean with the "
+        "object silently absent. Fix: either add `state=...` to make it a "
+        "direct call-form declaration, or apply the call as "
+        "`@template_number(...)` (etc.) over a zero-arg function that "
+        "`return`s the state expression."
+    ),
 }
 
 

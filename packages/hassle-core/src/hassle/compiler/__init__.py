@@ -55,6 +55,7 @@ from hassle.compiler.enums import MaxExceeded, Mode
 from hassle.compiler.errors import (
     CompileError,
     CompileTimeBranchError,
+    DanglingTemplateHelperDeclarationError,
     DuplicateObjectError,
     ElseWithoutIfError,
     MissingTemplateHelperWriteTargetError,
@@ -212,6 +213,7 @@ __all__ = [
     "CompileResult",
     "CompileTimeBranchError",
     "ConditionBuilder",
+    "DanglingTemplateHelperDeclarationError",
     "DelayAction",
     "DeviceIdTarget",
     "DeviceTrigger",
