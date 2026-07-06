@@ -534,6 +534,82 @@ the UI uses).
 
 ---
 
+## M12 — Category display names via `CATEGORY` module global (owner-commissioned)
+
+**Goal:** M11 invents a display name (`humanize_slug("automatic_hvac")` → "Automatic Hvac")
+when push-create has to CREATE a category — acronyms/punctuation are unrecoverable from a
+slug. An optional module-level `CATEGORY: str = "Automatic HVAC"` in a category-shaped
+bundle file (`automations/<slug>.py` / `scripts/<slug>.py`) supplies the exact name; pull
+writes it so display names round-trip through source.
+
+**Semantics (binding):**
+- `slugify(CATEGORY)` MUST equal the file stem. Mismatch → validation Finding
+  (what/where/fix, snapshot-tested); category write-back additionally ignores the global
+  with a warning (never guesses which side is right).
+- Used ONLY when creating a brand-new category. Matching stays slug-based; an existing HA
+  category is NEVER renamed by push (no surprise renames — the HA UI owns renames).
+- `hassle pull`, when it creates a NEW category file, emits the `CATEGORY = "…"` line from
+  the HA category's real name. The splicer must leave the global intact on REFRESH/DROP
+  (it is a top-level non-object statement).
+
+**Write these tests first**
+1. Push-create in a file with `CATEGORY = "Automatic HVAC"` → created category's name is
+   exactly that string (FakeBackend; DirectBackend payload test).
+2. `CATEGORY` that doesn't slugify to the stem → Finding (snapshot) + write-back warning
+   path; object apply still succeeds (M11 test-3 isolation unchanged).
+3. No `CATEGORY` → `humanize_slug` fallback byte-identical to M11 behavior.
+4. Pull of a categorized bundle emits the global; re-pull is byte-stable; splice
+   REFRESH/DROP of objects in that file preserves the line.
+5. Existing-category match never consults or writes `CATEGORY` (no rename attempted).
+
+---
+
+## M13 — Template-helper expression DSL: decorator form + bounded Jinja inversion (owner-commissioned)
+
+**Goal:** template helpers writable as decorated functions whose body returns a
+`TemplateExpr` (the M1.1 python→Jinja surface, `hassle.compiler.math_expr`/`templates`)
+instead of a raw Jinja string:
+
+```python
+@template_sensor(name="Average Temp", unit_of_measurement="°C", device_class="temperature")
+def average_temp():
+    return (states("sensor.a") | float_) / 2 + …   # exact spelling = existing M1.1 surface
+```
+
+The decorator form compiles to the IDENTICAL IR body as today's call form (`state=` becomes
+the rendered Jinja). Existing call form stays (F3 additions only). Identity remains
+`slug(name)` (§26.6) — the function name is cosmetic, like automations' function names.
+
+**Decompiler direction (bounded inversion, owner-approved fallback):** implement an inverse
+parser ONLY for the exact grammar the `TemplateExpr` renderer emits (literals, entity
+reads, the emitted filters/functions, arithmetic with the renderer's precedence/parens).
+Acceptance rule per template: `render(invert(jinja)) == jinja` BYTE-FOR-BYTE → decompile to
+the decorator form; anything else → today's string-state call form (the raw fallback). I3
+therefore holds trivially in both branches. Consequence (documented, deliberate): if a
+template is edited on the HA side into something non-invertible, the next pull REFRESH
+splices the user's decorator-form function away, replacing it with the call form — cleaner
+Python is an offer, not a guarantee (I6: nothing is lost; the config is fully present in
+the fallback).
+
+**Write these tests first**
+1. Golden DSL↔IR pair: decorator-form fixture for all four template domains compiles to
+   the same IR as the equivalent call form (byte-identical bodies).
+2. Inversion property test: for EVERY template the fixture corpus + renderer tests emit,
+   `render(invert(t)) == t` byte-for-byte, and the decompiled decorator source recompiles
+   to the identical IR (I3 through the nice branch).
+3. Fallback: a hand-written gnarly Jinja template (loops/macros/whitespace tricks) decompiles
+   to the string-state call form, never errors, and round-trips byte-stably (I3 through the
+   fallback branch).
+4. Refresh-overwrite: bundle has a decorator-form helper; remote template edited to
+   something non-invertible; pull REFRESH replaces the function with the call form via the
+   splicer (integration-level test with FakeBackend; no data loss).
+5. Bad decorator body (returns a non-TemplateExpr/str, takes arguments, calls services) →
+   R6 compile error, snapshot-tested.
+6. Docs gate: new construct documented (goldens/docs regenerated via `hassle-dev … --update`
+   with the diff shown, R3).
+
+---
+
 ## Milestone sizing (rough, for planning the swarm)
 
 | Milestone | Size | Parallel workstreams inside |
