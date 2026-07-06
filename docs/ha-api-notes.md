@@ -1325,3 +1325,58 @@ and the legacy `platform:`-naming fixture (`test_legacy_platform_automation_is_m
 asserting the ONE-TIME modernization label, not `noop` and not `conflict`, matching
 `test_modernization_labeling.py`'s existing single-object test but run across the full corpus
 object set for the first time).
+
+## 24. M8 finding: `hassle stubs`' output location never matched any pyright config (fixed) — `m8/vscode`
+
+**The finding.** M3's own CI-proof test (`packages/hassle-core/tests/test_registry_stubs_pyright.py`)
+already demonstrated the ONLY placement that makes pyright prefer a generated stub over the real
+runtime `hassle.registry` module for that dotted import path: a `pyrightconfig.json`/
+`python.analysis.stubPath` setting of `"typings"`, with the stub file physically at
+`typings/hassle/registry/__init__.pyi` (mirroring the real package's `__init__.py` shape — `entities`
+is a module-level attribute, not a submodule; see that test's docstring). Despite this, `hassle
+stubs` (`hassle_cli.cli`) wrote to `.hassle/entities.pyi`, and `hassle init` shipped no
+`.vscode/settings.json` at all. Nothing wired the two together: a fresh `hassle init` + `hassle
+pull` + `hassle stubs` sequence — the DESIGN §11 layer-1 "free" story — produced a real bundle
+where Pylance had **zero** knowledge of the generated entity types, silently. `hassle stubs`
+reported success (`wrote .hassle/entities.pyi`); nothing before M8 ever opened the result in a real
+pyright run to check it actually resolved.
+
+**Verification.** `packages/hassle-core/tests/test_registry_stubs_pyright_init_template.py` (new,
+M8) builds a bundle using the real `hassle_cli.init_cmd.init_bundle` + the real
+`generate_entities_stub`/`stubs`-command code path (not a hand-rolled fixture, unlike the M3
+original) and runs pyright against exactly those files — this is the "layer-1 proof, extended"
+MILESTONES M8 asked for.
+
+**Fix (not a DESIGN.md change — DESIGN §11 already specified the right end state, it just was
+never wired up):**
+- `hassle_cli.init_cmd.scaffold_vscode_settings` (new): writes `.vscode/settings.json` with
+  `python.analysis.stubPath: "typings"` and `python.analysis.extraPaths: ["."]` (the latter so
+  Pylance resolves the same PEP 420 namespace-package cross-file imports, §17.9, the compiler's
+  loader does). Idempotent, same convention as `scaffold_lib_and_tests_readmes`; called from both
+  `hassle init` and `hassle pull`.
+- `hassle stubs` now writes `typings/hassle/registry/__init__.pyi` (+ an empty
+  `typings/hassle/__init__.pyi` package marker) instead of `.hassle/entities.pyi`. This is not a
+  frozen interface (F1–F3) — no milestone ever pinned the stub's disk location as a contract, only
+  the command name/behavior ("generates `.hassle/entities.pyi`" was prose in a docstring, not a
+  tested guarantee) — so relocating it needed no MILESTONES.md update. The stale `.hassle/entities.pyi`
+  assertion in `test_cli_commands.py::test_stubs_generates_pyi_files` was updated in the same PR
+  (R4: this is exactly the kind of found-bug the milestone forced into the open).
+
+No HA API behavior is involved in this finding (it's pure local tooling/editor-integration), but
+it's recorded here per the standing instruction to log any DESIGN-vs-reality gap discovered while
+implementing a milestone.
+
+## 25. M8 finding: `DiagnosticsManager.refresh()` race (fixed, regression-tested) — `vscode-extension/`
+
+While writing the `@vscode/test-electron` integration test for Problems-pane diagnostics
+(MILESTONES M8 test 2), a real race surfaced: `activate()` fires one `hassle validate --json`
+refresh immediately on startup (fire-and-forget), and a user-triggered `hassle.validate` command
+fires another. If the first (older) request's CLI subprocess happens to resolve *after* the
+second (newer) one — plausible any time the CLI is slow to spawn, e.g. `uv run`'s first-invocation
+overhead — the stale response's `.clear()` + republish would blindly overwrite the newer, correct
+diagnostics (or wipe them entirely, if the stale request failed to parse). Fixed with a monotonic
+`latestRequestId` guard in `vscode-extension/src/diagnosticsManager.ts`: a response is only applied
+if no newer `refresh()` call has started since. Regression test:
+`vscode-extension/src/test/suite/extension.test.ts`'s
+`"regression: a slow, stale refresh() cannot clobber a newer one's results"` (verified to fail
+without the guard, confirming it exercises the real bug).
