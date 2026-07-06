@@ -39,6 +39,27 @@ def _bundle_root_or_fail(explicit: Path | None = None) -> Path:
     return root
 
 
+def _relative_finding_path(file: str | None, root: Path) -> str | None:
+    """`Finding.file` (from `hassle.compiler.spans.SourceSpan`) is always an
+    **absolute** path -- captured from CPython's frame `co_filename` at
+    compile time (`spans.py`'s module docstring). `hassle validate`'s
+    plain-text output doesn't mind (a human reads it in the same terminal
+    they ran the command from), but the `--json` contract is consumed by an
+    editor extension that may run the CLI from a different mount point/CI
+    checkout than the one that produced a snapshot -- bundle-root-relative
+    paths are the portable, useful form there, and match every other
+    file:line the CLI shows a human elsewhere. Absolute paths outside `root`
+    (shouldn't normally happen -- would mean a Finding pointing outside the
+    bundle) are left absolute rather than producing a `../../..` mess."""
+    if file is None:
+        return None
+    path = Path(file)
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return file
+
+
 def _require_backend_config(root: Path) -> tuple[str, str]:
     import os
 
@@ -193,9 +214,10 @@ def pull(allow_dirty: bool) -> None:
     # DESIGN §5.6/§6: a bundle that never ran `hassle init` (or predates this
     # scaffolding) still gets `lib/README.md`/`tests/README.md` on its first
     # pull, same as init -- idempotent, never overwrites an existing file.
-    from hassle_cli.init_cmd import scaffold_lib_and_tests_readmes
+    from hassle_cli.init_cmd import scaffold_lib_and_tests_readmes, scaffold_vscode_settings
 
     scaffold_lib_and_tests_readmes(root)
+    scaffold_vscode_settings(root)
 
     ha_url, token = _require_backend_config(root)
     config = load_config(root)
@@ -501,8 +523,25 @@ def push(
 
 
 @main.command()
-def validate() -> None:
-    """Compile + validate the bundle offline (DESIGN §9 tiers 1-3)."""
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    default=False,
+    help="Emit findings as JSON (the VS Code extension's Problems-pane contract, MILESTONES M8).",
+)
+def validate(as_json: bool) -> None:
+    """Compile + validate the bundle offline (DESIGN §9 tiers 1-3).
+
+    ``--json`` prints exactly one JSON object on stdout --
+    ``{"findings": [{code, severity, file, line, message, fix}, ...]}`` --
+    regardless of exit code, and never any rich/plain-text banner lines
+    (an editor extension parses this stdout directly). This is the schema
+    `hassle_cli.tests.test_cli_commands::test_validate_json_reports_findings_with_stable_schema`
+    and the VS Code extension's `findingsSchema.ts` both snapshot-test
+    (MILESTONES M8 test 3) -- field-for-field, it mirrors
+    `hassle.registry.finding.Finding`.
+    """
     from hassle.compiler.bundle import compile_bundle
     from hassle.registry.snapshot import RegistrySnapshot
     from hassle.registry.validate import validate_bundle
@@ -511,6 +550,7 @@ def validate() -> None:
     root = _bundle_root_or_fail()
     registry_path = root / ".hassle" / "registry.json"
     result = compile_bundle(root)
+    skip_notice: str | None = None
     if registry_path.is_file():
         snapshot = RegistrySnapshot.load(registry_path)
         manifest = manifest_io.load_manifest(root)
@@ -518,11 +558,34 @@ def validate() -> None:
         findings = validate_bundle(result, snapshot, adopted_helper_keys=adopted)
     else:
         findings = []
-        console.print(
-            "[yellow]hassle validate: no .hassle/registry.json found -- skipping tier-2/3 "
+        skip_notice = (
+            "hassle validate: no .hassle/registry.json found -- skipping tier-2/3 "
             "checks (entity/service/purpose-vocabulary references). Fix: run `hassle pull` "
-            "or `hassle stubs --refresh` once you have HA credentials.[/yellow]"
+            "or `hassle stubs --refresh` once you have HA credentials."
         )
+        if not as_json:
+            console.print(f"[yellow]{skip_notice}[/yellow]")
+
+    if as_json:
+        import json as _json
+
+        payload = {
+            "findings": [
+                {
+                    "code": f.code,
+                    "severity": f.severity,
+                    "file": _relative_finding_path(f.file, root),
+                    "line": f.line,
+                    "message": f.message,
+                    "fix": f.fix,
+                }
+                for f in findings
+            ]
+        }
+        click.echo(_json.dumps(payload))
+        if findings:
+            raise SystemExit(1)
+        return
 
     if not findings:
         console.print("[green]hassle validate: no findings[/green]")
@@ -597,7 +660,19 @@ def fmt() -> None:
     help="Refresh the registry snapshot first (needs a connection).",
 )
 def stubs(refresh: bool) -> None:
-    """Generate `.hassle/entities.pyi` from the registry snapshot (DESIGN §11)."""
+    """Generate `typings/hassle/registry/__init__.pyi` from the registry
+    snapshot (DESIGN §11).
+
+    **M8 layer-1 fix:** this used to write `.hassle/entities.pyi` -- a path no
+    pyright/Pylance configuration (including `hassle init`'s own
+    `.vscode/settings.json`) ever pointed at, so the generated types were
+    silently never picked up by a real editor. `typings/hassle/registry/__init__.pyi`
+    (with `.vscode/settings.json`'s `python.analysis.stubPath: "typings"`) is
+    the placement pyright actually prefers over the real runtime
+    `hassle.registry` module for that dotted path -- verified end-to-end in
+    `packages/hassle-core/tests/test_registry_stubs_pyright*.py`. See
+    docs/ha-api-notes.md.
+    """
     from hassle.registry.snapshot import RegistrySnapshot
     from hassle.registry.stubs import generate_entities_stub
 
@@ -617,8 +692,15 @@ def stubs(refresh: bool) -> None:
 
     snapshot = RegistrySnapshot.load(registry_path)
     stub_text = generate_entities_stub(snapshot)
-    out_path = root / ".hassle" / "entities.pyi"
+    stub_dir = root / "typings" / "hassle" / "registry"
+    stub_dir.mkdir(parents=True, exist_ok=True)
+    out_path = stub_dir / "__init__.pyi"
     out_path.write_text(stub_text, encoding="utf-8")
+    # Package marker so pyright treats the synthetic `hassle` stub package as
+    # a regular package (matches the real runtime `hassle` package shape).
+    package_marker = root / "typings" / "hassle" / "__init__.pyi"
+    if not package_marker.is_file():
+        package_marker.write_text("", encoding="utf-8")
     console.print(f"[green]hassle stubs: wrote {out_path}[/green]")
 
 
