@@ -20,6 +20,13 @@ Per-kind mapping to HA's APIs (DESIGN §4, docs/ha-api-notes.md):
 - **scripts** — config REST, keyed by object_id (from `script.<object_id>`).
 - **helpers** (9 storage-collection domains) — WS `{domain}/list|create|update|
   delete`; update/delete key the item as `{domain}_id` (quirk #1).
+- **template helpers** (M10, 4 config-entry domains) — listing is WS
+  (`config_entries/get`); create/update/delete are REST
+  (`/api/config/config_entries/flow[/{flow_id}]`, `/api/config/
+  config_entries/options/flow[/{flow_id}]`, `DELETE /api/config/
+  config_entries/entry/{entry_id}`) — docs/ha-api-notes.md §26, §26.0
+  correction (an earlier revision modeled all three as WS commands; CI
+  found they don't exist as such on real HA).
 """
 
 from __future__ import annotations
@@ -273,16 +280,32 @@ class DirectBackend:
 
     # -- config-entry template helpers (M10, docs/ha-api-notes.md §26) ----
     #
-    # `config_entries/list` filtered to `handler="template"` enumerates every
-    # template config entry; each entry's `options` dict holds the fields
-    # this milestone manages, keyed by `entry_id`. Hassle's declared identity
-    # (`unique_id`) is `options.get("name")`-independent -- the template
-    # integration's config entries don't carry a separate `unique_id` field
-    # on the entry itself the way storage helpers do, so DirectBackend uses
-    # the entry's own `entry_id` internally and derives the object identity
-    # from the *options* body's own declared identity, mirroring how a
-    # caller's `unique_id` field round-trips through `options` verbatim
-    # (FakeBackend's `_create_via_flow` stores it the same way).
+    # **CORRECTION (docs/ha-api-notes.md §26.0, found via CI on real HA
+    # stable+dev, both failed identically):** the ORIGINAL implementation drove
+    # config_entries/flow, config_entries/options/flow, and config_entries/remove
+    # over the WebSocket -- all three do not exist as WS commands (HA raised
+    # `Unknown command` on every one). `homeassistant/components/config/
+    # config_entries.py` registers these as **REST views**, not WS commands:
+    # flow start/step submission is `ConfigManagerFlowIndexView`/
+    # `ConfigManagerFlowResourceView` under `/api/config/config_entries/flow`;
+    # options-flow is the same shape under `/api/config/config_entries/options/
+    # flow`; entry removal is `ConfigManagerEntryResourceView`'s
+    # `DELETE /api/config/config_entries/entry/{entry_id}`. Only listing
+    # entries (`config_entries/get`) is a genuine WS command (registered
+    # separately in that module's `async_setup` via `websocket_api.py`) --
+    # that one call was correct in the original implementation and is
+    # unchanged below.
+    #
+    # `config_entries/get` (WS) enumerates every config entry; each entry's
+    # `options` dict holds the fields this milestone manages, keyed by
+    # `entry_id`. Hassle's declared identity (`unique_id`) is
+    # `options.get("name")`-independent -- the template integration's config
+    # entries don't carry a separate `unique_id` field on the entry itself
+    # the way storage helpers do, so DirectBackend uses the entry's own
+    # `entry_id` internally and derives the object identity from the
+    # *options* body's own declared identity, mirroring how a caller's
+    # `unique_id` field round-trips through `options` verbatim (FakeBackend's
+    # `_create_via_flow` stores it the same way).
 
     async def _alist_template_helpers(self, kind: str) -> dict[str, dict[str, Any]]:
         entries = await self._client.ws_command("config_entries/get")
@@ -319,18 +342,22 @@ class DirectBackend:
         identity = str(unique_id)
         step_id = _TEMPLATE_FLOW_TYPE[kind]
 
-        flow = await self._client.ws_command("config_entries/flow/create", handler="template")
+        flow = await self._client.rest_post(
+            "/api/config/config_entries/flow", json={"handler": "template"}
+        )
         flow_id = flow["flow_id"]
         if flow.get("type") == "menu":
-            flow = await self._client.ws_command(
-                "config_entries/flow/update", flow_id=flow_id, next_step_id=step_id
+            flow = await self._client.rest_post(
+                f"/api/config/config_entries/flow/{flow_id}", json={"next_step_id": step_id}
             )
         user_input = {"_template_type": step_id, **{k: v for k, v in config.items()}}
-        result = await self._client.ws_command(
-            "config_entries/flow/update", flow_id=flow_id, user_input=user_input
+        result = await self._client.rest_post(
+            f"/api/config/config_entries/flow/{flow_id}", json=user_input
         )
-        entry_result = result.get("result", {})
-        entry_id = str(entry_result.get("entry_id", flow_id))
+        # Flat create_entry body (docs/ha-api-notes.md §26.1): `entry_id` is a
+        # top-level key, not nested under a "result" wrapper (that was the
+        # original, incorrect WS-envelope assumption).
+        entry_id = str(result.get("entry_id", flow_id))
         self._template_entry_ids[(kind, identity)] = entry_id
         return identity
 
@@ -348,12 +375,14 @@ class DirectBackend:
                 f"no config entry found for {kind}:{identity} -- an UPDATE must "
                 "target an existing entry (options-flow update, never a recreate, I2 analog)"
             )
-        flow = await self._client.ws_command("config_entries/options/flow/create", handler=entry_id)
+        flow = await self._client.rest_post(
+            "/api/config/config_entries/options/flow", json={"handler": entry_id}
+        )
         flow_id = flow["flow_id"]
         step_id = _TEMPLATE_FLOW_TYPE[kind]
         user_input = {"_template_type": step_id, **{k: v for k, v in config.items()}}
-        await self._client.ws_command(
-            "config_entries/options/flow/update", flow_id=flow_id, user_input=user_input
+        await self._client.rest_post(
+            f"/api/config/config_entries/options/flow/{flow_id}", json=user_input
         )
 
     async def _adelete_template_helper(self, kind: str, identity: str) -> None:
@@ -363,7 +392,7 @@ class DirectBackend:
             entry_id = self._template_entry_ids.get((kind, identity))
         if entry_id is None:
             return  # already gone / never existed -- delete is idempotent
-        await self._client.ws_command("config_entries/remove", entry_id=entry_id)
+        await self._client.rest_delete(f"/api/config/config_entries/entry/{entry_id}")
         self._template_entry_ids.pop((kind, identity), None)
 
     # -- registry snapshot (DESIGN §9.2) ----------------------------------

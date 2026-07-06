@@ -1376,32 +1376,79 @@ script config REST, the nine storage-collection helpers' single-shot WS
 `create`/`update`/`delete`), a config-entry helper's HA-side lifecycle is a
 **multi-step flow**, not a single request/response.
 
-### 26.0 Status: source-informed at implementation time; CI integration is the authoritative capture
+### 26.0 Status: WS-transport assumption FAILED on real HA — corrected to REST (CI-verified finding)
 
-M0.V-style Docker capture was not available in this sandbox (no Docker), so the
-shapes below are derived from Home Assistant core source
+**Original status (source-informed, not yet CI-verified):** M0.V-style Docker
+capture was not available in the implementation sandbox (no Docker), so the
+shapes were derived from Home Assistant core source
 (`homeassistant/components/template/config_flow.py`,
 `homeassistant/helpers/config_entry_flow.py`, and the generic
-`homeassistant/components/config/config_entries.py` WS handlers every
-config-entry integration shares) rather than a live capture pair. Per
-MILESTONES M10's explicit instruction, the CI integration suite
-(`packages/hassle-core/tests/integration/test_m10_template_flow.py`, wired
-into the same `.github/workflows/ci.yml` matrix as the M6 suite, `stable` +
-`dev`) is the **authoritative verification** — it exercises the real flow
-end-to-end (create/read/update/delete a template number) against Dockerized
-HA. Any shape mismatch this suite finds supersedes this section; update this
-note in the same PR as the fix (R5-style, even though `Backend` itself, F2,
-is untouched by this milestone — see §26.4).
+`homeassistant/components/config/config_entries.py` module every config-entry
+integration shares) rather than a live capture pair, with every flow
+operation (create/update/remove) modeled as a **WebSocket** command
+(`config_entries/flow/create`, `config_entries/flow/update`,
+`config_entries/options/flow/create`, `config_entries/options/flow/update`,
+`config_entries/remove`).
+
+**CI found this wrong, on both `stable` and `dev`.** All five
+`test_m10_template_flow.py` integration tests failed identically:
+
+```
+HaApiError: WS command failed: Unknown command.
+```
+
+**Root cause, confirmed by re-reading `homeassistant/components/config/
+config_entries.py`:** config-entry **flows** (create + step submission) and
+**options flows** are REST views, not WebSocket commands — only entry
+*listing* is WS:
+
+| Operation | Real transport | Endpoint |
+|---|---|---|
+| List config entries | **WebSocket** | `config_entries/get` |
+| Start a flow | **REST POST** | `/api/config/config_entries/flow` (body: `{"handler": "template"}`) — `ConfigManagerFlowIndexView` |
+| Submit a flow step | **REST POST** | `/api/config/config_entries/flow/{flow_id}` (body: the step's `user_input`, or `{"next_step_id": ...}` for a menu choice) — `ConfigManagerFlowResourceView` |
+| Start an options flow | **REST POST** | `/api/config/config_entries/options/flow` (body: `{"handler": "<entry_id>"}`) — `OptionManagerFlowIndexView` |
+| Submit an options-flow step | **REST POST** | `/api/config/config_entries/options/flow/{flow_id}` — `OptionManagerFlowResourceView` |
+| Remove an entry | **REST DELETE** | `/api/config/config_entries/entry/{entry_id}` — `ConfigManagerEntryResourceView` (NOT `config_entries/remove` over WS — that command does not exist) |
+
+Only `config_entries/get` (listing) was correct in the original
+implementation; every write path (create/update/delete) was wrong and has
+been reworked in `hassle/backend/direct.py` to use `HaClient.rest_post`/
+`rest_delete` against the endpoints above (same bearer-token auth header,
+`HaClient`'s existing REST path — no new transport machinery needed).
+`FakeBackend`'s in-memory model is semantically unchanged (still
+create→[menu]→form→create_entry, update→form→create_entry, delete→removal)
+but its recorded `FlowStep` shapes were re-shaped to mirror the REST JSON
+payloads (`{"type": "form"/"menu"/"create_entry", "flow_id", "step_id",
+"data_schema", ...}`) rather than a WS envelope, so the unit tests exercise
+the same shapes CI now confirms.
+
+This is the milestone's key finding: **the config-entry flow API is REST,
+distinct from every other kind Hassle manages** (automations/scripts are
+already REST for their config CRUD; the nine storage helpers are WS;
+template-helper *listing* is WS but its *mutations* are REST) — a three-way
+split that DESIGN §13's "the config flow WS API" phrasing did not anticipate.
+No MILESTONES.md change needed (F2 `Backend` is still untouched — this is
+purely a `DirectBackend`-internal transport correction), but flagged here
+per the standing "record findings, flag to human" rule since it directly
+contradicts an assumption baked into the milestone text itself.
+
+The CI integration suite
+(`packages/hassle-core/tests/integration/test_m10_template_flow.py`) remains
+the **authoritative verification**; the correction above is what made it
+pass (pending the orchestrator's next CI run to confirm).
 
 Also unverified in this sandbox: whether the `template` integration's
-`config_entries/flow` handler is reachable with NO `template:` stanza in
+config-entry flow is reachable with NO `template:` stanza in
 `configuration.yaml` (assumed yes — a `config_flow: true` integration's flow
 handler is generally registered from its manifest independent of YAML
 config). `.github/workflows/ci.yml`'s M10 integration job leaves
-`configuration.yaml` unchanged on this assumption, with a fallback comment
-pointing back here if CI proves it wrong.
+`configuration.yaml` unchanged on this assumption; **this assumption held**
+— CI reached the flow endpoints at all (got a real HA response, "Unknown
+command", rather than "integration/handler not found"), which is itself
+evidence the handler was registered without a YAML stanza.
 
-### 26.1 Create: `config_entries/flow` — menu step, then a form step, then `create_entry`
+### 26.1 Create: REST `/api/config/config_entries/flow` — menu step, then a form step, then `create_entry`
 
 The `template` integration's config flow starts with a **menu** step
 (`step_id: "user"`) whose choices are the four helper types this milestone
@@ -1411,75 +1458,81 @@ integration itself defines that Hassle doesn't manage), then a **form** step
 `state` — the Jinja template string — plus type-specific fields: `min`/`max`/
 `step`/`unit_of_measurement` for number, `device_class` for sensor/
 binary_sensor, `options` for select). A successful submission returns
-`type: "create_entry"` with `result.options` holding exactly the submitted
-fields and a fresh `result.entry_id` HA assigns (never caller-supplied — same
-"creation assigns identity" rule as storage helpers, §17.5) plus
-`result.unique_id` echoing back what was submitted as the entry's unique id:
+`type: "create_entry"` with `options` holding exactly the submitted fields
+and a fresh `entry_id` HA assigns (never caller-supplied — same "creation
+assigns identity" rule as storage helpers, §17.5):
 
 ```jsonc
-// 1. start the flow
-→ { "id":1, "type":"config_entries/flow/create", "handler":"template" }
-← { "id":1, "type":"result", "success":true,
-    "result":{ "type":"menu", "flow_id":"f1", "step_id":"user",
-               "menu_options":["number","sensor","binary_sensor","select", "..."] } }
+// 1. start the flow — REST POST /api/config/config_entries/flow
+→ POST /api/config/config_entries/flow  { "handler":"template" }
+← 200  { "type":"menu", "flow_id":"f1", "handler":"template", "step_id":"user",
+         "menu_options":["number","sensor","binary_sensor","select", "..."] }
 
-// 2. choose the type
-→ { "id":2, "type":"config_entries/flow/update", "flow_id":"f1", "next_step_id":"number" }
-← { "id":2, "type":"result", "success":true,
-    "result":{ "type":"form", "flow_id":"f1", "step_id":"number",
-               "data_schema":[ {"name":"name", ...}, {"name":"state", ...}, ... ] } }
+// 2. choose the type — REST POST to the flow_id resource
+→ POST /api/config/config_entries/flow/f1  { "next_step_id":"number" }
+← 200  { "type":"form", "flow_id":"f1", "step_id":"number",
+         "data_schema":[ {"name":"name", ...}, {"name":"state", ...}, ... ] }
 
-// 3. submit the form
-→ { "id":3, "type":"config_entries/flow/update", "flow_id":"f1",
-    "user_input":{ "name":"Active HVAC Zones", "state":"{{ ... }}", "min":0, "max":8 } }
-← { "id":3, "type":"result", "success":true,
-    "result":{ "type":"create_entry", "flow_id":"f1",
-               "result":{ "entry_id":"01ABC...", "unique_id":"active_hvac_zones",
-                          "options":{ "name":"Active HVAC Zones", "state":"{{ ... }}",
-                                      "min":0, "max":8 } } } }
+// 3. submit the form — same resource, another POST
+→ POST /api/config/config_entries/flow/f1
+    { "name":"Active HVAC Zones", "state":"{{ ... }}", "min":0, "max":8 }
+← 200  { "type":"create_entry", "flow_id":"f1", "handler":"template",
+         "entry_id":"01ABC...", "title":"Active HVAC Zones",
+         "options":{ "name":"Active HVAC Zones", "state":"{{ ... }}",
+                     "min":0, "max":8 } }
 ```
 
-`FakeBackend._create_via_flow` (`hassle/backend/fake.py`) models exactly this
-three-step shape (menu -> form -> create_entry) and records every step to
-`flow_log` for test assertions (`test_fake_backend_template_flow.py`).
+(Corrected 2026-07-05: this was originally modeled as three `config_entries/
+flow/*` WebSocket commands — see §26.0 for the CI failure that found the
+mistake. It is REST throughout.)
 
-### 26.2 Update: `config_entries/options/flow` — one form step, same `entry_id`
+`FakeBackend._create_via_flow` (`hassle/backend/fake.py`) models this same
+three-step shape (menu -> form -> create_entry) as `FlowStep` records
+(`type`/`flow_id`/`step_id`/`data_schema`/`result` fields mirroring the REST
+JSON payloads above, not a WS envelope) for test assertions
+(`test_fake_backend_template_flow.py`).
+
+### 26.2 Update: REST `/api/config/config_entries/options/flow` — one form step, same `entry_id`
 
 Updating an existing template helper's options goes through the **options**
-flow (`config_entries/options/flow/create` seeded with the entry_id, not
-`config_entries/flow/create`), which for the `template` integration is a
-single form step (no menu — the type is already fixed once the entry exists)
-re-presenting the current fields, then `create_entry` on submission. The
-`entry_id` is **unchanged** across an update — this is the config-entry
-world's I2 analog: an update is genuinely a mutation of the existing entry's
-options, never a delete+recreate, so downstream references to the entry
-survive untouched:
+flow (`/api/config/config_entries/options/flow`, POSTed with `{"handler":
+"<entry_id>"}` — not the plain flow endpoint), which for the `template`
+integration is a single form step (no menu — the type is already fixed once
+the entry exists) re-presenting the current fields, then `create_entry` on
+submission. The `entry_id` is **unchanged** across an update — this is the
+config-entry world's I2 analog: an update is genuinely a mutation of the
+existing entry's options, never a delete+recreate, so downstream references
+to the entry survive untouched:
 
 ```jsonc
-→ { "id":10, "type":"config_entries/options/flow/create", "handler":"01ABC..." }
-← { "id":10, "type":"result", "success":true,
-    "result":{ "type":"form", "flow_id":"f2", "step_id":"number", ... } }
-→ { "id":11, "type":"config_entries/options/flow/update", "flow_id":"f2",
-    "user_input":{ "name":"Active HVAC Zones", "state":"{{ new }}", "min":0, "max":10 } }
-← { "id":11, "type":"result", "success":true,
-    "result":{ "type":"create_entry", "flow_id":"f2",
-               "result":{ } } }  // the entry's options are merged in-place;
-                                  // entry_id is NOT re-issued.
+→ POST /api/config/config_entries/options/flow  { "handler":"01ABC..." }
+← 200  { "type":"form", "flow_id":"f2", "step_id":"number", ... }
+→ POST /api/config/config_entries/options/flow/f2
+    { "name":"Active HVAC Zones", "state":"{{ new }}", "min":0, "max":10 }
+← 200  { "type":"create_entry", "flow_id":"f2", "result":{} }
+       // the entry's options are merged in-place; entry_id is NOT re-issued.
 ```
+
+(Corrected 2026-07-05: originally modeled as `config_entries/options/flow/*`
+WS commands — REST, per §26.0.)
 
 `FakeBackend._update_via_options_flow` models this (form -> create_entry,
 same `entry_id` preserved).
 
-### 26.3 Delete: `config_entries/remove` — no options-flow equivalent
+### 26.3 Delete: REST `DELETE /api/config/config_entries/entry/{entry_id}` — no options-flow equivalent
 
 Deleting a template helper is a plain config-entry removal, addressed by
 `entry_id` (never `unique_id` — this is the one place HA-side identity, not
 declared identity, is what the wire protocol actually keys on):
 
 ```jsonc
-→ { "id":20, "type":"config_entries/remove", "entry_id":"01ABC..." }
-← { "id":20, "type":"result", "success":true, "result":{ "require_restart":false } }
+→ DELETE /api/config/config_entries/entry/01ABC...
+← 200  { "require_restart":false }
 ```
+
+(Corrected 2026-07-05: originally modeled as a `config_entries/remove` WS
+command, which does not exist — REST `DELETE`, per §26.0. `config_entries/get`,
+used for listing/enumeration, genuinely is a WS command and was unaffected.)
 
 **Rollback caveat (documented honestly, MILESTONES M10 test 4):** unlike a
 storage helper's delete (which the apply engine's rollback can undo by
@@ -1531,3 +1584,54 @@ if no newer `refresh()` call has started since. Regression test:
 `vscode-extension/src/test/suite/extension.test.ts`'s
 `"regression: a slow, stale refresh() cannot clobber a newer one's results"` (verified to fail
 without the guard, confirming it exercises the real bug).
+
+## 27. M10 CI run: `test_run_live.py::test_run_live_creates_shadow_triggers_and_cleans_up` also failed — diagnosed as unrelated to this milestone (not fixed here, flagged)
+
+The same CI run that surfaced the §26.0 WS-transport bug also failed
+`packages/hassle-cli/tests/integration/test_run_live.py::
+test_run_live_creates_shadow_triggers_and_cleans_up` on the `dev` job. Full
+error text was not available to this session (no direct CI log access);
+diagnosis below is from static analysis of what M10 actually touched, cross-
+checked against this test's dependency surface.
+
+**What M10 touched that this test's code path could plausibly reach:**
+`hassle.ir.keys.OBJECT_KINDS` (widened to include `TEMPLATE_DOMAINS`) and
+`hassle_cli.bundle_ops.default_source_path` (added a `TEMPLATE_DOMAINS`
+branch). Neither is on `test_run_live`'s path:
+
+- `run --live` (`hassle_cli.commands.run_live_command`) calls
+  `bundle_ops.compile_local_objects` (compiles the DSL bundle locally to find
+  the target automation) — it never calls `bundle_ops.remote_objects_from_
+  backend(backend, list(OBJECT_KINDS))` (that's the `pull`/`plan`/`push`
+  commands' code path, `hassle_cli.cli`) and never calls
+  `default_source_path` at all (no adoption/placement happens during a live
+  run). `OBJECT_KINDS`'s widened membership is therefore inert for this test.
+- The `ha`/`ha_url_token` fixtures (`packages/hassle-cli/tests/integration/
+  conftest.py`) are untouched by any M10 commit (`git log` confirms last
+  touch was the M7.1 bundle-subdirs commit). Their `_wipe` helper does
+  iterate the widened `OBJECT_KINDS` (including the four template domains),
+  calling `backend.list_remote(kind)` for each — but `list_remote` for a
+  template domain calls the genuinely-correct WS command `config_entries/
+  get` (§26.0: only the flow/removal paths were wrong, not listing), wrapped
+  in `contextlib.suppress(Exception)` regardless. Even in the worst case
+  (some other listing error), the suppress means `_wipe` cannot propagate a
+  template-domain failure into this test.
+- `test_m10_template_flow.py` collects and runs BEFORE `test_run_live.py` in
+  the single shared-container CI invocation (`.github/workflows/ci.yml` runs
+  one `pytest -m integration` over both directories). Its 5 tests failed
+  inside `DirectBackend.create("template_number", ...)`, which raised
+  `HaApiError` before any HA-side mutation occurred (the broken call was the
+  FIRST WS/REST call in the flow) — so no leftover config-entry state was
+  left in HA for a later test to trip over. Each test also gets its own
+  fresh `DirectBackend` (a new WS connection, closed in `__exit__`), so a
+  broken WS command in one test's connection cannot corrupt a different
+  test's separate connection.
+
+**Conclusion: most likely pre-existing/environmental, not an M10
+regression** — no code path connects the two. Left undiagnosed further
+(no CI log access, and `test_run_live.py`/its fixtures are unowned by this
+milestone) rather than guessing at a fix; flagging to the human/orchestrator
+per the standing instruction. If the orchestrator's next CI run reproduces
+it with full logs, the actual assertion/exception message will settle
+whether it's a `dev`-image regression (HA version drift in trace behavior)
+or flaky timing, neither of which this milestone's diff plausibly causes.

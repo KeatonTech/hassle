@@ -1,13 +1,25 @@
 """MILESTONES M10 test 1 (integration half) — the config-entry template-helper
 flow verified end-to-end against real Home Assistant (M6 pattern: this suite
-is the AUTHORITATIVE verification of the flow shapes documented, source-
-informed, in docs/ha-api-notes.md §26; any mismatch found here supersedes
-that doc, updated in the same PR as the fix).
+is the AUTHORITATIVE verification of the flow shapes documented in
+docs/ha-api-notes.md §26; any mismatch found here supersedes the doc, updated
+in the same PR as the fix).
+
+**This suite is exactly what caught the §26.0 transport bug:** the original
+implementation drove config-entry flow create/step-submission, options-flow,
+and entry removal over the WebSocket; every test here failed identically on
+both HA `stable` and `dev` with `HaApiError: WS command failed: Unknown
+command.`. Root cause (confirmed against `homeassistant/components/config/
+config_entries.py`): those three operations are REST views, not WS commands
+(only entry *listing*, `config_entries/get`, is genuinely WS). Fixed in
+`hassle/backend/direct.py`; see docs/ha-api-notes.md §26.0-26.3 for the full
+correction.
 
 Covers:
-- create/read/update/delete a `template_number` through `DirectBackend`
-  (the real `config_entries/flow` / `config_entries/options/flow` /
-  `config_entries/remove` commands, docs/ha-api-notes.md §26.1-26.3).
+- create/read/update/delete a `template_number` through `DirectBackend` (REST
+  `/api/config/config_entries/flow[/{flow_id}]` for create, REST
+  `/api/config/config_entries/options/flow[/{flow_id}]` for update, REST
+  `DELETE /api/config/config_entries/entry/{entry_id}` for delete —
+  docs/ha-api-notes.md §26.1-26.3).
 - the same cycle for the other three template domains (sensor/binary_sensor/
   select), proving the plugin generalizes across the domain (MILESTONES M10
   "scoped to the template domain first ... at minimum" number/sensor/

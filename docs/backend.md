@@ -237,12 +237,20 @@ to `FakeBackend`/`DirectBackend`:
   reads it except a future DirectBackend needing it to address
   `config_entries/options/flow` by entry_id rather than re-deriving it.
 - **Internally:** `create`/`update` drive a simulated (`FakeBackend`) or real
-  (`DirectBackend`, M10) multi-step `config_entries/flow` /
-  `config_entries/options/flow` to completion inside the single synchronous
-  method call — the Protocol's caller (the sync engine) never sees the
-  intermediate flow steps, exactly as it never sees the helper `{domain}_id`
-  payload-key convention (quirk #1) either. `delete` is a plain
-  `config_entries/remove` by `entry_id`.
+  (`DirectBackend`, M10) multi-step config-entry flow / options-flow to
+  completion inside the single synchronous method call — the Protocol's
+  caller (the sync engine) never sees the intermediate flow steps, exactly as
+  it never sees the helper `{domain}_id` payload-key convention (quirk #1)
+  either. `delete` is a plain entry removal by `entry_id`.
+  **Transport correction (found via CI, docs/ha-api-notes.md §26.0):** flow
+  create/step-submission, options-flow create/step-submission, and entry
+  removal are all **REST**, not WebSocket (`POST /api/config/config_entries/
+  flow[/{flow_id}]`, `POST /api/config/config_entries/options/flow[/{flow_id}]`,
+  `DELETE /api/config/config_entries/entry/{entry_id}`) — only entry
+  *listing* (`config_entries/get`) is WS. The original implementation drove
+  all of these over WS and failed identically against both HA `stable` and
+  `dev` with `Unknown command`; `DirectBackend` now uses `HaClient.rest_post`/
+  `rest_delete` for every write path.
 - **Apply order** (`hassle.sync.apply._KIND_ORDER`): the four template
   domains slot in after the nine storage helpers, before scripts — same
   dependency-ordering rationale (an automation/script may reference a
@@ -275,11 +283,13 @@ design work. Concretely, a new domain (e.g. `threshold`) needs:
    step_id map — `create`/`update`/`delete`/`list_remote` themselves need NO
    change (they already dispatch on `kind in TEMPLATE_DOMAINS`-shaped
    membership checks; widen the membership set or add a sibling one).
-4. **DirectBackend:** same shape — the `config_entries/flow`/
-   `config_entries/options/flow`/`config_entries/remove` WS calls are
-   **generic across every config-entry integration** (`handler=<domain
-   integration name>` is the only per-domain parameter); only the step_id/
-   field-name map is domain-specific.
+4. **DirectBackend:** same shape — the REST flow/options-flow/entry-removal
+   endpoints (`/api/config/config_entries/flow[/{flow_id}]`, `/api/config/
+   config_entries/options/flow[/{flow_id}]`, `/api/config/config_entries/
+   entry/{entry_id}`, §26.0) are **generic across every config-entry
+   integration** (`handler=<domain integration name>` is the only per-domain
+   parameter on the start-flow POST); only the step_id/field-name map is
+   domain-specific.
 5. **Decompiler/placement:** `_template_helper_source`'s `unique_id` -> `id=`
    rename logic is already generic per-domain (keyed off `TEMPLATE_DOMAINS`
    membership, not a hardcoded domain name); `default_source_path`'s

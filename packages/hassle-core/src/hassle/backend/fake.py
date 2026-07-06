@@ -151,15 +151,19 @@ class FakeBackend:
 
     # -- M10: config-entry template-helper flows --------------------------
     #
-    # Modeled on the real `config_entries/flow` (create) and
-    # `config_entries/options/flow` (update) WS shapes (docs/ha-api-notes.md
-    # §26): a menu step choosing the template type, then a form step
-    # collecting fields, ending in a `type: "create_entry"` result whose
-    # `result.options` is exactly what the integration stores. Identity is
-    # the declared `unique_id`; the flow's `create_entry` result carries a
-    # fresh `entry_id` HA assigns (never caller-supplied, mirrors §17.5's
-    # "creation assigns identity" rule for storage helpers) -- tracked here,
-    # never in the stored options body.
+    # Modeled on the real REST flow (create: POST /api/config/config_entries/
+    # flow[/{flow_id}]) and options-flow (update: POST /api/config/
+    # config_entries/options/flow[/{flow_id}]) shapes (docs/ha-api-notes.md
+    # §26, §26.0 correction: these are REST, NOT WebSocket -- an earlier
+    # revision of this module modeled them as WS commands, which CI found
+    # failed identically on real HA stable+dev with "Unknown command"): a
+    # menu step choosing the template type, then a form step collecting
+    # fields, ending in a flat `type: "create_entry"` body whose `options` is
+    # exactly what the integration stores. Identity is the declared
+    # `unique_id`; the flow's `create_entry` result carries a fresh
+    # `entry_id` HA assigns (never caller-supplied, mirrors §17.5's "creation
+    # assigns identity" rule for storage helpers) -- tracked here, never in
+    # the stored options body.
 
     def _next_entry_id(self) -> str:
         self._entry_id_counter += 1
@@ -197,6 +201,10 @@ class FakeBackend:
 
         options = {k: v for k, v in config.items() if k != "unique_id"}
         entry_id = self._next_entry_id()
+        # Flat body (no nested "result" wrapper) -- the REST create_entry
+        # response is `{"type": "create_entry", "flow_id", "entry_id",
+        # "options", ...}` directly, not a WS-style `{"result": {...}}`
+        # envelope (docs/ha-api-notes.md §26.0/§26.1 correction).
         result_step = FlowStep(
             flow_id=flow_id,
             type="create_entry",

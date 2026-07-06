@@ -1,16 +1,18 @@
 """MILESTONES M10 test 1 — capture-driven backend tests for the config-entry
 template-helper domain.
 
-`FakeBackend` models the multi-step `config_entries/flow` (create: menu step
+`FakeBackend` models the multi-step config-entry flow (create: menu step
 choosing the template type, then a form step -> `create_entry`) and
-`config_entries/options/flow` (update: one form step -> `create_entry`, same
-`entry_id`) shapes (docs/ha-api-notes.md §26; the REAL shapes are captured by
-the CI integration suite, `packages/hassle-core/tests/integration/
+options-flow (update: one form step -> `create_entry`, same `entry_id`)
+shapes (docs/ha-api-notes.md §26; the REAL transport was captured by the CI
+integration suite, `packages/hassle-core/tests/integration/
 test_m10_template_flow.py`, which is the authoritative verification per
-MILESTONES M10). This suite exercises the SAME `Backend.create`/`update`/
-`delete`/`list_remote` methods every other kind uses (F2 untouched) while
-asserting on the internal flow-step log FakeBackend records for test
-visibility.
+MILESTONES M10 — it found the flow/options-flow/removal operations are REST,
+not WebSocket, §26.0). This suite is transport-agnostic: it exercises the
+SAME `Backend.create`/`update`/`delete`/`list_remote` methods every other
+kind uses (F2 untouched, and unaffected by the §26.0 DirectBackend-only
+transport correction) while asserting on the internal flow-step log
+FakeBackend records for test visibility.
 """
 
 from __future__ import annotations
