@@ -98,8 +98,6 @@ def live_test_automation():
 def test_run_live_creates_shadow_triggers_and_cleans_up(
     ha: DirectBackend, ha_url_token: tuple[str, str], tmp_path: Path
 ) -> None:
-    from click.testing import CliRunner
-
     from hassle_cli.cli import main
 
     url, token = ha_url_token
@@ -107,12 +105,11 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     ha.create("input_boolean", {"name": "Hassle Flag 2", "icon": "mdi:flag"})
 
     bundle = _write_bundle(tmp_path)
-    runner = CliRunner()
-    result = runner.invoke(
+    result = _invoke_in_dir(
         main,
         ["run", "a.py::live_test_automation", "--live", "--yes"],
+        cwd=bundle,
         env={"NO_COLOR": "1", "HASSLE_HA_URL": url, "HASSLE_TOKEN": token},
-        cwd=str(bundle),
     )
     assert result.exit_code == 0, result.output
     assert "trace" in result.output.lower()
@@ -127,8 +124,6 @@ def test_run_live_cleans_up_shadow_on_trace_stream_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from click.testing import CliRunner
-
     from hassle_cli import run_live
     from hassle_cli.cli import main
 
@@ -142,12 +137,11 @@ def test_run_live_cleans_up_shadow_on_trace_stream_failure(
     monkeypatch.setattr(run_live, "stream_trace", _boom)
 
     bundle = _write_bundle(tmp_path)
-    runner = CliRunner()
-    result = runner.invoke(
+    result = _invoke_in_dir(
         main,
         ["run", "a.py::live_test_automation", "--live", "--yes"],
+        cwd=bundle,
         env={"NO_COLOR": "1", "HASSLE_HA_URL": url, "HASSLE_TOKEN": token},
-        cwd=str(bundle),
     )
     assert result.exit_code != 0
     # Shadow cleaned up even though the trace stream blew up.
