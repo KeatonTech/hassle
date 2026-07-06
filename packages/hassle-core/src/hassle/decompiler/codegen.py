@@ -611,19 +611,54 @@ def _helper_source(obj: HelperConfig, ident: str) -> str:
     return f"{ident} = {builder}({', '.join(kwargs)})\n"
 
 
-def _template_helper_source(obj: TemplateHelperConfig, ident: str) -> str:
-    """M10: like ``_helper_source``, but there is no identity kwarg to rename
-    -- ``TemplateHelperConfig`` has no ``id``/``unique_id`` field at all
-    (docs/ha-api-notes.md §26.6: real HA's config-flow form schema rejects an
-    unrecognized ``unique_id`` key outright). The stored body's keys map
-    1:1 onto the builder's kwargs (``name=``, ``state=``, ...); identity is
-    derived from ``name`` (slugified) at both compile and decompile time, so
-    no rename is needed here."""
+def _template_helper_call_form_source(obj: TemplateHelperConfig, ident: str) -> str:
+    """The pre-M13 call form: ``ident = builder(name=..., state=..., ...)``.
+    The raw fallback for the M13 decorator form (module docstring) -- there is
+    no identity kwarg to rename, ``TemplateHelperConfig`` has no ``id``/
+    ``unique_id`` field at all (docs/ha-api-notes.md §26.6). Identity is
+    derived from ``name`` (slugified) at both compile and decompile time."""
     body = dict(obj.to_ha())
     domain = obj.kind()
     builder = _TEMPLATE_HELPER_BUILDER_NAMES[domain]
     kwargs = [f"{k}={render_literal(v)}" for k, v in body.items()]
     return f"{ident} = {builder}({', '.join(kwargs)})\n"
+
+
+def _template_helper_source(obj: TemplateHelperConfig, ident: str) -> str:
+    """M13: try the decorator form first (bounded Jinja inversion,
+    ``hassle.decompiler.template_invert``); fall back to the pre-M13 string-
+    ``state=`` call form (unchanged) for anything the bounded inverter can't
+    invert byte-for-byte.
+
+    ``state``'s value is the only field ever spelled as a decorated function
+    body -- every other kwarg (``set_value``, ``min``/``max``/``step``,
+    ``unit_of_measurement``, ``options``, ...) is unaffected and still
+    rendered exactly as the call form renders it, just moved into the
+    decorator's argument list. The acceptance rule (MILESTONES M13) is
+    enforced by :func:`~hassle.decompiler.template_invert.invert_template`
+    itself: it returns ``None`` (never partial output) unless
+    ``render(invert(state)) == state`` byte-for-byte, so choosing the
+    decorator branch here is safe by construction -- there is no separate
+    "trust the inverter" step.
+    """
+    from hassle.decompiler.template_invert import invert_template
+
+    body = dict(obj.to_ha())
+    state = body.get("state")
+    if not isinstance(state, str):
+        return _template_helper_call_form_source(obj, ident)
+    inverted = invert_template(state)
+    if inverted is None:
+        return _template_helper_call_form_source(obj, ident)
+
+    domain = obj.kind()
+    builder = _TEMPLATE_HELPER_BUILDER_NAMES[domain]
+    decorator_kwargs = [f"{k}={render_literal(v)}" for k, v in body.items() if k != "state"]
+    return (
+        f"@{builder}({', '.join(decorator_kwargs)})\n"
+        f"def {ident}():\n"
+        f"{INDENT}return {inverted.source}\n"
+    )
 
 
 def _object_function_name(object_key: str, obj: IRObject, used_names: dict[str, int]) -> str:

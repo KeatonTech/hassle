@@ -1,0 +1,43 @@
+{
+  "template_number:active_hvac_zones": {
+    "name": "Active HVAC Zones",
+    "state": "{{ states('input_number.hvac_zone_override') | float }}",
+    "set_value": {
+      "action": "input_number.set_value",
+      "target": {
+        "entity_id": "input_number.hvac_zone_override"
+      },
+      "data": {
+        "value": "{{ value }}"
+      }
+    },
+    "min": 0.0,
+    "max": 8.0,
+    "step": 1.0,
+    "unit_of_measurement": "zones"
+  },
+  "template_sensor:average_temp": {
+    "name": "Average Temp",
+    "state": "{{ (states('sensor.a') | float + states('sensor.b') | float) / 2 }}",
+    "unit_of_measurement": "°C",
+    "device_class": "temperature"
+  },
+  "template_binary_sensor:any_door_open": {
+    "name": "Any Door Open",
+    "state": "{{ states('binary_sensor.front_door') | float > 0 }}",
+    "device_class": "door"
+  },
+  "template_select:house_scene": {
+    "name": "House Scene",
+    "state": "{{ states('input_select.house_mode') | float }}",
+    "select_option": {
+      "action": "input_select.select_option",
+      "target": {
+        "entity_id": "input_select.house_mode"
+      },
+      "data": {
+        "option": "{{ option }}"
+      }
+    }
+  }
+}

@@ -7652,6 +7652,10 @@ Compiles to (canonical IR / stored HA shape):
 
 Raised when a Python `if`/`bool()` is used on a runtime state expression (DESIGN §5.5) -- Python control flow runs at *compile* time, so a native branch on a live entity state would be baked in wrong. Fix: use `with if_then(expr):` / `with else_then():` instead, which compile to HA's `if`/`choose` action.
 
+### `DanglingTemplateHelperDeclarationError`
+
+Raised when `template_number`/`template_sensor`/`template_binary_sensor`/`template_select` is called with no `state=` (the M13 decorator-form signal) but is never applied as a decorator over a function -- the call builds and registers nothing, so without this check it would compile clean with the object silently absent. Fix: either add `state=...` to make it a direct call-form declaration, or apply the call as `@template_number(...)` (etc.) over a zero-arg function that `return`s the state expression.
+
 ### `ElseWithoutIfError`
 
 `with else_then():`/`with else_if(...):` used where the immediately preceding action in the same list isn't an `if_then`/`choose`/`else_if` block. Fix: move it directly after the block it belongs to.
@@ -7667,6 +7671,10 @@ Raised when `with only_if(...):` is used but an action is recorded outside the b
 ### `PythonMathMisuseError`
 
 Python's stdlib `math.*` (or a bare `float()`/`int()`) called on a runtime `TemplateExpr`. Fix: use the matching `hassle` math builder (`sin`/`cos`/`sqrt`/... ) instead of `math.sin`/etc. -- `math.pi` as a *plain* Python constant is not a trap, it just folds into a literal.
+
+### `TemplateHelperDecoratorBodyError`
+
+Raised when a `@template_number`/`@template_sensor`/`@template_binary_sensor`/`@template_select` decorator (M13) is applied to a function that doesn't fit the decorator-form contract: it must take zero parameters and `return` a `TemplateExpr`/`str` -- no declared parameters, no recording-verb calls (`service`/`when`/`only_if`/...), no other return type. Fix: remove the parameters, return a template expression built from the `hassle.compiler.templates`/`hassle.compiler.math_expr` surface (or a plain Jinja string), and do nothing else in the function body.
 
 ### `UnknownFieldError`
 
