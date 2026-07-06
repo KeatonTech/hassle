@@ -46,6 +46,23 @@ For each of the 10 tasks `emit_tasks(bundle_dir)` returns:
 `hassle-dev acceptance-tasks --bundle DIR [--json]` is the CLI entry point
 an orchestrator script shells out to for step 1's prompt text (see
 `hassle_dev.cli`).
+
+## The bundle these prompts are written against
+
+`emit_tasks`'s 10 prompts are not generic -- each presupposes specific
+content (a hallway motion automation controlling `light.hallway` with a
+sun-based night gate, a declared-but-not-yet-wired-in
+`input_boolean.guest_mode` helper, two notify-sending automations to extract
+into a macro, a deliberately-failing `tests/` test with an isolated
+automation-logic bug, ...). `hassle_dev.bundle_gen.generate_sample_bundle`
+(`hassle-dev acceptance-bundle --out DIR`) is what builds a real, freshly-
+pulled bundle satisfying every one of those presuppositions -- see that
+module's docstring for the full inventory, how each is seeded, and the
+`diagnose_failing_test` scoring nuance (a pre-existing failing test would
+otherwise sink all 10 tasks' `score_task` floor; resolved with
+`xfail(strict=True)`). `packages/hassle-dev/tests/test_bundle_gen.py` pins
+one presupposition-check per category against that generator's output, so
+this docstring's claim stays true by construction rather than by convention.
 """
 
 from __future__ import annotations
@@ -91,7 +108,15 @@ def emit_tasks(bundle_dir: Path) -> list[AcceptanceTask]:
     """Build the 10 representative task prompts for ``bundle_dir``
     (MILESTONES M9 test 3's example list, made concrete against this
     specific bundle's own files/entities so a session has something real to
-    act on -- not a generic placeholder)."""
+    act on -- not a generic placeholder).
+
+    These prompts presuppose the specific "sample house" shape
+    `hassle_dev.bundle_gen.generate_sample_bundle` produces (see this
+    module's docstring, "The bundle these prompts are written against") --
+    calling `emit_tasks` against an arbitrary bundle that doesn't share that
+    shape (e.g. an empty `hassle init` scaffold) will still return 10 valid
+    prompts, but some may reference entities/files that bundle doesn't have.
+    """
     name = _bundle_display_name(bundle_dir)
     return [
         AcceptanceTask(
