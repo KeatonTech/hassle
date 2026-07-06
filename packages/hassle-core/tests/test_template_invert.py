@@ -13,10 +13,11 @@ source, run through the real `template_sensor`/`_declare_template_helper`
 path, reproduces the exact same `state=` string).
 
 Test 3 (fallback): a hand-written gnarly Jinja template (loops/macros/
-whitespace tricks) decompiles to the string-state call form, never raises,
-and round-trips byte-stably (I3 through the fallback branch) -- exercised
-both directly (`invert_template` returns `None`) and through the full
-`_template_helper_source`/`compile_bundle` pipeline.
+whitespace tricks) decompiles to the decorator-with-raw-string form
+(MILESTONES M14: the fallback branch is ALSO the decorator form), never
+raises, and round-trips byte-stably (I3 through the fallback branch) --
+exercised both directly (`invert_template` returns `None`) and through the
+full `_template_helper_source`/`compile_bundle` pipeline.
 """
 
 from __future__ import annotations
@@ -224,12 +225,14 @@ def test_gnarly_templates_never_error_and_return_none(gnarly: str) -> None:
 
 
 @pytest.mark.parametrize("gnarly", GNARLY_TEMPLATES)
-def test_gnarly_templates_decompile_to_call_form_and_round_trip(
+def test_gnarly_templates_decompile_to_decorator_form_and_round_trip(
     gnarly: str, tmp_path: Path
 ) -> None:
     """End-to-end: a template_sensor whose `state=` is gnarly decompiles to
-    the (unchanged) call form, never raises, and recompiling reproduces the
-    identical `state=` text byte-for-byte (I3 through the fallback branch)."""
+    the decorator-with-raw-string form (MILESTONES M14: the fallback branch
+    is ALSO the decorator form now, `state=` moving into the `return` body
+    verbatim), never raises, and recompiling reproduces the identical
+    `state=` text byte-for-byte (I3 through the fallback branch)."""
     reset_declared_template_helpers()
     from hassle import template_sensor
     from hassle.compiler.registry import fresh
@@ -242,8 +245,11 @@ def test_gnarly_templates_decompile_to_call_form_and_round_trip(
     obj = next(p.obj for p in prebuilt if p.obj.object_key() == "template_sensor:gnarly_sensor")
 
     source = decompile_object("template_sensor:gnarly_sensor", obj)
-    assert source.startswith("gnarly_sensor = template_sensor(")
-    assert "state=" in source
+    assert source.startswith("@template_sensor(")
+    assert "def gnarly_sensor():" in source
+    assert "return " in source
+    decorator_line = source.split("\n", 1)[0]
+    assert "state=" not in decorator_line
 
     bundle_dir = tmp_path / "bundle"
     bundle_dir.mkdir()

@@ -1,17 +1,23 @@
 """M13 test 4 — refresh-overwrite consequence: a bundle has a decorator-form
 template-helper function; the remote `state=` is edited (simulating a UI
 edit) into something the bounded inverter (`hassle.decompiler.template_invert`)
-cannot invert; `hassle pull`'s REFRESH splice replaces the function with the
-call form via the real `SourceWriter`/LibCST splicer path, FakeBackend-driven,
-end-to-end through the real CLI (mirrors
+cannot invert; `hassle pull`'s REFRESH splice replaces the function's BODY via
+the real `SourceWriter`/LibCST splicer path, FakeBackend-driven, end-to-end
+through the real CLI (mirrors
 `test_pull_refresh_triggers_decorator_form.py`'s pattern for the trigger-
 decorator feature).
 
-Deliberate consequence (documented, MILESTONES M13): cleaner decorator-form
-Python is an offer, not a guarantee -- once the remote value falls outside
-the bounded grammar, the next pull silently downgrades the local source to
-the (always-correct) call form. I6 still holds: nothing is lost, the
-config is fully present in the fallback string.
+**MILESTONES M14 update:** the fallback branch is ALSO the decorator form now
+(owner feedback) -- the downgrade below no longer replaces the decorator with
+the call form; it re-splices the SAME decorator shape with a `return
+"<verbatim Jinja>"` body instead of the inverted expression. Deliberate
+consequence (documented, MILESTONES M13, refined M14): cleaner
+expression-bodied Python is an offer, not a guarantee -- once the remote
+value falls outside the bounded grammar, the next pull silently downgrades
+the local source's `return` body to the (always-correct) raw string, but
+keeps the decorator shape (so a helper flipping between branches keeps its
+function name and its decorator kwargs, MILESTONES M14). I6 still holds:
+nothing is lost, the config is fully present in the fallback string.
 """
 
 from __future__ import annotations
@@ -38,7 +44,7 @@ def average_temp():
 """
 
 
-def test_pull_refresh_downgrades_noninvertible_template_helper_to_call_form(
+def test_pull_refresh_downgrades_noninvertible_template_helper_to_string_body(
     git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
     backend, token = fake_backend
@@ -67,12 +73,14 @@ def test_pull_refresh_downgrades_noninvertible_template_helper_to_call_form(
 
     after = (git_repo / "sensor_helper.py").read_text(encoding="utf-8")
 
-    # The function is GONE -- replaced by the call form (I6: the config is
-    # fully present in the fallback, just not as the decorator anymore).
-    assert "def average_temp():" not in after, after
-    assert "@template_sensor(" not in after, after
-    assert "average_temp = template_sensor(" in after, after
-    assert "state=" in after, after
+    # M14: the function STAYS a decorator -- only its `return` body downgrades
+    # to the verbatim raw string (I6: the config is fully present, and the
+    # decorator shape/function name survive the downgrade too).
+    assert "def average_temp():" in after, after
+    assert "@template_sensor(" in after, after
+    assert "average_temp = template_sensor(" not in after, after
+    decorator_line = next(line for line in after.splitlines() if "@template_sensor(" in line)
+    assert "state=" not in decorator_line, after
     assert non_invertible_state in after, after
 
     # No data loss (I3/I6): the bundle still compiles and reproduces the
