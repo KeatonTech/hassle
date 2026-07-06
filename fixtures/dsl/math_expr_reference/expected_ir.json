@@ -1,0 +1,36 @@
+{
+  "automation:math_expr_reference": {
+    "id": "math_expr_reference",
+    "alias": "Math expr reference",
+    "mode": "single",
+    "triggers": [
+      {
+        "trigger": "time_pattern",
+        "minutes": "/5"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "variables": {
+          "trig": "{{ sin(angle) + tan(angle) }}",
+          "inverse_trig": "{{ asin(ratio) + acos(ratio) + atan(ratio) }}",
+          "angle_from_slopes": "{{ atan2(dy, dx) }}",
+          "magnitude": "{{ sqrt(x * x + y * y) }}",
+          "log_value": "{{ log(x) }}",
+          "abs_value": "{{ delta | abs }}",
+          "smallest": "{{ [a, b, c] | min }}",
+          "largest": "{{ [a, b, c] | max }}",
+          "eulers_number": "{{ e }}",
+          "full_turn": "{{ tau }}",
+          "parsed_time": "{{ as_datetime(wakeup_time) }}",
+          "epoch_seconds": "{{ as_timestamp(event_time) }}",
+          "six_thirty": "{{ today_at('06:30:00') }}",
+          "half_hour": "{{ timedelta(minutes=30) }}",
+          "wakeup_plus_offset": "{{ today_at('06:30:00') + timedelta(minutes=30) }}",
+          "joined_label": "{{ 'Room ' ~ room_name ~ ' is ready' }}"
+        }
+      }
+    ]
+  }
+}
