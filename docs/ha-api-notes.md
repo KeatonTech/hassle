@@ -1491,9 +1491,8 @@ storage helpers, §17.5):
     { "name":"Active HVAC Zones", "state":"{{ ... }}", "min":0, "max":8,
       "set_value": {"action":"input_number.set_value", "data":{"value":"{{ value }}"}} }
 ← 200  { "type":"create_entry", "flow_id":"f1", "handler":"template",
-         "entry_id":"01ABC...", "title":"Active HVAC Zones",
-         "options":{ "name":"Active HVAC Zones", "state":"{{ ... }}",
-                     "min":0, "max":8, "set_value": {...} } }
+         "result": { "entry_id":"01ABC...", "domain":"template",
+                     "title":"Active HVAC Zones", "state":"loaded", ... } }
 ```
 
 (Corrected 2026-07-05, twice: round 1 modeled this as three `config_entries/
@@ -1501,6 +1500,27 @@ flow/*` WebSocket commands — §26.0 found it's REST. Round 2 sent
 `unique_id`/`_template_type` alongside the real fields and omitted
 `set_value` — §26.6 found the schema rejects the former and requires the
 latter.)
+
+**Correction (§31.8, CI field failure on PR #10):** the `create_entry` body
+shown above was ALSO wrong in a way nothing caught until M15 — `entry_id`
+(and `title`, `domain`, ...) are nested under a `"result"` key, never
+top-level keys on the response body, and there is no `"options"` key on the
+wire at all (`ConfigEntry.as_json_fragment`,
+`homeassistant/config_entries.py`, has no such field — options are only ever
+readable via the options-flow's suggested values, §26.7). `_prepare_config_
+flow_result_json` (`homeassistant/components/config/config_entries.py`)
+builds this nesting explicitly: `data["result"] = entry.as_json_fragment`;
+the base `FlowManagerIndexView._prepare_result_json`
+(`homeassistant/helpers/data_entry_flow.py`) even asserts `"result" not in
+result` for every OTHER flow-result type, confirming `result` was never a
+pre-existing top-level key this override merely populates.
+`DirectBackend._acreate_template_helper`'s original `result.get("entry_id",
+flow_id)` silently fell back to `flow_id` on every real call (a real, truthy
+string -- nothing ever raised), so `_template_entry_ids` cached the WRONG
+value from the moment M10 shipped; invisible until M15's category
+write-back needed to actually cross-reference it against a live entity
+registry. Fixed in the same PR; see §31.8 below for the full account and the
+identity-anchor implication.
 
 `FakeBackend._create_via_flow` (`hassle/backend/fake.py`) models this same
 three-step shape (menu -> form -> create_entry) as `FlowStep` records
@@ -2653,6 +2673,12 @@ config-entry helpers goes via `config_entry_id` → registry row rather than the
 `unique_id == object_id` anchor used for automations/scripts/storage helpers —
 `DirectBackend`'s helper-side assign needs that variant.
 
+> **Correction (§31.8):** implemented differently, and more simply, than this
+> paragraph predicted — §31.8 found the template entity's OWN `unique_id` is
+> set to its config entry's `entry_id`, so the existing `unique_id`-keyed
+> lookup works unchanged for template helpers too; no `config_entry_id`
+> branch was needed after all.
+
 ### 31.7 M15 work item A: implementation notes (`m15/category-sync`)
 
 Two decisions the binding spec left to the implementer, recorded here per this
@@ -2694,3 +2720,96 @@ doc's own convention:
   so the very next push's category-move sync starts from the correct base
   instead of `None` (which would otherwise misfire as "moved locally" on the
   very first push after every pull).
+
+### 31.8 CI field failure on PR #10: `_acreate_template_helper` cached a flow_id, not the real entry_id (source-verified, `home-assistant/core` `dev` + `2026.7.1`)
+
+**Symptom.** Both HA images in PR #10's integration matrix failed identically
+on ONE test: `test_helper_category_assign_and_readback_storage_and_template`'s
+template-helper half raised `LookupError: no entity-registry row found for
+template_number:tank_level_<suffix> after waiting 10.0s`. The
+storage-collection half of the same test passed, and the same-object
+two-scope test passed — the failure was specific to the template-helper
+identity anchor introduced for M15.
+
+**Root cause, confirmed by reading source (not the CI log alone).**
+`_acreate_template_helper` (`hassle/backend/direct.py`) read the just-created
+config entry's id as `result.get("entry_id", flow_id)` off the REST
+`create_entry` response body. That key never exists at that path:
+
+- `ConfigManagerFlowIndexView._prepare_result_json` →
+  `_prepare_config_flow_result_json`
+  (`homeassistant/components/config/config_entries.py`, identical at `dev`
+  and `2026.7.1`): for a `CREATE_ENTRY` result, `data["result"] =
+  entry.as_json_fragment` — the entire `ConfigEntry` JSON (which DOES have an
+  `entry_id` key, `homeassistant/config_entries.py`'s `as_json_fragment`) is
+  nested one level down, under `"result"`.
+- The BASE class this overrides, `FlowManagerIndexView._prepare_result_json`
+  (`homeassistant/helpers/data_entry_flow.py`), asserts `"result" not in
+  result` for every non-`CREATE_ENTRY` flow result — i.e. `result` was never
+  a pre-existing top-level key on the generic `FlowResult` shape; the
+  config-entries-specific override is what introduces it, always nested.
+- So the real response body shape is `{"type": "create_entry", "flow_id":
+  ..., "handler": "template", "result": {"entry_id": "01ABC...", "domain":
+  "template", "title": "...", "state": "loaded", ...}}` — `entry_id` is
+  ONLY ever reachable at `response["result"]["entry_id"]`.
+
+`result.get("entry_id", flow_id)` therefore ALWAYS took the fallback branch
+and silently cached `flow_id` — a real, truthy string, so nothing ever
+raised — as if it were the entry_id, for every template-helper CREATE this
+codebase has ever driven against real HA, since M10 first shipped. This was
+invisible until M15's category write-back needed `_template_entry_ids` to
+actually resolve a LIVE entity-registry row: `test_m10_template_flow.py`'s
+own `entry_id_for(...) is not None` assertion is true for a flow_id just as
+much as a real entry_id, so it never caught this.
+
+**Why the anchor design itself (`config_entry_id`, §31.6) also changed.**
+Read further to check whether even a correctly-cached entry_id would have
+matched the field the original design filtered on:
+`homeassistant/components/config/entity_registry.py`'s `websocket_list_
+entities` sends `entry.partial_json_repr`
+(`homeassistant/helpers/entity_registry.py`'s `as_partial_dict`), which DOES
+include `config_entry_id` (confirmed present at both `dev` and `2026.7.1`) —
+so the original field-presence worry was unfounded; the bug was purely the
+cached VALUE, not a missing/renamed field. But reading
+`homeassistant/components/template/helpers.py`'s `async_setup_template_entry`
+turned up a simpler anchor: `async_add_entities([state_entity_cls(hass,
+validated_config, config_entry.entry_id)])` — the THIRD positional arg to
+every template entity class is `unique_id`, and it's set to
+`config_entry.entry_id` directly. **A template helper's entity `unique_id`
+IS its config entry's `entry_id`**, always. This means the SAME
+`unique_id`-keyed entity-registry lookup every other kind already uses works
+unchanged for template helpers too — the match VALUE is the cached
+`entry_id` instead of the object-key identity, but the lookup FIELD never
+needs to branch on kind at all. `DirectBackend._unique_id_to_match` is the
+one-line abstraction this collapses to; the `config_entry_id`-based
+`_entity_registry_matcher` branch from the first round of this PR is gone.
+
+**Fix.** `_acreate_template_helper` now reads `result.get("result") or
+{}`, then `entry_id` off THAT dict (falling back to `flow_id` only if
+`result["result"]["entry_id"]` is itself falsy/missing — defensive, not
+expected against real HA). `DirectBackend._aassign_category`/`categories_for`
+anchor on `unique_id`, matching either `identity` (every kind except
+`TEMPLATE_DOMAINS`) or the cached `entry_id` (`TEMPLATE_DOMAINS`).
+
+**Fake-fidelity gap, fixed.** Neither `FakeBackend` nor any prior unit test
+exercised the actual JSON-shape parsing boundary `_acreate_template_helper`'s
+bug lived in: `FakeBackend.create()` never round-trips through a wire
+format at all (`_create_via_flow` sets `self._entry_ids[(kind, identity)] =
+entry_id` directly, no JSON parsing step to get wrong), and the only
+DirectBackend-level unit tests for this flow (`test_direct_backend_
+template_helpers.py`) covered `_alist_template_helpers`/
+`_aupdate_template_helper`, never `_acreate_template_helper`, so there was no
+regression net that could have caught this before CI did.
+`test_direct_backend_template_helpers.py`'s `_FakeClient.rest_post` now
+models the create flow's REAL nested `{"result": {"entry_id": ...}}` shape
+(new `/api/config/config_entries/flow` and `/api/config/config_entries/
+flow/{flow_id}` branches), and `test_create_template_helper_extracts_
+entry_id_from_nested_result_key` is the regression test — verified to fail
+against the pre-fix `result.get("entry_id", flow_id)` lookup (caches
+`"flow_1"` instead of `"entry_1"`) before this fix landed.
+`FakeBackend._create_via_flow`'s own module comment, which asserted the
+create_entry body was "flat... not a WS-style `{"result": {...}}` envelope"
+(the same false premise, inherited from §26.1's original, never-re-verified
+example JSON), is corrected too — `FlowStep.result` is FakeBackend's own
+internal test-log bookkeeping shape, never a literal wire-response mirror,
+since `FakeBackend` never parses JSON for this path at all.

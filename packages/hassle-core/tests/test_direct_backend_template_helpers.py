@@ -18,6 +18,24 @@ CI round 3 uncovered (docs/ha-api-notes.md §26.7):
   UPDATE that resubmits `name` gets `400 {"errors": {"base": ["extra keys
   not allowed @ data['name']"]}}` from real HA (CI round 3).
 
+**MILESTONES M15 work item A, CI field failure on PR #10 (docs/ha-api-notes.md
+§31.8):** `_acreate_template_helper`'s create_entry response parsing read a
+top-level `entry_id` key that never existed on the wire --
+`_prepare_config_flow_result_json` (`homeassistant/components/config/
+config_entries.py`) nests the whole `ConfigEntry.as_json_fragment` under a
+`"result"` key. The old code's `result.get("entry_id", flow_id)` therefore
+ALWAYS silently fell back to `flow_id` (a truthy string -- nothing raised),
+so every `_template_entry_ids` cache entry ever written held a flow_id, not
+the real entry_id -- invisible until M15's category write-back actually
+needed to cross-reference `entry_id` against a LIVE HA instance's entity
+registry (`test_helper_category_assign_and_readback_storage_and_template`,
+`packages/hassle-core/tests/integration/test_m11_category_writeback.py`),
+which a flow_id can never match. `_FakeClient.rest_post`'s
+`/api/config/config_entries/flow/*` branches now model the REAL nested
+response shape (`test_create_template_helper_extracts_entry_id_from_nested_result_key`
+is the regression test that fails against the pre-fix `result.get("entry_id",
+flow_id)` lookup).
+
 This suite is unit-level (no network, R2): it monkeypatches
 `DirectBackend._client` with a fake object exposing async `ws_command`/
 `rest_post`/`rest_delete`, and calls the private async `_alist_template_
@@ -68,6 +86,7 @@ class _FakeClient:
         self.rest_calls: list[tuple[str, str, Any]] = []
         self.cancelled_flow_ids: list[str] = []
         self._flow_counter = 0
+        self._entry_counter = 0
         self._flows: dict[str, str] = {}  # flow_id -> entry_id
 
     async def ws_command(self, type: str, **payload: Any) -> Any:
@@ -86,6 +105,47 @@ class _FakeClient:
 
     async def rest_post(self, path: str, json: Any = None, *, expect: str = "json") -> Any:
         self.rest_calls.append(("POST", path, json))
+        if path == "/api/config/config_entries/flow":
+            self._flow_counter += 1
+            flow_id = f"flow_{self._flow_counter}"
+            return {
+                "type": "menu",
+                "flow_id": flow_id,
+                "handler": "template",
+                "step_id": "user",
+                "menu_options": ["number", "sensor", "binary_sensor", "select"],
+            }
+        if path.startswith("/api/config/config_entries/flow/"):
+            flow_id = path.rsplit("/", 1)[1]
+            if isinstance(json, dict) and "next_step_id" in json:
+                return {
+                    "type": "form",
+                    "flow_id": flow_id,
+                    "step_id": json["next_step_id"],
+                    "data_schema": [],
+                }
+            # The form submission -- creates a brand-new entry.
+            self._entry_counter += 1
+            entry_id = f"entry_{self._entry_counter}"
+            title = str(json["name"])
+            self._entries[entry_id] = {"title": title, "options": dict(json)}
+            # **The REAL wire shape** (docs/ha-api-notes.md §31.8,
+            # source-verified: `_prepare_config_flow_result_json`,
+            # `homeassistant/components/config/config_entries.py`) --
+            # `entry_id` is nested under a `"result"` key, NEVER a top-level
+            # key on the response body. A caller reading `response["entry_id"]`
+            # directly gets `None`/a `KeyError` (or, with a truthy fallback
+            # like `flow_id`, silently the WRONG value) against this shape.
+            return {
+                "type": "create_entry",
+                "flow_id": flow_id,
+                "handler": "template",
+                "result": {
+                    "entry_id": entry_id,
+                    "domain": "template",
+                    "title": title,
+                },
+            }
         if path == "/api/config/config_entries/options/flow":
             entry_id = str(json["handler"])
             if entry_id not in self._entries:
@@ -139,6 +199,38 @@ def _make_backend(client: _FakeClient) -> DirectBackend:
     backend._client = client  # type: ignore[attr-defined]
     backend._template_entry_ids = {}  # type: ignore[attr-defined]
     return backend
+
+
+def test_create_template_helper_extracts_entry_id_from_nested_result_key() -> None:
+    """MILESTONES M15, docs/ha-api-notes.md §31.8 -- CI field failure on
+    PR #10: `_acreate_template_helper` must read the JUST-created entry_id
+    from `response["result"]["entry_id"]`, NEVER a top-level `entry_id` key
+    (which the real wire shape never has -- `_FakeClient` here models that
+    nesting faithfully, unlike the pre-fix code's `result.get("entry_id",
+    flow_id)`, which would cache the WRONG value, a flow_id, and never raise
+    -- this test fails against that old lookup)."""
+    client = _FakeClient(entries={}, entities=[])
+    backend = _make_backend(client)
+
+    identity = asyncio.run(
+        backend._acreate_template_helper(  # type: ignore[attr-defined]
+            "template_number",
+            {
+                "name": "Tank Level",
+                "state": "{{ 3 }}",
+                "set_value": _SET_VALUE,
+                "min": 0,
+                "max": 8,
+                "step": 1,
+            },
+        )
+    )
+
+    assert identity == "tank_level"
+    cached_entry_id = backend._template_entry_ids[("template_number", "tank_level")]  # type: ignore[attr-defined]
+    # The real entry_id ("entry_1"), never a flow_id ("flow_1", "flow_2", ...).
+    assert cached_entry_id == "entry_1"
+    assert not cached_entry_id.startswith("flow_")
 
 
 def test_list_remote_reads_back_name_and_options_via_options_flow_suggested_values() -> None:

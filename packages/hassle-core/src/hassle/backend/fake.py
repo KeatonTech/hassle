@@ -327,13 +327,23 @@ class FakeBackend:
         # not the caller's raw submission.
         options = _coerce_number_selector_fields(kind, config)
         entry_id = self._next_entry_id()
-        # Flat body (no nested "result" wrapper) -- the REST create_entry
-        # response is `{"type": "create_entry", "flow_id", "entry_id",
-        # "title", "options", ...}` directly, not a WS-style
-        # `{"result": {...}}` envelope (docs/ha-api-notes.md §26.0/§26.1).
-        # `title` is what HA actually sets from the submitted `name` -- the
-        # wire-level correlator now that there is no settable unique_id
-        # (§26.6).
+        # **Correction (docs/ha-api-notes.md §31.8):** this `FlowStep.result`
+        # shape is FakeBackend's own internal test-log bookkeeping (asserted
+        # on by `test_fake_backend_template_flow.py`), NOT a literal mirror
+        # of the real REST wire response -- the earlier claim here that it
+        # was ("Flat body, no nested result wrapper... not a WS-style
+        # {"result": {...}} envelope") was wrong: real HA's create_entry body
+        # DOES nest `entry_id`/`title`/... under a `"result"` key
+        # (`_prepare_config_flow_result_json`, §31.8), and never has an
+        # `"options"` key at all (options are only ever readable via the
+        # options-flow's suggested values, §26.7). `DirectBackend.
+        # _acreate_template_helper` parses the real nested shape directly
+        # (fixed in the same PR this correction was added, after a CI field
+        # failure); this fake's `result` dict is deliberately flat/simplified
+        # bookkeeping since `FakeBackend.create()` never round-trips through
+        # JSON at all -- `title` is what HA actually sets from the submitted
+        # `name` -- the wire-level correlator now that there is no settable
+        # unique_id (§26.6).
         result_step = FlowStep(
             flow_id=flow_id,
             type="create_entry",

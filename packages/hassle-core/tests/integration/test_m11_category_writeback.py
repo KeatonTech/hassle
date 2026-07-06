@@ -60,9 +60,11 @@ corrects §22/§30's "helpers have no category scope" belief):
    AND a template config-entry helper (`template_number`) via
    `DirectBackend.assign_category`/`create_category` (the shared `"helpers"`
    scope, §31.2) and reads both back via `categories_for` -- live proof that
-   the template-helper's `config_entry_id` anchor (§31.6, no settable
-   `unique_id`) really does resolve to the right entity-registry row on real
-   HA, not just in `FakeBackend`.
+   the template-helper's `unique_id == entry_id` anchor (§31.6/§31.8) really
+   does resolve to the right entity-registry row on real HA, not just in
+   `FakeBackend`. (This test's first CI run on PR #10 caught a real bug:
+   `_acreate_template_helper` was caching a flow_id instead of the real
+   entry_id, §31.8 -- fixed in the same round.)
 7. `test_same_object_two_scope_category_assignment_preserved` (§31.5d) -- the
    STRONGER I6 check §31.5d itself calls for: one automation carries a
    category under BOTH its own `"automation"` scope AND (as a synthetic
@@ -428,8 +430,12 @@ def test_helper_category_assign_and_readback_storage_and_template(
     """M15 test 1: the shared `"helpers"` scope (docs/ha-api-notes.md §31.2)
     round-trips for BOTH a storage-collection helper (`input_boolean`,
     anchored by `unique_id == object_id`) and a template config-entry helper
-    (`template_number`, anchored by `config_entry_id` -- §31.6, there is no
-    settable `unique_id` for these)."""
+    (`template_number`, anchored by `unique_id == entry_id` -- §31.6/§31.8,
+    there is no CALLER-settable `unique_id` for these, but the entity's OWN
+    `unique_id` equals its config entry's `entry_id`). This is also the live
+    proof that `_acreate_template_helper` now caches the REAL `entry_id`
+    (§31.8 fixed a bug where it cached a flow_id instead, which this exact
+    test caught failing on PR #10's first CI run)."""
     slug = _unique_slug("hvac_helpers")
     category_id = ha.create_category("helpers", slug.replace("_", " ").title())
     cleanup_category("helpers", category_id)

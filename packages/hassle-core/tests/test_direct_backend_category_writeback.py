@@ -21,10 +21,18 @@ inference):
   behavior); it just sends this call's own `{scope: category_id}`, and HA
   itself is responsible for leaving every other scope's assignment alone.
 
-**M15 (docs/ha-api-notes.md §31.6):** identity lookup for a TEMPLATE helper
-kind (`hassle.ir.keys.TEMPLATE_DOMAINS`) goes via `config_entry_id` -> entity
-registry row (there is no settable `unique_id` for these, §26.6) rather than
-the `unique_id == identity` anchor every other kind uses.
+**M15 (docs/ha-api-notes.md §31.6, corrected by §31.8):** identity lookup for
+a TEMPLATE helper kind (`hassle.ir.keys.TEMPLATE_DOMAINS`) uses the SAME
+`unique_id`-keyed entity-registry lookup every other kind uses -- there is no
+CALLER-settable `unique_id` for these (§26.6), but `template/helpers.py`'s
+`async_setup_template_entry` sets the entity's `unique_id` to the config
+entry's own `entry_id` (source-verified, §31.8), so the match VALUE is the
+cached `entry_id` instead of the object-key identity, not a different lookup
+field. (An earlier revision of this anchor used `config_entry_id` instead --
+CI on PR #10 found `_acreate_template_helper` was caching the wrong value for
+that field anyway, a separate bug fixed in `test_direct_backend_template_
+helpers.py`; switching to `unique_id` sidesteps the need for a second lookup
+field entirely.)
 """
 
 from __future__ import annotations
@@ -175,18 +183,22 @@ def test_assign_category_storage_helper_looks_up_by_unique_id() -> None:
     assert payload["categories"] == {"helpers": "cat_hvac_helpers"}
 
 
-def test_assign_category_template_helper_looks_up_by_config_entry_id() -> None:
-    """MILESTONES M15/§31.6: a template config-entry helper has no settable
-    `unique_id` (§26.6) -- its entity-registry row is found via
-    `config_entry_id` (the cached HA-assigned `entry_id`,
-    `DirectBackend._template_entry_ids`), not `unique_id == identity`."""
+def test_assign_category_template_helper_looks_up_by_unique_id_equal_to_entry_id() -> None:
+    """MILESTONES M15/§31.6, corrected by §31.8 (CI field failure on PR #10):
+    a template config-entry helper's entity-registry row is found via the
+    SAME `unique_id` lookup every other kind uses -- `template/helpers.py`'s
+    `async_setup_template_entry` sets the entity's `unique_id` to the config
+    entry's `entry_id` (source-verified), so the match VALUE is the cached
+    `entry_id` (`DirectBackend._template_entry_ids`), never `config_entry_id`
+    (which this row deliberately omits/mismatches, to prove it's not
+    consulted at all)."""
     client = _FakeClient(
         {
             "config/entity_registry/list": [
                 {
                     "entity_id": "number.tank_level",
-                    "unique_id": None,
-                    "config_entry_id": "entry_0007",
+                    "unique_id": "entry_0007",
+                    "config_entry_id": "some_other_id_never_consulted",
                     "categories": {},
                 },
                 {

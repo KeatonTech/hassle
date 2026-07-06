@@ -499,10 +499,21 @@ class DirectBackend:
         result = await self._client.rest_post(
             f"/api/config/config_entries/flow/{flow_id}", json=dict(config)
         )
-        # Flat create_entry body (docs/ha-api-notes.md §26.1): `entry_id` is a
-        # top-level key, not nested under a "result" wrapper (that was the
-        # original, incorrect WS-envelope assumption).
-        entry_id = str(result.get("entry_id", flow_id))
+        # **Correction (docs/ha-api-notes.md §31.8, source-verified, CI field
+        # failure on PR #10):** the create_entry response's `entry_id` is NOT
+        # a top-level key -- `_prepare_config_flow_result_json`
+        # (`homeassistant/components/config/config_entries.py`) nests the
+        # whole `ConfigEntry.as_json_fragment` under a `"result"` key
+        # (`data["result"] = entry.as_json_fragment`); the base
+        # `FlowManagerIndexView._prepare_result_json` even asserts `"result"
+        # not in result` for every OTHER flow-result type, confirming
+        # `result` is never a pre-existing top-level key this override adds
+        # on top of. The old `result.get("entry_id", flow_id)` therefore
+        # ALWAYS silently fell back to `flow_id` (a real, truthy string --
+        # nothing ever raised) -- every `_template_entry_ids` cache entry
+        # this backend ever wrote held a flow_id, not the real entry_id.
+        entry_json = cast("dict[str, Any]", result.get("result") or {})
+        entry_id = str(entry_json.get("entry_id") or flow_id)
         self._template_entry_ids[(kind, identity)] = entry_id
         return identity
 
@@ -680,10 +691,16 @@ class DirectBackend:
         fallback.
 
         **Identity anchor** (docs/ha-api-notes.md §2/§22, widened by M15
-        §31.6): `unique_id == identity` for automations/scripts/storage
-        helpers; a TEMPLATE_DOMAINS kind has no settable `unique_id` at all
-        (§26.6) and is instead found via `config_entry_id` -> the cached
-        HA-assigned `entry_id` (`self._template_entry_ids`).
+        §31.6, corrected by §31.8): `unique_id == identity` for automations/
+        scripts/storage helpers. A TEMPLATE_DOMAINS kind has no CALLER-
+        settable `unique_id` (§26.6), but its entity's `unique_id` is not
+        blank either -- `template/helpers.py`'s `async_setup_template_entry`
+        constructs the entity with `unique_id=config_entry.entry_id`
+        (source-verified, §31.8), i.e. **`unique_id` == the config entry's
+        own `entry_id`, always**. So the SAME `unique_id`-keyed lookup this
+        method already uses for every other kind works for template helpers
+        too -- the match VALUE is just the cached `entry_id`
+        (`self._template_entry_ids`) instead of the object-key identity.
 
         **Bounded-polls for the entity-registry row itself** (same class of
         async-settling wait as `_await_config_entity`, §17.7): by the time
@@ -701,33 +718,24 @@ class DirectBackend:
             "config/entity_registry/update", entity_id=entity_id, categories={scope: category_id}
         )
 
-    def _entity_registry_matcher(self, kind: str, identity: str):
-        """The predicate identifying `kind:identity`'s entity-registry row
-        among `config/entity_registry/list`'s rows (docs/ha-api-notes.md
-        §31.6): `config_entry_id` for a TEMPLATE_DOMAINS kind (no settable
-        `unique_id`, §26.6), else `unique_id == identity`."""
+    def _unique_id_to_match(self, kind: str, identity: str) -> str | None:
+        """The `unique_id` value `kind:identity`'s entity-registry row must
+        carry (docs/ha-api-notes.md §31.8): the object-key identity itself
+        for every kind EXCEPT a TEMPLATE_DOMAINS kind, whose entity's
+        `unique_id` is the config entry's `entry_id` instead (there is no
+        caller-settable `unique_id` for these, §26.6) -- `None` if this
+        process hasn't cached that kind/identity's `entry_id` yet."""
         if kind in TEMPLATE_DOMAINS:
-            entry_id = self._template_entry_ids.get((kind, identity))
-            if entry_id is None:
-                return None
-
-            def _matches_entry(entity: dict[str, Any]) -> bool:
-                return str(entity.get("config_entry_id")) == entry_id
-
-            return _matches_entry
-
-        def _matches_unique_id(entity: dict[str, Any]) -> bool:
-            return str(entity.get("unique_id")) == identity
-
-        return _matches_unique_id
+            return self._template_entry_ids.get((kind, identity))
+        return identity
 
     async def _find_entity_registry_row(self, kind: str, identity: str) -> str | None:
-        matcher = self._entity_registry_matcher(kind, identity)
-        if matcher is None:
+        unique_id = self._unique_id_to_match(kind, identity)
+        if unique_id is None:
             return None
         entities = await self._client.ws_command("config/entity_registry/list")
         for entity in entities:
-            if matcher(entity):
+            if str(entity.get("unique_id")) == unique_id:
                 return str(entity.get("entity_id"))
         return None
 
@@ -749,14 +757,13 @@ class DirectBackend:
     def categories_for(self, kind: str, identity: str) -> dict[str, str]:
         """Test/CLI-facing lookup: the entity-registry row's current
         `categories` map for `kind:identity` (empty if not found/uncategorized).
-        Same identity anchor as `_aassign_category` (§31.6): `config_entry_id`
-        for a TEMPLATE_DOMAINS kind, else `unique_id == identity`."""
-        matcher = self._entity_registry_matcher(kind, identity)
-        if matcher is None:
+        Same identity anchor as `_aassign_category` (§31.6/§31.8)."""
+        unique_id = self._unique_id_to_match(kind, identity)
+        if unique_id is None:
             return {}
         entities = self._run(self._client.ws_command("config/entity_registry/list"))
         for entity in entities:
-            if matcher(entity):
+            if str(entity.get("unique_id")) == unique_id:
                 return dict(entity.get("categories") or {})
         return {}
 
