@@ -155,7 +155,7 @@ TORTURE_TEMPLATES = [
     pytest.param('{{ states("sensor.a") }}"', id="ends-with-quote-char"),
     pytest.param('"{{ states("sensor.a") }}', id="starts-with-quote-char"),
     pytest.param("{{ states('sensor.a') }}\r\n{{ 1 }}", id="crlf-line-ending"),
-    pytest.param('{% set x = 1 %}\n{{ x }}\\', id="trailing-backslash"),
+    pytest.param("{% set x = 1 %}\n{{ x }}\\", id="trailing-backslash"),
 ]
 
 
@@ -193,9 +193,7 @@ def test_quoting_torture_is_ruff_format_stable(gnarly: str) -> None:
     fresh()
     template_sensor(name="Gnarly Sensor 2", state=gnarly)
     prebuilt = current_registry().prebuilt
-    obj = next(
-        p.obj for p in prebuilt if p.obj.object_key() == "template_sensor:gnarly_sensor_2"
-    )
+    obj = next(p.obj for p in prebuilt if p.obj.object_key() == "template_sensor:gnarly_sensor_2")
     source = decompile_object("template_sensor:gnarly_sensor_2", obj)
     wrapped = "from hassle import template_sensor\n\n" + source
     once = _ruff_format(wrapped)

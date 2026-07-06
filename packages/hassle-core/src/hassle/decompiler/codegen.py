@@ -613,10 +613,14 @@ def _helper_source(obj: HelperConfig, ident: str) -> str:
 
 def _template_helper_call_form_source(obj: TemplateHelperConfig, ident: str) -> str:
     """The pre-M13 call form: ``ident = builder(name=..., state=..., ...)``.
-    The raw fallback for the M13 decorator form (module docstring) -- there is
-    no identity kwarg to rename, ``TemplateHelperConfig`` has no ``id``/
-    ``unique_id`` field at all (docs/ha-api-notes.md §26.6). Identity is
-    derived from ``name`` (slugified) at both compile and decompile time."""
+
+    No longer the decompiler's own fallback output (MILESTONES M14: both
+    branches emit the decorator form now) -- kept because the call form
+    stays valid DSL input (F3 additions only; nothing is removed from the
+    surface). There is no identity kwarg to rename, ``TemplateHelperConfig``
+    has no ``id``/``unique_id`` field at all (docs/ha-api-notes.md §26.6).
+    Identity is derived from ``name`` (slugified) at both compile and
+    decompile time."""
     body = dict(obj.to_ha())
     domain = obj.kind()
     builder = _TEMPLATE_HELPER_BUILDER_NAMES[domain]
@@ -624,40 +628,106 @@ def _template_helper_call_form_source(obj: TemplateHelperConfig, ident: str) -> 
     return f"{ident} = {builder}({', '.join(kwargs)})\n"
 
 
-def _template_helper_source(obj: TemplateHelperConfig, ident: str) -> str:
-    """M13: try the decorator form first (bounded Jinja inversion,
-    ``hassle.decompiler.template_invert``); fall back to the pre-M13 string-
-    ``state=`` call form (unchanged) for anything the bounded inverter can't
-    invert byte-for-byte.
+def _raw_template_return_source(text: str) -> str:
+    """Render ``text`` (a stored ``state=``/``options=`` Jinja string) as a
+    Python string literal suitable for a decorator body's ``return`` -- the
+    M14 fallback branch's raw-string body (MILESTONES M14: "hand-converting a
+    helper to Python later means rewriting only the ``return`` expression").
 
-    ``state``'s value is the only field ever spelled as a decorated function
-    body -- every other kwarg (``set_value``, ``min``/``max``/``step``,
-    ``unit_of_measurement``, ``options``, ...) is unaffected and still
-    rendered exactly as the call form renders it, just moved into the
-    decorator's argument list. The acceptance rule (MILESTONES M13) is
-    enforced by :func:`~hassle.decompiler.template_invert.invert_template`
-    itself: it returns ``None`` (never partial output) unless
+    Byte-exact (I3): the literal must parse back to EXACTLY ``text``,
+    whatever it contains -- embedded single/double/triple quote runs,
+    backslashes, leading or trailing newlines, CR bytes. Two mechanical
+    cases, chosen by
+    whether ``text`` is multi-line (the common case for a hand-written
+    template -- triple-quoted is far more hand-editable than a single
+    ``\\n``-escaped line):
+
+    - Single-line (no ``\\n``): a plain ``repr(text)`` -- ``ruff format``
+      already normalizes quote-character choice/escaping deterministically
+      for any string content (verified empirically: idempotent after one
+      format pass for arbitrary content, including embedded quotes of both
+      kinds, backslashes, and the empty string), so there is nothing this
+      function needs to special-case here.
+    - Multi-line (contains ``\\n``): a triple-double-quoted string, escaping
+      ONLY backslash, the double-quote character, and ``\\r``
+      character-by-character (never a whole-string ``.replace`` -- that can
+      corrupt overlapping matches, e.g. a text ending in a double-quote
+      character, N15 finding during M14 implementation). Escaping every
+      double-quote character individually means a run of them (three in a
+      row inside the text, or a single trailing one that would otherwise
+      collide with the closing delimiter) can never produce an unescaped
+      close-delimiter sequence anywhere in the body. ``\\r`` is escaped
+      rather than emitted literally because `ruff format`'s own line-ending
+      normalization silently rewrites a bare CR byte inside a multi-line
+      string, which would break byte-exactness (I3) -- verified empirically.
+      Every other character (including the literal ``\\n``s that make this
+      the multi-line branch) is emitted as-is, which is what makes the
+      output actually multi-line and hand-editable rather than one long
+      escaped line.
+    """
+    if "\n" not in text:
+        return repr(text)
+    escaped_chars: list[str] = []
+    for ch in text:
+        if ch == "\\":
+            escaped_chars.append("\\\\")
+        elif ch == '"':
+            escaped_chars.append('\\"')
+        elif ch == "\r":
+            escaped_chars.append("\\r")
+        else:
+            escaped_chars.append(ch)
+    return '"""' + "".join(escaped_chars) + '"""'
+
+
+def _template_helper_source(obj: TemplateHelperConfig, ident: str) -> str:
+    """M13 + M14: the decorator form is canonical output for BOTH branches
+    (MILESTONES M14, owner feedback on M13) -- try the bounded Jinja inverter
+    first (``hassle.decompiler.template_invert``); when it can't invert
+    ``state`` byte-for-byte, fall back to a decorator whose body is
+    ``return "<verbatim Jinja>"`` (:func:`_raw_template_return_source`)
+    instead of the pre-M14 call form. Both branches share the exact same
+    decorator-kwargs rendering (every field but ``state`` is unaffected
+    either way) and the same ``ident`` (computed once, before this function
+    is even called -- MILESTONES M14: "a helper flipping between branches
+    keeps its function name").
+
+    ``state``/``options``'s value is the only field ever spelled as a
+    decorated function body -- every other kwarg (``set_value``,
+    ``min``/``max``/``step``, ``unit_of_measurement``, ...) is unaffected and
+    still rendered exactly as the call form renders it, just moved into the
+    decorator's argument list. ``template_select.options=`` (the second
+    template) stays a kwarg, unchanged (MILESTONES M14).
+
+    The acceptance rule (MILESTONES M13) is enforced by
+    :func:`~hassle.decompiler.template_invert.invert_template` itself: it
+    returns ``None`` (never partial output) unless
     ``render(invert(state)) == state`` byte-for-byte, so choosing the
-    decorator branch here is safe by construction -- there is no separate
-    "trust the inverter" step.
+    invertible branch here is safe by construction -- there is no separate
+    "trust the inverter" step. The fallback branch is safe by construction
+    too: it never re-renders or normalizes ``state``, just embeds it
+    verbatim as a string literal, so I3 holds trivially (the raw escape
+    hatch, DESIGN §2 I3, never drops data).
     """
     from hassle.decompiler.template_invert import invert_template
 
     body = dict(obj.to_ha())
     state = body.get("state")
-    if not isinstance(state, str):
-        return _template_helper_call_form_source(obj, ident)
-    inverted = invert_template(state)
-    if inverted is None:
-        return _template_helper_call_form_source(obj, ident)
-
     domain = obj.kind()
     builder = _TEMPLATE_HELPER_BUILDER_NAMES[domain]
+
+    if not isinstance(state, str):
+        # No `state=` at all (shouldn't happen for a real template-helper
+        # object -- every one of the four domains requires it -- but never
+        # crash the decompiler over a malformed/hand-built IR object; the
+        # call form degrades gracefully since it has no body to speak of).
+        return _template_helper_call_form_source(obj, ident)
+
+    inverted = invert_template(state)
     decorator_kwargs = [f"{k}={render_literal(v)}" for k, v in body.items() if k != "state"]
+    return_expr = inverted.source if inverted is not None else _raw_template_return_source(state)
     return (
-        f"@{builder}({', '.join(decorator_kwargs)})\n"
-        f"def {ident}():\n"
-        f"{INDENT}return {inverted.source}\n"
+        f"@{builder}({', '.join(decorator_kwargs)})\ndef {ident}():\n{INDENT}return {return_expr}\n"
     )
 
 
