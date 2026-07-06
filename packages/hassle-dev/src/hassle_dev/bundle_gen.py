@@ -385,10 +385,11 @@ def generate_sample_bundle(out_dir: Path, *, repo_root: Path | None = None) -> N
     (written first, and never touched by pull -- see module docstring).
     """
     from click.testing import CliRunner
+
+    from hassle.registry.snapshot import RegistrySnapshot
     from hassle_cli.backend_factory import register_fake_backend, unregister_fake_backend
     from hassle_cli.cli import main
     from hassle_cli.config import write_default_config
-    from hassle.registry.snapshot import RegistrySnapshot
 
     root = repo_root or find_repo_root()
     if root is None:
