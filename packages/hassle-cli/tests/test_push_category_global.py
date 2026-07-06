@@ -52,6 +52,43 @@ def auto_hvac_1():
     assert backend.categories_for("automation", "auto_hvac_1") == {"automation": category_id}
 
 
+def test_push_create_uses_punctuated_category_global_verbatim(
+    git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """Regression (CI field failure on PR #7's integration test, round 2):
+    the created category's display name must be stored VERBATIM, punctuation
+    included, never re-derived from (or reconciled against) its own slug --
+    `slugify("Automatic-HVAC!!!")` collapses right back to `automatic_hvac`
+    (matching the file stem, so the override is accepted), but the point of
+    this test is that the STORED name is the exact punctuated string, not
+    some slug-derived approximation of it."""
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+
+    (git_repo / "automations" / "automatic_hvac.py").write_text(
+        """
+from hassle import automation, service, state, when
+
+CATEGORY = "Automatic-HVAC!!!"
+
+
+@automation(id="auto_hvac_1", alias="Keep temp steady")
+def auto_hvac_1():
+    when(state("binary_sensor.hall_motion").to("on"))
+    service("climate.turn_on", target={"entity_id": "climate.living_room"})
+""",
+        encoding="utf-8",
+    )
+
+    result = cli(["push", "--yes"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+
+    assignment = backend.categories_for("automation", "auto_hvac_1")
+    assert assignment.keys() == {"automation"}
+    category_id = assignment["automation"]
+    assert backend.list_categories("automation") == {category_id: "Automatic-HVAC!!!"}
+
+
 def test_push_create_mismatched_category_global_ignored_with_warning(
     git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:

@@ -47,6 +47,37 @@ def test_attempt_category_writeback_uses_override_display_name() -> None:
     assert categories == {next(iter(categories)): "Automatic HVAC"}
 
 
+def test_attempt_category_writeback_uses_override_with_punctuation_verbatim() -> None:
+    """Regression (CI field failure on PR #7, integration-test round 2): the
+    override's slug is NEVER expected to equal the source path's slug -- that
+    would defeat the entire point of CATEGORY (recovering exact punctuation/
+    acronyms a slug can't hold). This uses a display name whose OWN slug
+    (`slugify("Automatic HVAC (with punctuation!)")` ==
+    `"automatic_hvac_with_punctuation"`) differs from the source path's slug
+    (`"automatic_hvac"`) -- proving the category is matched/created purely by
+    `source_path`, with the override stored verbatim as the row's `name`,
+    never re-slugified or reconciled against it."""
+    backend = FakeBackend()
+    assert backend.list_categories("automation") == {}
+
+    result = attempt_category_writeback(
+        backend,
+        "automation",
+        "auto_hvac_1",
+        "automations/automatic_hvac.py",
+        category_override="Automatic HVAC (with punctuation!)",
+    )
+
+    assert result.attempted is True
+    assert result.warning is None
+    assignment = backend.categories_for("automation", "auto_hvac_1")
+    assert assignment.keys() == {"automation"}
+    category_id = assignment["automation"]
+    assert backend.list_categories("automation") == {
+        category_id: "Automatic HVAC (with punctuation!)"
+    }
+
+
 def test_apply_plan_threads_category_overrides_by_source_path() -> None:
     """The `apply_plan`-level plumbing: `category_overrides` is keyed by
     `PlanEntry.source_path` (never by object_key -- CATEGORY is a per-FILE

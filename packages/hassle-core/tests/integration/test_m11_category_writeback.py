@@ -327,7 +327,25 @@ def test_push_create_with_category_global_uses_exact_display_name(
     here as a `category_overrides` plan-apply entry, the same sidecar map
     `hassle_cli.cli`'s push path builds from the compiled bundle) supplies the
     EXACT display name for a brand-new category, live-verified via
-    `config/category_registry/list` -- never M11's `humanize_slug` guess."""
+    `config/category_registry/list` -- never M11's `humanize_slug` guess.
+
+    **Deliberately punctuated `display_name`** (round 2 fix, CI field failure
+    on PR #7): `slugify(display_name)` is NOT expected to equal `slug` here --
+    that's the entire point of the CATEGORY global (recovering an exact
+    display name, punctuation included, that a slug can't hold). The FIRST
+    version of this test wrongly re-derived a slug from `display_name` and
+    filtered `list_categories` by it, which only coincidentally matches when
+    the display name happens to slugify back to the file's own slug (true for
+    a tame name, false the moment punctuation collapses differently, e.g.
+    "(with punctuation!)" -> `..._with_punctuation`, a different string from
+    `slug`'s random suffix) -- `attempt_category_writeback` itself never
+    re-slugifies the override (`hassle.sync.category_writeback`: it matches/
+    creates purely by `source_path`'s slug, storing the override verbatim as
+    the created row's `name`), so this test must identify "the category just
+    created for this object" the same way production code does: by looking
+    up `identity`'s own assignment (`categories_for`), never by re-slugifying
+    the display name back apart from it.
+    """
     slug = _unique_slug("automatic_hvac")
     identity = f"auto_{slug}"
     display_name = "Automatic HVAC (with punctuation!)"
@@ -356,17 +374,18 @@ def test_push_create_with_category_global_uses_exact_display_name(
     assert result.category_warnings == [], result.category_warnings
 
     try:
-        after_categories = ha.list_categories("automation")
-        matches = [
-            category_id for category_id, name in after_categories.items() if slugify(name) == slug
-        ]
-        assert len(matches) == 1, after_categories
-        category_id = matches[0]
+        # Identify the category THIS object was actually assigned to --
+        # never by re-slugifying `display_name` (see docstring: that is not
+        # a real invariant when the override is deliberately punctuated).
+        assignment = ha.categories_for("automation", identity)
+        assert assignment.keys() == {"automation"}, assignment
+        category_id = assignment["automation"]
         cleanup_category("automation", category_id)
 
-        # The EXACT display name was used -- not humanize_slug(slug).
+        after_categories = ha.list_categories("automation")
+        # The EXACT display name was used -- not humanize_slug(slug), and not
+        # some derivative of it either.
         assert after_categories[category_id] == display_name
-        assert ha.categories_for("automation", identity) == {"automation": category_id}
     finally:
         with contextlib.suppress(Exception):
             ha.delete("automation", identity)
