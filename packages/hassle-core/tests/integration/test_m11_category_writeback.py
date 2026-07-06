@@ -43,6 +43,13 @@ concurrent/rerun CI jobs against a persistent instance never collide) and
 best-effort deletes it during teardown -- `config/category_registry/delete`
 is not confirmed to exist (docs/ha-api-notes.md §30 addendum below), so
 teardown is wrapped in `contextlib.suppress` and never fails the test.
+
+5. `test_push_create_with_category_global_uses_exact_display_name` (MILESTONES
+   M12) -- a push-create carrying a `category_overrides` entry for its source
+   path (standing in for a bundle file's `CATEGORY = "..."` global, MILESTONES
+   M12) creates the category with EXACTLY that display name, live-verified via
+   `config/category_registry/list`, instead of M11's `humanize_slug`-derived
+   guess.
 """
 
 from __future__ import annotations
@@ -311,3 +318,57 @@ def test_push_create_preserves_other_scope_category_assignment(
             ha.delete("automation", auto_identity)
         with contextlib.suppress(Exception):
             ha.delete("script", script_object_id)
+
+
+def test_push_create_with_category_global_uses_exact_display_name(
+    ha: DirectBackend, cleanup_category
+) -> None:
+    """MILESTONES M12 -- a bundle file's `CATEGORY = "..."` global (modeled
+    here as a `category_overrides` plan-apply entry, the same sidecar map
+    `hassle_cli.cli`'s push path builds from the compiled bundle) supplies the
+    EXACT display name for a brand-new category, live-verified via
+    `config/category_registry/list` -- never M11's `humanize_slug` guess."""
+    slug = _unique_slug("automatic_hvac")
+    identity = f"auto_{slug}"
+    display_name = "Automatic HVAC (with punctuation!)"
+
+    plan = Plan(
+        entries=[
+            PlanEntry(
+                object_key=f"automation:{identity}",
+                kind="automation",
+                action=PlanAction.CREATE,
+                local={
+                    "id": identity,
+                    "alias": "M12 integration automation",
+                    "triggers": [],
+                    "conditions": [],
+                    "actions": [],
+                },
+                source_path=f"automations/{slug}.py",
+            )
+        ]
+    )
+    result = apply_plan(
+        plan, ha, _manifest(), category_overrides={f"automations/{slug}.py": display_name}
+    )
+    assert result.succeeded is True, result.outcomes
+    assert result.category_warnings == [], result.category_warnings
+
+    try:
+        after_categories = ha.list_categories("automation")
+        matches = [
+            category_id
+            for category_id, name in after_categories.items()
+            if slugify(name) == slug
+        ]
+        assert len(matches) == 1, after_categories
+        category_id = matches[0]
+        cleanup_category("automation", category_id)
+
+        # The EXACT display name was used -- not humanize_slug(slug).
+        assert after_categories[category_id] == display_name
+        assert ha.categories_for("automation", identity) == {"automation": category_id}
+    finally:
+        with contextlib.suppress(Exception):
+            ha.delete("automation", identity)

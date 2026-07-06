@@ -1,0 +1,122 @@
+"""M12 -- `hassle push` end-to-end (`FakeBackend`): a bundle file's `CATEGORY`
+module global supplies the exact display name for a brand-new HA category
+push-create has to create (MILESTONES M12).
+
+Covers the milestone's push-side tests:
+
+1. Push-create in a file with `CATEGORY = "Automatic HVAC"` -> created
+   category's name is exactly that string.
+2. `CATEGORY` that doesn't slugify to the file stem -> a validation Finding
+   AND the write-back path ignores the global (falls back to
+   `humanize_slug`), with a warning printed -- the object itself still
+   applies successfully.
+3. No `CATEGORY` -> unchanged M11 `humanize_slug` behavior (already covered
+   by `test_push_category_writeback.py`; not duplicated here).
+5. An existing category match is reused verbatim and never renamed, even
+   when the file also carries a (matching) `CATEGORY` global.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+
+def test_push_create_uses_category_global_as_exact_display_name(
+    git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+
+    (git_repo / "automations" / "automatic_hvac.py").write_text(
+        '''
+from hassle import automation, service, state, when
+
+CATEGORY = "Automatic HVAC"
+
+
+@automation(id="auto_hvac_1", alias="Keep temp steady")
+def auto_hvac_1():
+    when(state("binary_sensor.hall_motion").to("on"))
+    service("climate.turn_on", target={"entity_id": "climate.living_room"})
+''',
+        encoding="utf-8",
+    )
+
+    result = cli(["push", "--yes"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+    assert "auto_hvac_1" in backend.list_remote("automation")
+
+    categories = backend.list_categories("automation")
+    assert list(categories.values()) == ["Automatic HVAC"]
+    category_id = next(iter(categories))
+    assert backend.categories_for("automation", "auto_hvac_1") == {"automation": category_id}
+
+
+def test_push_create_mismatched_category_global_ignored_with_warning(
+    git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+
+    (git_repo / "automations" / "automatic_hvac.py").write_text(
+        '''
+from hassle import automation, service, state, when
+
+CATEGORY = "Something Else Entirely"
+
+
+@automation(id="auto_hvac_1", alias="Keep temp steady")
+def auto_hvac_1():
+    when(state("binary_sensor.hall_motion").to("on"))
+    service("climate.turn_on", target={"entity_id": "climate.living_room"})
+''',
+        encoding="utf-8",
+    )
+
+    result = cli(["push", "--yes"], cwd=git_repo)
+    # The object apply itself still succeeds (M11 test-3-style isolation) --
+    # a CATEGORY mismatch is never fatal to the push.
+    assert result.exit_code == 0, result.output
+    assert "auto_hvac_1" in backend.list_remote("automation")
+
+    # The mismatched global is never trusted -- humanize_slug fallback is
+    # used instead of the (untrustworthy) declared name.
+    categories = backend.list_categories("automation")
+    assert list(categories.values()) == ["Automatic Hvac"]
+
+    # A warning was surfaced (I6: never silently ignored).
+    assert "category" in result.output.lower()
+    assert "automatic_hvac" in result.output.lower() or "auto_hvac_1" in result.output
+
+
+def test_push_existing_category_match_never_renamed_even_with_category_global(
+    git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    backend.seed_category("automation", "cat_hvac", "Pre-Existing UI Name")
+
+    (git_repo / "automations" / "automatic_hvac.py").write_text(
+        '''
+from hassle import automation, service, state, when
+
+CATEGORY = "Automatic HVAC"
+
+
+@automation(id="auto_hvac_1", alias="Keep temp steady")
+def auto_hvac_1():
+    when(state("binary_sensor.hall_motion").to("on"))
+    service("climate.turn_on", target={"entity_id": "climate.living_room"})
+''',
+        encoding="utf-8",
+    )
+
+    result = cli(["push", "--yes"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+
+    # No new category created, and the existing one's name is untouched --
+    # HA's UI owns renames (MILESTONES M12: "an existing HA category is NEVER
+    # renamed by push").
+    categories = backend.list_categories("automation")
+    assert categories == {"cat_hvac": "Pre-Existing UI Name"}
+    assert backend.categories_for("automation", "auto_hvac_1") == {"automation": "cat_hvac"}
