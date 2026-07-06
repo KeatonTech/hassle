@@ -72,6 +72,114 @@ by bundles and tests. These don't compile to an HA YAML shape — the error text
 *is* the documentation.
 
 
+### `Mode`
+
+Golden case: `fixtures/dsl/mode_enum_parity/`.
+
+```python
+"""Golden case: `Mode`/`MaxExceeded` StrEnum form (`ux/dsl-ergonomics`, item 2) --
+`StrEnum` IS a `str` subclass, so passing a member compiles byte-identical to the
+equivalent plain string. Paired with `mode_str_parity/`'s plain-string form to
+prove compile parity.
+"""
+
+from hassle import MaxExceeded, Mode, automation, service, state, when
+
+
+@automation(
+    id="hall_light_on_motion",
+    alias="Hallway: light on motion",
+    mode=Mode.RESTART,
+    max_exceeded=MaxExceeded.SILENT,
+)
+def hall_light_on_motion():
+    when(state("binary_sensor.hall_motion").to("on"))
+    service("light.turn_on", entity_id="light.hallway")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "automation:hall_light_on_motion": {
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "data": {
+          "entity_id": "light.hallway"
+        }
+      }
+    ],
+    "alias": "Hallway: light on motion",
+    "conditions": [],
+    "id": "hall_light_on_motion",
+    "max_exceeded": "silent",
+    "mode": "restart",
+    "triggers": [
+      {
+        "entity_id": "binary_sensor.hall_motion",
+        "to": "on",
+        "trigger": "state"
+      }
+    ]
+  }
+}
+```
+
+### `MaxExceeded`
+
+Golden case: `fixtures/dsl/mode_enum_parity/`.
+
+```python
+"""Golden case: `Mode`/`MaxExceeded` StrEnum form (`ux/dsl-ergonomics`, item 2) --
+`StrEnum` IS a `str` subclass, so passing a member compiles byte-identical to the
+equivalent plain string. Paired with `mode_str_parity/`'s plain-string form to
+prove compile parity.
+"""
+
+from hassle import MaxExceeded, Mode, automation, service, state, when
+
+
+@automation(
+    id="hall_light_on_motion",
+    alias="Hallway: light on motion",
+    mode=Mode.RESTART,
+    max_exceeded=MaxExceeded.SILENT,
+)
+def hall_light_on_motion():
+    when(state("binary_sensor.hall_motion").to("on"))
+    service("light.turn_on", entity_id="light.hallway")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "automation:hall_light_on_motion": {
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "data": {
+          "entity_id": "light.hallway"
+        }
+      }
+    ],
+    "alias": "Hallway: light on motion",
+    "conditions": [],
+    "id": "hall_light_on_motion",
+    "max_exceeded": "silent",
+    "mode": "restart",
+    "triggers": [
+      {
+        "entity_id": "binary_sensor.hall_motion",
+        "to": "on",
+        "trigger": "state"
+      }
+    ]
+  }
+}
+```
+
 ### `PI`
 
 Golden case: `fixtures/dsl/shade_tracks_sun/`.
@@ -7091,6 +7199,10 @@ Raised when a Python `if`/`bool()` is used on a runtime state expression (DESIGN
 ### `NoParamContextError`
 
 `param(name)` called outside an active `@shared_script` body. Fix: only call `param(...)` inside the decorated function; use `var(name)` for a runtime `variables:` reference instead.
+
+### `OnlyIfBlockCoverageError`
+
+Raised when `with only_if(...):` is used but an action is recorded outside the block (before or after). Automation-level conditions gate *every* action, so a partial block would be visually misleading. Fix: move all actions inside the `with only_if(...):` block, or use the bare `only_if(...)` call form.
 
 ### `PythonMathMisuseError`
 

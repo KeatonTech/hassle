@@ -22,6 +22,13 @@ from typing import Any
 from hassle.docs.construct_map import EXEMPT_NAMES, NAME_TO_CASES
 
 _ERROR_DOCS: dict[str, str] = {
+    "OnlyIfBlockCoverageError": (
+        "Raised when `with only_if(...):` is used but an action is recorded "
+        "outside the block (before or after). Automation-level conditions "
+        "gate *every* action, so a partial block would be visually misleading. "
+        "Fix: move all actions inside the `with only_if(...):` block, or use "
+        "the bare `only_if(...)` call form."
+    ),
     "CompileTimeBranchError": (
         "Raised when a Python `if`/`bool()` is used on a runtime state "
         "expression (DESIGN §5.5) -- Python control flow runs at *compile* "
