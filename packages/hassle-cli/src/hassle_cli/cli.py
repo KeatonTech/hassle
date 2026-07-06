@@ -793,9 +793,17 @@ def run(target: str, live: bool, yes: bool, skip_conditions: bool) -> None:
     root = _bundle_root_or_fail()
 
     if not live:
-        from hassle_cli.run_sim import run_on_simulator
+        from hassle_cli.run_sim import (
+            InvalidRunTargetError,
+            UnknownRunTargetError,
+            run_on_simulator,
+        )
 
-        object_key, sim = run_on_simulator(root, target)
+        try:
+            object_key, sim = run_on_simulator(root, target)
+        except (InvalidRunTargetError, UnknownRunTargetError) as exc:
+            console.print(f"[red]hassle run: {exc}[/red]")
+            raise SystemExit(1) from exc
         console.print(f"[green]ran {object_key} on the simulator[/green]")
         for call in sim.all_calls():
             console.print(f"  called {call.action} {call.data}")

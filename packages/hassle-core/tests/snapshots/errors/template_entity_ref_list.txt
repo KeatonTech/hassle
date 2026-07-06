@@ -1,0 +1,1 @@
+`expr()`/`state(...).value` at test_template_entity_ref_error.py:39: this `state(...)` builder was constructed with a list entity_id (['light.a', 'light.b']), not a single entity id. Fix: pass a single entity id string (or a `state(...)` builder built from one) -- a template read always names exactly one entity.

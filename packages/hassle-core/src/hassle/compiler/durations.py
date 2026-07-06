@@ -15,7 +15,28 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
+from hassle.compiler.errors import CompileError
+from hassle.compiler.spans import capture_span
+
 DurationLike = "timedelta | str | dict[str, Any]"
+
+
+class InvalidDurationError(CompileError):
+    """A `for_=`/duration value is neither a timedelta, an `HH:MM:SS` string,
+    nor a dict of hours/minutes/seconds units (R6: what/where/fix -- M9
+    error-message audit finding. Previously a bare `ValueError`/`TypeError`
+    with no file:line and no fix hint, reachable from ordinary bundle
+    authoring, e.g. `state(x).to("on", for_="5 minutes")`)."""
+
+    def __init__(self, value: Any, span: Any = None) -> None:
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        self.value = value
+        super().__init__(
+            f"Invalid duration value {value!r}{where}. A `for_=`/duration value must be "
+            f'a `datetime.timedelta`, an `"HH:MM:SS"` string, or a dict of '
+            f"hours/minutes/seconds (e.g. the `hours()`/`minutes()`/`seconds()` helpers). "
+            f'Fix: use one of those forms, e.g. `for_=minutes(5)` or `for_="00:05:00"`.'
+        )
 
 
 def _duration_dict(hours: int = 0, minutes: int = 0, seconds: int = 0) -> dict[str, int]:
@@ -58,11 +79,11 @@ def normalize_duration(value: Any) -> dict[str, int]:
     if isinstance(value, str):
         parts = value.split(":")
         if len(parts) != 3:
-            raise ValueError(
-                f"invalid for_= duration string {value!r}; use HH:MM:SS, a timedelta, "
-                f"or a dict of hours/minutes/seconds"
-            )
-        h, m, s = (int(p) for p in parts)
+            raise InvalidDurationError(value, capture_span(depth=0))
+        try:
+            h, m, s = (int(p) for p in parts)
+        except ValueError as exc:
+            raise InvalidDurationError(value, capture_span(depth=0)) from exc
         return _duration_dict(hours=h, minutes=m, seconds=s)
     if isinstance(value, dict):
         return _duration_dict(
@@ -70,7 +91,4 @@ def normalize_duration(value: Any) -> dict[str, int]:
             minutes=int(value.get("minutes", 0)),  # type: ignore[arg-type]
             seconds=int(value.get("seconds", 0)),  # type: ignore[arg-type]
         )
-    raise TypeError(
-        f"for_= must be a timedelta, an 'HH:MM:SS' string, or a dict of units, got "
-        f"{type(value).__name__}"
-    )
+    raise InvalidDurationError(value, capture_span(depth=0))
