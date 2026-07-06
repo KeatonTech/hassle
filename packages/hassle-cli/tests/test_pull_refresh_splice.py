@@ -16,7 +16,7 @@ from pathlib import Path
 
 from hassle.compiler import compile_bundle
 
-TWO_AUTOMATIONS = '''\
+TWO_AUTOMATIONS = """\
 from hassle import automation, service, state, when
 
 
@@ -31,7 +31,7 @@ def hall_light_on_motion():
 def porch_light_on_motion():
     when(state("binary_sensor.porch_motion").to("on"))
     service("light.turn_on", target={"entity_id": "light.porch"})
-'''
+"""
 
 
 def _commit_all(repo: Path, message: str) -> None:

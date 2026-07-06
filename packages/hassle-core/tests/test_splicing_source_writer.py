@@ -14,7 +14,7 @@ from pathlib import Path
 
 from hassle.sync.source_writer import SourceWriter, SplicingSourceWriter
 
-TWO_AUTOMATIONS = '''\
+TWO_AUTOMATIONS = """\
 from hassle import automation, service, state, when
 
 
@@ -29,7 +29,7 @@ def hall_light_on_motion():
 def porch_light_on_motion():
     when(state("binary_sensor.porch_motion").to("on"))
     service("light.turn_on", target={"entity_id": "light.porch"})
-'''
+"""
 
 PORCH_BLOCK = (
     "# Hand-written note about the porch automation.\n"
@@ -42,7 +42,7 @@ PORCH_BLOCK = (
 # Shaped like real `decompile_bundle` single-object output: the decompiler's
 # import header plus ONE object statement, whose (alias-derived) function name
 # differs from the def name currently in the file.
-HALL_REPLACEMENT = '''\
+HALL_REPLACEMENT = """\
 from hassle import *
 from hassle.registry import entities as e
 
@@ -51,7 +51,7 @@ from hassle.registry import entities as e
 def hallway_light_on_motion_ui_edit():
     when(state("binary_sensor.hall_motion").to("on"))
     service("light.turn_on", target={"entity_id": "light.hallway"})
-'''
+"""
 
 
 def _write(tmp_path: Path, content: str = TWO_AUTOMATIONS) -> Path:
@@ -170,7 +170,7 @@ def test_delete_object_removes_only_the_target(tmp_path: Path) -> None:
 
 
 def test_delete_last_object_removes_the_file(tmp_path: Path) -> None:
-    single = '''\
+    single = """\
 from hassle import automation, service, state, when
 
 
@@ -178,7 +178,7 @@ from hassle import automation, service, state, when
 def hall_light_on_motion():
     when(state("binary_sensor.hall_motion").to("on"))
     service("light.turn_on", target={"entity_id": "light.hallway"})
-'''
+"""
     writer = SplicingSourceWriter(updated_on="2026-07-04")
     target = _write(tmp_path, single)
 
