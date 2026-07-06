@@ -37,6 +37,8 @@ EXEMPT_NAMES: frozenset[str] = frozenset(
         "UnknownParamError",
         # Compile-time guard, not a construct (ux/dsl-ergonomics round):
         "OnlyIfBlockCoverageError",
+        # M13: decorator-form template-helper body contract violation.
+        "TemplateHelperDecoratorBodyError",
     }
 )
 

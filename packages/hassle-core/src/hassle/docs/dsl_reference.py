@@ -65,6 +65,17 @@ _ERROR_DOCS: dict[str, str] = {
         "a *plain* Python constant is not a trap, it just folds into a "
         "literal."
     ),
+    "TemplateHelperDecoratorBodyError": (
+        "Raised when a `@template_number`/`@template_sensor`/"
+        "`@template_binary_sensor`/`@template_select` decorator (M13) is "
+        "applied to a function that doesn't fit the decorator-form contract: "
+        "it must take zero parameters and `return` a `TemplateExpr`/`str` -- "
+        "no declared parameters, no recording-verb calls (`service`/`when`/"
+        "`only_if`/...), no other return type. Fix: remove the parameters, "
+        "return a template expression built from the `hassle.compiler."
+        "templates`/`hassle.compiler.math_expr` surface (or a plain Jinja "
+        "string), and do nothing else in the function body."
+    ),
 }
 
 

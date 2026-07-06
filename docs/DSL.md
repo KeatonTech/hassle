@@ -7656,6 +7656,10 @@ Raised when `with only_if(...):` is used but an action is recorded outside the b
 
 Python's stdlib `math.*` (or a bare `float()`/`int()`) called on a runtime `TemplateExpr`. Fix: use the matching `hassle` math builder (`sin`/`cos`/`sqrt`/... ) instead of `math.sin`/etc. -- `math.pi` as a *plain* Python constant is not a trap, it just folds into a literal.
 
+### `TemplateHelperDecoratorBodyError`
+
+Raised when a `@template_number`/`@template_sensor`/`@template_binary_sensor`/`@template_select` decorator (M13) is applied to a function that doesn't fit the decorator-form contract: it must take zero parameters and `return` a `TemplateExpr`/`str` -- no declared parameters, no recording-verb calls (`service`/`when`/`only_if`/...), no other return type. Fix: remove the parameters, return a template expression built from the `hassle.compiler.templates`/`hassle.compiler.math_expr` surface (or a plain Jinja string), and do nothing else in the function body.
+
 ### `UnknownFieldError`
 
 A `@shared_script` call-site kwarg is not among the script's declared `fields=` keys (when `fields=` is given explicitly, it is the superset source of truth even if the signature would otherwise accept the kwarg). Fix: add the field to `fields=`, or correct the call-site kwarg's spelling.
