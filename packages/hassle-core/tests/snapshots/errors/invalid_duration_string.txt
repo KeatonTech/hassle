@@ -1,0 +1,1 @@
+Invalid duration value '5 minutes' at test_duration_error.py:42. A `for_=`/duration value must be a `datetime.timedelta`, an `"HH:MM:SS"` string, or a dict of hours/minutes/seconds (e.g. the `hours()`/`minutes()`/`seconds()` helpers). Fix: use one of those forms, e.g. `for_=minutes(5)` or `for_="00:05:00"`.

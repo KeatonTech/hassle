@@ -420,11 +420,15 @@ name = "hassle-dev"
 version = "0.0.0"
 source = { editable = "packages/hassle-dev" }
 dependencies = [
+    { name = "hassle-cli" },
     { name = "hassle-core" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "hassle-core", editable = "packages/hassle-core" }]
+requires-dist = [
+    { name = "hassle-cli", editable = "packages/hassle-cli" },
+    { name = "hassle-core", editable = "packages/hassle-core" },
+]
 
 [[package]]
 name = "hypothesis"

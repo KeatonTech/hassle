@@ -128,6 +128,49 @@ def scaffold_lib_and_tests_readmes(root: Path) -> list[str]:
     return steps
 
 
+def scaffold_agent_docs(root: Path) -> list[str]:
+    """Write `AGENTS.md` + `docs/DSL.md` + `docs/COOKBOOK.md` (DESIGN §12,
+    MILESTONES M9 deliverable 1). Unlike `lib/README.md`/`tests/README.md`
+    (user territory, "only if missing"), these are wholly machine-generated
+    content the user is never expected to hand-edit -- so they are
+    REWRITTEN every time (same convention as `.vscode/settings.json`), which
+    also means a bundle stays in sync with whatever Hassle version generated
+    them after an upgrade + re-`init`/`pull`. `AGENTS.md` is bundle-specific
+    (its header names the bundle directory); `docs/DSL.md`/`docs/COOKBOOK.md`
+    are the same reference content for every bundle, shipped as package data
+    (`hassle.docs.static`, refreshed only via `hassle-dev docs --update`,
+    R3) since the installed CLI doesn't carry the fixture corpus these are
+    generated from.
+
+    Shared by `hassle init` and `hassle pull` (when it scaffolds directories
+    a bundle predating this change never had)."""
+    from hassle.docs.agents_md import generate_agents_md
+    from hassle.docs.static import load_cookbook_md, load_dsl_md
+
+    steps: list[str] = []
+
+    agents_md_path = root / "AGENTS.md"
+    agents_md_text = generate_agents_md(bundle_name=root.name)
+    already_had_it = agents_md_path.is_file()
+    agents_md_path.write_text(agents_md_text, encoding="utf-8")
+    steps.append("refreshed AGENTS.md" if already_had_it else "wrote AGENTS.md")
+
+    docs_dir = root / "docs"
+    docs_dir.mkdir(exist_ok=True)
+    dsl_path = docs_dir / "DSL.md"
+    cookbook_path = docs_dir / "COOKBOOK.md"
+    docs_existed = dsl_path.is_file() or cookbook_path.is_file()
+    dsl_path.write_text(load_dsl_md(), encoding="utf-8")
+    cookbook_path.write_text(load_cookbook_md(), encoding="utf-8")
+    steps.append(
+        "refreshed docs/DSL.md, docs/COOKBOOK.md"
+        if docs_existed
+        else "wrote docs/DSL.md, docs/COOKBOOK.md"
+    )
+
+    return steps
+
+
 def scaffold_vscode_settings(root: Path) -> list[str]:
     """Write `.vscode/settings.json` (DESIGN §11 layer 1) pointing Pylance at
     `hassle stubs`'s actual output location. Idempotent -- never overwrites a
@@ -162,6 +205,7 @@ def init_bundle(root: Path) -> list[str]:
     (root / ".hassle").mkdir(exist_ok=True)
     steps.extend(scaffold_lib_and_tests_readmes(root))
     steps.extend(scaffold_vscode_settings(root))
+    steps.extend(scaffold_agent_docs(root))
 
     config_path = root / CONFIG_FILENAME
     if not config_path.is_file():

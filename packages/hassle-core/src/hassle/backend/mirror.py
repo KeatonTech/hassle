@@ -56,8 +56,10 @@ class MediaMirror:
         clean = folder.strip().strip("/")
         if not clean or clean == ".":
             raise ValueError(
-                "the media mirror must target a subfolder, never the media root "
-                "(its signed URLs are broken — docs/ha-api-notes.md §10.4)"
+                f"the media mirror's folder={folder!r} resolves to the media root, "
+                "which the mirror must never target (its signed URLs are broken — "
+                "docs/ha-api-notes.md §10.4). Fix: use a real subfolder name (the "
+                "default, 'hassle', is fine for almost everyone)."
             )
         self._transport = transport
         self._folder = clean

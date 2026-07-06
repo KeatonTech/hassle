@@ -8,8 +8,12 @@ avoids adding a `tomli`/`tomllib` version-gate dependency -- Python 3.12 ships
 Fields:
 - `ha_url` -- the HA base URL (or a `fake://<token>` test seam, never written
   by production code).
-- `format_version` -- bundle format version (M9 will use this for the
-  upgrade-error check; M7 just writes/reads it).
+- `bundle_format` -- the bundle format version (MILESTONES M9 test 4: the CLI
+  refuses to operate on a bundle whose major version is NEWER than what this
+  CLI build understands, with a clear upgrade error). Renamed from the M7
+  placeholder field `format_version` (M9); `load_config` still reads the old
+  key name too (see `load_config`'s docstring) so a bundle written by an
+  older `hassle init` keeps working with no migration step.
 - `mirror` -- DESIGN §8.5, off by default.
 - `token` -- **never legitimately present**; if found, `pull`/`doctor` treat
   it as a committed-secret error (DESIGN §14, MILESTONES M7 test 6).
@@ -29,11 +33,18 @@ from pathlib import Path
 
 CONFIG_FILENAME = "hassle.toml"
 
+#: The bundle format version THIS CLI build understands (MILESTONES M9 test 4).
+#: A bundle whose `bundle_format` is newer (a greater integer -- there is only
+#: ever one "major" component, matching how `format_version`/`bundle_format`
+#: has always been stored, a single int) refuses to run with a clear upgrade
+#: error rather than attempting a partial operation.
+CURRENT_BUNDLE_FORMAT = 1
+
 
 @dataclass
 class BundleConfig:
     ha_url: str | None = None
-    format_version: int = 1
+    bundle_format: int = 1
     mirror: bool = False
     token: str | None = None  # only ever set if someone committed one (a bug)
     ignore: list[str] = field(default_factory=list)
@@ -41,6 +52,11 @@ class BundleConfig:
     @property
     def has_committed_token(self) -> bool:
         return bool(self.token)
+
+    @property
+    def format_version(self) -> int:
+        """Deprecated alias for `bundle_format` (the M7-era field name)."""
+        return self.bundle_format
 
 
 def find_bundle_root(start: Path | None = None) -> Path | None:
@@ -57,9 +73,14 @@ def load_config(bundle_root: Path) -> BundleConfig:
     if not path.is_file():
         return BundleConfig()
     data = tomllib.loads(path.read_text(encoding="utf-8"))
+    # `bundle_format` is the current key; `format_version` (M7-era) is still
+    # accepted for a bundle whose hassle.toml predates the M9 rename -- no
+    # migration step required. `bundle_format` wins if a bundle somehow has
+    # both (shouldn't happen in practice, but pick a deterministic winner).
+    raw_format = data.get("bundle_format", data.get("format_version", 1))
     return BundleConfig(
         ha_url=data.get("ha_url"),
-        format_version=int(data.get("format_version", 1)),
+        bundle_format=int(raw_format),
         mirror=bool(data.get("mirror", False)),
         token=data.get("token"),
         ignore=list(data.get("ignore", [])),
@@ -98,7 +119,7 @@ def write_default_config(bundle_root: Path, *, ha_url: str | None = None) -> Non
     path = bundle_root / CONFIG_FILENAME
     lines = [
         f'ha_url = "{ha_url}"' if ha_url else '# ha_url = "http://homeassistant.local:8123"',
-        "format_version = 1",
+        f"bundle_format = {CURRENT_BUNDLE_FORMAT}",
         "mirror = false",
         "# ignore = []  # fnmatch globs on object keys Hassle must never touch,",
         '#              # e.g. ["input_boolean:material_you_*"]',

@@ -14,14 +14,30 @@ import yaml
 from hassle.compiler.bundle import compile_bundle
 
 
+class UnknownObjectKeyError(KeyError):
+    """`hassle explain <object_key>` named a key not in the compiled bundle
+    (R6: what/where/fix -- M9 error-message audit finding)."""
+
+    def __init__(self, object_key: str, known: list[str]) -> None:
+        self.object_key = object_key
+        self.known = known
+        known_str = ", ".join(sorted(known)) or "(this bundle has no objects)"
+        super().__init__(
+            f"no object with key `{object_key}` in this bundle. Fix: check the "
+            f"spelling, or pick one of the known object keys: {known_str}."
+        )
+
+    def __str__(self) -> str:
+        # KeyError.__str__ re-reprs its args (Python quirk); surface the
+        # built what/where/fix message directly instead (R6).
+        return self.args[0]
+
+
 def compiled_config_for(bundle_root: Path, object_key: str) -> dict[str, Any]:
     result = compile_bundle(bundle_root)
     obj = result.objects.get(object_key)
     if obj is None:
-        raise KeyError(
-            f"no object with key {object_key!r} in this bundle "
-            f"(known keys: {sorted(result.objects)})"
-        )
+        raise UnknownObjectKeyError(object_key, list(result.objects))
     return obj.to_ha()
 
 

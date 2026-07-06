@@ -39,6 +39,11 @@ class FakeBackend:
     def __init__(self) -> None:
         self._store: dict[str, dict[str, dict[str, Any]]] = {kind: {} for kind in OBJECT_KINDS}
         self._writes = 0
+        # Settable by tests (MILESTONES M9 deliverable 4: `hassle doctor`'s
+        # HA tested-version-range check, `hassle.backend.version`). `None`
+        # (the default) mirrors "not connected / version unknown" -- no
+        # warning is possible without a version to compare.
+        self.ha_version: str | None = None
 
     # -- Backend protocol -------------------------------------------------
 

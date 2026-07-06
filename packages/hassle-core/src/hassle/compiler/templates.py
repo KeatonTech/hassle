@@ -116,6 +116,22 @@ class PythonMathMisuseError(CompileError):
         )
 
 
+class TemplateEntityRefError(CompileError):
+    """`expr()`/`state(...).value` was given something that doesn't name
+    exactly one entity (R6: what/where/fix -- M9 error-message audit
+    finding. Previously a bare `TypeError` with no file:line, reachable from
+    ordinary bundle authoring, e.g. `expr(state(["light.a", "light.b"]))` or
+    `expr(123)`)."""
+
+    def __init__(self, detail: str, span: Any) -> None:
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        super().__init__(
+            f"`expr()`/`state(...).value`{where}: {detail} Fix: pass a single "
+            f"entity id string (or a `state(...)` builder built from one) -- a "
+            f"template read always names exactly one entity."
+        )
+
+
 def _entity_ref_str(value: Any) -> str:
     """Coerce an entity reference (a plain entity_id string, or a StateExpr) to
     its ``domain.object_id`` string.
@@ -123,23 +139,24 @@ def _entity_ref_str(value: Any) -> str:
     A template read always names exactly one entity, so a ``StateExpr`` built
     from a list ``entity_id`` (real-world smoke-test addition: the HA UI's
     list-valued trigger fields, ``state([...])``) is rejected here with a
-    what/where/fix error rather than silently stringifying the list.
+    what/where/fix error (:class:`TemplateEntityRefError`) rather than
+    silently stringifying the list.
     """
     if isinstance(value, StateExpr):
         entity_id = value.entity_id
         if isinstance(entity_id, str):
             return entity_id
-        raise TypeError(
-            f"expr()/state(...).value expects a single entity id, but this "
-            f"state(...) builder was constructed with a list entity_id "
-            f"({entity_id!r}). Fix: pass a single entity id string to state(...) "
-            f"when using it as a template read."
+        raise TemplateEntityRefError(
+            f"this `state(...)` builder was constructed with a list entity_id "
+            f"({entity_id!r}), not a single entity id.",
+            capture_span(depth=0),
         )
     if isinstance(value, str):
         return value
-    raise TypeError(
-        f"expr()/state(...).value expects an entity id string or a state(...) "
-        f"builder, got {value!r} ({type(value).__name__})"
+    raise TemplateEntityRefError(
+        f"expected an entity id string or a `state(...)` builder, got "
+        f"{value!r} ({type(value).__name__}).",
+        capture_span(depth=0),
     )
 
 

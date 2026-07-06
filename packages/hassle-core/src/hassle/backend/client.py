@@ -201,7 +201,11 @@ class HaClient:
                 return ws
             await ws.close()
             raise HaAuthError("WebSocket auth rejected")
-        raise HaConnectionError(f"could not open the HA WebSocket ({last_exc}).")
+        raise HaConnectionError(
+            f"could not open the HA WebSocket after {self._max_retries} attempts "
+            f"({last_exc}). Fix: check the HA URL and that the instance is reachable "
+            "from here."
+        )
 
     async def _ws_recv(self, ws: aiohttp.ClientWebSocketResponse) -> dict[str, Any]:
         try:
@@ -219,9 +223,16 @@ class HaClient:
             aiohttp.WSMsgType.CLOSING,
             aiohttp.WSMsgType.CLOSED,
         ):
-            raise HaConnectionError("HA closed the WebSocket connection")
+            raise HaConnectionError(
+                "Home Assistant closed the WebSocket connection unexpectedly. "
+                "Fix: check that the instance is still running and reachable, then "
+                "retry -- a fresh connection will be opened automatically."
+            )
         if msg.type is aiohttp.WSMsgType.ERROR:
-            raise HaConnectionError(f"HA WebSocket error: {ws.exception()}")
+            raise HaConnectionError(
+                f"Home Assistant WebSocket error: {ws.exception()}. Fix: check that "
+                "the instance is healthy and reachable, then retry."
+            )
         return msg.json()
 
     async def _ensure_ws(self) -> aiohttp.ClientWebSocketResponse:
@@ -257,7 +268,11 @@ class HaClient:
                     await ws.send_json({"id": msg_id, "type": type, **payload})
                 except _WS_SEND_FAILURES as err:
                     self._ws = None
-                    raise HaConnectionError(f"could not send WS command {type!r}: {err}") from err
+                    raise HaConnectionError(
+                        f"could not send the WebSocket command {type!r} to Home Assistant "
+                        f"even after reconnecting ({err}). Fix: check that the instance is "
+                        "healthy and reachable, then retry."
+                    ) from err
             return await self._await_result(ws, msg_id)
 
     async def _await_result(self, ws: aiohttp.ClientWebSocketResponse, msg_id: int) -> Any:

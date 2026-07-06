@@ -13,10 +13,45 @@ from pathlib import Path
 from hassle.testing import Simulator, simulate
 
 
+class InvalidRunTargetError(ValueError):
+    """`hassle run <target>` was given a target with no `::` separator
+    (R6: what/where/fix -- M9 error-message audit finding)."""
+
+    def __init__(self, target: str) -> None:
+        self.target = target
+        super().__init__(
+            f"`{target}` is not a valid run target: it has no `::` separator. Fix: use "
+            f"`<relative/path.py>::<function_name>`, e.g. `automations/hallway.py::"
+            f"hall_light_on_motion` (the function name is the automation's id, by DSL "
+            f"convention)."
+        )
+
+
+class UnknownRunTargetError(KeyError):
+    """`hassle run <target>` named a function not found in the compiled
+    bundle (R6: what/where/fix -- M9 error-message audit finding)."""
+
+    def __init__(self, function_name: str, known: list[str]) -> None:
+        self.function_name = function_name
+        self.known = known
+        known_names = ", ".join(sorted(k.partition(":")[2] for k in known)) or "(none)"
+        super().__init__(
+            f"no automation named `{function_name}` was found in the compiled bundle. "
+            f"Fix: check the spelling, or pick one of the known automation function "
+            f"names: {known_names}."
+        )
+
+    def __str__(self) -> str:
+        # KeyError.__str__ re-reprs its args (Python quirk); the base
+        # Exception message built above is what R6 requires -- surface it
+        # directly instead of KeyError's usual double-quoted repr.
+        return self.args[0]
+
+
 def parse_target(target: str) -> tuple[str, str]:
     path_part, sep, name_part = target.partition("::")
     if not sep:
-        raise ValueError(f"invalid run target {target!r}: expected '<path.py>::<function_name>'")
+        raise InvalidRunTargetError(target)
     return path_part, name_part
 
 
@@ -25,9 +60,7 @@ def find_object_key(sim: Simulator, function_name: str) -> str:
     for key in known:
         if key.endswith(f":{function_name}"):
             return key
-    raise KeyError(
-        f"no automation named {function_name!r} in the compiled bundle (known: {sorted(known)})"
-    )
+    raise UnknownRunTargetError(function_name, known)
 
 
 def run_on_simulator(bundle_root: Path, target: str) -> tuple[str, Simulator]:

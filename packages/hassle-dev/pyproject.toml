@@ -5,6 +5,7 @@ description = "Hassle internal dev CLI: goldens, corpus-stats."
 requires-python = ">=3.12"
 dependencies = [
     "hassle-core",
+    "hassle-cli",
 ]
 
 [project.scripts]

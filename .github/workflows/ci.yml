@@ -64,6 +64,9 @@ jobs:
           name: decompile-coverage-${{ matrix.os }}
           path: decompile-coverage.json
 
+      - name: Docs gate (docs/DSL.md + docs/COOKBOOK.md unchanged, MILESTONES M9)
+        run: uv run hassle-dev docs
+
   # ---------------------------------------------------------------------------
   # M6 integration: the same integration-marked suite against real Home
   # Assistant, on both the `stable` and `dev` images (MILESTONES M6 "Done
