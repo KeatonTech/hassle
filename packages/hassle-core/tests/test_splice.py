@@ -26,7 +26,7 @@ def test_splice_preserves_rest_of_file() -> None:
 
     after = splice_object(
         before,
-        object_name="middle_automation",
+        object_key="automation:middle_automation",
         new_source=new_def,
         updated_on="2026-07-03",
     )
@@ -60,7 +60,10 @@ def test_splice_preserves_rest_of_file() -> None:
 
     # Splicing is itself deterministic: no wall-clock anywhere in the call path.
     again = splice_object(
-        before, object_name="middle_automation", new_source=new_def, updated_on="2026-07-03"
+        before,
+        object_key="automation:middle_automation",
+        new_source=new_def,
+        updated_on="2026-07-03",
     )
     assert after == again
 
@@ -73,7 +76,7 @@ def test_splice_marker_uses_caller_supplied_date_not_wallclock() -> None:
 
     fixed_date = "2099-01-01"
     after = splice_object(
-        before, object_name="middle_automation", new_source=new_def, updated_on=fixed_date
+        before, object_key="automation:middle_automation", new_source=new_def, updated_on=fixed_date
     )
     assert f"# hassle: updated from UI on {fixed_date}" in after
     assert "# hassle: updated from UI on 2026-07-03" not in after
