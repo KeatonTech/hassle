@@ -165,9 +165,7 @@ def _front_door_notify_automation() -> dict[str, Any]:
         "id": "front_door_opened_notify",
         "alias": "Front door: notify when opened",
         "mode": "single",
-        "triggers": [
-            {"trigger": "state", "entity_id": "binary_sensor.front_door", "to": "open"}
-        ],
+        "triggers": [{"trigger": "state", "entity_id": "binary_sensor.front_door", "to": "open"}],
         "conditions": [],
         "actions": [
             {"action": "notify.notify", "data": {"message": "Front door was opened"}},
@@ -206,12 +204,12 @@ def _buggy_landing_light_automation() -> dict[str, Any]:
         "id": "landing_light_on_motion",
         "alias": "Landing: light on motion",
         "mode": "single",
-        "triggers": [
-            {"trigger": "state", "entity_id": "binary_sensor.bedroom_motion", "to": "on"}
-        ],
+        "triggers": [{"trigger": "state", "entity_id": "binary_sensor.bedroom_motion", "to": "on"}],
         # BUG (deliberate, matching hallway_bundle_buggy's convention): should
         # be "off" -- fires only when holiday mode IS on instead of suppressing.
-        "conditions": [{"condition": "state", "entity_id": "input_boolean.holiday_mode", "state": "on"}],
+        "conditions": [
+            {"condition": "state", "entity_id": "input_boolean.holiday_mode", "state": "on"}
+        ],
         "actions": [
             {
                 "action": "light.turn_on",
@@ -395,8 +393,7 @@ def generate_sample_bundle(out_dir: Path, *, repo_root: Path | None = None) -> N
     root = repo_root or find_repo_root()
     if root is None:
         raise FileNotFoundError(
-            "hassle-dev acceptance-bundle: could not locate the repo root "
-            "(pass --repo-root DIR)"
+            "hassle-dev acceptance-bundle: could not locate the repo root (pass --repo-root DIR)"
         )
 
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -224,7 +224,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "acceptance-bundle",
         help="generate the sample-house bundle acceptance-tasks' prompts are written against",
     )
-    p_bundle.add_argument("--out", type=Path, required=True, help="directory to write the bundle to")
+    p_bundle.add_argument(
+        "--out", type=Path, required=True, help="directory to write the bundle to"
+    )
     p_bundle.add_argument("--repo-root", type=Path, default=None, help="path to the repo root")
     p_bundle.set_defaults(func=_cmd_acceptance_bundle)
 
