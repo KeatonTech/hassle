@@ -19,12 +19,16 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, NoReturn
 
 import click
 
 from hassle_cli import bundle_ops, git_support, init_cmd, manifest_io
 from hassle_cli.config import CURRENT_BUNDLE_FORMAT, find_bundle_root, load_config
 from hassle_cli.render import get_console
+
+if TYPE_CHECKING:
+    from hassle.compiler.errors import CompileError
 
 
 def _bundle_root_or_fail(explicit: Path | None = None) -> Path:
@@ -72,6 +76,43 @@ def _relative_finding_path(file: str | None, root: Path) -> str | None:
         return str(path.relative_to(root))
     except ValueError:
         return file
+
+
+def _report_compile_error(exc: CompileError, root: Path, *, as_json: bool = False) -> NoReturn:
+    """Report a `CompileError` the same clean way a tier-2/3 `Finding` is --
+    what/where/fix, exit 1, never a raw traceback -- and raise `SystemExit(1)`.
+
+    Shared by every command that compiles the bundle before doing its own
+    work (`validate`, and `_build_plan` on behalf of `plan`/`status`/`push`):
+    `compile_bundle` runs before any Finding-producing check or plan
+    computation even starts, so this is always the earliest possible exit
+    point. `as_json` only applies to commands that actually expose a
+    `--json` contract (currently just `validate`) -- callers without one
+    always pass the default `False`.
+    """
+    console = get_console()
+    span = getattr(exc, "span", None)
+    file = _relative_finding_path(span.file, root) if span is not None else None
+    line = span.line if span is not None else None
+    if as_json:
+        import json as _json
+
+        payload = {
+            "findings": [
+                {
+                    "code": type(exc).__name__,
+                    "severity": "error",
+                    "file": file,
+                    "line": line,
+                    "message": str(exc),
+                    "fix": str(exc),
+                }
+            ]
+        }
+        click.echo(_json.dumps(payload))
+    else:
+        console.print(f"[red]{type(exc).__name__}[/red]: {exc}")
+    raise SystemExit(1) from exc
 
 
 def _require_backend_config(root: Path) -> tuple[str, str]:
@@ -439,6 +480,7 @@ def pull(allow_dirty: bool) -> None:
 
 
 def _build_plan(root: Path):
+    from hassle.compiler.errors import CompileError
     from hassle.ir.keys import OBJECT_KINDS
     from hassle.sync.plan import compute_plan
     from hassle_cli import backend_factory
@@ -449,7 +491,16 @@ def _build_plan(root: Path):
     manifest = migrate_manifest_for_ignores(
         manifest_io.load_manifest(root), ignore_globs=config.ignore
     ).manifest
-    local_objects, compile_result = bundle_ops.compile_local_objects(root)
+    try:
+        local_objects, compile_result = bundle_ops.compile_local_objects(root)
+    except CompileError as exc:
+        # Task #15 (reviewer follow-up to PR #4): `plan`/`status`/`push` all
+        # share this helper and all compile the bundle before doing anything
+        # else -- report a compile-time error the same clean way `validate`
+        # does (what/where/fix, exit 1, no raw traceback) instead of letting
+        # it escape uncaught. None of these three commands has a `--json`
+        # mode, so `as_json` stays at its default (plain-text only).
+        _report_compile_error(exc, root)
     with backend_factory.connect(ha_url, token) as backend:
         remote_objects = bundle_ops.remote_objects_from_backend(backend, list(OBJECT_KINDS))
     ignore_result = apply_ignore_globs(
@@ -645,29 +696,9 @@ def validate(as_json: bool) -> None:
         # select_option=) must be reported the same clean way a tier-2/3
         # Finding is -- not let the exception escape as a raw traceback.
         # `compile_bundle` runs before any Finding-producing check even
-        # starts, so this is the earliest possible exit point.
-        span = getattr(exc, "span", None)
-        file = _relative_finding_path(span.file, root) if span is not None else None
-        line = span.line if span is not None else None
-        if as_json:
-            import json as _json
-
-            payload = {
-                "findings": [
-                    {
-                        "code": type(exc).__name__,
-                        "severity": "error",
-                        "file": file,
-                        "line": line,
-                        "message": str(exc),
-                        "fix": str(exc),
-                    }
-                ]
-            }
-            click.echo(_json.dumps(payload))
-        else:
-            console.print(f"[red]{type(exc).__name__}[/red]: {exc}")
-        raise SystemExit(1) from exc
+        # starts, so this is the earliest possible exit point. Shared with
+        # `plan`/`status`/`push` via `_build_plan` (task #15 follow-up).
+        _report_compile_error(exc, root, as_json=as_json)
     skip_notice: str | None = None
     if registry_path.is_file():
         snapshot = RegistrySnapshot.load(registry_path)

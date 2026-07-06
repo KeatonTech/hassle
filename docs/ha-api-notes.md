@@ -1963,10 +1963,22 @@ codebase works (`hassle.compiler.errors`, R6 what/where/fix):
 `capture_span(depth=1)` pattern the existing registration call uses so the
 error names the user's bundle `file:line`. Since `compile_bundle` runs before
 any tier-2/3 `Finding` check even starts, this is caught by `hassle validate`,
-`hassle plan`, and `hassle push` alike — `hassle_cli.cli.validate` was updated
-to catch `CompileError` around `compile_bundle` and report it the same clean
-way a `Finding` is (exit 1, `file:line`, both plain and `--json` modes)
-instead of letting the exception escape as a raw traceback.
+`hassle plan`, `hassle status`, and `hassle push` alike —
+`hassle_cli.cli.validate` was updated to catch `CompileError` around
+`compile_bundle` and report it the same clean way a `Finding` is (exit 1,
+`file:line`, both plain and `--json` modes) instead of letting the exception
+escape as a raw traceback.
+
+(Task #15, reviewer follow-up to this same PR #4: the paragraph above was
+initially true only for `validate` — `_build_plan` (`hassle_cli.cli`, shared
+by `plan`/`status`/`push`) called `bundle_ops.compile_local_objects` with no
+`CompileError` handling at all, so those three commands still dumped a raw
+traceback on the same bundle `validate` reported cleanly. Fixed by factoring
+the catch-and-report logic in `hassle_cli.cli` into a shared
+`_report_compile_error` helper, used by both `validate`'s `except CompileError`
+block and `_build_plan`'s. `plan`/`status`/`push` have no `--json` mode, so
+they always report in plain text; the wording above is accurate again now
+that all four commands share one code path.)
 
 The backend-side `_check_required_fields` checks are UNCHANGED and remain a
 second line of defense for any non-DSL path that constructs a
