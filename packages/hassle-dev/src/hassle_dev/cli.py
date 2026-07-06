@@ -1,17 +1,22 @@
 """`hassle-dev` — internal developer CLI.
 
 Subcommands:
-  corpus-stats   Report fixture-corpus construct coverage; enforce the M0 contract.
-  goldens        Manage golden files (DSL↔IR pairs land in M1; M0 is the baseline).
-  docs           Build/check docs/DSL.md + docs/COOKBOOK.md (MILESTONES M9 tests 1-2).
+  corpus-stats       Report fixture-corpus construct coverage; enforce the M0 contract.
+  goldens            Manage golden files (DSL↔IR pairs land in M1; M0 is the baseline).
+  docs               Build/check docs/DSL.md + docs/COOKBOOK.md (MILESTONES M9 tests 1-2).
+  acceptance-tasks   Emit the 10 agent-acceptance task prompts for a bundle (MILESTONES M9
+                     test 3 -- build only; the orchestrator runs the actual model sessions).
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
+import json
 from collections.abc import Sequence
 from pathlib import Path
 
+from hassle_dev.acceptance import emit_tasks
 from hassle_dev.corpus import analyze, find_configs_dir
 from hassle_dev.decompile_coverage import run_decompile_coverage
 from hassle_dev.docs import find_repo_root, run_docs
@@ -137,6 +142,26 @@ def _cmd_docs(args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_acceptance_tasks(args: argparse.Namespace) -> int:
+    bundle_dir: Path = args.bundle
+    if not bundle_dir.is_dir():
+        print(f"acceptance-tasks: bundle directory not found: {bundle_dir}")
+        return 2
+
+    tasks = emit_tasks(bundle_dir)
+
+    if args.json:
+        payload = {"tasks": [dataclasses.asdict(t) for t in tasks]}
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    print(f"acceptance-tasks: {len(tasks)} task(s) for {bundle_dir}")
+    for task in tasks:
+        print(f"\n[{task.task_id}] ({task.category})")
+        print(f"  {task.prompt}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="hassle-dev")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -165,6 +190,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_docs.add_argument("--update", action="store_true", help="write docs/*.md in place")
     p_docs.add_argument("--repo-root", type=Path, default=None, help="path to the repo root")
     p_docs.set_defaults(func=_cmd_docs)
+
+    p_acc = sub.add_parser(
+        "acceptance-tasks",
+        help="emit the 10 agent-acceptance task prompts for a bundle (MILESTONES M9 test 3)",
+    )
+    p_acc.add_argument("--bundle", type=Path, required=True, help="path to the bundle directory")
+    p_acc.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    p_acc.set_defaults(func=_cmd_acceptance_tasks)
 
     args = parser.parse_args(argv)
     return int(args.func(args))
