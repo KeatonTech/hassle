@@ -4,11 +4,14 @@ approved DSL evolution, task #10; DESIGN §5.3/§5.5/§7.3, docs/dsl-f3.md).
 The decompiler no longer emits `when(...)` in the automation body: triggers
 become a `triggers=[...]` kwarg on `@automation(...)` (multi-line formatted
 when there is more than one trigger, matching the pre-existing `when(...)`
-multi-trigger formatting convention). The body starts with
-`# --- conditions ---` (when conditions are present) then `# --- actions ---`;
-the `# --- triggers ---` section comment is gone, since triggers no longer
-live in the body at all. `when()` itself is untouched and remains importable/
-usable (F3: additions never remove).
+multi-trigger formatting convention). `when()` itself is untouched and remains
+importable/usable (F3: additions never remove).
+
+Section comments (`# --- conditions ---`/`# --- actions ---`) were removed
+entirely in a later round (`ux/dsl-ergonomics`, owner amendment -- see
+`test_no_section_comments_ever_emitted` below and DESIGN §7.3's dated note):
+once conditions also moved to the `with only_if(...):` block form, the body's
+structure became self-describing on its own.
 """
 
 from __future__ import annotations
@@ -75,7 +78,13 @@ def test_raw_trigger_still_emitted_as_body_statement() -> None:
     assert "raw_trigger(" in source
 
 
-def test_no_triggers_section_comment_ever_emitted() -> None:
+def test_no_section_comments_ever_emitted() -> None:
+    # Updated (`ux/dsl-ergonomics`, owner amendment -- supersedes this test's
+    # original expectation): section comments are removed entirely, not just
+    # the triggers one. With conditions now emitted as the `with only_if(...):`
+    # block form (item 1) wrapping every action, the body's structure --
+    # decorator = when, only_if block = gate, plain statements = do -- no
+    # longer needs a comment to be legible. See DESIGN §7.3's dated note.
     config = {
         "id": "1",
         "alias": "Full Sections",
@@ -89,13 +98,10 @@ def test_no_triggers_section_comment_ever_emitted() -> None:
     source = decompile_bundle({obj.object_key(): obj})
 
     assert "# --- triggers ---" not in source
-    assert "# --- conditions ---" in source
-    assert "# --- actions ---" in source
-    # Body starts with conditions, then actions (triggers no longer precede
-    # anything in the body -- they're in the decorator).
-    cond_idx = source.index("# --- conditions ---")
-    act_idx = source.index("# --- actions ---")
-    assert cond_idx < act_idx
+    assert "# --- conditions ---" not in source
+    assert "# --- actions ---" not in source
+    # Conditions now wrap the actions in a `with only_if(...):` block.
+    assert "with only_if(" in source
 
 
 def test_no_triggers_at_all_emits_no_triggers_kwarg() -> None:

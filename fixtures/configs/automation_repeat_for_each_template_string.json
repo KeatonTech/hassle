@@ -1,0 +1,27 @@
+{
+  "alias": "Repeat For Each Template String",
+  "description": "Owner-bundle regression: repeat.for_each stored as a Jinja template STRING (not a literal list) -- mirrors scripts/misc.py's shape. The compiler used to explode a string for_each into a list of individual characters via `list(items)`.",
+  "triggers": [
+    {
+      "trigger": "state",
+      "entity_id": "input_text.entities"
+    }
+  ],
+  "conditions": [],
+  "actions": [
+    {
+      "repeat": {
+        "for_each": "{{ states.light | map(attribute='entity_id') | list }}",
+        "sequence": [
+          {
+            "action": "light.turn_on",
+            "target": {
+              "entity_id": "{{ repeat.item }}"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "mode": "single"
+}

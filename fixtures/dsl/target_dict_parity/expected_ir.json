@@ -1,0 +1,43 @@
+{
+  "automation:weather_update": {
+    "id": "weather_update",
+    "alias": "Weather update",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.trigger",
+        "to": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "weather.get_forecasts",
+        "target": {
+          "entity_id": "weather.home"
+        },
+        "data": {
+          "type": "daily"
+        }
+      },
+      {
+        "action": "light.turn_on",
+        "target": {
+          "area_id": "office"
+        }
+      },
+      {
+        "action": "light.turn_off",
+        "target": {
+          "floor_id": "upstairs"
+        }
+      },
+      {
+        "action": "light.toggle",
+        "target": {
+          "label_id": "security"
+        }
+      }
+    ]
+  }
+}

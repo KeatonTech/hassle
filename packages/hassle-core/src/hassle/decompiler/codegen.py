@@ -17,6 +17,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from hassle.compiler.enums import MaxExceeded, Mode
 from hassle.decompiler.actions import INDENT, CallResolver, CallTarget, decompile_action
 from hassle.decompiler.exprs import decompile_condition, decompile_trigger, render_literal
 from hassle.ir.keys import HELPER_DOMAINS, slugify
@@ -32,6 +33,26 @@ from hassle.ir.normalize import normalize_ha
 # import entities as e`, its own dedicated, non-`__all__` entry point).
 _STAR_IMPORT_LINE = "from hassle import *\n"
 _ENTITIES_IMPORT_LINE = "from hassle.registry import entities as e\n"
+
+# `mode=`/`max_exceeded=` enums (``ux/dsl-ergonomics``, item 2): a recognized value
+# decompiles to `Mode.RESTART`/`MaxExceeded.SILENT`; an unrecognized one (a future HA
+# value this DSL doesn't know about yet) falls back to the raw string -- never a
+# decompiler error.
+_MODE_VALUES = {member.value: member for member in Mode}
+_MAX_EXCEEDED_VALUES = {member.value: member for member in MaxExceeded}
+
+
+def _mode_or_max_exceeded_src(key: str, value: Any) -> str:
+    """Render a `mode`/`max_exceeded` option value: the enum member's
+    attribute access (`Mode.RESTART`) for a recognized string value, else a
+    plain literal (covers both an unrecognized string and a non-string value,
+    which should never happen in practice but must never crash the decompiler
+    either way)."""
+    if key == "mode" and isinstance(value, str) and value in _MODE_VALUES:
+        return f"Mode.{_MODE_VALUES[value].name}"
+    if key == "max_exceeded" and isinstance(value, str) and value in _MAX_EXCEEDED_VALUES:
+        return f"MaxExceeded.{_MAX_EXCEEDED_VALUES[value].name}"
+    return render_literal(value)
 
 
 @dataclass(frozen=True)
@@ -208,6 +229,14 @@ def _blueprint_source(obj: AutomationConfig, ident: str) -> str | None:
     return f"{ident} = blueprint_automation({', '.join(kwargs)})\n"
 
 
+def _indent_lines(lines: list[str]) -> list[str]:
+    """Indent every non-empty line one level (mirrors
+    ``hassle.decompiler.actions._indent_lines``, kept local here since that one is
+    module-private to its own file -- used for the `with only_if(...):` block body,
+    item 1, ``ux/dsl-ergonomics``)."""
+    return [f"{INDENT}{line}" if line else line for line in lines]
+
+
 def _raw_automation_source(obj: AutomationConfig, ident: str) -> str:
     """Whole-object fallback: ``@raw_automation(id=...)`` over a function
     returning the verbatim (already-normalized) body (DESIGN §5.8)."""
@@ -271,7 +300,7 @@ def _automation_source(
         decorator_kwargs.append(f"id={body_id!r}")
     for key in ("alias", "description", "mode", "max", "max_exceeded", "initial_state"):
         if key in body:
-            decorator_kwargs.append(f"{key}={body.pop(key)!r}")
+            decorator_kwargs.append(f"{key}={_mode_or_max_exceeded_src(key, body.pop(key))}")
     triggers = body.pop("triggers", [])
     conditions = body.pop("conditions", [])
     actions = body.pop("actions", [])
@@ -322,51 +351,68 @@ def _automation_source(
     # `raw_trigger`/`raw_condition` are recording *verbs* (they call
     # record_trigger/record_condition themselves and return None) -- they
     # cannot be nested as arguments inside when(...)/only_if(...)/`triggers=`.
-    # Typed (non-raw) conditions are collected into one only_if() call; raw
-    # ones become separate statements alongside it, in original order
-    # (whether emitted before or after doesn't change the recorded set, since
-    # `only_if`/`raw_condition` all append to the same list -- but preserving
-    # relative order keeps the generated source legible and, on a splice,
-    # minimizes the visible diff).
-    # Section comments (owner feedback, DESIGN §7.3): a `# --- <section> ---`
-    # line precedes each *non-empty* section, so a body with only actions
-    # doesn't get two comments pointing at nothing. Triggers no longer get a
-    # body section comment at all -- they're in the `triggers=` decorator
-    # kwarg now, which precedes the body entirely; any raw_trigger() leftover
-    # is emitted plain, with no header, right at the top of the body.
+    # Any raw_trigger() leftover is emitted plain, right at the top of the
+    # body (no section header -- see below).
+    #
+    # Section comments removed (owner amendment, ``ux/dsl-ergonomics``,
+    # supersedes the original DESIGN §7.3 "judge readability" latitude): with
+    # triggers living in the decorator (ux/triggers-in-decorator) and
+    # conditions now emitted as the `with only_if(...):` block form (item 1
+    # below) whenever any are present, the body's structure is already
+    # self-describing -- decorator = when, only_if block = gate, plain
+    # statements = do -- so a `# --- conditions ---`/`# --- actions ---`
+    # comment no longer points at anything a reader couldn't already tell at
+    # a glance. See DESIGN §7.3's dated note.
     body_lines.extend(raw_trigger_stmts)
 
-    if conditions:
-        typed: list[str] = []
-        raw_stmts: list[str] = []
-        for cond in conditions:
-            src = (
-                decompile_condition(cast("dict[str, Any]", cond))
-                if isinstance(cond, dict)
-                else None
-            )
-            if src is not None:
-                typed.append(src)
-            else:
-                raw_stmts.append(f"raw_condition({render_literal(cond)})")
-        body_lines.append("# --- conditions ---")
-        if typed:
-            if len(typed) == 1:
-                body_lines.append(f"only_if({typed[0]})")
-            else:
-                body_lines.append("only_if(")
-                for src in typed:
-                    body_lines.append(f"{INDENT}{src},")
-                body_lines.append(")")
-        body_lines.extend(raw_stmts)
+    # Conditions (item 1, ``ux/dsl-ergonomics``): whenever this automation has
+    # ANY conditions, the block form (`with only_if(...): <every action>`) is
+    # now the canonical decompiled shape -- it's the compiled IR's only
+    # accurate rendering, since HA's automation-level conditions gate every
+    # action regardless of where in the body they're textually written; the
+    # block form makes that visually true instead of misleading (owner
+    # feedback: a bare `only_if(...)` call above a flat action list "looks
+    # like an empty if"). No conditions -> no block at all, actions are plain
+    # top-level statements exactly as before this feature existed.
+    typed_conditions: list[str] = []
+    raw_condition_stmts: list[str] = []
+    for cond in conditions:
+        src = decompile_condition(cast("dict[str, Any]", cond)) if isinstance(cond, dict) else None
+        if src is not None:
+            typed_conditions.append(src)
+        else:
+            raw_condition_stmts.append(f"raw_condition({render_literal(cond)})")
 
-    if actions:
-        body_lines.append("# --- actions ---")
+    action_lines: list[str] = []
     for action in actions:
         if isinstance(action, dict):
-            body_lines.extend(decompile_action(action, resolver=resolver))
+            action_lines.extend(decompile_action(action, resolver=resolver))
         else:
-            body_lines.append(f"raw_action({render_literal(action)})")
+            action_lines.append(f"raw_action({render_literal(action)})")
+    if not action_lines:
+        action_lines = ["pass"]
+
+    if conditions:
+        # `raw_condition(...)` is a recording verb -- it cannot nest inside
+        # `only_if(...)`'s own argument list, so any raw conditions are
+        # emitted as their own statements immediately before the block opens
+        # (original relative order preserved, same rationale as the
+        # pre-existing raw-condition handling: legible source, minimal splice
+        # diff). This is safe for item 1's "every action must be inside the
+        # block" invariant regardless of order: `raw_condition()` only ever
+        # appends to the automation's conditions list, never its actions.
+        body_lines.extend(raw_condition_stmts)
+        if len(typed_conditions) <= 1:
+            args = typed_conditions[0] if typed_conditions else ""
+            body_lines.append(f"with only_if({args}):")
+        else:
+            body_lines.append("with only_if(")
+            for src in typed_conditions:
+                body_lines.append(f"{INDENT}{src},")
+            body_lines.append("):")
+        body_lines.extend(_indent_lines(action_lines))
+    else:
+        body_lines.extend(action_lines)
 
     if not body_lines:
         body_lines = ["pass"]
@@ -519,21 +565,22 @@ def _script_source(obj: ScriptConfig, ident: str, resolver: CallResolver | None)
     )
     for key in decorator_keys:
         if key in body:
-            decorator_kwargs.append(f"{key}={render_literal(body.pop(key))}")
+            decorator_kwargs.append(f"{key}={_mode_or_max_exceeded_src(key, body.pop(key))}")
     if as_shared_script:
         body.pop("fields", None)
         if not terse and fields is not None:
             decorator_kwargs.append(f"fields={render_literal(fields)}")
     sequence = body.pop("sequence", [])
     for key, value in body.items():
-        decorator_kwargs.append(f"{key}={render_literal(value)}")
+        decorator_kwargs.append(f"{key}={_mode_or_max_exceeded_src(key, value)}")
 
     decorator_name = "shared_script" if as_shared_script else "script"
     signature = _shared_script_signature(fields) if as_shared_script else ""
     lines = [f"@{decorator_name}({', '.join(decorator_kwargs)})", f"def {ident}({signature}):"]
     body_lines: list[str] = []
-    if sequence:
-        body_lines.append("# --- sequence ---")
+    # No `# --- sequence ---` header (owner amendment, ``ux/dsl-ergonomics`` --
+    # see `_automation_source`'s matching note): a script's body is just its
+    # sequence, nothing else, so the comment never disambiguated anything.
     for action in sequence:
         if isinstance(action, dict):
             body_lines.extend(decompile_action(action, resolver=resolver))

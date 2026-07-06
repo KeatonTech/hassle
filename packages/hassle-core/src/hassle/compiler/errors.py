@@ -106,3 +106,27 @@ class NoRecordingContextError(CompileError):
             f"into a decorated function body; if you meant to build a value, assign the "
             f"builder to a variable instead of calling `{call}` at module scope."
         )
+
+
+class OnlyIfBlockCoverageError(CompileError):
+    """``with only_if(...):`` was used but an action was recorded outside it.
+
+    DESIGN §5.3/§5.5 (``ux/dsl-ergonomics``): automation-level ``only_if`` conditions gate
+    *every* action in the automation, not just the ones textually nested under it -- HA has
+    no notion of a conditional subset of an automation's action list. So the block form is an
+    all-or-nothing declaration: once an automation uses ``with only_if(...):``, every action it
+    records must live inside that one block, or the block's visual scope would lie about what
+    it actually gates. The bare call form (``only_if(cond)`` with no ``with``) has no such
+    requirement -- it's unchanged from before this feature existed.
+    """
+
+    def __init__(self, span: SourceSpan | None) -> None:
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        super().__init__(
+            f"An action was recorded outside the `with only_if(...):` block{where}. "
+            f"Automation-level conditions gate every action in the automation, not just the "
+            f"ones written inside the block -- so once you use the block form, it must "
+            f"contain *all* of the automation's actions. Fix: move every action inside the "
+            f"`with only_if(...):` block, or switch back to the bare `only_if(...)` call (no "
+            f"`with`), which has no such restriction."
+        )

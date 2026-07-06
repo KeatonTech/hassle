@@ -1,0 +1,24 @@
+{
+  "automation:hall_light_on_motion": {
+    "id": "hall_light_on_motion",
+    "alias": "Hallway: light on motion",
+    "mode": "restart",
+    "max_exceeded": "silent",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.hall_motion",
+        "to": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "data": {
+          "entity_id": "light.hallway"
+        }
+      }
+    ]
+  }
+}

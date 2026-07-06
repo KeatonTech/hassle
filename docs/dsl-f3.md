@@ -74,6 +74,42 @@
 > is untouched (`automation` was already frozen there; only its accepted
 > kwargs widened).
 
+> **Widened 2026-07-05 (`ux/dsl-ergonomics`, owner feedback, F3-additive,
+> surface count 98 → 101 — the doc's earlier "72"/"73" counts predate several
+> unrelated widenings and were never kept current; this note states the
+> actual delta this workstream makes, not a running total):** four DSL
+> ergonomics changes, all additive.
+> (1) `only_if(*conditions)` — already frozen — is now dual-form: the bare
+> call is byte-for-byte unchanged (F3); the SAME call is also usable as
+> `with only_if(...):`, which additionally requires every action the
+> automation records to be inside that one block (an action recorded
+> before/after it raises the new `OnlyIfBlockCoverageError`, added to
+> `hassle.__all__`). The decompiler now emits the block form as canonical
+> whenever an automation has any conditions at all, wrapping every action —
+> compiled IR is byte-identical either form (golden pair
+> `fixtures/dsl/only_if_block_form/` vs. `fixtures/dsl/only_if_bare_form_parity/`).
+> (2) Two new `StrEnum` names, `Mode` and `MaxExceeded` (added to
+> `hassle.__all__`), for HA's enumerated `mode:`/`max_exceeded:` automation/
+> script options — a real `str` subclass, so `mode=Mode.RESTART` compiles
+> byte-identical to `mode="restart"`; the decompiler emits the enum member
+> for a recognized value and falls back to the raw string otherwise (never
+> fails on an unrecognized future HA value). (3) `service(..., target=...)`
+> (and every other `target=` accepting call) now also accepts a bare entity
+> ref/`str`, a list of them, or an `area()`/`floor()`/`label()`/`device_id()`
+> target helper object directly — normalized to HA's stored target dict shape
+> by the new `hassle.compiler.purpose.normalize_target` (non-public tooling
+> seam, not added to `hassle.__all__`); an already-built dict passes through
+> unchanged. The decompiler emits the bare form whenever a stored `target`
+> has exactly one key, keeping the dict literal for any multi-key target.
+> (4) `repeat_for_each(items)` now also accepts a bare Jinja template `str`
+> (HA's `repeat.for_each` may be stored as a template that renders to a list
+> at runtime, not just a literal list) — passed through verbatim, never
+> exploded into a list of characters (the bug this fixes, docs/ha-api-notes.md).
+> None of these four changes alters the meaning of any existing name;
+> `hassle.__all__` itself gains exactly three entries (`Mode`, `MaxExceeded`,
+> `OnlyIfBlockCoverageError`) and `only_if`'s existing frozen entry is
+> untouched (only its usage — bare vs. `with` — widened).
+
 The public surface is exactly `hassle.__all__` (module
 `packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.

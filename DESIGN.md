@@ -535,10 +535,17 @@ for-byte, verified over the whole round-trip corpus):**
   update to a generated-code import list. The `entities as e` import stays its own explicit line
   (DESIGN §5.3: a dedicated, non-`__all__` entry point). This is the **generated-code** style
   only; hand-written bundle files may use either form.
-- **Section comments:** `# --- conditions ---` / `# --- actions ---` precede each non-empty
-  section of an automation body (a script gets `# --- sequence ---` when its sequence is
-  non-empty); an empty section gets no comment. Triggers no longer have a body section at all —
-  see the `triggers=` bullet below (`ux/triggers-in-decorator`).
+- **Section comments — introduced, then removed (dated note).** Originally: `# --- conditions ---`
+  / `# --- actions ---` precede each non-empty section of an automation body (a script gets
+  `# --- sequence ---` when its sequence is non-empty); an empty section gets no comment.
+  Triggers never had a body section at all once `triggers=` moved them into the decorator
+  (`ux/triggers-in-decorator`). **Removed 2026-07 (`ux/dsl-ergonomics`, owner amendment,
+  supersedes this bullet's original "judge readability" latitude on item 1):** once conditions
+  also moved out of the body — the `with only_if(...):` block form (below) is now the canonical
+  decompiled shape whenever an automation has any conditions at all — the remaining section
+  comments no longer disambiguated anything: the body's structure (decorator = when, `only_if`
+  block = gate, plain statements = do) is self-describing on its own. A freshly decompiled
+  automation/script body therefore carries no `# --- ... ---` comments at all.
 - **Function names derive from `alias`, not `id`** (this section as originally written, now
   actually implemented): the name is `slugify(alias)`, with a deterministic `_2`/`_3` suffix on a
   collision — collisions include another decompiled object's alias-slug **and** any name the
@@ -617,6 +624,34 @@ for-byte, verified over the whole round-trip corpus):**
   reads, correctly, as "an escape hatch for dynamic trigger construction", not "the normal way to
   write a trigger") — a `when()` call still composes with the decorator's list regardless of
   where in the body it appears, appending after the decorator's triggers in call order.
+- **`only_if` gains a block form; it's the canonical decompiled shape whenever conditions
+  exist** (owner feedback — "a bare `only_if(...)` call looks like an empty if" —
+  `ux/dsl-ergonomics`, item 1). `only_if(*conditions)` is now dual-form: the bare call keeps
+  its exact pre-existing behavior (F3), and the SAME call is also usable as
+  `with only_if(cond1, cond2): ...`. HA has no notion of a conditional subset of an
+  automation's actions — automation-level conditions gate every single action regardless of
+  where in the body it's written — so the block form makes that true visually: using it
+  requires every action the automation records to be inside the block (recorded before or
+  after it raises `OnlyIfBlockCoverageError`, a what/where/fix error naming the fix — move the
+  action inside the block, or drop back to the bare form). The decompiler always emits the
+  block form when an automation has any conditions at all, wrapping every action; no
+  conditions means no block, exactly as before. Compiled IR is byte-identical either form
+  (golden-pair parity proof, matching the precedent `triggers=` set: `fixtures/dsl/
+  only_if_block_form/` vs. the equivalent bare-`only_if` golden).
+- **Enums for enumerated HA options** (`ux/dsl-ergonomics`, item 2): `Mode`
+  (`SINGLE`/`RESTART`/`QUEUED`/`PARALLEL`) and `MaxExceeded` (`SILENT`/`WARNING`/`ERROR`) are
+  `StrEnum` — a real `str` subclass, so `@automation(mode=Mode.RESTART)` compiles byte-identical
+  to `@automation(mode="restart")`. The decompiler emits `Mode.RESTART`/`MaxExceeded.SILENT` for
+  a recognized value and falls back to the raw string for anything else (an unrecognized future
+  HA value is never a decompiler error).
+- **Bare entity target sugar** (`ux/dsl-ergonomics`, item 3): `service(..., target=e.weather.
+  forecast_home)` — an `EntityRef`/`str`, or a list of them — compiles to
+  `target={"entity_id": ...}`, identical to writing the dict by hand; `area(...)`/`floor(...)`/
+  `label(...)`/`device_id(...)` (the same target helpers `on()`/`met()` already accept, DESIGN
+  §5.4) are also accepted directly as `target=`, compiling to `{"area_id": ...}` etc. The
+  decompiler emits the bare form whenever a stored `target` dict has exactly one key —
+  `entity_id` (single ref or list) or one of the four id-key forms — and keeps the plain dict
+  literal for any multi-key target (e.g. `entity_id` + `device_id` together).
 
 ---
 

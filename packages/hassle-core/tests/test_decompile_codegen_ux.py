@@ -16,12 +16,18 @@ compiles to the exact same string as the quoted literal it replaces):
    strings are untouched.
 3. `from hassle import *` replaces the enumerated builder import. The
    `entities as e` import stays explicit.
-4. Section comments (`# --- conditions ---` / `# --- actions ---`) precede
-   each non-empty section in an automation body; `# --- sequence ---`
-   precedes a script's sequence when non-empty. Triggers no longer have a
-   body section comment at all -- they're emitted as the `triggers=` decorator
-   kwarg now (``ux/triggers-in-decorator``, see test_decompile_triggers_in_
-   decorator.py), which precedes the body entirely.
+4. Section comments -- introduced, then REMOVED (`ux/dsl-ergonomics`, owner
+   amendment; DESIGN §7.3's dated note): originally, `# --- conditions ---` /
+   `# --- actions ---` preceded each non-empty section in an automation body,
+   and `# --- sequence ---` preceded a script's sequence when non-empty
+   (triggers never got one at all -- they're the `triggers=` decorator kwarg,
+   `ux/triggers-in-decorator`). Once conditions ALSO moved out of the body
+   (the `with only_if(...):` block form, item 1 of `ux/dsl-ergonomics`, wraps
+   every action whenever any conditions exist), the remaining comments no
+   longer disambiguated anything -- the body's structure (decorator = when,
+   only_if block = gate, plain statements = do) is self-describing on its
+   own. A freshly decompiled automation/script body now carries NO
+   `# --- ... ---` comments at all; see the tests below.
 """
 
 from __future__ import annotations
@@ -168,7 +174,13 @@ def test_numeric_state_entity_id_uses_registry_accessor() -> None:
     assert "numeric_state(e.sensor.temperature, above=20)" in source
 
 
-def test_target_entity_id_uses_registry_accessor_inside_dict() -> None:
+def test_target_entity_id_uses_registry_accessor() -> None:
+    # Updated (`ux/dsl-ergonomics`, item 3: bare entity target sugar): a
+    # single-key `{"entity_id": ...}` target now decompiles to the bare form
+    # (`target=e.light.hallway`), not the dict form -- still using the
+    # registry accessor either way. The dict form's own entity-ref rendering
+    # (for a target that ISN'T single-key) is covered separately, see
+    # test_target_entity_sugar.py::test_decompiler_keeps_dict_form_for_multi_key_target.
     config = {
         "id": "1",
         "alias": "Turn On Hallway",
@@ -181,7 +193,7 @@ def test_target_entity_id_uses_registry_accessor_inside_dict() -> None:
     obj = parse(config, kind="automation")
     source = decompile_bundle({obj.object_key(): obj})
 
-    assert 'target={"entity_id": e.light.hallway}' in source
+    assert "target=e.light.hallway" in source
     assert '"light.hallway"' not in source
 
 
@@ -334,11 +346,12 @@ def test_bundle_emits_star_import_and_explicit_entities_import() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. section comments
+# 4. section comments -- removed entirely (`ux/dsl-ergonomics`, owner
+# amendment; see module docstring's dated note)
 # ---------------------------------------------------------------------------
 
 
-def test_automation_body_gets_section_comments_for_nonempty_sections() -> None:
+def test_automation_body_never_gets_section_comments_with_conditions() -> None:
     config = {
         "id": "1",
         "alias": "Full Sections",
@@ -351,18 +364,15 @@ def test_automation_body_gets_section_comments_for_nonempty_sections() -> None:
     obj = parse(config, kind="automation")
     source = decompile_bundle({obj.object_key(): obj})
 
-    # Triggers no longer get a body section comment at all -- they're in the
-    # `triggers=` decorator kwarg (ux/triggers-in-decorator).
     assert "# --- triggers ---" not in source
-    assert "# --- conditions ---" in source
-    assert "# --- actions ---" in source
-    # Ordering: conditions, then actions.
-    cond_idx = source.index("# --- conditions ---")
-    act_idx = source.index("# --- actions ---")
-    assert cond_idx < act_idx
+    assert "# --- conditions ---" not in source
+    assert "# --- actions ---" not in source
+    # Conditions are the `with only_if(...):` block form (item 1), wrapping
+    # the action(s) -- no comment needed to make that legible.
+    assert "with only_if(" in source
 
 
-def test_automation_body_omits_section_comment_for_empty_sections() -> None:
+def test_automation_body_never_gets_section_comments_without_conditions() -> None:
     config = {
         "id": "1",
         "alias": "Only Actions",
@@ -377,10 +387,10 @@ def test_automation_body_omits_section_comment_for_empty_sections() -> None:
 
     assert "# --- triggers ---" not in source
     assert "# --- conditions ---" not in source
-    assert "# --- actions ---" in source
+    assert "# --- actions ---" not in source
 
 
-def test_script_sequence_gets_section_comment_when_nonempty() -> None:
+def test_script_sequence_never_gets_section_comment_when_nonempty() -> None:
     config = {
         "alias": "Movie Time",
         "sequence": [
@@ -390,7 +400,7 @@ def test_script_sequence_gets_section_comment_when_nonempty() -> None:
     obj = parse(config, kind="script", key_hint="movie_time")
     source = decompile_bundle({obj.object_key(): obj})
 
-    assert "# --- sequence ---" in source
+    assert "# --- sequence ---" not in source
 
 
 def test_script_sequence_omits_section_comment_when_empty() -> None:

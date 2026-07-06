@@ -182,7 +182,11 @@ def pull(allow_dirty: bool) -> None:
     from hassle_cli import backend_factory
     from hassle_cli.doctor import find_committed_tokens
     from hassle_cli.git_support import commit_message_for_pull
-    from hassle_cli.pull_apply import DecompiledBatchDoesNotCompileError, apply_pull_with_decompiler
+    from hassle_cli.pull_apply import (
+        DecompiledBatchDoesNotCompileError,
+        DecompiledValueMismatchError,
+        apply_pull_with_decompiler,
+    )
 
     console = get_console()
     root = _bundle_root_or_fail()
@@ -279,7 +283,7 @@ def pull(allow_dirty: bool) -> None:
     # self-check can't cover -- see that module's docstring).
     try:
         result = apply_pull_with_decompiler(plan, writer)
-    except DecompiledBatchDoesNotCompileError as exc:
+    except (DecompiledBatchDoesNotCompileError, DecompiledValueMismatchError) as exc:
         console.print(
             f"[bold red]hassle pull: {exc}[/bold red]\n"
             "[bold red]This is a bug in Hassle's decompiler, not a mistake in your HA "
@@ -300,8 +304,19 @@ def pull(allow_dirty: bool) -> None:
     # `hassle test`/`hassle push`. Files are left in place (never rolled
     # back) -- the user needs them to file a useful bug report, and the fix
     # is always just a `hassle pull --allow-dirty` once it lands.
+    #
+    # Widened to compare VALUES, not just "does it compile" (``ux/dsl-
+    # ergonomics``, item 4 investigation, `hassle_cli.pull_apply` module
+    # docstring): "does it compile" alone cannot catch a decompiler bug that
+    # compiles cleanly but silently changes an object's meaning. Every
+    # REFRESH/ADOPT entry's original stored `remote` config is compared
+    # against what the bundle just written recompiles to -- via
+    # `is_modernization_only_diff`'s decompiled-DSL-source comparison (same
+    # technique, same reason: tolerate the decompiler's known cosmetic
+    # modernizations, never a raw canonical-hash equality check, which would
+    # false-positive on those).
     try:
-        bundle_ops.compile_local_objects(root)
+        _, post_write_result = bundle_ops.compile_local_objects(root)
     except Exception as exc:
         console.print(
             f"[bold red]hassle pull: the bundle just written to {root} does not compile "
@@ -315,7 +330,37 @@ def pull(allow_dirty: bool) -> None:
         )
         raise SystemExit(1) from exc
 
+    from hassle.ir.canonical import sha256_hash
     from hassle.sync.models import ManifestEntry, PlanAction
+    from hassle_cli.diffing import is_modernization_only_diff
+
+    mismatched_keys = [
+        entry.object_key
+        for entry in plan.entries
+        if entry.action in (PlanAction.REFRESH, PlanAction.ADOPT)
+        and entry.remote is not None
+        and entry.object_key in post_write_result.objects
+        and not is_modernization_only_diff(
+            entry.object_key,
+            entry.kind,
+            post_write_result.objects[entry.object_key].to_ha(),
+            entry.remote,
+        )
+        and post_write_result.objects[entry.object_key].to_ha() != entry.remote
+    ]
+    if mismatched_keys:
+        keys = ", ".join(sorted(mismatched_keys))
+        console.print(
+            f"[bold red]hassle pull: the bundle just written to {root} does not reproduce the "
+            f"original stored configuration for object(s): {keys} (it compiles, but does not "
+            "recompile to the same value). This is a bug in Hassle's decompiler, not a mistake "
+            "in your HA configuration -- the files just written are left in place for you to "
+            "inspect. Fix: please report this (include the object(s) listed) at "
+            "https://github.com/hassle-project/hassle/issues; once a fix lands, "
+            "`hassle pull --allow-dirty` is safe to re-run and will overwrite the broken "
+            "file(s).[/bold red]"
+        )
+        raise SystemExit(1)
 
     pull_actions = (PlanAction.REFRESH, PlanAction.ADOPT, PlanAction.DROP)
     for entry in plan.entries:
@@ -339,8 +384,6 @@ def pull(allow_dirty: bool) -> None:
         if entry.action in (PlanAction.REFRESH, PlanAction.ADOPT):
             assert entry.remote is not None
             existing = manifest.objects.get(entry.object_key)
-            from hassle.ir.canonical import sha256_hash
-
             new_objects[entry.object_key] = ManifestEntry(
                 source=source_paths.get(entry.object_key),
                 compiled_hash=sha256_hash(entry.remote),

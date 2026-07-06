@@ -25,7 +25,11 @@ import pytest
 
 from hassle.sync.models import Plan, PlanAction, PlanEntry
 from hassle.sync.source_writer import RecordingSourceWriter
-from hassle_cli.pull_apply import DecompiledBatchDoesNotCompileError, apply_pull_with_decompiler
+from hassle_cli.pull_apply import (
+    DecompiledBatchDoesNotCompileError,
+    DecompiledValueMismatchError,
+    apply_pull_with_decompiler,
+)
 
 
 def _adopt_entry(object_key: str, kind: str, remote: dict, source_path: str) -> PlanEntry:
@@ -88,3 +92,60 @@ def test_adopt_batch_self_check_is_silent_for_healthy_batch() -> None:
     apply_pull_with_decompiler(Plan(entries=entries), writer)  # must not raise
 
     assert "a1" in writer.written_files[Path("automations/misc.py")]
+
+
+def test_adopt_batch_self_check_catches_value_mismatch_that_still_compiles(monkeypatch) -> None:
+    """``ux/dsl-ergonomics``, item 4 investigation: the "does it compile" self-check
+    alone would NOT have caught the real `for_each` template-string bug, because
+    `list("{{ template }}")` compiles just fine -- it just silently produces the
+    wrong value (a list of individual characters instead of the template string).
+    This pins the WIDENED self-check (comparing the recompiled value's canonical
+    hash against the original stored config) against a hand-rolled fake decompiler
+    that reproduces exactly that failure mode: valid Python, wrong meaning.
+    """
+    import hassle_cli.pull_apply as pull_apply_mod
+
+    def _silently_wrong_decompile_bundle(objects, *, script_refs=None):
+        # Reproduces the shape of the real bug: a `repeat.for_each` that should be
+        # the template string verbatim instead gets exploded into a character list
+        # -- valid Python, compiles cleanly, but a different value than the input.
+        return (
+            "from hassle import *\n\n"
+            "from hassle.registry import entities as e\n\n\n"
+            "@automation(id='a1', alias='A1')\n"
+            "def a1():\n"
+            "    with repeat_for_each(list('{{ x }}')):\n"
+            '        service("light.turn_on")\n'
+        )
+
+    monkeypatch.setattr(pull_apply_mod, "decompile_bundle", _silently_wrong_decompile_bundle)
+
+    entries = [
+        _adopt_entry(
+            "automation:a1",
+            "automation",
+            {
+                "id": "a1",
+                "alias": "A1",
+                "triggers": [],
+                "conditions": [],
+                "actions": [
+                    {
+                        "repeat": {
+                            "for_each": "{{ x }}",
+                            "sequence": [{"action": "light.turn_on"}],
+                        }
+                    }
+                ],
+            },
+            "automations/misc.py",
+        )
+    ]
+    writer = RecordingSourceWriter()
+
+    with pytest.raises(DecompiledValueMismatchError) as excinfo:
+        apply_pull_with_decompiler(Plan(entries=entries), writer)
+
+    assert "automation:a1" in str(excinfo.value)
+    # Nothing written -- this fires before any adopt destination is touched.
+    assert Path("automations/misc.py") not in writer.written_files

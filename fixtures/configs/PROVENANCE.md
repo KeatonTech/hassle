@@ -190,3 +190,16 @@ convention as rounds 1-2.
    branch sequences; `parallel()` gained a `with p.branch(): ...` sub-context (bound via `as p:`) so
    the compiler can author a multi-step branch, while a bare `with parallel(): action(); action():`
    with no `as` binding is unchanged (each action still becomes its own one-step branch, F3-additive).
+
+## DSL ergonomics round (owner feedback #1/#2/#4/#5, `ux/dsl-ergonomics`)
+
+Source: owner bug report, `scripts/misc.py` on the owner's real bundle -- `repeat.for_each` stored
+as a Jinja template STRING (renders to a list at runtime), not a literal list. `repeat_for_each()`'s
+`list(items)` silently exploded the template string into a list of individual characters (a `str`
+is an `Iterable[str]`) instead of passing it through verbatim; the char-explosion shape survived to
+disk because the pull self-check only verified "does the recompiled bundle compile", not "does it
+recompile to the same value" (docs/ha-api-notes.md, this workstream's finding).
+
+| Fixture | Source | Construct |
+|---------|--------|-----------|
+| automation_repeat_for_each_template_string.json | Owner bug report shape, `scripts/misc.py` | `repeat` with `for_each` stored as a Jinja template string (not a list), proving the compiler passes it through verbatim and the decompiler emits `repeat_for_each("{{ ... }}")` |

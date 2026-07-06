@@ -13,6 +13,7 @@ from typing import Any
 
 from hassle.compiler.durations import normalize_duration
 from hassle.compiler.errors import CompileTimeBranchError
+from hassle.compiler.purpose import normalize_target
 from hassle.compiler.spans import capture_span
 
 
@@ -168,13 +169,20 @@ class ServiceAction:
     individual steps. Both are additive, top-level action fields, same treatment
     as ``metadata=``/``data_template=`` — omitted by default, emitted verbatim
     when passed (including ``enabled=False``).
+
+    ``target=`` also accepts the bare entity target sugar (``ux/dsl-ergonomics``, item 3,
+    DESIGN §5.3/§7.3): a bare entity ref/string or a list of them (``{"entity_id": ...}``), or
+    an ``area()``/``floor()``/``label()``/``device_id()`` target helper object (``{"area_id":
+    ...}`` etc.) — normalized to HA's stored target dict shape by
+    :func:`~hassle.compiler.purpose.normalize_target`. An already-built dict passes through
+    unchanged (the pre-existing behavior).
     """
 
     def __init__(
         self,
         action: str,
         *,
-        target: dict[str, Any] | None = None,
+        target: Any = None,
         data: dict[str, Any] | None = None,
         data_template: dict[str, Any] | None = None,
         response_variable: str | None = None,
@@ -185,7 +193,7 @@ class ServiceAction:
         **fields: Any,
     ) -> None:
         self._action = action
-        self._target = target
+        self._target = normalize_target(target)
         self._data_template = data_template
         self._response_variable = response_variable
         self._continue_on_error = continue_on_error

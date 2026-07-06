@@ -19,7 +19,7 @@ from hassle.compiler.spans import capture_span
 def service(
     action: str,
     *,
-    target: dict[str, Any] | None = None,
+    target: Any = None,
     data: dict[str, Any] | None = None,
     data_template: dict[str, Any] | None = None,
     response_variable: str | None = None,
@@ -46,6 +46,10 @@ def service(
 
     ``alias=``/``enabled=`` (residue-coverage round 2): per-step name/toggle,
     same treatment as ``metadata=``/``data_template=``.
+
+    ``target=`` also accepts the bare entity target sugar (``ux/dsl-ergonomics``, item 3):
+    an ``EntityRef``/``str`` or a list of them, or an ``area()``/``floor()``/``label()``/
+    ``device_id()`` target helper object — see :class:`~hassle.compiler.builders.ServiceAction`.
     """
     record_action(
         ServiceAction(
