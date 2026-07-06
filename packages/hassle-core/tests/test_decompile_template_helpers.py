@@ -18,10 +18,18 @@ inverter's bounded grammar. Of this fixture's four objects, exactly
 `template_sensor:average_temp`'s state (`(states('sensor.a') | float +
 states('sensor.b') | float) / 2`) is inside that grammar -- the other three
 use `is_state(...)`/a bare `states(...)` read (no `| float`)/a `selectattr`
-filter chain, none of which this parser models, so they still decompile to
-the call form asserted below unchanged. See
+filter chain, none of which this parser models. See
 `test_template_helper_decorator_form.py` for the decorator-form-specific
 contract (M13 tests 1-5).
+
+**M14 update:** the fallback branch is ALSO the decorator form now (owner
+feedback) -- the other three objects decompile to `@builder(...)` / `def
+<ident>(): return "<verbatim Jinja>"` instead of the pre-M14 call form. See
+`test_template_helper_decorator_fallback.py` for the fallback-form-specific
+contract (M14 tests 1-5); this file's own assertions are updated in place to
+match (no test here NEEDED the call form as such -- they asserted the
+builder name and a round trip, both of which the decorator form also
+satisfies).
 """
 
 from __future__ import annotations
@@ -40,17 +48,25 @@ FIXTURE = (
 )
 
 
-def test_decompile_template_number_produces_matching_builder_call() -> None:
+def test_decompile_template_number_produces_matching_builder_decorator() -> None:
+    """M14: the fallback branch is ALSO the decorator form -- `state=` moves
+    into the `return` body instead of staying a decorator kwarg; every other
+    kwarg is unaffected and still rendered in the decorator's argument list."""
     result = compile_bundle(FIXTURE)
     key = "template_number:active_hvac_zones"
     obj = result.objects[key]
     source = decompile_object(key, obj)
 
-    assert source.startswith("active_hvac_zones = template_number(")
+    assert source.startswith("@template_number(")
+    assert "def active_hvac_zones():" in source
     assert "name='Active HVAC Zones'" in source
     assert "id=" not in source  # no identity kwarg at all (§26.6)
     assert "unique_id=" not in source
     assert "set_value=" in source
+    # `state=` is never a decorator kwarg any more (M14) -- it's the
+    # `return`ed string body instead.
+    decorator_line = source.split("\n", 1)[0]
+    assert "state=" not in decorator_line
     # min/max/step decompile as floats (CI round 4, docs/ha-api-notes.md
     # §26.10): HA's NumberSelector always stores these as floats, and the
     # compiler now coerces to match -- `render_literal`'s `repr()` renders
@@ -59,11 +75,9 @@ def test_decompile_template_number_produces_matching_builder_call() -> None:
 
 
 def test_decompile_every_template_domain_uses_matching_builder_name() -> None:
-    """Each object's source names its matching builder -- as the call form's
-    `ident = builder(...)` for the three objects whose `state=` is outside
-    the M13 bounded inverter's grammar, or as the decorator form's
-    `@builder(...)` for `average_temp` (the one object whose state IS inside
-    it -- module docstring)."""
+    """Each object's source names its matching builder as the decorator form's
+    `@builder(...)` (M14: both the invertible branch, `average_temp`, and the
+    fallback branch, the other three objects -- module docstring)."""
     result = compile_bundle(FIXTURE)
     expected_builder = {
         "template_number:active_hvac_zones": "template_number",
@@ -71,18 +85,10 @@ def test_decompile_every_template_domain_uses_matching_builder_name() -> None:
         "template_binary_sensor:any_door_open": "template_binary_sensor",
         "template_select:house_scene": "template_select",
     }
-    call_form_keys = {
-        "template_number:active_hvac_zones",
-        "template_binary_sensor:any_door_open",
-        "template_select:house_scene",
-    }
     for key, builder in expected_builder.items():
         obj = result.objects[key]
         source = decompile_object(key, obj)
-        if key in call_form_keys:
-            assert source.split(" = ", 1)[1].startswith(f"{builder}(")
-        else:
-            assert source.startswith(f"@{builder}(")
+        assert source.startswith(f"@{builder}(")
 
 
 def test_decompile_recompile_round_trip_is_byte_stable_for_options_body(
@@ -105,7 +111,10 @@ def test_decompile_recompile_round_trip_is_byte_stable_for_options_body(
         # §7.3's entity-reference cosmetic rewrite) emits as `e.<domain>.<id>`
         # -- needs this import, exactly like any generated bundle would carry.
         # M13: the inverted `average_temp` decorator body also references `e.`
-        # entities directly (`expr(e.sensor.a)`).
+        # entities directly (`expr(e.sensor.a)`). M14: the other three
+        # objects' fallback decorator bodies are `return "<raw string>"` --
+        # no `expr`/`e.` reference needed for those, but the import stays
+        # harmless (unused-import isn't checked by this test).
         "from hassle.registry import entities as e",
         "",
     ]
