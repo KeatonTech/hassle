@@ -54,6 +54,7 @@ class _StubTraceBackend:
         self.list_traces_calls: list[tuple[str, str]] = []
         self.get_trace_calls: list[tuple[str, str, str]] = []
         self._empty_polls_before_trace = empty_polls_before_trace
+        self._polls_at_trigger = 0
 
     def create(self, kind: str, config: dict[str, Any]) -> str:
         self.created.append((kind, config))
@@ -79,12 +80,23 @@ class _StubTraceBackend:
 
     def call_service(self, domain: str, service: str, **data: Any) -> None:
         self.triggered.append((f"{domain}.{service}", data))
+        if f"{domain}.{service}" == "automation.trigger":
+            self._polls_at_trigger = len(self.list_traces_calls)
 
     def list_traces(self, kind: str, identity: str) -> list[dict[str, Any]]:
+        # Trigger-aware, matching real HA: a run's trace can only exist AFTER
+        # automation.trigger fired (round-6: a count-based stub whose trace
+        # "pre-existed" the trigger was correctly excluded by the new
+        # pre-trigger run-id snapshot, failing the test for stub reasons).
         self.list_traces_calls.append((kind, identity))
         if self._empty_polls_before_trace is None:
             return []
-        if len(self.list_traces_calls) <= self._empty_polls_before_trace:
+        if not any(name == "automation.trigger" for name, _ in self.triggered):
+            return []
+        polls_after_trigger = sum(
+            1 for _ in self.list_traces_calls
+        ) - self._polls_at_trigger
+        if polls_after_trigger <= self._empty_polls_before_trace:
             return []
         return [{"run_id": "run-xyz", "state": "stopped"}]
 
@@ -292,7 +304,7 @@ def test_execute_live_run_ignores_stale_pre_trigger_trace(
             stale = [{"run_id": "stale-1", "state": "stopped"}]
             if not self._fresh_landed:
                 return stale
-            return stale + [{"run_id": "fresh-2", "state": "stopped"}]
+            return [*stale, {"run_id": "fresh-2", "state": "stopped"}]
 
         def get_trace(self, kind: str, identity: str, run_id: str) -> dict[str, Any]:
             self.get_trace_calls.append((kind, identity, run_id))

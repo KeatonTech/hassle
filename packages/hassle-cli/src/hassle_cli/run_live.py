@@ -111,7 +111,9 @@ class TriggerFn(Protocol):
 
 
 class GetTraceFn(Protocol):
-    def __call__(self, shadow_id: str) -> dict[str, Any]: ...
+    def __call__(
+        self, shadow_id: str, exclude_run_ids: frozenset[str] = frozenset()
+    ) -> dict[str, Any]: ...
 
 
 @dataclass
@@ -127,6 +129,7 @@ def run_shadow_session(
     *,
     trigger_fn: TriggerFn,
     get_trace_fn: GetTraceFn,
+    list_run_ids_fn: Any = None,
     skip_conditions: bool = False,
     variables: dict[str, Any] | None = None,
     poll_timeout: float = DEFAULT_TRACE_POLL_TIMEOUT,
@@ -142,11 +145,19 @@ def run_shadow_session(
     shadow_id = shadow_config["id"]
     backend.create(kind, shadow_config)
     try:
+        # HA retains traces per item_id ACROSS the shadow's delete/recreate
+        # (round-6 CI finding, docs/ha-api-notes.md §27): snapshot the runs
+        # that already exist so trace selection can never render a previous
+        # session's run.
+        pre_existing_run_ids = (
+            frozenset(list_run_ids_fn(shadow_id)) if list_run_ids_fn is not None else frozenset()
+        )
         payload = trigger_payload(skip_conditions=skip_conditions, variables=variables)
         trigger_fn(shadow_id, **payload)
         trace = stream_trace(
             get_trace_fn,
             shadow_id,
+            exclude_run_ids=pre_existing_run_ids,
             poll_timeout=poll_timeout,
             poll_interval=poll_interval,
             sleep_fn=sleep_fn,
@@ -161,6 +172,7 @@ def stream_trace(
     get_trace_fn: GetTraceFn,
     shadow_id: str,
     *,
+    exclude_run_ids: frozenset[str] = frozenset(),
     poll_timeout: float = DEFAULT_TRACE_POLL_TIMEOUT,
     poll_interval: float = DEFAULT_TRACE_POLL_INTERVAL,
     sleep_fn: Any = time.sleep,
@@ -191,7 +203,7 @@ def stream_trace(
     """
     deadline = monotonic_fn() + poll_timeout
     while True:
-        trace = get_trace_fn(shadow_id)
+        trace = get_trace_fn(shadow_id, exclude_run_ids=exclude_run_ids)
         if trace:
             return trace
         if monotonic_fn() >= deadline:

@@ -68,11 +68,20 @@ def execute_live_run(root: Path, target: str, *, skip_conditions: bool, console:
                 "automation", "trigger", entity_id=entity_id, **payload
             )
 
-        def get_trace_fn(shadow_id: str) -> dict[str, Any]:
+        def list_run_ids_fn(shadow_id: str) -> list[str]:
             traces = backend.list_traces("automation", shadow_id)  # type: ignore[attr-defined]
-            if not traces:
+            return [t["run_id"] for t in traces]
+
+        def get_trace_fn(
+            shadow_id: str, exclude_run_ids: frozenset[str] = frozenset()
+        ) -> dict[str, Any]:
+            traces = backend.list_traces("automation", shadow_id)  # type: ignore[attr-defined]
+            candidates = [t for t in traces if t["run_id"] not in exclude_run_ids]
+            if not candidates:
                 return {}
-            run_id = traces[0]["run_id"]
+            # Exactly one new run exists per trigger; [-1] guards against
+            # either list ordering.
+            run_id = candidates[-1]["run_id"]
             return backend.get_trace("automation", shadow_id, run_id)  # type: ignore[attr-defined]
 
         # Read the poll bound off the module at call time (not as bound
@@ -84,6 +93,7 @@ def execute_live_run(root: Path, target: str, *, skip_conditions: bool, console:
             backend,
             object_key,
             body,
+            list_run_ids_fn=list_run_ids_fn,
             trigger_fn=trigger_fn,
             get_trace_fn=get_trace_fn,
             skip_conditions=skip_conditions,

@@ -118,7 +118,9 @@ def test_live_session_cleans_up_shadow_on_success(fake_backend) -> None:
     def fake_trigger(shadow_id: str, **_: object) -> None:
         calls.append(shadow_id)
 
-    def fake_get_trace(shadow_id: str) -> dict[str, object]:
+    def fake_get_trace(
+        shadow_id: str, exclude_run_ids: frozenset[str] = frozenset()
+    ) -> dict[str, object]:
         return {"trace": {}, "config": body}
 
     result = run_shadow_session(
@@ -162,7 +164,9 @@ def test_stream_trace_polls_until_trace_appears() -> None:
     calls: list[int] = []
     real_trace = {"run_id": "abc123", "script_execution": "finished", "trace": {"action/0": [{}]}}
 
-    def flaky_get_trace(shadow_id: str) -> dict[str, object]:
+    def flaky_get_trace(
+        shadow_id: str, exclude_run_ids: frozenset[str] = frozenset()
+    ) -> dict[str, object]:
         calls.append(1)
         if len(calls) < 3:
             return {}
@@ -191,7 +195,7 @@ def test_stream_trace_gives_up_after_poll_timeout_returns_empty() -> None:
 
     clock = _FakeClock()
     trace = stream_trace(
-        lambda shadow_id: {},
+        lambda shadow_id, exclude_run_ids=frozenset(): {},
         "hassle_shadow_abc",
         poll_timeout=1.0,
         poll_interval=0.25,
@@ -279,7 +283,9 @@ def test_live_session_cleans_up_shadow_on_trace_failure(fake_backend) -> None:
     def fake_trigger(shadow_id: str, **_: object) -> None:
         return None
 
-    def failing_get_trace(shadow_id: str) -> dict[str, object]:
+    def failing_get_trace(
+        shadow_id: str, exclude_run_ids: frozenset[str] = frozenset()
+    ) -> dict[str, object]:
         raise RuntimeError("injected trace-stream failure")
 
     try:
