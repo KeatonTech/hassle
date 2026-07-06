@@ -1454,3 +1454,59 @@ intended behavior (shadow created, triggered, trace rendered, cleaned up) is unc
 test's own Click API usage was wrong. Not independently re-verified against live HA in this PR (no
 Docker/HA access in this environment) — the orchestrator's CI run against both `stable` and `dev`
 is the actual green/red signal for this fix, per the task's definition of done.
+
+## 27. `run --live` trace-settle race (`fix/run-live-trace-settle`): a real trace vanished silently
+
+**The finding.** Once Finding B (§26) was fixed and `run --live`'s shadow-automation body actually
+executed against real HA, a new, legible failure appeared identically on `HA stable` and `HA dev`:
+the command completed cleanly (`shadow run complete: hassle_shadow_...`) but rendered **no trace
+timeline at all** — DESIGN §10.4 point 3's whole point. Root cause, in
+`hassle_cli.commands.run_live_command.execute_live_run`'s `get_trace_fn`: it called `trace/list`
+exactly once, immediately after `automation.trigger` returned, and returned `{}` straight through
+if that single call came back empty. HA persists a trace **asynchronously** after a trigger — the
+same class of async-settling race already documented for the config-REST reload
+(`DirectBackend._await_config_entity`, §17.7) — so a `trace/list` issued too early routinely
+returns `[]` even though the run is about to have a trace. `execute_live_run`'s
+`if result.trace:` then simply skipped the whole rendering block for a falsy `{}`, with **zero**
+indication to the user that anything was ever wrong — indistinguishable from "there was nothing to
+show," which is never true for a triggered automation.
+
+**Rejected alternate theory (ruled out explicitly, as asked).** A wrong `item_id` (e.g. passing the
+shadow's full `entity_id`, `"automation.hassle_shadow_..."`, instead of its bare automation `id`)
+would produce the exact same symptom — an empty `trace/list`/`trace/get` — and needed to be ruled
+out separately from the timing race. Re-verified against the §7 capture shape
+(`trace/list`/`trace/get` take `domain` + `item_id`, where `item_id` is the bare automation `id`,
+e.g. `"hassle_skipcond"`) and pinned down with a dedicated unit test
+(`test_execute_live_run_uses_bare_automation_id_not_entity_id_for_trace_lookup`,
+`packages/hassle-cli/tests/test_run_live_command.py`): `get_trace_fn`/`list_traces`/`get_trace`
+were already using the bare `shadow_id` correctly — only `trigger_fn`'s `automation.trigger`
+service call needs the full `entity_id` (a service-call target, not a trace lookup), and it already
+had it right. The bug was purely the missing poll/no-feedback path, not a parameter mistake.
+
+**Fix.**
+- `hassle_cli/run_live.py`: `stream_trace` now bounded-polls `get_trace_fn` (default 5 s budget,
+  0.25 s interval, both overridable and read off the module at call time so they're
+  monkeypatchable) instead of accepting a single empty response — matching the `DirectBackend`
+  reload-settle pattern's own bounded-polling shape. `sleep_fn`/`monotonic_fn` are injected (default
+  `time.sleep`/`time.monotonic`) so this is genuinely live-transport I/O (R8's "no wall-clock"
+  governs core compiler/simulator logic, not this) while unit tests use a fake clock and take zero
+  real wall-clock time. Added `render_trace_timeline` (a real step-by-step timeline keyed off
+  `trace["trace"]`'s step paths — `trigger`/`condition/0`/`action/0`/… — DESIGN §10.4 point 3;
+  full DSL-source-line mapping remains a separate, not-yet-built feature).
+- `hassle_cli/commands/run_live_command.py`: renders the timeline when a trace eventually shows up;
+  when it still doesn't after the full poll window, prints an explicit yellow warning naming the
+  run id and pointing at Settings → Automations → Traces in the HA UI — never silence, whether the
+  cause is a slower-than-usual settle or a genuine absence.
+- Regression tests: `test_stream_trace_polls_until_trace_appears` /
+  `test_stream_trace_gives_up_after_poll_timeout_returns_empty` (fake clock, `packages/hassle-cli/
+  tests/test_run_command.py`); `render_trace_timeline` structural tests (same file); CLI-level
+  `test_execute_live_run_renders_timeline_once_trace_settles` /
+  `test_execute_live_run_warns_explicitly_when_trace_never_appears` /
+  `test_execute_live_run_uses_bare_automation_id_not_entity_id_for_trace_lookup` (new file,
+  `packages/hassle-cli/tests/test_run_live_command.py`, against a hand-rolled stub `Backend` with
+  the trace/`call_service` surface `FakeBackend` doesn't have). The one integration test's
+  assertion was tightened from the bare word `"trace"` to a structural check (`action/0` step path
+  present, the explicit-warning text absent) plus the mirror assertion in the "never appears" case.
+- No DESIGN.md/MILESTONES.md change: DESIGN §10.4 point 3 already specified a rendered timeline;
+  this fixes an implementation gap, not a design gap. Not re-verified against live HA in this PR
+  (no Docker/HA access here) — the orchestrator's CI run is the actual green signal.

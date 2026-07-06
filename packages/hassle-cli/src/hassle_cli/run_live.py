@@ -21,10 +21,22 @@ here that doesn't require a real HA connection is unit-tested against
 from __future__ import annotations
 
 import hashlib
+import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from hassle.ir.canonical import canonical_json
+
+# Bounded polling for the trace-persistence race (docs/ha-api-notes.md §27):
+# HA's `trace/list` can return empty for a short window after
+# `automation.trigger` while the trace is asynchronously persisted -- the
+# same class of async-settling race as the config-REST reload wait
+# (`DirectBackend._await_config_entity`, docs/ha-api-notes.md §17.7). This is
+# live-transport I/O, not core compiler/simulator logic, so R8's "no
+# wall-clock" does not apply; the bound keeps a slow/never-settling trace
+# from hanging the CLI forever.
+DEFAULT_TRACE_POLL_TIMEOUT = 5.0
+DEFAULT_TRACE_POLL_INTERVAL = 0.25
 
 
 def shadow_automation_id(object_key: str) -> str:
@@ -87,6 +99,10 @@ def run_shadow_session(
     get_trace_fn: GetTraceFn,
     skip_conditions: bool = False,
     variables: dict[str, Any] | None = None,
+    poll_timeout: float = DEFAULT_TRACE_POLL_TIMEOUT,
+    poll_interval: float = DEFAULT_TRACE_POLL_INTERVAL,
+    sleep_fn: Any = time.sleep,
+    monotonic_fn: Any = time.monotonic,
 ) -> LiveRunResult:
     """Create the shadow, trigger + fetch its trace, then delete the shadow --
     on success *and* on any exception during trigger/trace (cleanup always
@@ -98,17 +114,80 @@ def run_shadow_session(
     try:
         payload = trigger_payload(skip_conditions=skip_conditions, variables=variables)
         trigger_fn(shadow_id, **payload)
-        trace = stream_trace(get_trace_fn, shadow_id)
+        trace = stream_trace(
+            get_trace_fn,
+            shadow_id,
+            poll_timeout=poll_timeout,
+            poll_interval=poll_interval,
+            sleep_fn=sleep_fn,
+            monotonic_fn=monotonic_fn,
+        )
         return LiveRunResult(shadow_id=shadow_id, trace=trace)
     finally:
         backend.delete(kind, shadow_id)
 
 
-def stream_trace(get_trace_fn: GetTraceFn, shadow_id: str) -> dict[str, Any]:
-    """Thin seam so tests can monkeypatch `hassle_cli.run_live.stream_trace`
-    to inject a trace-stream failure (MILESTONES M7 test 5)."""
-    return get_trace_fn(shadow_id)
+def stream_trace(
+    get_trace_fn: GetTraceFn,
+    shadow_id: str,
+    *,
+    poll_timeout: float = DEFAULT_TRACE_POLL_TIMEOUT,
+    poll_interval: float = DEFAULT_TRACE_POLL_INTERVAL,
+    sleep_fn: Any = time.sleep,
+    monotonic_fn: Any = time.monotonic,
+) -> dict[str, Any]:
+    """Fetch `shadow_id`'s trace, polling `get_trace_fn` for up to
+    `poll_timeout` seconds if it starts out empty.
+
+    `get_trace_fn` returning `{}` means "no trace yet" (see
+    `hassle_cli.commands.run_live_command.get_trace_fn`: `trace/list` racing
+    HA's async trace persistence right after `automation.trigger`, docs/
+    ha-api-notes.md §27). Bare-`{}` used to be returned straight through and
+    silently treated as falsy by the caller -- this always re-polls at least
+    once (so the common case, the trace lands within a poll or two, needs no
+    caller changes) and keeps retrying until either a non-empty trace shows
+    up or the bound elapses, at which point it returns `{}` -- the caller
+    (`execute_live_run`) is responsible for turning a still-empty trace into
+    an explicit warning, never silence.
+
+    `sleep_fn`/`monotonic_fn` are injected so unit tests never do a real
+    wall-clock wait (a fake clock advances instantly); production uses
+    `time.sleep`/`time.monotonic`, matching `DirectBackend`'s config-reload
+    settling pattern.
+
+    Also the seam tests monkeypatch (`monkeypatch.setattr(run_live,
+    "stream_trace", ...)`, MILESTONES M7 test 5) to inject a trace-stream
+    failure -- unchanged.
+    """
+    deadline = monotonic_fn() + poll_timeout
+    while True:
+        trace = get_trace_fn(shadow_id)
+        if trace:
+            return trace
+        if monotonic_fn() >= deadline:
+            return {}
+        sleep_fn(poll_interval)
 
 
 def canonical_shadow_json(config: dict[str, Any]) -> str:
     return canonical_json(config)
+
+
+def render_trace_timeline(trace: dict[str, Any]) -> str:
+    """Render a `trace/get` response as a step-by-step timeline (DESIGN
+    §10.4 point 3): one line per step path (`trigger`, `condition/0`,
+    `action/0`, ...), keyed off `trace["trace"]` (docs/ha-api-notes.md §7's
+    capture shape) in the dict's own order (HA returns it execution-ordered).
+    Full DSL-source-line mapping is a separate, not-yet-built DESIGN §10.4
+    feature -- this renders the step path HA gives, which is already enough
+    to locate the corresponding `with if_then(...)`/`service(...)` call in
+    the decompiled/authored source.
+    """
+    steps = trace.get("trace", {})
+    lines = [f"trace: run {trace.get('run_id', '?')} ({trace.get('script_execution', '?')})"]
+    for path, events in steps.items():
+        count = len(events) if isinstance(events, list) else 1
+        lines.append(f"  {path} ({count} event{'s' if count != 1 else ''})")
+    if not steps:
+        lines.append("  (no steps recorded)")
+    return "\n".join(lines)
