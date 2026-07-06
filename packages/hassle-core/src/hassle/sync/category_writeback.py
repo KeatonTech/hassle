@@ -99,7 +99,12 @@ def _category_id_for_slug(categories: dict[str, str], slug: str) -> str | None:
 
 
 def attempt_category_writeback(
-    backend: Any, kind: str, identity: str, source_path: str | None
+    backend: Any,
+    kind: str,
+    identity: str,
+    source_path: str | None,
+    *,
+    category_override: str | None = None,
 ) -> CategoryWritebackResult:
     """Try to assign (creating if needed) the category implied by
     `source_path` to the just-CREATEd object `kind:identity`.
@@ -111,6 +116,19 @@ def attempt_category_writeback(
     only ever collects into `ApplyResult.category_warnings` (MILESTONES M11
     test 3). The caller does NOT add its own try/except — the isolation
     guarantee lives entirely here.
+
+    ``category_override`` (MILESTONES M12, additive): the exact display name
+    to use if a brand-new category has to be created, in place of M11's
+    `humanize_slug(slug)` guess -- sourced from a bundle file's `CATEGORY`
+    module global. Callers (`hassle.sync.apply.apply_plan` /
+    `hassle_cli.cli`) are responsible for only ever passing an override whose
+    slug actually matches `source_path`'s stem -- this function does not
+    itself re-validate that (the validator, `hassle.registry.validate`'s
+    `category-slug-mismatch` Finding, is the one check for that); it only
+    ever consults the override when a NEW category is actually being
+    created, never when reusing an existing match (M11's "never guess which
+    side is right" reuse rule is unaffected by M12 -- an existing category is
+    never renamed by push regardless of what `CATEGORY` says).
     """
     scope = _SCOPE_FOR_KIND.get(kind)
     if scope is None:
@@ -134,7 +152,10 @@ def attempt_category_writeback(
         existing = list_categories(scope)
         category_id = _category_id_for_slug(existing, slug)
         if category_id is None:
-            category_id = create_category(scope, humanize_slug(slug))
+            display_name = (
+                category_override if category_override is not None else humanize_slug(slug)
+            )
+            category_id = create_category(scope, display_name)
         assign_category(kind, identity, scope, category_id)
         return CategoryWritebackResult(attempted=True)
     except Exception as exc:

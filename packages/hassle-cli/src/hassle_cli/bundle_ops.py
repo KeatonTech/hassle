@@ -32,6 +32,40 @@ def compile_local_objects(bundle_root: Path) -> tuple[ObjectMap, CompileResult]:
     return objects, result
 
 
+def category_overrides_and_warnings(
+    result: CompileResult,
+) -> tuple[dict[str, str], list[str]]:
+    """MILESTONES M12: `hassle.sync.apply.apply_plan`'s `category_overrides`
+    map (bundle-relative source path -> exact display name), built from every
+    bundle file's `CATEGORY` global that actually slugifies to its own file
+    stem -- alongside a list of warning strings for every file whose
+    `CATEGORY` does NOT (the "write-back additionally ignores the global with
+    a warning" half of MILESTONES M12's binding semantics; the compile-time
+    Finding, `hassle.registry.validate`'s `category-slug-mismatch`, is the
+    other half of that same rule, surfaced via `hassle validate`/`plan`
+    instead of push's own warning stream).
+
+    A mismatched file's `CATEGORY` is deliberately left OUT of the returned
+    map (never passed through as an override) -- `apply_plan`'s fallback for
+    an entry with no override entry is exactly M11's `humanize_slug` guess,
+    which is the correct "don't guess which side is right" behavior here.
+    """
+    overrides: dict[str, str] = {}
+    warnings: list[str] = []
+    for source_path, category in result.category_globals.items():
+        stem = Path(source_path).stem
+        if _slugify(category.value) == stem:
+            overrides[source_path] = category.value
+        else:
+            warnings.append(
+                f'hassle push: `CATEGORY = "{category.value}"` in `{source_path}` does not '
+                f"slugify to this file's own name -- ignoring it (falling back to a "
+                f"slug-derived category name if a new category has to be created). Fix: "
+                f"rename the file or change `CATEGORY` so they agree (see `hassle validate`)."
+            )
+    return overrides, warnings
+
+
 def source_path_for(bundle_root: Path, result: CompileResult, object_key: str) -> str | None:
     span = result.decl_span_for(object_key)
     if span is None:
@@ -62,6 +96,39 @@ def _category_source_path(object_key: str, registry: RegistrySnapshot) -> str | 
         return None
     tree = "automations" if kind == "automation" else "scripts"
     return f"{tree}/{_slugify(category_name)}.py"
+
+
+def category_display_names_for_paths(
+    object_keys: list[str], registry: RegistrySnapshot
+) -> dict[str, str]:
+    """MILESTONES M12: destination path -> that category's real HA display
+    name, for every ``object_keys`` entry that has a UI-assigned category
+    (the exact same `_category_source_path` anchor `default_source_path`
+    already uses for placement -- this just also keeps the display NAME it
+    would otherwise throw away, for `hassle pull` to emit as the new
+    category file's `CATEGORY` global).
+
+    Only ever consulted by `hassle_cli.pull_apply.apply_pull_with_decompiler`
+    for an ADOPT batch whose destination file does not already exist --
+    i.e. this dict may (harmlessly) also contain paths for objects landing
+    in an ALREADY-EXISTING category file; the caller is what decides whether
+    the destination is actually new.
+    """
+    names: dict[str, str] = {}
+    for object_key in object_keys:
+        kind, _, identity = object_key.partition(":")
+        if kind not in ("automation", "script"):
+            continue
+        entity = registry.entity_by_unique_id(kind, identity)
+        if entity is None:
+            continue
+        category_name = registry.category_name_for_entity(kind, entity)
+        if not category_name:
+            continue
+        tree = "automations" if kind == "automation" else "scripts"
+        path = f"{tree}/{_slugify(category_name)}.py"
+        names[path] = category_name
+    return names
 
 
 def default_source_path(object_key: str, *, registry: RegistrySnapshot | None = None) -> str:

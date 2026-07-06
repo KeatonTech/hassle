@@ -46,11 +46,13 @@ service param always produces a Finding.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, cast
 
 from hassle.compiler.bundle import CompileResult
 from hassle.compiler.spans import SourceSpan
 from hassle.ir import slugify
+from hassle.ir.keys import humanize_slug
 from hassle.ir.models import HelperConfig
 from hassle.registry.didyoumean import did_you_mean
 from hassle.registry.extract import as_dict_list, extract_references
@@ -488,6 +490,48 @@ def _validate_helper_slugs(
     return findings
 
 
+def _validate_category_globals(result: CompileResult) -> list[Finding]:
+    """MILESTONES M12: a bundle file's ``CATEGORY`` global must slugify to
+    that file's own stem (the same anchor `bundle_ops._category_source_path`/
+    push-side write-back use to match a category by name) -- a mismatch means
+    the declared display name and the file's placement disagree about which
+    category this is, which is unresolvable without guessing, so it's flagged
+    rather than silently trusted either way. Never blocks the object itself
+    from compiling/validating/applying (MILESTONES M11 test-3-style
+    isolation) -- write-back separately ignores a mismatched global with its
+    own warning (`hassle.sync.category_writeback`)."""
+    findings: list[Finding] = []
+    for source_path, category in result.category_globals.items():
+        stem = Path(source_path).stem
+        expected_slug = slugify(category.value)
+        if expected_slug == stem:
+            continue
+        file = category.span.file if category.span is not None else source_path
+        line = category.span.line if category.span is not None else None
+        findings.append(
+            Finding(
+                code="category-slug-mismatch",
+                severity="error",
+                file=file,
+                line=line,
+                message=(
+                    f'`CATEGORY = "{category.value}"` in `{source_path}` does not slugify to '
+                    f'this file\'s own name -- `slugify("{category.value}")` is '
+                    f"`{expected_slug}`, but the file is named `{stem}.py`."
+                ),
+                fix=(
+                    f"Rename the file to `{expected_slug}.py` (or change `CATEGORY` to a name "
+                    f"that slugifies to `{stem}`, e.g. a display name close to "
+                    f"`{humanize_slug(stem)}`) so the declared name and the file's placement "
+                    f"agree on which HA category this is. Until fixed, `hassle push` ignores "
+                    f"`CATEGORY` for this file and falls back to a slug-derived name if it "
+                    f"has to create the category."
+                ),
+            )
+        )
+    return findings
+
+
 def validate_bundle(
     result: CompileResult,
     snapshot: RegistrySnapshot,
@@ -505,4 +549,5 @@ def validate_bundle(
     findings.extend(_validate_purpose_vocabulary(result, snapshot))
     findings.extend(_validate_service_params(result, snapshot))
     findings.extend(_validate_helper_slugs(result, snapshot, adopted_helper_keys))
+    findings.extend(_validate_category_globals(result))
     return findings

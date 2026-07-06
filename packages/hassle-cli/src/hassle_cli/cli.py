@@ -338,6 +338,21 @@ def pull(allow_dirty: bool) -> None:
     from datetime import UTC, datetime
 
     writer = SplicingSourceWriter(updated_on=datetime.now(UTC).strftime("%Y-%m-%d"))
+    # MILESTONES M12: real HA display names for every categorized object in
+    # this plan, keyed by destination path -- `apply_pull_with_decompiler`
+    # only actually emits `CATEGORY` for a path that doesn't exist on disk
+    # yet (a brand-new category file), so harmlessly including
+    # already-existing destinations here is fine. `registry_snapshot` is
+    # `None` when the backend lacks the registry surface at all (best-effort,
+    # same guard `_write_registry_snapshot` itself uses) -- category
+    # placement/display names simply aren't available in that case.
+    category_display_names = (
+        bundle_ops.category_display_names_for_paths(
+            [e.object_key for e in plan.entries], registry_snapshot
+        )
+        if registry_snapshot is not None
+        else {}
+    )
     # `apply_pull_with_decompiler` self-checks every ADOPT destination
     # together BEFORE writing any of them (`hassle_cli.pull_apply` module
     # docstring, coordinator task 4) -- a decompiler coordination bug here is
@@ -346,7 +361,9 @@ def pull(allow_dirty: bool) -> None:
     # covers REFRESH's single-object splice, the one path the pre-write
     # self-check can't cover -- see that module's docstring).
     try:
-        result = apply_pull_with_decompiler(plan, writer)
+        result = apply_pull_with_decompiler(
+            plan, writer, category_display_names=category_display_names
+        )
     except (DecompiledBatchDoesNotCompileError, DecompiledValueMismatchError) as exc:
         console.print(
             f"[bold red]hassle pull: {exc}[/bold red]\n"
@@ -479,7 +496,12 @@ def pull(allow_dirty: bool) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _build_plan(root: Path):
+def _build_plan_with_compile_result(root: Path):
+    """`_build_plan`'s implementation, additionally returning the
+    `CompileResult` the plan was computed from (MILESTONES M12: `push` needs
+    it to build `apply_plan`'s `category_overrides` from the bundle's
+    `CATEGORY` globals; `plan`/`status` just discard the second value via the
+    `_build_plan` wrapper below)."""
     from hassle.compiler.errors import CompileError
     from hassle.ir.keys import OBJECT_KINDS
     from hassle.sync.plan import compute_plan
@@ -519,7 +541,7 @@ def _build_plan(root: Path):
     source_paths = bundle_ops.build_source_paths(
         root, compile_result, [e.object_key for e in the_plan.entries]
     )
-    return the_plan.model_copy(
+    the_plan = the_plan.model_copy(
         update={
             "entries": [
                 entry.model_copy(update={"source_path": source_paths.get(entry.object_key)})
@@ -527,6 +549,12 @@ def _build_plan(root: Path):
             ]
         }
     )
+    return the_plan, compile_result
+
+
+def _build_plan(root: Path):
+    the_plan, _compile_result = _build_plan_with_compile_result(root)
+    return the_plan
 
 
 @main.command()
@@ -596,7 +624,17 @@ def push(
 
     console = get_console(force_plain=ctx.obj.get("plain", False))
     root = _bundle_root_or_fail()
-    the_plan = _build_plan(root)
+    the_plan, compile_result = _build_plan_with_compile_result(root)
+    # MILESTONES M12: `category_overrides` (bundle-relative source path ->
+    # exact display name) from every file's `CATEGORY` global that actually
+    # slugifies to its own file stem; a mismatched file's global is left out
+    # (never trusted) and instead reported here as its own warning, alongside
+    # a `category-slug-mismatch` Finding from `hassle validate`/`plan`.
+    category_overrides, category_global_warnings = bundle_ops.category_overrides_and_warnings(
+        compile_result
+    )
+    for warning in category_global_warnings:
+        console.print(f"[yellow]{warning}[/yellow]")
 
     unresolved_conflicts = [
         e
@@ -636,7 +674,13 @@ def push(
     ha_url, token = _require_backend_config(root)
     manifest = manifest_io.load_manifest(root)
     with backend_factory.connect(ha_url, token) as backend:
-        result = apply_plan(resolved_plan, backend, manifest, synced_at=manifest_io.now_iso())
+        result = apply_plan(
+            resolved_plan,
+            backend,
+            manifest,
+            synced_at=manifest_io.now_iso(),
+            category_overrides=category_overrides,
+        )
 
     if not result.succeeded:
         console.print(f"[bold red]hassle push: apply failed/aborted: {result.outcomes}[/bold red]")

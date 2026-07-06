@@ -84,9 +84,26 @@ _PUSH_ACTIONS = (PlanAction.CREATE, PlanAction.UPDATE, PlanAction.DELETE)
 
 
 def apply_plan(
-    plan: Plan, backend: Backend, manifest: Manifest, *, synced_at: str | None = None
+    plan: Plan,
+    backend: Backend,
+    manifest: Manifest,
+    *,
+    synced_at: str | None = None,
+    category_overrides: dict[str, str] | None = None,
 ) -> ApplyResult:
-    """Apply the push-side actions of ``plan`` against ``backend``."""
+    """Apply the push-side actions of ``plan`` against ``backend``.
+
+    ``category_overrides`` (MILESTONES M12, additive): bundle-relative source
+    path -> exact category display name, sourced from that file's `CATEGORY`
+    module global (`hassle_cli.bundle_ops`/`cli.py` build this from the
+    compiled bundle's `CompileResult.category_globals`). Keyed by
+    `PlanEntry.source_path` -- `CATEGORY` is a per-FILE global, matching
+    DESIGN §7.3's placement being per-file too, never per-object. Threaded
+    straight to `attempt_category_writeback`'s `category_override` for the
+    matching CREATE; a missing/absent entry behaves exactly like M11's
+    `humanize_slug` fallback (M12 test 3 -- byte-identical when no override
+    is supplied at all).
+    """
     push_entries = [entry for entry in plan.entries if entry.action in _PUSH_ACTIONS]
     push_entries.sort(key=lambda entry: _kind_sort_key(entry.kind))
 
@@ -136,7 +153,12 @@ def apply_plan(
             # M11: metadata-only, best-effort -- never raises past this call
             # (attempt_category_writeback catches everything internally) and
             # never affects `outcomes`/rollback for the object it just created.
-            result = attempt_category_writeback(backend, entry.kind, identity, entry.source_path)
+            override = None
+            if category_overrides is not None and entry.source_path is not None:
+                override = category_overrides.get(entry.source_path)
+            result = attempt_category_writeback(
+                backend, entry.kind, identity, entry.source_path, category_override=override
+            )
             if result.warning is not None:
                 category_warnings.append(result.warning)
 

@@ -1,0 +1,1 @@
+`CATEGORY` in automatic_hvac.py is a int (42), not a `str`. `CATEGORY` supplies the exact display name Hassle uses when it has to create a brand-new Home Assistant UI category, so it must be a plain string. Fix: quote the value, e.g. `CATEGORY = "42"`.

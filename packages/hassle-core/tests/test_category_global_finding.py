@@ -57,7 +57,7 @@ def test_category_mismatched_with_file_stem_is_flagged(
     bundle = _write_bundle(
         tmp_path,
         "automatic_hvac.py",
-        '''
+        """
 from hassle import automation, service, state, when
 
 CATEGORY = "Totally Different Name"
@@ -67,7 +67,7 @@ CATEGORY = "Totally Different Name"
 def auto_hvac_1():
     when(state("binary_sensor.hall_motion").to("on"))
     service("climate.turn_on", target={"entity_id": "climate.living_room"})
-''',
+""",
     )
     result = compile_bundle(bundle)
     findings = validate_bundle(result, snapshot)
@@ -82,7 +82,7 @@ def test_category_matching_file_stem_is_clean(tmp_path: Path, snapshot: Registry
     bundle = _write_bundle(
         tmp_path,
         "automatic_hvac.py",
-        '''
+        """
 from hassle import automation, service, state, when
 
 CATEGORY = "Automatic HVAC"
@@ -92,7 +92,7 @@ CATEGORY = "Automatic HVAC"
 def auto_hvac_1():
     when(state("binary_sensor.hall_motion").to("on"))
     service("climate.turn_on", target={"entity_id": "climate.living_room"})
-''',
+""",
     )
     result = compile_bundle(bundle)
     findings = validate_bundle(result, snapshot)
@@ -108,7 +108,7 @@ def test_mismatch_does_not_block_other_object_validation(
     bundle = _write_bundle(
         tmp_path,
         "automatic_hvac.py",
-        '''
+        """
 from hassle import automation, service, state, when
 
 CATEGORY = "Nonsense"
@@ -118,7 +118,7 @@ CATEGORY = "Nonsense"
 def auto_hvac_1():
     when(state("binary_sensor.hall_motion").to("on"))
     service("climate.turn_on", target={"entity_id": "climate.living_room"})
-''',
+""",
     )
     result = compile_bundle(bundle)
     findings = validate_bundle(result, snapshot)

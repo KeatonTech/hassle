@@ -110,9 +110,12 @@ transform itself.
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
+
+import libcst as cst
 
 from hassle.compiler.bundle import compile_bundle
 from hassle.decompiler.codegen import ScriptRef, decompile_bundle
@@ -379,6 +382,45 @@ def _adopt_batch_source(
     return path, decompile_bundle(objs, script_refs=script_refs)
 
 
+def _insert_category_global(source: str, category_name: str) -> str:
+    """Insert ``CATEGORY = "<category_name>"`` right after ``source``'s
+    import header (MILESTONES M12: pull emits the global when it CREATES a
+    brand-new category file). Only ever called for a fresh ADOPT-batch
+    destination that doesn't exist on disk yet -- an existing file's
+    `CATEGORY` line is left alone entirely by the splicer (`hassle.decompiler.
+    splice`'s `splice_object`/`remove_object` only ever touch the ONE
+    statement matching a given object key; a plain `CATEGORY = "..."`
+    assignment is never recognized as an object statement at all, so REFRESH/
+    DROP simply never look at it, MILESTONES M12 test 4).
+
+    Implemented with LibCST (already a decompiler-layer dependency) rather
+    than string surgery, so the inserted statement is always syntactically
+    well-formed regardless of what ``source`` looks like; a `ruff format`
+    pass afterward keeps spacing byte-stable and consistent with
+    `decompile_bundle`'s own formatting (R8: deterministic output).
+    """
+    module = cst.parse_module(source)
+    last_import_index = -1
+    for index, stmt in enumerate(module.body):
+        is_import = isinstance(stmt, cst.SimpleStatementLine) and all(
+            isinstance(small, (cst.Import, cst.ImportFrom)) for small in stmt.body
+        )
+        if is_import:
+            last_import_index = index
+    category_stmt = cst.parse_statement(f"CATEGORY = {category_name!r}\n").with_changes(
+        leading_lines=[cst.EmptyLine(), cst.EmptyLine()]
+    )
+    new_body = list(module.body)
+    new_body.insert(last_import_index + 1, category_stmt)
+    new_source = module.with_changes(body=new_body).code
+    proc = subprocess.run(
+        ["ruff", "format", "-"], input=new_source, capture_output=True, text=True, check=False
+    )
+    if proc.returncode != 0 or not proc.stdout:
+        return new_source  # pragma: no cover - defensive, mirrors codegen._format_with_ruff
+    return proc.stdout
+
+
 def _drop(entry: PlanEntry, source_writer: SourceWriter) -> None:
     source_writer.delete_object(_entry_path(entry), entry.object_key)
 
@@ -419,9 +461,32 @@ def _script_refs_for_plan(plan: Plan) -> dict[str, ScriptRef]:
     return build_script_refs(scripts, source_paths)
 
 
-def apply_pull_with_decompiler(plan: Plan, source_writer: SourceWriter) -> PullResult:
+def apply_pull_with_decompiler(
+    plan: Plan,
+    source_writer: SourceWriter,
+    *,
+    category_display_names: dict[str, str] | None = None,
+) -> PullResult:
     """Same action dispatch as `hassle.sync.pull.apply_pull`, but real
-    decompiled DSL content for `refresh`/`adopt` instead of the M5 placeholder."""
+    decompiled DSL content for `refresh`/`adopt` instead of the M5 placeholder.
+
+    ``category_display_names`` (MILESTONES M12, additive): bundle-relative
+    destination path -> the HA category's real display name (`hassle_cli.
+    bundle_ops`/`cli.py`'s pull command builds this from the registry
+    snapshot -- the same real name `bundle_ops._category_source_path`
+    already slugifies for placement, never thrown away here). Only ever
+    consulted for an ADOPT batch whose destination file does NOT already
+    exist on disk -- i.e. pull is CREATING that category file for the first
+    time (MILESTONES M12: "only when pull CREATES a new category file").
+    Adopting a further object into an ALREADY-EXISTING category file never
+    re-emits or duplicates the global (it's appended-to via the splicer's
+    own file-doesn't-exist-yet fallback path, `SplicingSourceWriter.
+    splice_object`, which only fires for a stale-manifest case, not a plain
+    second adopt into an existing multi-object file -- an existing file
+    already has its `CATEGORY` line, if any, and this function never
+    touches an existing file's content before deciding whether to insert
+    one).
+    """
     script_refs = _script_refs_for_plan(plan)
     conflicts: list[Conflict] = []
     adopts_by_path: dict[Path, list[PlanEntry]] = {}
@@ -453,6 +518,13 @@ def apply_pull_with_decompiler(plan: Plan, source_writer: SourceWriter) -> PullR
     for path, entries in adopts_by_path.items():
         batch_path, source = _adopt_batch_source(entries, script_refs)
         assert batch_path == path
+        # MILESTONES M12: emit CATEGORY only for a file that doesn't exist
+        # yet (pull is creating it) and only when a real display name is
+        # known for this exact destination path.
+        if category_display_names is not None and not path.exists():
+            display_name = category_display_names.get(path.as_posix())
+            if display_name is not None:
+                source = _insert_category_global(source, display_name)
         batch_sources[path] = source
         all_object_keys.extend(e.object_key for e in entries)
         for e in entries:

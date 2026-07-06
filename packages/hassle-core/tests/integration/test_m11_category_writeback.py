@@ -358,9 +358,7 @@ def test_push_create_with_category_global_uses_exact_display_name(
     try:
         after_categories = ha.list_categories("automation")
         matches = [
-            category_id
-            for category_id, name in after_categories.items()
-            if slugify(name) == slug
+            category_id for category_id, name in after_categories.items() if slugify(name) == slug
         ]
         assert len(matches) == 1, after_categories
         category_id = matches[0]

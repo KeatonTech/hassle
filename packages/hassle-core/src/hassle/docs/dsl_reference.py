@@ -152,6 +152,18 @@ the entity registry's category, if any) else `automations/misc.py` /
 organization is entirely user-controlled** — an object always stays in whatever
 file the user puts it in (tracked by the manifest), never auto-moved.
 
+An optional module-level `CATEGORY: str = "Automatic HVAC"` in a category-shaped
+file supplies the *exact* display name Hassle uses if it ever has to create that
+category fresh in HA (an acronym or punctuation choice a slug can't recover, e.g.
+`"HVAC"` from `automatic_hvac.py`) — `slugify(CATEGORY)` must equal the file's own
+stem, or `hassle validate` flags it and `hassle push` ignores the global (falling
+back to a slug-derived guess) rather than guessing which side is right. It is
+consulted ONLY when push has to CREATE a brand-new category; matching an existing
+HA category is always slug-based, and an existing category is never renamed by
+push (the HA UI owns renames). `hassle pull` writes this line itself whenever it
+creates a new category file, so display names round-trip through source; refreshing
+an already-existing file never duplicates or moves the line.
+
 ## Upgrade / plan-labeling note
 
 `hassle push`ing a legacy-form remote object (inner `platform:`, scalar `delay:`,

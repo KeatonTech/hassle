@@ -57,7 +57,7 @@ def test_category_global_recorded_with_value(tmp_path: Path) -> None:
     bundle = _write_bundle(
         tmp_path,
         "automatic_hvac.py",
-        '''
+        """
 from hassle import automation, service, state, when
 
 CATEGORY = "Automatic HVAC"
@@ -67,7 +67,7 @@ CATEGORY = "Automatic HVAC"
 def auto_hvac_1():
     when(state("binary_sensor.hall_motion").to("on"))
     service("climate.turn_on", target={"entity_id": "climate.living_room"})
-''',
+""",
     )
     result = compile_bundle(bundle)
     entry = result.category_global_for("automations/automatic_hvac.py")
@@ -79,7 +79,7 @@ def test_category_global_span_points_at_assignment(tmp_path: Path) -> None:
     bundle = _write_bundle(
         tmp_path,
         "automatic_hvac.py",
-        '''
+        """
 from hassle import automation, service, state, when
 
 CATEGORY = "Automatic HVAC"
@@ -89,7 +89,7 @@ CATEGORY = "Automatic HVAC"
 def auto_hvac_1():
     when(state("binary_sensor.hall_motion").to("on"))
     service("climate.turn_on", target={"entity_id": "climate.living_room"})
-''',
+""",
     )
     result = compile_bundle(bundle)
     entry = result.category_global_for("automations/automatic_hvac.py")
@@ -145,7 +145,7 @@ def test_category_global_survives_bundle_with_multiple_files(tmp_path: Path) -> 
     bundle.mkdir()
     (bundle / "automations").mkdir()
     (bundle / "automations" / "hvac.py").write_text(
-        '''
+        """
 from hassle import automation, service, state, when
 
 CATEGORY = "Automatic HVAC"
@@ -155,7 +155,7 @@ CATEGORY = "Automatic HVAC"
 def auto_hvac_1():
     when(state("binary_sensor.hall_motion").to("on"))
     service("climate.turn_on", target={"entity_id": "climate.living_room"})
-''',
+""",
         encoding="utf-8",
     )
     (bundle / "automations" / "misc.py").write_text(

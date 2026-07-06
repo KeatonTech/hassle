@@ -92,6 +92,29 @@ class ElseWithoutIfError(CompileError):
         )
 
 
+class InvalidCategoryGlobalError(CompileError):
+    """A bundle file's module-level ``CATEGORY`` global is not a ``str``
+    (MILESTONES M12: category display names via the ``CATEGORY`` global).
+
+    ``CATEGORY`` is read directly off the imported module's namespace (like a
+    plain Python global, not a DSL call) — the only shape it may legally take
+    is a ``str``, the exact display name pull writes and push uses when it
+    has to create a brand-new HA UI category. Anything else (an int, a
+    template expression, ``None``, ...) is a compile-time error rather than a
+    silent coercion or a silently-ignored value, matching R6.
+    """
+
+    def __init__(self, file: str, value: object) -> None:
+        self.file = file
+        self.value = value
+        super().__init__(
+            f"`CATEGORY` in {file} is a {type(value).__name__} ({value!r}), not a `str`. "
+            f"`CATEGORY` supplies the exact display name Hassle uses when it has to create a "
+            f"brand-new Home Assistant UI category, so it must be a plain string. Fix: quote "
+            f'the value, e.g. `CATEGORY = "{value}"`.'
+        )
+
+
 class NoRecordingContextError(CompileError):
     """A recording call (``when``/``only_if``/service/``delay``) ran outside a context.
 

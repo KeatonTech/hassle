@@ -131,7 +131,10 @@ def test_attempt_category_writeback_override_only_used_for_create_not_reuse() ->
     pre-existing matching category is still reused untouched (M11's own
     "never guess which side is right" reuse rule is unaffected by M12)."""
     backend = FakeBackend()
-    backend.seed_category("automation", "cat_hvac", "Some Existing Name")
+    # This name slugifies to the SAME slug the source path implies
+    # ("automatic_hvac") but is spelled differently from the CATEGORY
+    # override below -- proving the override is never used to rename it.
+    backend.seed_category("automation", "cat_hvac", "automatic hvac")
 
     result = attempt_category_writeback(
         backend,
@@ -144,5 +147,5 @@ def test_attempt_category_writeback_override_only_used_for_create_not_reuse() ->
     assert result.attempted is True
     assert result.warning is None
     # Reused the existing category untouched -- the override never renames it.
-    assert backend.list_categories("automation") == {"cat_hvac": "Some Existing Name"}
+    assert backend.list_categories("automation") == {"cat_hvac": "automatic hvac"}
     assert backend.categories_for("automation", "auto_hvac_1") == {"automation": "cat_hvac"}

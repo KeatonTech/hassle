@@ -28,7 +28,7 @@ def test_push_create_uses_category_global_as_exact_display_name(
     toml_writer(git_repo, backend_token=token)
 
     (git_repo / "automations" / "automatic_hvac.py").write_text(
-        '''
+        """
 from hassle import automation, service, state, when
 
 CATEGORY = "Automatic HVAC"
@@ -38,7 +38,7 @@ CATEGORY = "Automatic HVAC"
 def auto_hvac_1():
     when(state("binary_sensor.hall_motion").to("on"))
     service("climate.turn_on", target={"entity_id": "climate.living_room"})
-''',
+""",
         encoding="utf-8",
     )
 
@@ -59,7 +59,7 @@ def test_push_create_mismatched_category_global_ignored_with_warning(
     toml_writer(git_repo, backend_token=token)
 
     (git_repo / "automations" / "automatic_hvac.py").write_text(
-        '''
+        """
 from hassle import automation, service, state, when
 
 CATEGORY = "Something Else Entirely"
@@ -69,7 +69,7 @@ CATEGORY = "Something Else Entirely"
 def auto_hvac_1():
     when(state("binary_sensor.hall_motion").to("on"))
     service("climate.turn_on", target={"entity_id": "climate.living_room"})
-''',
+""",
         encoding="utf-8",
     )
 
@@ -94,10 +94,13 @@ def test_push_existing_category_match_never_renamed_even_with_category_global(
 ) -> None:
     backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
-    backend.seed_category("automation", "cat_hvac", "Pre-Existing UI Name")
+    # Slugifies to the SAME slug the source path implies ("automatic_hvac")
+    # but is spelled differently from the CATEGORY global below, so a
+    # renaming write-back would be observable if it (wrongly) happened.
+    backend.seed_category("automation", "cat_hvac", "automatic hvac")
 
     (git_repo / "automations" / "automatic_hvac.py").write_text(
-        '''
+        """
 from hassle import automation, service, state, when
 
 CATEGORY = "Automatic HVAC"
@@ -107,7 +110,7 @@ CATEGORY = "Automatic HVAC"
 def auto_hvac_1():
     when(state("binary_sensor.hall_motion").to("on"))
     service("climate.turn_on", target={"entity_id": "climate.living_room"})
-''',
+""",
         encoding="utf-8",
     )
 
@@ -118,5 +121,5 @@ def auto_hvac_1():
     # HA's UI owns renames (MILESTONES M12: "an existing HA category is NEVER
     # renamed by push").
     categories = backend.list_categories("automation")
-    assert categories == {"cat_hvac": "Pre-Existing UI Name"}
+    assert categories == {"cat_hvac": "automatic hvac"}
     assert backend.categories_for("automation", "auto_hvac_1") == {"automation": "cat_hvac"}

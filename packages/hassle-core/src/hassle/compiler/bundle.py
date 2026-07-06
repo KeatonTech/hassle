@@ -30,6 +30,7 @@ simply outside this loader's contract.
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import importlib
 import importlib.util
@@ -38,7 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from hassle.compiler.errors import DuplicateObjectError
+from hassle.compiler.errors import DuplicateObjectError, InvalidCategoryGlobalError
 from hassle.compiler.recording import RecordedNode, Recorder, record_trigger, recording
 from hassle.compiler.registry import PrebuiltObject, RegisteredObject, fresh
 from hassle.compiler.spans import SourceSpan
@@ -61,6 +62,25 @@ def _empty_decl_spans() -> dict[str, SourceSpan | None]:
     return {}
 
 
+@dataclass(frozen=True)
+class CategoryGlobal:
+    """One bundle file's module-level ``CATEGORY`` global (MILESTONES M12):
+    its declared display-name value plus the assignment's source span (when
+    obtainable — a plain top-level `CATEGORY = "..."` executes at import
+    time with no Hassle DSL call involved, so it isn't captured by
+    :func:`hassle.compiler.spans.capture_span`; the span is instead found by
+    a lightweight `ast` scan of the module's own source, matching the
+    milestone's "file:line of the CATEGORY assignment if obtainable, else
+    file" wording)."""
+
+    value: str
+    span: SourceSpan | None
+
+
+def _empty_category_globals() -> dict[str, CategoryGlobal]:
+    return {}
+
+
 @dataclass
 class CompileResult:
     """The output of compiling a bundle: IR objects + their source spans."""
@@ -70,6 +90,11 @@ class CompileResult:
     _spans: dict[str, _SectionSpans] = field(default_factory=_empty_spans)
     # object_key -> the decoration-site span (for whole-object errors like duplicates).
     _decl_spans: dict[str, SourceSpan | None] = field(default_factory=_empty_decl_spans)
+    # bundle-relative source path (POSIX, e.g. "automations/hvac.py") -> that
+    # file's module-level `CATEGORY` global, when it declares one (MILESTONES
+    # M12). A sidecar map, exactly like `_spans`/`_decl_spans` -- never part
+    # of the frozen F1 IR shape.
+    _category_globals: dict[str, CategoryGlobal] = field(default_factory=_empty_category_globals)
 
     def add(
         self,
@@ -125,6 +150,27 @@ class CompileResult:
         trigger/condition/action line within it.
         """
         return self._decl_spans.get(object_key)
+
+    def set_category_global(self, source_path: str, category: CategoryGlobal) -> None:
+        """Record ``source_path``'s (bundle-relative, POSIX) ``CATEGORY``
+        global (MILESTONES M12). Internal to the pipeline (called from
+        :func:`compile_bundle` while importing each bundle module); downstream
+        consumers read via :meth:`category_global_for`/:attr:`category_globals`.
+        """
+        self._category_globals[source_path] = category
+
+    def category_global_for(self, source_path: str) -> CategoryGlobal | None:
+        """The ``CATEGORY`` global declared by ``source_path`` (bundle-relative,
+        POSIX, e.g. ``"automations/hvac.py"``), or ``None`` if that file
+        declares none."""
+        return self._category_globals.get(source_path)
+
+    @property
+    def category_globals(self) -> dict[str, CategoryGlobal]:
+        """Every bundle file that declares a ``CATEGORY`` global, keyed by its
+        bundle-relative (POSIX) source path -- read-only view for the
+        validator (:mod:`hassle.registry.validate`)."""
+        return dict(self._category_globals)
 
 
 def _flatten_spans(nodes: list[RecordedNode]) -> list[SourceSpan | None]:
@@ -235,11 +281,14 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
 
     reg = fresh()
     with _sandboxed_import(bundle_path):
-        _import_bundle_modules(bundle_path)
+        category_globals = _import_bundle_modules(bundle_path)
     # Snapshot the registry before compiling (compile opens recorders that must not
     # see leftover registrations). Pre-built objects (helpers / raw / blueprint)
     # ride the `prebuilt` stream; function-shaped registrations ride `objects`.
-    return compile_registered(list(reg.objects), list(reg.prebuilt))
+    result = compile_registered(list(reg.objects), list(reg.prebuilt))
+    for source_path, category in category_globals.items():
+        result.set_category_global(source_path, category)
+    return result
 
 
 class _sandboxed_import:
@@ -345,7 +394,33 @@ def _dotted_module_name(bundle_path: Path, py: Path) -> str:
     return ".".join(rel.parts)
 
 
-def _import_bundle_modules(bundle_path: Path) -> None:
+def _category_global_span(py: Path) -> SourceSpan | None:
+    """The source span of a top-level ``CATEGORY = ...`` assignment in ``py``,
+    or ``None`` if it can't be found (MILESTONES M12: "file:line of the
+    CATEGORY assignment if obtainable, else file").
+
+    ``CATEGORY`` executes as a plain module-level assignment at import time --
+    no Hassle DSL call is involved, so :func:`hassle.compiler.spans.capture_span`
+    (which walks live call-stack frames) cannot see it. A lightweight `ast`
+    parse of the file's own source is simpler and more reliable than trying to
+    thread a frame hook through an ordinary Python assignment statement.
+    """
+    try:
+        tree = ast.parse(py.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, ValueError):  # pragma: no cover - defensive
+        return None
+    for stmt in tree.body:
+        if (
+            isinstance(stmt, ast.Assign)
+            and len(stmt.targets) == 1
+            and isinstance(stmt.targets[0], ast.Name)
+            and stmt.targets[0].id == "CATEGORY"
+        ):
+            return SourceSpan(file=str(py), line=stmt.lineno)
+    return None
+
+
+def _import_bundle_modules(bundle_path: Path) -> dict[str, CategoryGlobal]:
     """Import every ``*.py`` module in the bundle tree (sorted, stable), at
     any depth under a subdirectory (M7.1, DESIGN §6/§7.3, docs/ha-api-notes.md
     §17.9 RESOLVED).
@@ -370,8 +445,20 @@ def _import_bundle_modules(bundle_path: Path) -> None:
     symlinked *intermediate* path component (e.g. a non-symlink leaf file
     reached through a symlinked grandparent directory two levels up), which
     ``child.is_symlink()`` on the leaf alone would not catch.
+
+    **MILESTONES M12:** after each module executes, its namespace is checked
+    for a module-level ``CATEGORY`` global -- present only when the bundle
+    file declares one. A non-``str`` value is a compile-time
+    :class:`~hassle.compiler.errors.InvalidCategoryGlobalError` (R6), raised
+    immediately rather than carried forward as a bad value some downstream
+    consumer would have to re-validate. Returned as a
+    bundle-relative-POSIX-path -> :class:`CategoryGlobal` map for
+    :func:`compile_bundle` to attach to the `CompileResult` it builds
+    afterward (this function itself never touches `CompileResult` -- it runs
+    entirely inside `_sandboxed_import`, before any recorder opens).
     """
     resolved_bundle_path = bundle_path.resolve()
+    category_globals: dict[str, CategoryGlobal] = {}
     for py in _iter_bundle_source_files(bundle_path):
         if not py.resolve().is_relative_to(resolved_bundle_path):
             continue  # defensive: escaped the bundle via some path component
@@ -384,3 +471,13 @@ def _import_bundle_modules(bundle_path: Path) -> None:
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
+
+        if hasattr(module, "CATEGORY"):
+            value = module.CATEGORY
+            if not isinstance(value, str):
+                raise InvalidCategoryGlobalError(str(py), value)
+            source_path = py.relative_to(bundle_path).as_posix()
+            category_globals[source_path] = CategoryGlobal(
+                value=value, span=_category_global_span(py)
+            )
+    return category_globals
