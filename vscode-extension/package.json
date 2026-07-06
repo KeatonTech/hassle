@@ -1,0 +1,79 @@
+{
+  "name": "hassle-vscode",
+  "displayName": "Hassle",
+  "description": "Home Assistant automations as version-controlled Python: Pull/Plan/Push/Validate/Test/Run, Problems-pane diagnostics, and a compiled-YAML preview panel.",
+  "version": "0.0.1",
+  "publisher": "REPLACE_WITH_YOUR_PUBLISHER_ID",
+  "private": true,
+  "license": "SEE LICENSE IN ../LICENSE",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:hassle.toml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "hassle.pull",
+        "title": "Hassle: Pull"
+      },
+      {
+        "command": "hassle.plan",
+        "title": "Hassle: Plan"
+      },
+      {
+        "command": "hassle.push",
+        "title": "Hassle: Push"
+      },
+      {
+        "command": "hassle.validate",
+        "title": "Hassle: Validate"
+      },
+      {
+        "command": "hassle.test",
+        "title": "Hassle: Test"
+      },
+      {
+        "command": "hassle.run",
+        "title": "Hassle: Run (simulator)"
+      },
+      {
+        "command": "hassle.showCompiledYaml",
+        "title": "Hassle: Show Compiled YAML"
+      }
+    ],
+    "configuration": {
+      "title": "Hassle",
+      "properties": {
+        "hassle.executablePath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path (or command) used to invoke the Hassle CLI, e.g. `/usr/local/bin/hassle`. Leave empty to use the default: `uv run hassle`, invoked from the workspace root."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test:unit": "node --no-experimental-strip-types ./node_modules/.bin/mocha --require ts-node/register --extension ts src/test/unit/**/*.test.ts",
+    "test:integration": "node ./out/test/runTest.js",
+    "test": "npm run test:unit"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.4.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}
