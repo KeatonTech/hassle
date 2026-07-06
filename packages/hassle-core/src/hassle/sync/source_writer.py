@@ -13,8 +13,10 @@ depends on this Protocol. Three implementations:
   surgical) for `adopt` (a brand new file has no "rest of file" to preserve).
   It was the M5 stand-in for `refresh`/`drop` too — using it for those on a
   file holding MORE than one object silently clobbers the siblings (the
-  `test_pull_refresh_splice.py` regression), so only ever pass it to a pull
-  apply when every touched file is single-object (or being fully rewritten).
+  `test_pull_refresh_splice.py` regression for refresh's whole-file rewrite,
+  `test_pull_drop_splice.py` for drop's whole-file `unlink`), so only ever
+  pass it to a pull apply when every touched file is single-object (or being
+  fully rewritten).
 - `RecordingSourceWriter` — an in-memory test double that records every call
   without touching disk, used by the pull-engine unit tests.
 
@@ -56,12 +58,25 @@ class SourceWriter(Protocol):
         ...
 
     def delete_object(self, path: Path, object_key: str) -> None:
-        """Remove ``object_key``'s source (drop). May delete the whole file."""
+        """Remove ``object_key``'s source (drop).
+
+        Deletes the file itself only when nothing else would remain
+        (`WholeFileSourceWriter` unlinks it unconditionally — see its
+        docstring for why that is only safe on single-object files).
+        """
         ...
 
 
 class WholeFileSourceWriter:
-    """Blunt but correct: every operation is a whole-file write or delete."""
+    """Blunt: every operation is a whole-file write or delete.
+
+    Correct only when every touched file holds a single object:
+    `splice_object` overwrites and `delete_object` unlinks the WHOLE file, so
+    on a multi-object file both silently destroy the sibling objects and
+    hand-written comments (I6 — the `test_pull_refresh_splice.py` /
+    `test_pull_drop_splice.py` regression pair). `hassle pull` uses
+    `SplicingSourceWriter` instead.
+    """
 
     def write_whole_file(self, path: Path, content: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
