@@ -440,6 +440,54 @@ the owner has run the `docs/SMOKE.md` checklist against the real house. 🎉
 
 ---
 
+## M10 — Config-entry helpers: the template-helper plugin (owner-commissioned, revises the v1 non-goal)
+
+Owner field need: template helpers (e.g. `number.active_hvac_zones`, platform `template`) are
+config-entry objects, invisible to sync. This milestone builds the first config-entry
+`ObjectType` plugin (DESIGN §13's protocol, finally exercised as designed), scoped to the
+**template** domain first (number/sensor/binary_sensor/select at minimum); other config-entry
+helper domains (threshold, derivative, group, …) become mechanical follow-ons.
+
+**Write these tests first**
+1. Capture-driven backend tests: WS `config_entries/get` (filter domain=template) list/read of
+   entry options; create via `config_entries/flow` (handler=template: menu step → type step →
+   form step) and update via `config_entries/options/flow` — FakeBackend models the multi-step
+   flows; the REAL flow shapes are captured by extending the CI integration suite (M6 pattern,
+   HA stable + dev) — integration test creates/updates/deletes a template number end-to-end.
+2. DSL declarations: `template_number(id=..., name=..., state="{{ ... }}", min=..., max=...)`
+   (+ template_sensor/binary_sensor/select), registered as prebuilt objects; golden pairs.
+3. Decompile/adopt into `helpers/` with the same category/misc placement rules; round-trip
+   byte-stable against the entry-options shape (I3 applies to options bodies).
+4. Plan/apply: create = full flow; update = options flow; delete = config entry removal;
+   CREATE-collision drift + rollback semantics matching §8.2; fuzz extension covering the new
+   kind. Identity: config entry_id is HA-side identity (I2 analog: never change it; object key
+   uses the declared unique id — decide and freeze the key form in the same PR).
+5. Ignore-glob + validation interplay (declared template helpers count as existing, §9).
+
+DESIGN amendments in the same series: §1 non-goals (config-entry helpers move from v2 to M10),
+§13 (plugin protocol gains the flow-based apply notes).
+
+---
+
+## M11 — Category write-back on create (owner-commissioned)
+
+New automations/scripts authored in a category-named bundle file get the matching HA category
+assigned on push-create (entity registry write — first registry write; I1 holds: same WS APIs
+the UI uses).
+
+**Write these tests first**
+1. Push-create of an automation whose source file is `automations/automatic_hvac.py` →
+   after apply, the entity-registry entry carries the category whose name slugifies to
+   `automatic_hvac` (FakeBackend models `config/entity_registry/update` + category registries;
+   CI integration verifies live).
+2. Missing category → created first via `config/category_registry/create` (scope-correct),
+   then assigned; `misc.py` (or any non-category file) → no category action.
+3. Failure isolation: category assignment failure NEVER fails or rolls back the object apply
+   (it's metadata; warn and continue — test proves apply survives a category API error).
+4. No retroactive changes: existing/adopted objects' categories are never touched (test).
+
+---
+
 ## Milestone sizing (rough, for planning the swarm)
 
 | Milestone | Size | Parallel workstreams inside |

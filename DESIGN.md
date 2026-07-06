@@ -42,8 +42,9 @@ implementing agents).
 ### Non-goals (v1)
 
 - Managing YAML-only configuration (packages, `configuration.yaml` integrations, Lovelace YAML mode).
-- Managing config-entry helpers (template sensors, threshold, derivative, groups) — these use
-  HA config flows, not storage collections; they're a designed-for v2 plugin (§13).
+- ~~Managing config-entry helpers~~ **Revised (owner decision, 2026-07-05):** template-domain
+  config-entry helpers are now in scope as M10 (the first §13 plugin); other config-entry
+  domains (threshold, derivative, group, …) remain follow-ons.
 - Replacing HA's execution engine. Hassle compiles **to** native HA automations; nothing runs
   through Hassle at runtime. If Hassle is deleted, everything keeps working.
 - Multi-user concurrent editing beyond conflict *detection* (no CRDT/merge editor).
