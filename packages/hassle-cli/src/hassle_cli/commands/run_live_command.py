@@ -39,9 +39,33 @@ def execute_live_run(root: Path, target: str, *, skip_conditions: bool, console:
 
     with backend_factory.connect(ha_url, token) as backend:
 
+        def resolve_shadow_entity_id(shadow_id: str) -> str:
+            """The automation `entity_id` is `slug(alias)`, NOT `slug(id)`
+            (docs/ha-api-notes.md §10.2, confirmed against real HA in M0.V) --
+            `automation.{shadow_id}` was a latent bug that made every live
+            trigger silently target a nonexistent entity (§27 addendum: this,
+            not disabled-automation semantics, is why no trace ever appeared).
+            Resolve the real entity_id the same way `DirectBackend.
+            _alist_automations` enumerates: match `attributes.id` on
+            `/api/states`.
+            """
+            for state in backend.states():  # type: ignore[attr-defined]
+                entity_id = str(state.get("entity_id", ""))
+                if entity_id.startswith("automation.") and (
+                    state.get("attributes", {}).get("id") == shadow_id
+                ):
+                    return entity_id
+            raise RuntimeError(
+                f"hassle run --live: the shadow automation {shadow_id!r} was created but no "
+                "automation.* entity with that id showed up in /api/states. Fix: this usually "
+                "means the config-REST reload settle (DirectBackend._await_config_entity) timed "
+                "out -- check HA's own logs for the shadow automation, or retry."
+            )
+
         def trigger_fn(shadow_id: str, **payload: Any) -> None:
+            entity_id = resolve_shadow_entity_id(shadow_id)
             backend.call_service(  # type: ignore[attr-defined]
-                "automation", "trigger", entity_id=f"automation.{shadow_id}", **payload
+                "automation", "trigger", entity_id=entity_id, **payload
             )
 
         def get_trace_fn(shadow_id: str) -> dict[str, Any]:
