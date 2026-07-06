@@ -1263,3 +1263,65 @@ had) now write `lib/README.md` (explaining `@macro`/`@shared_script`/plain const
 `tests/README.md`. Both writes are idempotent (`hassle_cli.init_cmd.scaffold_lib_and_tests_readmes`
 checks `Path.is_file()` before writing) — re-running `init` or `pull` never clobbers a file the
 user has since edited. Test coverage: `packages/hassle-cli/tests/test_lib_readme_scaffold.py`.
+
+## 23. Hassle bug found + fixed (regression-tested): pull→plan-noop invariant (`fix/plan-noop-invariant`)
+
+A fresh `hassle pull` immediately followed by `hassle plan`, with zero edits on either side, must
+show every object as `noop` (or an `update` labeled `"modernization (one-time)"` — DESIGN §8.2's
+one-time legacy-schema exception, MILESTONES M7 test 4b). A owner real-bundle pull instead showed
+8 phantom `conflict`s alongside the (expected) 13 modernization entries. Root-caused to two
+distinct bugs, both now regression-tested (`packages/hassle-core/tests/test_pull_plan_noop_invariant.py`,
+`packages/hassle-cli/tests/test_pull_plan_noop_invariant_cli.py`):
+
+### 23.1 `ScriptConfig`/decompiler decorator-kwarg emission already matched the stored body (verified, not a bug)
+
+The suspected "materialized defaults" cause (decompiler emitting `mode="single"` etc. for a
+mode-less stored automation/script) was audited against every `@automation`/`@script` decorator
+kwarg (`mode`, `description`, `initial_state`, `max`, `max_exceeded`, `icon`, `fields`, ...): `IRObject.to_ha()`
+uses `model_dump(mode="json", exclude_unset=True)` (`hassle/ir/models.py`), so an absent key stays
+absent through parse → `to_ha()`, and `hassle/decompiler/codegen.py`'s `_automation_source`/
+`_script_source` only emit a decorator kwarg `if key in body` — never a hardcoded default. Confirmed
+via `test_mode_less_automation_hash_stable` and `test_mode_less_script_hash_stable`
+(round-trip through decompile → recompile → canonical-hash-identical to the stored body, for a
+synthetic mode-less automation/script, since the fixture corpus itself only has one mode-less
+non-blueprint case). No code change was needed for this half.
+
+### 23.2 `FakeBackend` leaked a caller-supplied script `id` into the stored body — real bug, fixed ✅
+
+Ground truth (`docs/ha-api-captures/rest-ws-core.json`, `script_read_normalized`, verified again
+here): a script's stored/read-back body is `{alias, mode, sequence, ...}` — **no `id` key at all**
+(scripts are keyed by an extrinsic object_id in the REST path, `/api/config/script/config/{object_id}`,
+never in the body; contrast `automation_read_normalized`, which DOES carry `id` in the body,
+since `AutomationConfig.id` is intrinsic). `ScriptConfig` correctly has no `id` field, so local
+compile's `to_ha()` never emits one for a script.
+
+`FakeBackend.create`/`.update`, however, stored whatever body was handed to them verbatim for
+non-helper kinds — including a caller-supplied `id` key, which a test/fixture-seeding helper can
+easily pass by analogy with automations/helpers (both of which legitimately take one). Once
+`id` leaks into the stored remote body this way, it never comes back out: every subsequent
+`compute_plan` hashes local (no `id`) against remote (`id` present) and sees a permanent
+difference — `update` if untouched otherwise, or `conflict` if the object also differs from the
+manifest base on either side. This is pure test/seeding-harness residue, not a real HA behavior
+(real HA's own script REST endpoint has no such leak, per the capture) — but `FakeBackend` is the
+only backend M5's unit suite and M7's CLI suite exercise, so the leak was real and reproducible
+end-to-end (`hassle pull` → `hassle plan` through the actual CLI, R2-compliant, no network).
+
+**Fix:** `FakeBackend._stored_body` (new, called from both `create`/`update`) now strips `id` from
+a script's body unconditionally before storing — mirroring `ScriptConfig` having no `id` field at
+all — while still injecting the derived `id` for helper domains (unchanged, intrinsic) and passing
+automation bodies through verbatim (unchanged, intrinsic). No `Backend` protocol (F2) change; this
+is an internal `FakeBackend` storage-fidelity fix, analogous in spirit to §17.5's helper-id
+derivation note.
+
+### 23.3 Permanent gate: whole-corpus pull→plan invariant test
+
+`packages/hassle-cli/tests/test_pull_plan_noop_invariant_cli.py::test_full_corpus_pull_then_plan_is_noop_or_modernization`
+seeds every `fixtures/configs/*.json` object into a fresh `FakeBackend` (via `identity`/`key_hint`,
+never a leaked `id`), runs the real CLI's `hassle pull` then `hassle plan`, and asserts every
+resulting entry is `noop` or an `update` for which `is_modernization_only_diff` is `True` — zero
+`conflict`, zero non-modernization `update`, zero `delete`. Parametrized variants cover the two
+named-in-task-description edge cases specifically: a mode-less automation (`test_mode_less_automation_pull_plan_noop`)
+and the legacy `platform:`-naming fixture (`test_legacy_platform_automation_is_modernization_labeled`,
+asserting the ONE-TIME modernization label, not `noop` and not `conflict`, matching
+`test_modernization_labeling.py`'s existing single-object test but run across the full corpus
+object set for the first time).
