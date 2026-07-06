@@ -122,6 +122,16 @@ jobs:
           YAML
           echo "[]" > ha-config/automations.yaml
           echo "{}" > ha-config/scripts.yaml
+          # M10 assumption (unverified in this sandbox, no Docker -- CI is the
+          # authoritative check, docs/ha-api-notes.md §26.0): `template:` is a
+          # config-entry-capable integration, and HA generally registers a
+          # `config_flow: true` integration's config_entries/flow handler from
+          # its manifest regardless of YAML config presence, so no
+          # configuration.yaml stanza should be needed for M10's tests to reach
+          # `config_entries/flow/create(handler="template")`. If the M10
+          # integration job fails with "unknown handler" / "integration not
+          # found", add a bare `template:` key here and update
+          # docs/ha-api-notes.md §26.0 with the correction.
 
       - name: Start Home Assistant (${{ matrix.ha_tag }})
         run: |

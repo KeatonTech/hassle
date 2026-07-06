@@ -1393,6 +1393,14 @@ HA. Any shape mismatch this suite finds supersedes this section; update this
 note in the same PR as the fix (R5-style, even though `Backend` itself, F2,
 is untouched by this milestone — see §26.4).
 
+Also unverified in this sandbox: whether the `template` integration's
+`config_entries/flow` handler is reachable with NO `template:` stanza in
+`configuration.yaml` (assumed yes — a `config_flow: true` integration's flow
+handler is generally registered from its manifest independent of YAML
+config). `.github/workflows/ci.yml`'s M10 integration job leaves
+`configuration.yaml` unchanged on this assumption, with a fallback comment
+pointing back here if CI proves it wrong.
+
 ### 26.1 Create: `config_entries/flow` — menu step, then a form step, then `create_entry`
 
 The `template` integration's config flow starts with a **menu** step

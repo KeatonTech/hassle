@@ -251,6 +251,49 @@ to `FakeBackend`/`DirectBackend`:
 See docs/ha-api-notes.md §26 for the full flow-shape capture notes and the
 rollback entry_id-changes caveat.
 
+### 3.1.1 What a new config-entry domain needs (proving the follow-ons are mechanical)
+
+DESIGN §13 names `threshold`/`derivative`/`group`/… as future config-entry
+helper plugins after `template`. Scoping M10 to one domain only pays off if
+adding the next one is small and mechanical, not a repeat of this milestone's
+design work. Concretely, a new domain (e.g. `threshold`) needs:
+
+1. **IR:** a domain string added to a `*_DOMAINS` frozenset next to
+   `TEMPLATE_DOMAINS` (`hassle.ir.keys`) — or, if it shares the exact same
+   options shape as `TemplateHelperConfig` (`unique_id`/`name` + passthrough
+   extras), no new IR class at all; a genuinely different shape gets its own
+   thin `IRObject` subclass mirroring `TemplateHelperConfig` (~15 lines).
+2. **DSL:** one builder function per new domain in a sibling module to
+   `hassle.compiler.template_helpers`, reusing `_declare_helper`'s pattern
+   (validate domain membership, build the IR object, register via
+   `current_registry().add_object`, return an `EntityRef`) — no new
+   registration mechanism.
+3. **FakeBackend:** the SAME three internal methods
+   (`_create_via_flow`/`_update_via_options_flow`/`entry_id_for`, or a shared
+   helper extracted from them if a second domain makes the duplication worth
+   collapsing) dispatch on the new domain's `_TEMPLATE_FLOW_TYPE`-equivalent
+   step_id map — `create`/`update`/`delete`/`list_remote` themselves need NO
+   change (they already dispatch on `kind in TEMPLATE_DOMAINS`-shaped
+   membership checks; widen the membership set or add a sibling one).
+4. **DirectBackend:** same shape — the `config_entries/flow`/
+   `config_entries/options/flow`/`config_entries/remove` WS calls are
+   **generic across every config-entry integration** (`handler=<domain
+   integration name>` is the only per-domain parameter); only the step_id/
+   field-name map is domain-specific.
+5. **Decompiler/placement:** `_template_helper_source`'s `unique_id` -> `id=`
+   rename logic is already generic per-domain (keyed off `TEMPLATE_DOMAINS`
+   membership, not a hardcoded domain name); `default_source_path`'s
+   `helpers/misc.py` rule already covers `TEMPLATE_DOMAINS` as a set, so a
+   domain added to that set needs no placement-code change at all.
+6. **Apply order / validation / ignore-glob:** all three are driven by
+   `hassle.ir.OBJECT_KINDS` membership or plain object-key string matching —
+   zero code changes for a new domain that's added to `OBJECT_KINDS`.
+
+In short: steps 1-2 are the only places that see genuinely new code per
+domain (an IR shape + a DSL builder); steps 3-6 are membership-set additions
+into machinery this milestone already built generically. This is the
+concrete evidence for MILESTONES M10's "mechanical follow-ons" framing.
+
 ## 4. Where things live
 
 - `hassle.backend` — `Backend` Protocol (`protocol.py`), `FakeBackend`

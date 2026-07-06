@@ -467,6 +467,19 @@ helper domains (threshold, derivative, group, …) become mechanical follow-ons.
 DESIGN amendments in the same series: §1 non-goals (config-entry helpers move from v2 to M10),
 §13 (plugin protocol gains the flow-based apply notes).
 
+**Identity freeze (decided in this PR, `m10/template-helpers`):** object key is
+`"<template domain>:<unique_id>"` (e.g. `"template_number:active_hvac_zones"`) — `unique_id` is
+Hassle's declared identity (the DSL's `id=` kwarg), frozen as the object-key identity exactly like
+every other kind's `object_key(kind, identity)` (F1, `hassle.ir.keys.object_key`, additive:
+`TEMPLATE_DOMAINS` widens `OBJECT_KINDS`, the key *format* is unchanged). HA's config entry `entry_id`
+is transport-side identity only: tracked in `ManifestEntry.entry_id` (additive optional field,
+`hassle.sync.models`), never in the IR body (`TemplateHelperConfig` has no `entry_id` field) and
+never in the object key. An UPDATE never changes `entry_id` (I2 analog, driven through the options
+flow); a DELETE followed by a re-CREATE under the same `unique_id` gets a **fresh** `entry_id` from
+HA — documented, not hidden, as the rollback-by-recreate caveat (docs/ha-api-notes.md §26.3). See
+docs/backend.md §3.1 and docs/ha-api-notes.md §26 for the full mechanics; `Backend` (F2) itself
+required zero changes.
+
 ---
 
 ## M11 — Category write-back on create (owner-commissioned)
