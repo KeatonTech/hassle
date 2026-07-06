@@ -44,7 +44,7 @@
 > when the metadata carries no `"default"` key (HA-side requiredness lives in
 > the metadata, not in whether the compiler can invoke the body with zero
 > arguments to build its sequence). New error `UnknownFieldError` (added to
-> `hassle.__all__`, surface count 72 → 73): a call-site kwarg not among
+> `hassle.__all__`, +1 name): a call-site kwarg not among
 > `fields=`'s keys (the superset source of truth when `fields=` is explicit)
 > is rejected even if it would otherwise bind against the signature — catches
 > an author who added a Python parameter but forgot to also declare it as a
@@ -75,9 +75,7 @@
 > kwargs widened).
 
 > **Widened 2026-07-05 (`ux/dsl-ergonomics`, owner feedback, F3-additive,
-> surface count 98 → 101 — the doc's earlier "72"/"73" counts predate several
-> unrelated widenings and were never kept current; this note states the
-> actual delta this workstream makes, not a running total):** four DSL
+> +3 names: `Mode`, `MaxExceeded`, `OnlyIfBlockCoverageError`):** four DSL
 > ergonomics changes, all additive.
 > (1) `only_if(*conditions)` — already frozen — is now dual-form: the bare
 > call is byte-for-byte unchanged (F3); the SAME call is also usable as
@@ -114,9 +112,14 @@ The public surface is exactly `hassle.__all__` (module
 `packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.
 
-Current surface: **72 names**, plus one dedicated entry point (`hassle.registry`,
-below) that is deliberately *not* folded into `hassle.__all__` because DESIGN
-§5.3 imports it under its own alias (`from hassle.registry import entities as e`).
+The frozen M1 baseline is **72 names**. F3-additive widenings since then are
+recorded as per-note deltas (never a running total, which drifts): M1.1
+runtime-math +23, `ux/shared-script-rich-fields` +1, `ux/dsl-ergonomics` +3 —
+99 names as of 2026-07-05. The authoritative count is always
+`len(hassle.__all__)`; recompute it rather than trusting any number written
+here. One dedicated entry point (`hassle.registry`, below) is deliberately
+*not* folded into `hassle.__all__` because DESIGN §5.3 imports it under its
+own alias (`from hassle.registry import entities as e`).
 
 ### Entity indexing form — `hassle.registry.entities` (DESIGN §5.2/§5.3, M1 test 8)
 
@@ -249,7 +252,7 @@ bundles are written.
 ### Runtime-math expression surface (M1.1 ADDITION, DESIGN §5.4 extension)
 Symbolic-expression extension of the template builder (docs/ha-api-notes.md
 records no deviation; every builder mirrors HA's Jinja math set 1:1). All of
-this is additive to `hassle.__all__`; nothing above changed.
+this is additive to `hassle.__all__` (+23 names); nothing above changed.
 - Trig/algebra (bare Jinja function calls): `sin`, `cos`, `tan`, `asin`,
   `acos`, `atan`, `atan2`, `sqrt`, `log`.
 - Jinja2-filter mirrors: `round_(x, precision=None)` → `| round` /
