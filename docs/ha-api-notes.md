@@ -1944,6 +1944,40 @@ the float form) to an explicit `"min=0.0" in source`, and by the existing
 which now exercises the float-valued fixture end-to-end (decompile → write
 → recompile) unchanged.
 
+### 26.11 Reviewer follow-up: missing write-target kwargs were only caught at APPLY time — now a compile-time error
+
+**The gap:** §26.6 froze `set_value=`/`select_option=` as required DSL kwargs
+for `template_number`/`template_select`, and `_check_required_fields`
+(`hassle.backend.direct`/`hassle.backend.fake`) rejects an APPLY that omits
+either — but nothing checked this at COMPILE time. A bundle with
+`template_number(name=..., state=...)` and no `set_value=` compiled cleanly,
+`hassle validate` reported no findings, and the omission only surfaced as a
+bare `ValueError` from the backend at `hassle push` — after the user believed
+their bundle was clean.
+
+**Fixed at compile time**, mirroring how every other compiler trap in this
+codebase works (`hassle.compiler.errors`, R6 what/where/fix):
+`hassle.compiler.template_helpers._declare_template_helper` now raises
+`MissingTemplateHelperWriteTargetError` the moment `template_number`/
+`template_select` is called without its required kwarg, using the same
+`capture_span(depth=1)` pattern the existing registration call uses so the
+error names the user's bundle `file:line`. Since `compile_bundle` runs before
+any tier-2/3 `Finding` check even starts, this is caught by `hassle validate`,
+`hassle plan`, and `hassle push` alike — `hassle_cli.cli.validate` was updated
+to catch `CompileError` around `compile_bundle` and report it the same clean
+way a `Finding` is (exit 1, `file:line`, both plain and `--json` modes)
+instead of letting the exception escape as a raw traceback.
+
+The backend-side `_check_required_fields` checks are UNCHANGED and remain a
+second line of defense for any non-DSL path that constructs a
+`TemplateHelperConfig` directly (e.g. a hand-rolled adopt path bypassing the
+DSL builders). I3 is unaffected: pulled template helpers always carry their
+write-target keys (M10 CI-verified, §26.6), confirmed here by a defensive
+decompile-then-recompile test
+(`test_decompile_template_helpers.py::test_decompiled_write_target_helpers_recompile_without_error`)
+proving the decompiler can never produce a `template_number`/`template_select`
+call that then trips the new check.
+
 ## 25. M8 finding: `DiagnosticsManager.refresh()` race (fixed, regression-tested) — `vscode-extension/`
 
 While writing the `@vscode/test-electron` integration test for Problems-pane diagnostics
