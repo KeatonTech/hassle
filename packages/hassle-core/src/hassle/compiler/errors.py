@@ -107,8 +107,10 @@ class InvalidCategoryGlobalError(CompileError):
     def __init__(self, file: str, value: object) -> None:
         self.file = file
         self.value = value
+        type_name = type(value).__name__
+        article = "an" if type_name[:1].lower() in "aeiou" else "a"
         super().__init__(
-            f"`CATEGORY` in {file} is a {type(value).__name__} ({value!r}), not a `str`. "
+            f"`CATEGORY` in {file} is {article} {type_name} ({value!r}), not a `str`. "
             f"`CATEGORY` supplies the exact display name Hassle uses when it has to create a "
             f"brand-new Home Assistant UI category, so it must be a plain string. Fix: quote "
             f'the value, e.g. `CATEGORY = "{value}"`.'

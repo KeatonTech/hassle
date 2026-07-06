@@ -42,15 +42,15 @@ from hassle.registry.validate import validate_bundle
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = REPO_ROOT / "fixtures" / "registry" / "home.json"
 
-_AUTOMATION_BODY = '''
+_AUTOMATION_BODY = """
 from hassle import automation, service, state, when
 
 
 @automation(id="auto_1", alias="Whatever")
 def auto_1():
     when(state("binary_sensor.hall_motion").to("on"))
-    service("light.turn_on", target={{"entity_id": "light.hallway"}})
-'''
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+"""
 
 
 def _write_bundle(tmp_path: Path, rel_path: str, category_line: str) -> Path:
@@ -63,7 +63,7 @@ def _write_bundle(tmp_path: Path, rel_path: str, category_line: str) -> Path:
     bundle = tmp_path / "bundle"
     bundle.mkdir(exist_ok=True)
     (bundle / "automations").mkdir(exist_ok=True)
-    (bundle / "automations" / "misc.py").write_text(_AUTOMATION_BODY.format(), encoding="utf-8")
+    (bundle / "automations" / "misc.py").write_text(_AUTOMATION_BODY, encoding="utf-8")
 
     target = bundle / rel_path
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -98,9 +98,7 @@ def test_mismatched_str_category_in_misc_file_is_ignored(tmp_path: Path) -> None
 
 
 def test_mismatched_str_category_in_nested_automations_file_is_ignored(tmp_path: Path) -> None:
-    bundle = _write_bundle(
-        tmp_path, "automations/sub/x.py", 'CATEGORY = "Nested Nonsense"'
-    )
+    bundle = _write_bundle(tmp_path, "automations/sub/x.py", 'CATEGORY = "Nested Nonsense"')
     result = compile_bundle(bundle)  # must not raise
     snapshot = RegistrySnapshot.load(FIXTURE)
     findings = validate_bundle(result, snapshot)

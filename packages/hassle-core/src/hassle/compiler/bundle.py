@@ -44,6 +44,7 @@ from hassle.compiler.recording import RecordedNode, Recorder, record_trigger, re
 from hassle.compiler.registry import PrebuiltObject, RegisteredObject, fresh
 from hassle.compiler.spans import SourceSpan
 from hassle.ir import normalize_ha
+from hassle.ir.keys import category_shaped_stem
 from hassle.ir.models import AutomationConfig, IRObject, ScriptConfig
 
 # object_key -> {"triggers"|"conditions"|"actions": [SourceSpan | None, ...]}
@@ -447,15 +448,25 @@ def _import_bundle_modules(bundle_path: Path) -> dict[str, CategoryGlobal]:
     ``child.is_symlink()`` on the leaf alone would not catch.
 
     **MILESTONES M12:** after each module executes, its namespace is checked
-    for a module-level ``CATEGORY`` global -- present only when the bundle
-    file declares one. A non-``str`` value is a compile-time
-    :class:`~hassle.compiler.errors.InvalidCategoryGlobalError` (R6), raised
-    immediately rather than carried forward as a bad value some downstream
-    consumer would have to re-validate. Returned as a
-    bundle-relative-POSIX-path -> :class:`CategoryGlobal` map for
-    :func:`compile_bundle` to attach to the `CompileResult` it builds
-    afterward (this function itself never touches `CompileResult` -- it runs
-    entirely inside `_sandboxed_import`, before any recorder opens).
+    for a module-level ``CATEGORY`` global -- but ONLY for a file matching
+    :func:`hassle.ir.keys.category_shaped_stem`'s ``automations/<stem>.py`` /
+    ``scripts/<stem>.py`` shape (reviewer finding, PR #7 round 2: an
+    unscoped ``hasattr`` check was a regression against ordinary bundle code
+    that happened to use the name `CATEGORY` for something else entirely --
+    a `lib/constants.py` support module, an unrelated enum value -- which was
+    unremarkable before this milestone). The path-shape check runs BEFORE
+    even looking at the module's namespace for a non-category-shaped file,
+    so the non-``str`` guard below only ever fires for a category-shaped
+    file too -- a `CATEGORY = 5` in `lib/enums.py` is simply never looked at,
+    exactly as it was on `main`. A non-``str`` value in a category-shaped
+    file is a compile-time :class:`~hassle.compiler.errors.
+    InvalidCategoryGlobalError` (R6), raised immediately rather than carried
+    forward as a bad value some downstream consumer would have to
+    re-validate. Returned as a bundle-relative-POSIX-path ->
+    :class:`CategoryGlobal` map for :func:`compile_bundle` to attach to the
+    `CompileResult` it builds afterward (this function itself never touches
+    `CompileResult` -- it runs entirely inside `_sandboxed_import`, before
+    any recorder opens).
     """
     resolved_bundle_path = bundle_path.resolve()
     category_globals: dict[str, CategoryGlobal] = {}
@@ -472,11 +483,11 @@ def _import_bundle_modules(bundle_path: Path) -> dict[str, CategoryGlobal]:
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
 
-        if hasattr(module, "CATEGORY"):
+        source_path = py.relative_to(bundle_path).as_posix()
+        if category_shaped_stem(source_path) is not None and hasattr(module, "CATEGORY"):
             value = module.CATEGORY
             if not isinstance(value, str):
                 raise InvalidCategoryGlobalError(str(py), value)
-            source_path = py.relative_to(bundle_path).as_posix()
             category_globals[source_path] = CategoryGlobal(
                 value=value, span=_category_global_span(py)
             )
