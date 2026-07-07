@@ -62,7 +62,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
-    "test:unit": "node --no-experimental-strip-types ./node_modules/.bin/mocha --require ts-node/register --extension ts src/test/unit/**/*.test.ts",
+    "test:unit": "node scripts/run-unit-tests.js",
     "test:integration": "node ./out/test/runTest.js",
     "test": "npm run test:unit"
   },

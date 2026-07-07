@@ -1,4 +1,6 @@
 import * as assert from "assert";
+import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 import { CliRunner, ProcessRunner } from "../../cliRunner";
@@ -18,9 +20,13 @@ import { setProcessRunnerForTesting } from "../../extension";
  *   - explain panel renders for the automation under the cursor.
  *
  * Runs inside a real VS Code Extension Host against
- * `src/test/suite/fixtureWorkspace` (a minimal bundle with `hassle.toml`,
- * satisfying the extension's `workspaceContains:hassle.toml` activation
- * event) launched by `src/test/runTest.ts`.
+ * `src/test/suite/fixtureWorkspace` (a minimal bundle with `hassle.toml`
+ * AND a `pyproject.toml` -- polish-batch item 1's fallback chain only takes
+ * the `uv run hassle` branch when one is present, so the fixture workspace
+ * carries one to pin that branch for the arg-shape assertions below; the
+ * no-pyproject bare-`hassle` fallback is exercised separately, against an
+ * isolated temp directory, in its own suite further down) launched by
+ * `src/test/runTest.ts`.
  */
 
 const EXTENSION_ID = "REPLACE_WITH_YOUR_PUBLISHER_ID.hassle-vscode";
@@ -114,6 +120,32 @@ suite("Hassle extension: commands shell to the CLI with correct args", () => {
       subcommands.some((args) => args[0] === "validate" && args.includes("--json")),
       `expected a "validate --json" invocation among: ${JSON.stringify(subcommands)}`
     );
+  });
+});
+
+suite("Hassle extension: no-pyproject.toml falls back to bare `hassle` (polish-batch item 1)", () => {
+  // Exercised directly against `CliRunner` (not through a registered
+  // `hassle.*` command) so it doesn't need a SECOND VS Code workspace with
+  // no pyproject.toml -- `fixtureWorkspace` itself now carries one (see the
+  // suite above), so this test targets an isolated, freshly created temp
+  // directory instead, mirroring the "regression: a slow, stale refresh()"
+  // test's own direct-`CliRunner` pattern further down this file.
+  test("invokes bare `hassle` (never `uv run hassle`) when the target directory has no pyproject.toml", async () => {
+    const noProjectDir = fs.mkdtempSync(path.join(os.tmpdir(), "hassle-vscode-no-pyproject-"));
+    try {
+      const fake = new FakeProcessRunner({ stdout: "no changes", exitCode: 0 });
+      const cliRunner = new CliRunner(() => undefined, fake);
+
+      const result = await cliRunner.run("plan", [], noProjectDir);
+
+      assert.strictEqual(result.stdout, "no changes");
+      assert.strictEqual(fake.calls.length, 1);
+      assert.strictEqual(fake.calls[0].command, "hassle");
+      assert.deepStrictEqual(fake.calls[0].args, ["--plain", "plan"]);
+      assert.strictEqual(fake.calls[0].cwd, noProjectDir);
+    } finally {
+      fs.rmSync(noProjectDir, { recursive: true, force: true });
+    }
   });
 });
 

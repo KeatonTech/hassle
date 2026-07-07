@@ -2,3 +2,11 @@ out/
 node_modules/
 .vscode-test/
 *.vsix
+
+# The test fixture workspace carries its own pyproject.toml (pins the
+# uv-run-hassle branch of the CLI invocation fallback chain, polish-batch
+# item 1) -- a `uv.lock` can get generated alongside it by an incidental
+# `uv` invocation with cwd under this directory; it's disposable, never
+# part of the fixture's actual contract (every test mocks the CLI
+# subprocess, real `uv`/`hassle` never runs).
+src/test/suite/fixtureWorkspace/uv.lock
