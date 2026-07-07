@@ -36,7 +36,7 @@ from pathlib import Path
 import pytest
 
 from hassle.registry.snapshot import RegistrySnapshot
-from hassle.registry.stubs import generate_entities_stub
+from hassle.registry.stubs import generate_entities_stub, generate_services_stub
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = REPO_ROOT / "fixtures" / "registry" / "home.json"
@@ -133,3 +133,62 @@ def test_pyright_accepts_correct_entity_reference(tmp_path: Path) -> None:
     diagnostics = payload.get("generalDiagnostics", [])
     errors = [d for d in diagnostics if d.get("severity") == "error"]
     assert errors == [], f"unexpected pyright errors on a correct reference: {errors}"
+
+
+# ---------------------------------------------------------------------------
+# M18 test 5 extension: the generated `hassle.services` stub is
+# typo-squiggle effective too. Unlike `entities` (a module-level variable
+# inside the real `hassle/registry/__init__.py`), `hassle.services` is itself
+# a real top-level module at runtime -- so its stub is a plain submodule stub
+# file at `typings/hassle/services.pyi` (not nested inside another `.pyi`'s
+# `__init__.py`).
+# ---------------------------------------------------------------------------
+
+
+def _setup_services_typings(tmp_path: Path) -> None:
+    snapshot = RegistrySnapshot.load(FIXTURE)
+    stub_text = generate_services_stub(snapshot)
+    hassle_dir = tmp_path / "typings" / "hassle"
+    hassle_dir.mkdir(parents=True, exist_ok=True)
+    (hassle_dir / "services.pyi").write_text(stub_text, encoding="utf-8")
+    if not (hassle_dir / "__init__.pyi").is_file():
+        (hassle_dir / "__init__.pyi").write_text("", encoding="utf-8")
+
+
+def test_pyright_catches_seeded_service_typo(tmp_path: Path) -> None:
+    _setup_typings(tmp_path)
+    _setup_services_typings(tmp_path)
+    _write_pyrightconfig(tmp_path)
+    sample = tmp_path / "sample.py"
+    sample.write_text(
+        "from hassle.services import light\n"
+        "\n"
+        "# deliberate typo: 'turn_on_light' instead of 'turn_on'\n"
+        "light.turn_on_light(brightness_pct=50)\n",
+        encoding="utf-8",
+    )
+
+    proc = _run_pyright(tmp_path)
+    payload = json.loads(proc.stdout or "{}")
+    diagnostics = payload.get("generalDiagnostics", [])
+    messages = " ".join(d.get("message", "") for d in diagnostics)
+    assert "turn_on_light" in messages or any(
+        "sample.py" in d.get("file", "") and d.get("severity") == "error" for d in diagnostics
+    ), f"expected a pyright error on the seeded service typo; got: {proc.stdout}\n{proc.stderr}"
+
+
+def test_pyright_accepts_correct_service_call(tmp_path: Path) -> None:
+    _setup_typings(tmp_path)
+    _setup_services_typings(tmp_path)
+    _write_pyrightconfig(tmp_path)
+    sample = tmp_path / "sample.py"
+    sample.write_text(
+        "from hassle.services import light\nlight.turn_on(brightness_pct=50)\n",
+        encoding="utf-8",
+    )
+
+    proc = _run_pyright(tmp_path)
+    payload = json.loads(proc.stdout or "{}")
+    diagnostics = payload.get("generalDiagnostics", [])
+    errors = [d for d in diagnostics if d.get("severity") == "error"]
+    assert errors == [], f"unexpected pyright errors on a correct service call: {errors}"
