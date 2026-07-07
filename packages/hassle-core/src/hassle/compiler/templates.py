@@ -149,6 +149,18 @@ class TemplateComparisonOperandError(CompileError):
 
     def __init__(self, value: Any, method: str, span: Any) -> None:
         where = f" at {span.file}:{span.line}" if span is not None else ""
+        if method == "in_":
+            # Polish-batch item 5: `.in_([...])` applies this SAME check to
+            # EACH element -- the generic "use `.in_([...])` instead" fix
+            # text (below, for `.eq()`/`.ne()`) would be self-referential
+            # nonsense here, so state the per-element requirement directly.
+            super().__init__(
+                f"`.in_([..., {value!r}, ...])`{where}: every element of `.in_([...])` must "
+                f"be a template expression or a bare int/float/str/bool literal, not "
+                f"{type(value).__name__}. Fix: pass only literal values or template "
+                f"expressions as elements (e.g. `.in_(['on', 'off'])`)."
+            )
+            return
         super().__init__(
             f"`.{method}({value!r})`{where}: comparison operands must be a template "
             f"expression or a bare int/float/str/bool literal, not {type(value).__name__}. "
@@ -333,7 +345,16 @@ class TemplateExpr(_NoBool, str):
         list-literal collection (``", ".join`` of each rendered operand,
         wrapped in ``[...]``) -- the canonical spacing every other DSL list
         literal in this codebase already uses.
+
+        Polish-batch item 5: each element gets the SAME
+        :func:`_check_comparison_operand` check ``.eq()``/``.ne()`` already
+        apply to their single operand -- without it, a bad element (a dict, a
+        custom object, ...) would silently ``repr()`` into nonsense Jinja
+        inside the ``in [...]`` list, same failure mode those two methods are
+        already protected against.
         """
+        for value in values:
+            _check_comparison_operand(value, "in_")
         rendered = ", ".join(TemplateExpr._render_operand(v, min_prec=0) for v in values)
         return TemplateExpr(f"{self._as_operand()} in [{rendered}]", compound=True)
 

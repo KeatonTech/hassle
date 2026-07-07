@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 import click
+from rich.markup import escape as _escape_markup
 
 from hassle_cli import bundle_ops, git_support, init_cmd, manifest_io
 from hassle_cli.config import CURRENT_BUNDLE_FORMAT, find_bundle_root, load_config
@@ -29,6 +30,23 @@ from hassle_cli.render import get_console
 
 if TYPE_CHECKING:
     from hassle.compiler.errors import CompileError
+
+
+def _esc(value: object) -> str:
+    """Escape ``str(value)`` for safe interpolation into a rich-markup
+    f-string passed to ``Console.print`` (polish-batch item 5).
+
+    Rich's default `Console.print` parses `[...]`-bracketed substrings as
+    markup tags -- silently swallowing them (or raising, for a malformed
+    tag) if they happen to appear in interpolated data Hassle does not
+    control (a bundle's own `CATEGORY` name, an object key, an exception
+    message, a validator Finding's text, ...). Every call site below that
+    embeds such data inside a still-markup-enabled `console.print(f"[style]...
+    {data}...[/style]")` call must route ``data`` through this first. Static,
+    Hassle-authored text (the surrounding `[style]`/`[/style]` tags and
+    plain English) is never escaped -- only the dynamic segment.
+    """
+    return _escape_markup(str(value))
 
 
 def _bundle_root_or_fail(explicit: Path | None = None) -> Path:
@@ -111,7 +129,7 @@ def _report_compile_error(exc: CompileError, root: Path, *, as_json: bool = Fals
         }
         click.echo(_json.dumps(payload))
     else:
-        console.print(f"[red]{type(exc).__name__}[/red]: {exc}")
+        console.print(f"[red]{type(exc).__name__}[/red]: {_esc(exc)}")
     raise SystemExit(1) from exc
 
 
@@ -195,14 +213,15 @@ def login(url: str, token: str) -> None:
             pass
     except HaAuthError as exc:
         console.print(
-            f"[red]hassle login: authentication failed (401) against {url}: {exc}[/red]\n"
+            f"[red]hassle login: authentication failed (401) against "
+            f"{_esc(url)}: {_esc(exc)}[/red]\n"
             "Fix: double-check the long-lived access token (Profile -> Security -> "
             "Long-Lived Access Tokens in HA) and re-run `hassle login`."
         )
         raise SystemExit(1) from exc
     except HaConnectionError as exc:
         console.print(
-            f"[red]hassle login: could not connect to {url}: {exc}[/red]\n"
+            f"[red]hassle login: could not connect to {_esc(url)}: {_esc(exc)}[/red]\n"
             "Fix: check the URL is reachable from this machine."
         )
         raise SystemExit(1) from exc
@@ -213,7 +232,7 @@ def login(url: str, token: str) -> None:
     root = find_bundle_root(Path.cwd()) or Path.cwd()
     persist_ha_url(root, url)
     console.print(
-        f"[green]hassle login: token verified and stored for {url}[/green]\n"
+        f"[green]hassle login: token verified and stored for {_esc(url)}[/green]\n"
         f"[dim]ha_url written to {root / 'hassle.toml'} (token stays in the keyring)[/dim]"
     )
 
@@ -245,7 +264,7 @@ def pull(allow_dirty: bool) -> None:
     committed = find_committed_tokens(root)
     if committed:
         console.print(
-            f"[red]hassle pull: a token was found committed in {committed[0][0].name}. "
+            f"[red]hassle pull: a token was found committed in {_esc(committed[0][0].name)}. "
             "Fix: remove the `token = ...` line, run `hassle login` to store it in the "
             "system keyring instead, and rotate the exposed token in HA.[/red]"
         )
@@ -366,7 +385,7 @@ def pull(allow_dirty: bool) -> None:
         local_objects=local_objects, remote_objects=remote_objects, ignore_globs=config.ignore
     )
     for finding in ignore_result.findings:
-        console.print(f"[yellow]hassle pull: {finding}[/yellow]")
+        console.print(f"[yellow]hassle pull: {_esc(finding)}[/yellow]")
 
     plan = compute_plan(
         manifest=manifest,
@@ -408,7 +427,7 @@ def pull(allow_dirty: bool) -> None:
     for warning in bundle_ops.category_divergence_warnings(
         previous_source_paths, recomputed_source_paths
     ):
-        console.print(f"[yellow]{warning}[/yellow]")
+        console.print(f"[yellow]{_esc(warning)}[/yellow]")
 
     # The REAL splicer-backed writer: REFRESH/DROP touch exactly one object's
     # statement, so sibling objects sharing a source file survive (I6 -- the
@@ -447,7 +466,7 @@ def pull(allow_dirty: bool) -> None:
         )
     except (DecompiledBatchDoesNotCompileError, DecompiledValueMismatchError) as exc:
         console.print(
-            f"[bold red]hassle pull: {exc}[/bold red]\n"
+            f"[bold red]hassle pull: {_esc(exc)}[/bold red]\n"
             "[bold red]This is a bug in Hassle's decompiler, not a mistake in your HA "
             "configuration. Fix: please report this, then re-run `hassle pull` (or "
             "`--allow-dirty` if needed) once a fix lands -- nothing was written for the "
@@ -520,11 +539,11 @@ def pull(allow_dirty: bool) -> None:
             raise SystemExit(1) from exc
 
         console.print(
-            f"[bold red]hassle pull: the bundle just written to {root} does not compile "
-            f"({type(exc).__name__}: {exc}). This is a bug in Hassle's decompiler, not a "
-            "mistake in your HA configuration -- the files just written are left in place "
-            "for you to inspect. Fix: please report this (include the error above and, if "
-            "possible, the object(s) involved) at "
+            f"[bold red]hassle pull: the bundle just written to {_esc(root)} does not compile "
+            f"({_esc(type(exc).__name__)}: {_esc(exc)}). This is a bug in Hassle's "
+            "decompiler, not a mistake in your HA configuration -- the files just written "
+            "are left in place for you to inspect. Fix: please report this (include the "
+            "error above and, if possible, the object(s) involved) at "
             "https://github.com/hassle-project/hassle/issues; once a fix lands, "
             "`hassle pull --allow-dirty` is safe to re-run and will overwrite the broken "
             "file(s).[/bold red]"
@@ -543,11 +562,12 @@ def pull(allow_dirty: bool) -> None:
         and not values_match(post_write_result.objects[entry.object_key], entry.remote)
     ]
     if mismatched_keys:
-        keys = ", ".join(sorted(mismatched_keys))
+        keys = _esc(", ".join(sorted(mismatched_keys)))
         console.print(
-            f"[bold red]hassle pull: the bundle just written to {root} does not reproduce the "
-            f"original stored configuration for object(s): {keys} (it compiles, but does not "
-            "recompile to the same value). This is a bug in Hassle's decompiler, not a mistake "
+            f"[bold red]hassle pull: the bundle just written to {_esc(root)} does not "
+            f"reproduce the original stored configuration for object(s): {keys} (it "
+            "compiles, but does not recompile to the same value). This is a bug in "
+            "Hassle's decompiler, not a mistake "
             "in your HA configuration -- the files just written are left in place for you to "
             "inspect. Fix: please report this (include the object(s) listed) at "
             "https://github.com/hassle-project/hassle/issues; once a fix lands, "
@@ -559,11 +579,11 @@ def pull(allow_dirty: bool) -> None:
     pull_actions = (PlanAction.REFRESH, PlanAction.ADOPT, PlanAction.DROP)
     for entry in plan.entries:
         if entry.action in pull_actions:
-            console.print(f"[cyan]{entry.action.value:>10}[/cyan]  {entry.object_key}")
+            console.print(f"[cyan]{entry.action.value:>10}[/cyan]  {_esc(entry.object_key)}")
     if result.conflicts:
         for conflict in result.conflicts:
             console.print(
-                f"[bold red]conflict[/bold red]  {conflict.object_key} (see written markers)"
+                f"[bold red]conflict[/bold red]  {_esc(conflict.object_key)} (see written markers)"
             )
 
     # Pull mutates only the working tree (apply_pull never touches HA or the
@@ -757,7 +777,7 @@ def push(
         compile_result
     )
     for warning in category_global_warnings:
-        console.print(f"[yellow]{warning}[/yellow]")
+        console.print(f"[yellow]{_esc(warning)}[/yellow]")
 
     unresolved_conflicts = [
         e
@@ -806,7 +826,9 @@ def push(
         )
 
     if not result.succeeded:
-        console.print(f"[bold red]hassle push: apply failed/aborted: {result.outcomes}[/bold red]")
+        console.print(
+            f"[bold red]hassle push: apply failed/aborted: {_esc(result.outcomes)}[/bold red]"
+        )
         raise SystemExit(1)
 
     if result.manifest is not None:
@@ -815,7 +837,7 @@ def push(
     # M11: category write-back warnings are metadata-only (I6) -- the push
     # already succeeded (checked above); these are printed, never fatal.
     for warning in result.category_warnings:
-        console.print(f"[yellow]{warning}[/yellow]")
+        console.print(f"[yellow]{_esc(warning)}[/yellow]")
 
     # M15 work item A: category-on-move conflicts (I6 -- never silently
     # resolved in either direction) are printed too, never fatal for a push
@@ -823,7 +845,7 @@ def push(
     # applied; only its category grouping is left exactly as it was pending
     # the user resolving which side should win.
     for conflict_message in result.category_conflicts:
-        console.print(f"[bold red]{conflict_message}[/bold red]")
+        console.print(f"[bold red]{_esc(conflict_message)}[/bold red]")
 
     summary = plan_summary(resolved_plan)
     console.print(f"[green]hassle push: applied {sum(summary.values())} change(s)[/green]")
@@ -916,7 +938,7 @@ def validate(as_json: bool) -> None:
         return
 
     for finding in findings:
-        console.print(f"[red]{finding.code}[/red]: {finding}")
+        console.print(f"[red]{_esc(finding.code)}[/red]: {_esc(finding)}")
     raise SystemExit(1)
 
 
@@ -1025,7 +1047,7 @@ def stubs(refresh: bool) -> None:
     package_marker = root / "typings" / "hassle" / "__init__.pyi"
     if not package_marker.is_file():
         package_marker.write_text("", encoding="utf-8")
-    console.print(f"[green]hassle stubs: wrote {out_path}[/green]")
+    console.print(f"[green]hassle stubs: wrote {_esc(out_path)}[/green]")
 
 
 def _write_registry_snapshot(backend: object, root: Path):
@@ -1067,9 +1089,13 @@ def explain(object_key: str, as_yaml_flag: bool) -> None:
     try:
         config = compiled_config_for(root, object_key)
     except KeyError as exc:
-        console.print(f"[red]hassle explain: {exc}[/red]")
+        console.print(f"[red]hassle explain: {_esc(exc)}[/red]")
         raise SystemExit(1) from exc
-    console.print(as_yaml(config) if as_yaml_flag else str(config))
+    # The compiled YAML/repr is the exact product output `explain` promises
+    # (a compiled config can legitimately contain `[...]` -- a flow-style
+    # YAML list, a Jinja template using list indexing, ...) -- never parsed
+    # as rich markup.
+    console.print(as_yaml(config) if as_yaml_flag else str(config), markup=False)
 
 
 @main.command()
@@ -1079,7 +1105,9 @@ def render(template: str) -> None:
     from hassle_cli.explain import render_template_offline
 
     console = get_console()
-    console.print(render_template_offline(template))
+    # A rendered Jinja template is arbitrary text (`{{ ... }}`, list
+    # literals, ...) -- never parsed as rich markup.
+    console.print(render_template_offline(template), markup=False)
 
 
 # ---------------------------------------------------------------------------
@@ -1107,11 +1135,11 @@ def run(target: str, live: bool, yes: bool, skip_conditions: bool) -> None:
         try:
             object_key, sim = run_on_simulator(root, target)
         except (InvalidRunTargetError, UnknownRunTargetError) as exc:
-            console.print(f"[red]hassle run: {exc}[/red]")
+            console.print(f"[red]hassle run: {_esc(exc)}[/red]")
             raise SystemExit(1) from exc
-        console.print(f"[green]ran {object_key} on the simulator[/green]")
+        console.print(f"[green]ran {_esc(object_key)} on the simulator[/green]")
         for call in sim.all_calls():
-            console.print(f"  called {call.action} {call.data}")
+            console.print(f"  called {_esc(call.action)} {_esc(call.data)}")
         return
 
     if not yes:

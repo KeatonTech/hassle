@@ -77,3 +77,24 @@ def test_ne_against_non_literal_non_expr_raises_with_location_and_fix() -> None:
     assert "test_string_state_errors.py" in msg
     assert "Fix:" in msg
     _check_snapshot("template_comparison_operand_dict", _normalize(msg))
+
+
+def test_in_applies_the_same_operand_check_per_element() -> None:
+    """Polish-batch item 5: `.in_([...])` must validate EACH element with the
+    same `_check_comparison_operand` `.eq()`/`.ne()` use -- otherwise a bad
+    element (e.g. a dict) would silently `repr()` into nonsense Jinja inside
+    the `in [...]` list, exactly the failure mode `.eq()`/`.ne()` were
+    already protected against."""
+    with recording(alias="x", id="x"), pytest.raises(TemplateComparisonOperandError) as excinfo:
+        state_of("sensor.x").in_(["a", {"b": 1}])  # type: ignore[list-item]
+    msg = str(excinfo.value)
+    assert "test_string_state_errors.py" in msg
+    assert "Fix:" in msg
+    _check_snapshot("template_comparison_operand_in_element", _normalize(msg))
+
+
+def test_in_with_all_valid_elements_still_compiles_fine() -> None:
+    # Regression guard: the new per-element check must not reject the
+    # ordinary, already-golden-tested case.
+    result = state_of("sensor.x").in_(["a", "b", 3, True])
+    assert result.to_template() == "{{ states('sensor.x') in ['a', 'b', 3, True] }}"

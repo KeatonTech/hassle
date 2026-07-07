@@ -143,6 +143,47 @@ def auto_hvac_1():
     assert "automatic_hvac" in result.output.lower() or "auto_hvac_1" in result.output
 
 
+def test_push_warning_survives_a_category_name_that_looks_like_rich_markup(
+    git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """Polish-batch item 5: a `CATEGORY` value containing `[...]` (rich
+    markup syntax, e.g. `"[main]"`) must not be silently swallowed by the
+    console when the mismatch warning is printed -- `rich.Console.print`
+    treats an unescaped `[...]` substring as a markup tag; before the fix,
+    the ENTIRE bracketed segment (and here, the whole rest of the message
+    after it) vanished from the CLI's captured output."""
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    _remove_fixture_seed_file(git_repo)
+
+    (git_repo / "automatic_hvac.py").write_text(
+        """
+from hassle import automation, service, state, when
+
+CATEGORY = "[main]"
+
+
+@automation(id="auto_hvac_1", alias="Keep temp steady")
+def auto_hvac_1():
+    when(state("binary_sensor.hall_motion").to("on"))
+    service("climate.turn_on", target={"entity_id": "climate.living_room"})
+""",
+        encoding="utf-8",
+    )
+
+    result = cli(["push", "--yes"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+    assert "auto_hvac_1" in backend.list_remote("automation")
+
+    # The mismatch warning must print with the CATEGORY value INTACT,
+    # brackets and all -- not swallowed as a (bogus) markup tag, and not
+    # truncating anything printed after it either.
+    assert "[main]" in result.output
+    assert "does not" in result.output.lower()
+    assert "slugify" in result.output.lower()
+    assert "hassle validate" in result.output.lower()
+
+
 def test_push_existing_category_match_never_renamed_even_with_category_global(
     git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
