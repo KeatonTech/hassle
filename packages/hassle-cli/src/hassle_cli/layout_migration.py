@@ -48,6 +48,7 @@ proposed because of a migration alone.
 
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -58,6 +59,49 @@ from hassle.ir.keys import OBJECT_KINDS
 from hassle.registry.snapshot import RegistrySnapshot
 
 _RETIRED_TREES: tuple[str, ...] = ("automations", "scripts", "helpers")
+
+
+def _top_level_category_global(source: str) -> str | None:
+    """The string value of a top-level ``CATEGORY = "..."`` assignment in
+    ``source``, or ``None`` if there is none (or its value isn't a plain
+    string literal). Polish-batch item 4(b): used only to flag an ORPHANED
+    global left behind in a kept old-layout file after migration -- the file
+    is no longer category-shaped (`hassle.ir.keys.category_shaped_stem`
+    rejects every nested path, including the retired per-kind trees), so this
+    global is now inert bundle-side metadata, not a re-parse of a live
+    category capture (`hassle.compiler.bundle`'s own ``_category_global_span``
+    is the load-bearing one for an ACTUAL category-shaped file; this is a
+    diagnostic-only lookup on plain source text, best-effort like that
+    function's own `ast`-parse approach)."""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):  # pragma: no cover - defensive
+        return None
+    for stmt in tree.body:
+        if (
+            isinstance(stmt, ast.Assign)
+            and len(stmt.targets) == 1
+            and isinstance(stmt.targets[0], ast.Name)
+            and stmt.targets[0].id == "CATEGORY"
+            and isinstance(stmt.value, ast.Constant)
+            and isinstance(stmt.value.value, str)
+        ):
+            return stmt.value.value
+    return None
+
+
+@dataclass(frozen=True)
+class OrphanedCategoryGlobal:
+    """A kept old-layout file's leftover `CATEGORY = "..."` global (polish-
+    batch item 4(b)): the migrated object(s) that used to make this path
+    category-shaped (under the M12-era per-kind-tree rule) have moved out,
+    and M15's `category_shaped_stem` never recognizes a nested path as
+    category-shaped at all -- so this global is now dead bundle-side
+    metadata. Reported, never auto-removed (surgical splice territory the
+    migration pass doesn't attempt); the user cleans it up by hand."""
+
+    path: str
+    category: str
 
 
 def bundle_has_old_layout(bundle_root: Path) -> bool:
@@ -89,6 +133,17 @@ class MigrationMove:
 class MigrationReport:
     moves: list[MigrationMove] = field(default_factory=list)
     deleted_files: list[str] = field(default_factory=list)
+    # Polish-batch item 4(b): kept old-tree files (I6 -- not deleted, because
+    # something besides the migrated object(s) remains) whose only remaining
+    # "content" is an orphaned `CATEGORY = "..."` global from the M12 era.
+    # Note (also polish-batch item 4(b)): any now-unused import left in a kept
+    # old file is deliberately NOT reported or auto-removed here -- migration
+    # only ever splices OUT the migrated object's own statement, never
+    # rewrites the rest of the file, so a leftover `from hassle import
+    # automation` with nothing left to use it is left as-is for the user to
+    # clean up (same "never touch what migration didn't move" principle as
+    # the orphaned CATEGORY global itself).
+    orphaned_category_globals: list[OrphanedCategoryGlobal] = field(default_factory=list)
 
     @property
     def migrated(self) -> bool:
@@ -184,6 +239,16 @@ def migrate_old_layout(
             report.deleted_files.append(old_path_posix)
         else:
             old_file.write_text(source, encoding="utf-8")
+            # Polish-batch item 4(b): the file was kept (I6 -- something
+            # besides the migrated object remains) -- flag it if that
+            # "something" is (at least) an orphaned CATEGORY global left
+            # over from the M12-era per-kind-tree category shape, now inert
+            # under M15's root-level-only `category_shaped_stem`.
+            category_value = _top_level_category_global(source)
+            if category_value is not None:
+                report.orphaned_category_globals.append(
+                    OrphanedCategoryGlobal(path=old_path_posix, category=category_value)
+                )
 
     # 2. Regenerate every migrated object at its NEW destination, batched by
     #    destination file (mixed-kind files land here naturally -- the same

@@ -181,6 +181,84 @@ tank_level = input_number(id="tank_level", name="Tank level", min=0, max=100, st
     assert "tank_level" in new_text
 
 
+def test_migration_report_flags_a_kept_old_file_with_an_orphaned_category_global(
+    tmp_path: Path,
+) -> None:
+    """Polish-batch item 4(b): an old-layout file may carry a leftover
+    `CATEGORY = "..."` global from the M12 era (when `automations/<stem>.py`
+    was itself category-shaped) -- M15's `category_shaped_stem` no longer
+    recognizes ANY nested path as category-shaped, so this global is now
+    inert, but it's still a top-level statement `remove_object` doesn't touch
+    (it isn't the migrated object's own statement) -- the file survives
+    migration with just that orphaned global (and its now-possibly-unused
+    import) left behind. The migration report must call this out explicitly
+    so the user knows to clean it up by hand."""
+    bundle = tmp_path / "bundle"
+    _write(
+        bundle / "automations" / "hallway.py",
+        """
+from hassle import automation, service, state, when
+
+CATEGORY = "Hallway"
+
+
+@automation(id="hall_light_on_motion", alias="Hallway light on motion")
+def hall_light_on_motion():
+    when(state("binary_sensor.hall_motion").to("on"))
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+""",
+    )
+    result = compile_bundle(bundle)
+    new_paths = {key: bundle_ops.default_source_path(key, registry=None) for key in result.objects}
+
+    report = migrate_old_layout(bundle, result, registry=None, new_source_path_for=new_paths)
+
+    assert report.migrated is True
+    # The old file is kept (the CATEGORY global counts as remaining content).
+    old_file = bundle / "automations" / "hallway.py"
+    assert old_file.is_file()
+    assert "automations/hallway.py" not in report.deleted_files
+
+    assert len(report.orphaned_category_globals) == 1
+    orphan = report.orphaned_category_globals[0]
+    assert orphan.path == "automations/hallway.py"
+    assert orphan.category == "Hallway"
+
+
+def test_migration_report_no_orphan_flag_for_a_file_with_ordinary_kept_content(
+    tmp_path: Path,
+) -> None:
+    # Regression/contrast: a kept old file WITHOUT a CATEGORY global (the
+    # ordinary I6 case, already covered by
+    # test_migration_preserves_user_content_in_kept_old_file) must not be
+    # flagged as an orphaned-category case.
+    bundle = tmp_path / "bundle"
+    _write(
+        bundle / "automations" / "hallway.py",
+        '''
+from hassle import automation, service, state, when
+
+# This comment is mine -- do not lose it.
+def helper_fn():
+    """A custom, non-Hassle helper the user wrote by hand."""
+    return 42
+
+
+@automation(id="hall_light_on_motion", alias="Hallway light on motion")
+def hall_light_on_motion():
+    when(state("binary_sensor.hall_motion").to("on"))
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+''',
+    )
+    result = compile_bundle(bundle)
+    new_paths = {key: bundle_ops.default_source_path(key, registry=None) for key in result.objects}
+
+    report = migrate_old_layout(bundle, result, registry=None, new_source_path_for=new_paths)
+
+    assert report.migrated is True
+    assert report.orphaned_category_globals == []
+
+
 def test_no_migration_needed_for_new_layout_bundle(tmp_path: Path) -> None:
     bundle = tmp_path / "bundle"
     _write(

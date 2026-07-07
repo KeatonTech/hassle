@@ -336,6 +336,17 @@ def pull(allow_dirty: bool) -> None:
             )
         for deleted in migration_report.deleted_files:
             console.print(f"[cyan]   deleted[/cyan]  {deleted} (no content left after migration)")
+        for orphan in migration_report.orphaned_category_globals:
+            # markup=False + no [...]-bearing f-string: `orphan.path`/
+            # `orphan.category` are bundle-controlled data, never trusted as
+            # rich markup (polish-batch item 5's rule).
+            console.print(
+                f"  kept {orphan.path} with an orphaned CATEGORY = {orphan.category!r} global "
+                "(no longer category-shaped under the new layout -- clean it up by hand; "
+                "any now-unused import left in that file is also left as-is for you to clean up)",
+                style="yellow",
+                markup=False,
+            )
         if migration_report.migrated:
             # The working tree just changed under compile_result's feet --
             # recompile so the rest of this pull sees each object's NEW

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from hassle.compiler.bundle import CompileResult, compile_bundle
+from hassle.ir.keys import category_shaped_stem
 from hassle.ir.keys import slugify as _slugify
 from hassle.registry.snapshot import RegistrySnapshot
 from hassle.sync.category_writeback import (
@@ -221,6 +222,16 @@ def category_divergence_warnings(
     ordinary same-scope re-categorization already has its own (per-object,
     silent) handling; this warning is specifically for the CROSS-SCOPE case
     the milestone calls out.
+
+    **Polish-batch item 4(a):** only warn when the OLD shared path was
+    ITSELF category-derived (``category_shaped_stem(old_path) is not
+    None``). A user who hand-grouped a mixed-kind file under a name that was
+    never a category placement (``misc.py``, a nested `lib/`/`tests/`/`docs/`
+    path, ...) and later has ONE of those objects gain a real HA category
+    simply sees that object move to its own new placement -- there was never
+    a shared category for anything to "diverge" from, so this is ordinary
+    per-object re-categorization, not the cross-scope-rename situation this
+    warning exists for.
     """
     old_groups: dict[str, set[str]] = {}
     for object_key, old_path in previous_source_paths.items():
@@ -232,6 +243,8 @@ def category_divergence_warnings(
     for old_path, member_keys in sorted(old_groups.items()):
         if len(member_keys) < 2:
             continue
+        if category_shaped_stem(old_path) is None:
+            continue  # never a category placement to begin with -- nothing diverged
         new_paths = {new_source_paths[k] for k in member_keys if k in new_source_paths}
         if len(new_paths) < 2:
             continue  # still all together (or none of them are in this pull)

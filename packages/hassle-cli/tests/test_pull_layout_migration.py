@@ -99,6 +99,49 @@ def take_out_trash():
     assert "script:take_out_trash" in compiled.objects
 
 
+def test_pull_reports_an_orphaned_category_global_in_a_kept_old_file(
+    git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """Polish-batch item 4(b): a kept old-tree file that retains an M12-era
+    `CATEGORY = "..."` global (now inert under the new root-level-only
+    `category_shaped_stem`) is called out explicitly in pull's output."""
+    _backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+
+    (git_repo / "hallway.py").unlink()
+    (git_repo / "automations").mkdir(exist_ok=True)
+    (git_repo / "automations" / "hallway.py").write_text(
+        """
+from hassle import automation, service, state, when
+
+CATEGORY = "Hallway"
+
+
+@automation(id="hall_light_on_motion", alias="Hallway light on motion")
+def hall_light_on_motion():
+    when(state("binary_sensor.hall_motion").to("on"))
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+""",
+        encoding="utf-8",
+    )
+    _commit_all(git_repo, "old-layout bundle with a leftover CATEGORY global")
+
+    result = cli(["pull"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+    lowered = result.output.lower()
+    assert "automations/hallway.py" in result.output
+    assert "orphaned" in lowered
+    assert "category" in lowered
+    assert "hallway" in lowered
+    assert "clean it up by hand" in lowered
+    assert "unused import" in lowered
+
+    # The kept old file still has the orphaned global; migration doesn't
+    # touch it.
+    kept_text = (git_repo / "automations" / "hallway.py").read_text(encoding="utf-8")
+    assert 'CATEGORY = "Hallway"' in kept_text
+
+
 def test_plan_is_noop_after_migration(git_repo: Path, cli, fake_backend, toml_writer) -> None:
     """MILESTONES M15: migration only moves source, never config -- the very
     next `hassle push --yes` (a create-if-needed apply) must not re-create or
