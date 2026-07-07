@@ -45,6 +45,14 @@ Every change to this bundle follows the same loop, in this order:
 Do not skip straight to `hassle push`. If `validate` or `test` fails, fix it before
 planning/pushing.
 
+## Toolchain
+
+The `hassle` CLI itself is expected to be on `PATH`. Pre-PyPI, get it there with
+`uv tool install -e <repo>/packages/hassle-cli` (editable install from a checkout
+of the Hassle repo). If this bundle has its own `pyproject.toml` (a bundle-local
+uv project), `uv run hassle` inside the bundle resolves the pinned version from
+that uv project instead — no global install needed in that case.
+
 ## Hard rules
 
 - **Never change an existing object's `id=`.** An object's `id` is its permanent HA

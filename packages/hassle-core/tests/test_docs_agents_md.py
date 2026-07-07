@@ -81,3 +81,16 @@ def test_points_into_docs_dir() -> None:
     text = generate_agents_md(bundle_name="my-home")
     assert "docs/DSL.md" in text
     assert "docs/COOKBOOK.md" in text
+
+
+def test_contains_toolchain_note() -> None:
+    """Polish-batch item 2: a short note on how the `hassle` CLI itself gets
+    onto PATH -- either a pre-PyPI `uv tool install -e` of the CLI package,
+    or (once M17 lands) the bundle's own uv project."""
+    text = generate_agents_md(bundle_name="my-home")
+    assert "## Toolchain" in text
+    lowered = text.lower()
+    assert "path" in lowered
+    assert "uv tool install -e" in text
+    assert "packages/hassle-cli" in text
+    assert "bundle" in lowered and "uv project" in lowered
