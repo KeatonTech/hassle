@@ -91,320 +91,514 @@ class WeatherEntity: ...
 class ZoneEntity: ...
 
 class _AlarmControlPanel:
-    home: AlarmControlPanelEntity  # alarm_control_panel.home - "Home Alarm"
+    home: AlarmControlPanelEntity
+    "Home Alarm -- alarm_control_panel.home"
     def __getitem__(self, object_id: str) -> AlarmControlPanelEntity: ...
 
 class _Automation:
-    hall_light_on_motion: AutomationEntity  # automation.hall_light_on_motion
-    morning_lights: AutomationEntity  # automation.morning_lights - "Morning Lights"
+    hall_light_on_motion: AutomationEntity
+    "Hallway light on motion -- automation.hall_light_on_motion"
+    morning_lights: AutomationEntity
+    "Morning Lights -- automation.morning_lights"
     def __getitem__(self, object_id: str) -> AutomationEntity: ...
 
 class _BinarySensor:
-    alarm: BinarySensorEntity  # binary_sensor.alarm - "Alarm Sensor"
-    back_door: BinarySensorEntity  # binary_sensor.back_door - "Back Door"
-    basement_flood: BinarySensorEntity  # binary_sensor.basement_flood - "Basement Flood Sensor"
-    bathroom_humidity: BinarySensorEntity  # binary_sensor.bathroom_humidity
-    bedroom_motion: BinarySensorEntity  # binary_sensor.bedroom_motion - "Bedroom Motion"
-    bedroom_window: BinarySensorEntity  # binary_sensor.bedroom_window - "Bedroom Window"
-    door: BinarySensorEntity  # binary_sensor.door - "Front Door"
-    front_door: BinarySensorEntity  # binary_sensor.front_door - "Front Door Sensor"
-    garage_door: BinarySensorEntity  # binary_sensor.garage_door - "Garage Door"
-    guest_arrived: BinarySensorEntity  # binary_sensor.guest_arrived - "Guest Arrived"
-    guest_sensor: BinarySensorEntity  # binary_sensor.guest_sensor - "Guest Sensor"
-    hall_motion: BinarySensorEntity  # binary_sensor.hall_motion - "Hall Motion"
-    kitchen_motion: BinarySensorEntity  # binary_sensor.kitchen_motion - "Kitchen Motion"
-    laundry_door: BinarySensorEntity  # binary_sensor.laundry_door - "Laundry Door"
-    living_room_motion: BinarySensorEntity  # binary_sensor.living_room_motion
-    motion: BinarySensorEntity  # binary_sensor.motion - "Motion"
-    motion_detector: BinarySensorEntity  # binary_sensor.motion_detector - "Motion Detector"
-    office_motion: BinarySensorEntity  # binary_sensor.office_motion - "Office Motion"
-    trigger: BinarySensorEntity  # binary_sensor.trigger - "Test Trigger Sensor"
-    window: BinarySensorEntity  # binary_sensor.window - "Window Sensor"
-    workshop_door: BinarySensorEntity  # binary_sensor.workshop_door - "Workshop Door"
+    alarm: BinarySensorEntity
+    "Alarm Sensor -- binary_sensor.alarm"
+    back_door: BinarySensorEntity
+    "Back Door -- binary_sensor.back_door (area: Porch)"
+    basement_flood: BinarySensorEntity
+    "Basement Flood Sensor -- binary_sensor.basement_flood (area: Outdoor)"
+    bathroom_humidity: BinarySensorEntity
+    "Bathroom Humidity Sensor -- binary_sensor.bathroom_humidity (area: Utility)"
+    bedroom_motion: BinarySensorEntity
+    "Bedroom Motion -- binary_sensor.bedroom_motion (area: Bedroom)"
+    bedroom_window: BinarySensorEntity
+    "Bedroom Window -- binary_sensor.bedroom_window (area: Bedroom)"
+    door: BinarySensorEntity
+    "Front Door -- binary_sensor.door (area: Entryway)"
+    front_door: BinarySensorEntity
+    "Front Door Sensor -- binary_sensor.front_door (area: Entryway)"
+    garage_door: BinarySensorEntity
+    "Garage Door -- binary_sensor.garage_door (area: Garage)"
+    guest_arrived: BinarySensorEntity
+    "Guest Arrived -- binary_sensor.guest_arrived (area: Entryway)"
+    guest_sensor: BinarySensorEntity
+    "Guest Sensor -- binary_sensor.guest_sensor (area: Entryway)"
+    hall_motion: BinarySensorEntity
+    "Hall Motion -- binary_sensor.hall_motion (area: Hallway)"
+    kitchen_motion: BinarySensorEntity
+    "Kitchen Motion -- binary_sensor.kitchen_motion (area: Kitchen)"
+    laundry_door: BinarySensorEntity
+    "Laundry Door -- binary_sensor.laundry_door (area: Laundry)"
+    living_room_motion: BinarySensorEntity
+    "Living Room Motion -- binary_sensor.living_room_motion (area: Living Room)"
+    motion: BinarySensorEntity
+    "Motion -- binary_sensor.motion (area: Hallway)"
+    motion_detector: BinarySensorEntity
+    "Motion Detector -- binary_sensor.motion_detector (area: Hallway)"
+    office_motion: BinarySensorEntity
+    "Office Motion -- binary_sensor.office_motion (area: Office)"
+    trigger: BinarySensorEntity
+    "Test Trigger Sensor -- binary_sensor.trigger"
+    window: BinarySensorEntity
+    "Window Sensor -- binary_sensor.window (area: Bedroom)"
+    workshop_door: BinarySensorEntity
+    "Workshop Door -- binary_sensor.workshop_door (area: Workshop)"
     def __getitem__(self, object_id: str) -> BinarySensorEntity: ...
 
 class _Button:
-    reboot_ha: ButtonEntity  # button.reboot_ha - "Reboot HA"
-    restart: ButtonEntity  # button.restart - "Restart"
-    start: ButtonEntity  # button.start - "Start Button"
-    test: ButtonEntity  # button.test - "Test Button"
+    reboot_ha: ButtonEntity
+    "Reboot HA -- button.reboot_ha"
+    restart: ButtonEntity
+    "Restart -- button.restart"
+    start: ButtonEntity
+    "Start Button -- button.start"
+    test: ButtonEntity
+    "Test Button -- button.test"
     def __getitem__(self, object_id: str) -> ButtonEntity: ...
 
 class _Calendar:
-    holidays: CalendarEntity  # calendar.holidays - "Holidays"
-    work_schedule: CalendarEntity  # calendar.work_schedule - "Work Schedule"
+    holidays: CalendarEntity
+    "Holidays -- calendar.holidays"
+    work_schedule: CalendarEntity
+    "Work Schedule -- calendar.work_schedule"
     def __getitem__(self, object_id: str) -> CalendarEntity: ...
 
 class _Camera:
-    back_patio: CameraEntity  # camera.back_patio - "Back Patio Camera"
-    driveway: CameraEntity  # camera.driveway - "Driveway Camera"
-    front_door: CameraEntity  # camera.front_door - "Front Door Camera"
-    garage_interior: CameraEntity  # camera.garage_interior - "Garage Interior Camera"
-    living_room: CameraEntity  # camera.living_room - "Living Room Camera"
-    side_yard: CameraEntity  # camera.side_yard - "Side Yard Camera"
+    back_patio: CameraEntity
+    "Back Patio Camera -- camera.back_patio (area: Outdoor)"
+    driveway: CameraEntity
+    "Driveway Camera -- camera.driveway (area: Garage)"
+    front_door: CameraEntity
+    "Front Door Camera -- camera.front_door (area: Entryway)"
+    garage_interior: CameraEntity
+    "Garage Interior Camera -- camera.garage_interior (area: Garage)"
+    living_room: CameraEntity
+    "Living Room Camera -- camera.living_room (area: Living Room)"
+    side_yard: CameraEntity
+    "Side Yard Camera -- camera.side_yard (area: Outdoor)"
     def __getitem__(self, object_id: str) -> CameraEntity: ...
 
 class _Climate:
-    bedroom_thermostat: ClimateEntity  # climate.bedroom_thermostat - "Bedroom Thermostat"
-    living: ClimateEntity  # climate.living - "Living Climate"
-    living_room: ClimateEntity  # climate.living_room - "Living Room Thermostat"
-    office_thermostat: ClimateEntity  # climate.office_thermostat - "Office Thermostat"
+    bedroom_thermostat: ClimateEntity
+    "Bedroom Thermostat -- climate.bedroom_thermostat (area: Bedroom)"
+    living: ClimateEntity
+    "Living Climate -- climate.living (area: Living Room)"
+    living_room: ClimateEntity
+    "Living Room Thermostat -- climate.living_room (area: Living Room)"
+    office_thermostat: ClimateEntity
+    "Office Thermostat -- climate.office_thermostat (area: Office)"
     def __getitem__(self, object_id: str) -> ClimateEntity: ...
 
 class _Counter:
-    daily_count: CounterEntity  # counter.daily_count - "Daily Count"
+    daily_count: CounterEntity
+    "Daily Count -- counter.daily_count"
     def __getitem__(self, object_id: str) -> CounterEntity: ...
 
 class _Cover:
-    basement_window: CoverEntity  # cover.basement_window - "Basement Window"
-    bathroom_exhaust_damper: CoverEntity  # cover.bathroom_exhaust_damper
-    bedroom_blinds: CoverEntity  # cover.bedroom_blinds - "Bedroom Blinds"
-    garage_door: CoverEntity  # cover.garage_door - "Garage Door"
-    kitchen_blinds: CoverEntity  # cover.kitchen_blinds - "Kitchen Blinds"
-    living_room_blinds: CoverEntity  # cover.living_room_blinds - "Living Room Blinds"
-    living_room_shade: CoverEntity  # cover.living_room_shade - "Living Room Shade"
-    office_blinds: CoverEntity  # cover.office_blinds - "Office Blinds"
+    basement_window: CoverEntity
+    "Basement Window -- cover.basement_window (area: Outdoor)"
+    bathroom_exhaust_damper: CoverEntity
+    "Bathroom Exhaust Damper -- cover.bathroom_exhaust_damper (area: Utility)"
+    bedroom_blinds: CoverEntity
+    "Bedroom Blinds -- cover.bedroom_blinds (area: Bedroom)"
+    garage_door: CoverEntity
+    "Garage Door -- cover.garage_door (area: Garage)"
+    kitchen_blinds: CoverEntity
+    "Kitchen Blinds -- cover.kitchen_blinds (area: Kitchen)"
+    living_room_blinds: CoverEntity
+    "Living Room Blinds -- cover.living_room_blinds (area: Living Room)"
+    living_room_shade: CoverEntity
+    "Living Room Shade -- cover.living_room_shade (area: Living Room)"
+    office_blinds: CoverEntity
+    "Office Blinds -- cover.office_blinds (area: Office)"
     def __getitem__(self, object_id: str) -> CoverEntity: ...
 
 class _DeviceTracker:
-    john: DeviceTrackerEntity  # device_tracker.john - "John"
-    john_phone: DeviceTrackerEntity  # device_tracker.john_phone - "John's Phone"
-    keaton_phone: DeviceTrackerEntity  # device_tracker.keaton_phone - "Keaton's Phone"
+    john: DeviceTrackerEntity
+    "John -- device_tracker.john"
+    john_phone: DeviceTrackerEntity
+    "John's Phone -- device_tracker.john_phone"
+    keaton_phone: DeviceTrackerEntity
+    "Keaton's Phone -- device_tracker.keaton_phone"
     def __getitem__(self, object_id: str) -> DeviceTrackerEntity: ...
 
 class _Event:
-    doorbell: EventEntity  # event.doorbell - "Doorbell"
-    garage_motion: EventEntity  # event.garage_motion - "Garage Motion"
+    doorbell: EventEntity
+    "Doorbell -- event.doorbell (area: Entryway)"
+    garage_motion: EventEntity
+    "Garage Motion -- event.garage_motion (area: Garage)"
     def __getitem__(self, object_id: str) -> EventEntity: ...
 
 class _Fan:
-    bedroom: FanEntity  # fan.bedroom - "Bedroom Fan"
-    kitchen_fan: FanEntity  # fan.kitchen_fan - "Kitchen Fan"
-    living_room: FanEntity  # fan.living_room - "Living Room Fan"
-    living_room_ceiling: FanEntity  # fan.living_room_ceiling - "Living Room Ceiling Fan"
-    office_fan: FanEntity  # fan.office_fan - "Office Fan"
+    bedroom: FanEntity
+    "Bedroom Fan -- fan.bedroom (area: Bedroom)"
+    kitchen_fan: FanEntity
+    "Kitchen Fan -- fan.kitchen_fan (area: Kitchen)"
+    living_room: FanEntity
+    "Living Room Fan -- fan.living_room (area: Living Room)"
+    living_room_ceiling: FanEntity
+    "Living Room Ceiling Fan -- fan.living_room_ceiling (area: Living Room)"
+    office_fan: FanEntity
+    "Office Fan -- fan.office_fan (area: Office)"
     def __getitem__(self, object_id: str) -> FanEntity: ...
 
 class _GeoLocation:
-    mobile_device: GeoLocationEntity  # geo_location.mobile_device - "Mobile Device"
+    mobile_device: GeoLocationEntity
+    "Mobile Device -- geo_location.mobile_device"
     def __getitem__(self, object_id: str) -> GeoLocationEntity: ...
 
 class _Humidifier:
-    bedroom: HumidifierEntity  # humidifier.bedroom - "Bedroom Humidifier"
-    living_room: HumidifierEntity  # humidifier.living_room - "Living Room Humidifier"
+    bedroom: HumidifierEntity
+    "Bedroom Humidifier -- humidifier.bedroom (area: Bedroom)"
+    living_room: HumidifierEntity
+    "Living Room Humidifier -- humidifier.living_room (area: Living Room)"
     def __getitem__(self, object_id: str) -> HumidifierEntity: ...
 
 class _Image:
-    front_door: ImageEntity  # image.front_door - "Front Door Camera"
+    front_door: ImageEntity
+    "Front Door Camera -- image.front_door (area: Entryway)"
     def __getitem__(self, object_id: str) -> ImageEntity: ...
 
 class _InputBoolean:
-    armed: InputBooleanEntity  # input_boolean.armed - "Armed"
-    away: InputBooleanEntity  # input_boolean.away - "Away"
-    do_not_disturb: InputBooleanEntity  # input_boolean.do_not_disturb - "Do Not Disturb"
-    done: InputBooleanEntity  # input_boolean.done - "Done"
-    enable: InputBooleanEntity  # input_boolean.enable - "Enable"
-    enable_automation: InputBooleanEntity  # input_boolean.enable_automation - "Enable Automation"
-    guest_mode: InputBooleanEntity  # input_boolean.guest_mode - "Guest Mode"
-    holiday_mode: InputBooleanEntity  # input_boolean.holiday_mode - "Holiday Mode"
-    mode: InputBooleanEntity  # input_boolean.mode - "Mode Toggle"
+    armed: InputBooleanEntity
+    "Armed -- input_boolean.armed"
+    away: InputBooleanEntity
+    "Away -- input_boolean.away"
+    do_not_disturb: InputBooleanEntity
+    "Do Not Disturb -- input_boolean.do_not_disturb"
+    done: InputBooleanEntity
+    "Done -- input_boolean.done"
+    enable: InputBooleanEntity
+    "Enable -- input_boolean.enable"
+    enable_automation: InputBooleanEntity
+    "Enable Automation -- input_boolean.enable_automation"
+    guest_mode: InputBooleanEntity
+    "Guest Mode -- input_boolean.guest_mode"
+    holiday_mode: InputBooleanEntity
+    "Holiday Mode -- input_boolean.holiday_mode"
+    mode: InputBooleanEntity
+    "Mode Toggle -- input_boolean.mode"
     def __getitem__(self, object_id: str) -> InputBooleanEntity: ...
 
 class _InputButton:
-    reset: InputButtonEntity  # input_button.reset - "Reset"
+    reset: InputButtonEntity
+    "Reset -- input_button.reset"
     def __getitem__(self, object_id: str) -> InputButtonEntity: ...
 
 class _InputDatetime:
-    alarm_time: InputDatetimeEntity  # input_datetime.alarm_time - "Alarm Time"
+    alarm_time: InputDatetimeEntity
+    "Alarm Time -- input_datetime.alarm_time"
     def __getitem__(self, object_id: str) -> InputDatetimeEntity: ...
 
 class _InputNumber:
-    counter: InputNumberEntity  # input_number.counter - "Counter Input"
-    max_temperature: InputNumberEntity  # input_number.max_temperature - "Max Temperature"
-    target_temp: InputNumberEntity  # input_number.target_temp - "Target Temperature"
+    counter: InputNumberEntity
+    "Counter Input -- input_number.counter"
+    max_temperature: InputNumberEntity
+    "Max Temperature -- input_number.max_temperature"
+    target_temp: InputNumberEntity
+    "Target Temperature -- input_number.target_temp"
     def __getitem__(self, object_id: str) -> InputNumberEntity: ...
 
 class _InputSelect:
-    house_mode: InputSelectEntity  # input_select.house_mode - "House Mode"
-    mode: InputSelectEntity  # input_select.mode - "Mode"
+    house_mode: InputSelectEntity
+    "House Mode -- input_select.house_mode"
+    mode: InputSelectEntity
+    "Mode -- input_select.mode"
     def __getitem__(self, object_id: str) -> InputSelectEntity: ...
 
 class _InputText:
-    entities: InputTextEntity  # input_text.entities - "Entities List"
-    location: InputTextEntity  # input_text.location - "Location"
-    material_you_image_url_6814bc: InputTextEntity  # input_text.material_you_image_url_6814bc
-    vacation_note: InputTextEntity  # input_text.vacation_note - "Vacation Note"
+    entities: InputTextEntity
+    "Entities List -- input_text.entities"
+    location: InputTextEntity
+    "Location -- input_text.location"
+    material_you_image_url_6814bc: InputTextEntity
+    "Material You Base Color Source Image Path/URL K... -- input_text.material_you_image_url_6814bc"
+    vacation_note: InputTextEntity
+    "Vacation Note -- input_text.vacation_note"
     def __getitem__(self, object_id: str) -> InputTextEntity: ...
 
 class _Light:
-    a: LightEntity  # light.a - "Light A"
-    all: LightEntity  # light.all - "All Lights"
-    all_downstairs: LightEntity  # light.all_downstairs - "All Downstairs"
-    b: LightEntity  # light.b - "Light B"
-    back_patio: LightEntity  # light.back_patio - "Back Patio"
-    basement: LightEntity  # light.basement - "Basement"
-    bathroom: LightEntity  # light.bathroom - "Bathroom"
-    bathroom_mirror: LightEntity  # light.bathroom_mirror - "Bathroom Mirror"
-    bedroom: LightEntity  # light.bedroom - "Bedroom"
-    entryway: LightEntity  # light.entryway - "Entryway Light"
-    front_door_light: LightEntity  # light.front_door_light - "Front Door Light"
-    garage_ceiling: LightEntity  # light.garage_ceiling - "Garage Ceiling"
-    hallway: LightEntity  # light.hallway - "Hallway"
-    kitchen: LightEntity  # light.kitchen - "Kitchen"
-    kitchen_island: LightEntity  # light.kitchen_island - "Kitchen Island"
-    kitchen_under_cabinet: LightEntity  # light.kitchen_under_cabinet - "Kitchen Under Cabinet"
-    laundry_room: LightEntity  # light.laundry_room - "Laundry Room"
-    living_room: LightEntity  # light.living_room - "Living Room"
-    living_room_accent: LightEntity  # light.living_room_accent - "Living Room Accent"
-    master_bedroom_bedside: LightEntity  # light.master_bedroom_bedside - "Master Bedroom Bedside"
-    master_bedroom_ceiling: LightEntity  # light.master_bedroom_ceiling - "Master Bedroom Ceiling"
-    mudroom: LightEntity  # light.mudroom - "Mudroom"
-    office: LightEntity  # light.office - "Office Light"
-    office_ceiling: LightEntity  # light.office_ceiling - "Office Ceiling"
-    office_desk: LightEntity  # light.office_desk - "Office Desk"
-    porch: LightEntity  # light.porch - "Porch"
-    side_yard: LightEntity  # light.side_yard - "Side Yard"
-    utility_room: LightEntity  # light.utility_room - "Utility Room"
-    workshop: LightEntity  # light.workshop - "Workshop"
+    a: LightEntity
+    "Light A -- light.a"
+    all: LightEntity
+    "All Lights -- light.all"
+    all_downstairs: LightEntity
+    "All Downstairs -- light.all_downstairs"
+    b: LightEntity
+    "Light B -- light.b"
+    back_patio: LightEntity
+    "Back Patio -- light.back_patio (area: Outdoor)"
+    basement: LightEntity
+    "Basement -- light.basement (area: Outdoor)"
+    bathroom: LightEntity
+    "Bathroom -- light.bathroom (area: Utility)"
+    bathroom_mirror: LightEntity
+    "Bathroom Mirror -- light.bathroom_mirror (area: Utility)"
+    bedroom: LightEntity
+    "Bedroom -- light.bedroom (area: Bedroom)"
+    entryway: LightEntity
+    "Entryway Light -- light.entryway (area: Entryway)"
+    front_door_light: LightEntity
+    "Front Door Light -- light.front_door_light (area: Entryway)"
+    garage_ceiling: LightEntity
+    "Garage Ceiling -- light.garage_ceiling (area: Garage)"
+    hallway: LightEntity
+    "Hallway -- light.hallway (area: Hallway)"
+    kitchen: LightEntity
+    "Kitchen -- light.kitchen (area: Kitchen)"
+    kitchen_island: LightEntity
+    "Kitchen Island -- light.kitchen_island (area: Kitchen)"
+    kitchen_under_cabinet: LightEntity
+    "Kitchen Under Cabinet -- light.kitchen_under_cabinet (area: Kitchen)"
+    laundry_room: LightEntity
+    "Laundry Room -- light.laundry_room (area: Laundry)"
+    living_room: LightEntity
+    "Living Room -- light.living_room (area: Living Room)"
+    living_room_accent: LightEntity
+    "Living Room Accent -- light.living_room_accent (area: Living Room)"
+    master_bedroom_bedside: LightEntity
+    "Master Bedroom Bedside -- light.master_bedroom_bedside (area: Bedroom)"
+    master_bedroom_ceiling: LightEntity
+    "Master Bedroom Ceiling -- light.master_bedroom_ceiling (area: Bedroom)"
+    mudroom: LightEntity
+    "Mudroom -- light.mudroom (area: Entryway)"
+    office: LightEntity
+    "Office Light -- light.office (area: Office)"
+    office_ceiling: LightEntity
+    "Office Ceiling -- light.office_ceiling (area: Office)"
+    office_desk: LightEntity
+    "Office Desk -- light.office_desk (area: Office)"
+    porch: LightEntity
+    "Porch -- light.porch (area: Porch)"
+    side_yard: LightEntity
+    "Side Yard -- light.side_yard (area: Outdoor)"
+    utility_room: LightEntity
+    "Utility Room -- light.utility_room (area: Utility)"
+    workshop: LightEntity
+    "Workshop -- light.workshop (area: Workshop)"
     def __getitem__(self, object_id: str) -> LightEntity: ...
 
 class _Lock:
-    back_door: LockEntity  # lock.back_door - "Back Door Lock"
-    front_door: LockEntity  # lock.front_door - "Front Door Lock"
-    garage_entry_door: LockEntity  # lock.garage_entry_door - "Garage Entry Door Lock"
-    garage_side_door: LockEntity  # lock.garage_side_door - "Garage Side Door Lock"
-    office_door: LockEntity  # lock.office_door - "Office Door Lock"
+    back_door: LockEntity
+    "Back Door Lock -- lock.back_door (area: Porch)"
+    front_door: LockEntity
+    "Front Door Lock -- lock.front_door (area: Entryway)"
+    garage_entry_door: LockEntity
+    "Garage Entry Door Lock -- lock.garage_entry_door (area: Garage)"
+    garage_side_door: LockEntity
+    "Garage Side Door Lock -- lock.garage_side_door (area: Garage)"
+    office_door: LockEntity
+    "Office Door Lock -- lock.office_door (area: Office)"
     def __getitem__(self, object_id: str) -> LockEntity: ...
 
 class _MediaPlayer:
-    bathroom_speaker: MediaPlayerEntity  # media_player.bathroom_speaker - "Bathroom Speaker"
-    bedroom_speaker: MediaPlayerEntity  # media_player.bedroom_speaker - "Bedroom Speaker"
-    bedroom_tv: MediaPlayerEntity  # media_player.bedroom_tv - "Bedroom TV"
-    kitchen_speaker: MediaPlayerEntity  # media_player.kitchen_speaker - "Kitchen Speaker"
-    living_room_speaker: MediaPlayerEntity  # media_player.living_room_speaker
-    office_speaker: MediaPlayerEntity  # media_player.office_speaker - "Office Speaker"
-    tv: MediaPlayerEntity  # media_player.tv - "Living Room TV"
+    bathroom_speaker: MediaPlayerEntity
+    "Bathroom Speaker -- media_player.bathroom_speaker (area: Utility)"
+    bedroom_speaker: MediaPlayerEntity
+    "Bedroom Speaker -- media_player.bedroom_speaker (area: Bedroom)"
+    bedroom_tv: MediaPlayerEntity
+    "Bedroom TV -- media_player.bedroom_tv (area: Bedroom)"
+    kitchen_speaker: MediaPlayerEntity
+    "Kitchen Speaker -- media_player.kitchen_speaker (area: Kitchen)"
+    living_room_speaker: MediaPlayerEntity
+    "Living Room Speaker -- media_player.living_room_speaker (area: Living Room)"
+    office_speaker: MediaPlayerEntity
+    "Office Speaker -- media_player.office_speaker (area: Office)"
+    tv: MediaPlayerEntity
+    "Living Room TV -- media_player.tv (area: Living Room)"
     def __getitem__(self, object_id: str) -> MediaPlayerEntity: ...
 
 class _Notify:
-    mobile_app_keaton: NotifyEntity  # notify.mobile_app_keaton - "Mobile App Keaton"
-    mobile_app_spouse: NotifyEntity  # notify.mobile_app_spouse - "Mobile App Spouse"
-    notify: NotifyEntity  # notify.notify - "Notifications"
-    phone: NotifyEntity  # notify.phone - "Phone Notification"
+    mobile_app_keaton: NotifyEntity
+    "Mobile App Keaton -- notify.mobile_app_keaton"
+    mobile_app_spouse: NotifyEntity
+    "Mobile App Spouse -- notify.mobile_app_spouse"
+    notify: NotifyEntity
+    "Notifications -- notify.notify"
+    phone: NotifyEntity
+    "Phone Notification -- notify.phone"
     def __getitem__(self, object_id: str) -> NotifyEntity: ...
 
 class _Number:
-    bedroom_brightness: NumberEntity  # number.bedroom_brightness - "Bedroom Brightness"
-    kitchen_brightness_threshold: NumberEntity  # number.kitchen_brightness_threshold
-    living_room_brightness: NumberEntity  # number.living_room_brightness - "Living Room Brightness"
+    bedroom_brightness: NumberEntity
+    "Bedroom Brightness -- number.bedroom_brightness (area: Bedroom)"
+    kitchen_brightness_threshold: NumberEntity
+    "Kitchen Brightness Threshold -- number.kitchen_brightness_threshold (area: Kitchen)"
+    living_room_brightness: NumberEntity
+    "Living Room Brightness -- number.living_room_brightness (area: Living Room)"
     def __getitem__(self, object_id: str) -> NumberEntity: ...
 
 class _Person:
-    john: PersonEntity  # person.john - "John"
-    keaton: PersonEntity  # person.keaton - "Keaton"
+    john: PersonEntity
+    "John -- person.john"
+    keaton: PersonEntity
+    "Keaton -- person.keaton"
     def __getitem__(self, object_id: str) -> PersonEntity: ...
 
 class _Scene:
-    evening: SceneEntity  # scene.evening - "Evening Scene"
+    evening: SceneEntity
+    "Evening Scene -- scene.evening"
     def __getitem__(self, object_id: str) -> SceneEntity: ...
 
 class _Schedule:
-    morning_routine: ScheduleEntity  # schedule.morning_routine - "Morning Routine"
+    morning_routine: ScheduleEntity
+    "Morning Routine -- schedule.morning_routine"
     def __getitem__(self, object_id: str) -> ScheduleEntity: ...
 
 class _Script:
-    bedtime: ScriptEntity  # script.bedtime - "Bedtime"
-    good_morning: ScriptEntity  # script.good_morning - "Good Morning"
-    greet_guest: ScriptEntity  # script.greet_guest - "Greet Guest"
-    movie_time: ScriptEntity  # script.movie_time - "Movie Time"
-    security_check: ScriptEntity  # script.security_check - "Security Check"
+    bedtime: ScriptEntity
+    "Bedtime -- script.bedtime"
+    good_morning: ScriptEntity
+    "Good Morning -- script.good_morning"
+    greet_guest: ScriptEntity
+    "Greet Guest -- script.greet_guest"
+    movie_time: ScriptEntity
+    "Movie Time -- script.movie_time"
+    security_check: ScriptEntity
+    "Security Check -- script.security_check"
     def __getitem__(self, object_id: str) -> ScriptEntity: ...
 
 class _Select:
-    bedroom_scene: SelectEntity  # select.bedroom_scene - "Bedroom Scene"
-    lighting_mode: SelectEntity  # select.lighting_mode - "Lighting Mode"
-    living_room_scene: SelectEntity  # select.living_room_scene - "Living Room Scene"
+    bedroom_scene: SelectEntity
+    "Bedroom Scene -- select.bedroom_scene (area: Bedroom)"
+    lighting_mode: SelectEntity
+    "Lighting Mode -- select.lighting_mode"
+    living_room_scene: SelectEntity
+    "Living Room Scene -- select.living_room_scene (area: Living Room)"
     def __getitem__(self, object_id: str) -> SelectEntity: ...
 
 class _Sensor:
-    _3d_printer: SensorEntity  # sensor.3d_printer - "3D Printer"
-    air_quality_indoor: SensorEntity  # sensor.air_quality_indoor - "Indoor Air Quality"
-    basement_humidity: SensorEntity  # sensor.basement_humidity - "Basement Humidity"
-    basement_temperature: SensorEntity  # sensor.basement_temperature - "Basement Temperature"
-    bathroom_humidity: SensorEntity  # sensor.bathroom_humidity - "Bathroom Humidity"
-    bedroom_humidity: SensorEntity  # sensor.bedroom_humidity - "Bedroom Humidity"
-    bedroom_temperature: SensorEntity  # sensor.bedroom_temperature - "Bedroom Temperature"
-    co2_level: SensorEntity  # sensor.co2_level - "CO2 Level"
-    counter: SensorEntity  # sensor.counter - "Counter Sensor"
-    energy_usage_today: SensorEntity  # sensor.energy_usage_today - "Energy Usage Today"
-    front_porch_light_level: SensorEntity  # sensor.front_porch_light_level
-    hall_motion: SensorEntity  # sensor.hall_motion - "Hall Motion Sensor"
-    humidity: SensorEntity  # sensor.humidity - "Humidity"
-    kitchen_sink_water: SensorEntity  # sensor.kitchen_sink_water - "Kitchen Sink Water"
-    kitchen_temperature: SensorEntity  # sensor.kitchen_temperature - "Kitchen Temperature"
-    living_room_temperature: SensorEntity  # sensor.living_room_temperature
-    office_temperature: SensorEntity  # sensor.office_temperature - "Office Temperature"
-    outdoor_temp: SensorEntity  # sensor.outdoor_temp - "Outdoor Temp"
-    outdoor_temperature: SensorEntity  # sensor.outdoor_temperature - "Outdoor Temperature"
-    solar_production: SensorEntity  # sensor.solar_production - "Solar Production"
-    temperature: SensorEntity  # sensor.temperature - "Temperature"
-    time_of_day: SensorEntity  # sensor.time_of_day - "Time of Day"
-    uptime: SensorEntity  # sensor.uptime - "Uptime"
-    washing_machine_power: SensorEntity  # sensor.washing_machine_power - "Washing Machine Power"
-    wireless_device_battery: SensorEntity  # sensor.wireless_device_battery
-    workshop_temperature: SensorEntity  # sensor.workshop_temperature - "Workshop Temperature"
+    _3d_printer: SensorEntity
+    "3D Printer -- sensor.3d_printer (area: Workshop)"
+    air_quality_indoor: SensorEntity
+    "Indoor Air Quality -- sensor.air_quality_indoor (area: Living Room)"
+    basement_humidity: SensorEntity
+    "Basement Humidity -- sensor.basement_humidity (area: Outdoor)"
+    basement_temperature: SensorEntity
+    "Basement Temperature -- sensor.basement_temperature (area: Outdoor)"
+    bathroom_humidity: SensorEntity
+    "Bathroom Humidity -- sensor.bathroom_humidity (area: Utility)"
+    bedroom_humidity: SensorEntity
+    "Bedroom Humidity -- sensor.bedroom_humidity (area: Bedroom)"
+    bedroom_temperature: SensorEntity
+    "Bedroom Temperature -- sensor.bedroom_temperature (area: Bedroom)"
+    co2_level: SensorEntity
+    "CO2 Level -- sensor.co2_level (area: Living Room)"
+    counter: SensorEntity
+    "Counter Sensor -- sensor.counter"
+    energy_usage_today: SensorEntity
+    "Energy Usage Today -- sensor.energy_usage_today"
+    front_porch_light_level: SensorEntity
+    "Front Porch Light Level -- sensor.front_porch_light_level (area: Porch)"
+    hall_motion: SensorEntity
+    "Hall Motion Sensor -- sensor.hall_motion (area: Hallway)"
+    humidity: SensorEntity
+    "Humidity -- sensor.humidity"
+    kitchen_sink_water: SensorEntity
+    "Kitchen Sink Water -- sensor.kitchen_sink_water (area: Kitchen)"
+    kitchen_temperature: SensorEntity
+    "Kitchen Temperature -- sensor.kitchen_temperature (area: Kitchen)"
+    living_room_temperature: SensorEntity
+    "Living Room Temperature -- sensor.living_room_temperature (area: Living Room)"
+    office_temperature: SensorEntity
+    "Office Temperature -- sensor.office_temperature (area: Office)"
+    outdoor_temp: SensorEntity
+    "Outdoor Temp -- sensor.outdoor_temp (area: Outdoor)"
+    outdoor_temperature: SensorEntity
+    "Outdoor Temperature -- sensor.outdoor_temperature (area: Outdoor)"
+    solar_production: SensorEntity
+    "Solar Production -- sensor.solar_production (area: Outdoor)"
+    temperature: SensorEntity
+    "Temperature -- sensor.temperature"
+    time_of_day: SensorEntity
+    "Time of Day -- sensor.time_of_day"
+    uptime: SensorEntity
+    "Uptime -- sensor.uptime"
+    washing_machine_power: SensorEntity
+    "Washing Machine Power -- sensor.washing_machine_power (area: Laundry)"
+    wireless_device_battery: SensorEntity
+    "Wireless Device Battery -- sensor.wireless_device_battery"
+    workshop_temperature: SensorEntity
+    "Workshop Temperature -- sensor.workshop_temperature (area: Workshop)"
     def __getitem__(self, object_id: str) -> SensorEntity: ...
 
 class _Siren:
-    garage_alarm: SirenEntity  # siren.garage_alarm - "Garage Alarm"
+    garage_alarm: SirenEntity
+    "Garage Alarm -- siren.garage_alarm (area: Garage)"
     def __getitem__(self, object_id: str) -> SirenEntity: ...
 
 class _Sun:
-    sun: SunEntity  # sun.sun - "Sun"
+    sun: SunEntity
+    "Sun -- sun.sun"
     def __getitem__(self, object_id: str) -> SunEntity: ...
 
 class _Switch:
-    bathroom_exhaust: SwitchEntity  # switch.bathroom_exhaust - "Bathroom Exhaust"
-    bedroom_fan: SwitchEntity  # switch.bedroom_fan - "Bedroom Fan Power"
-    coffee_maker: SwitchEntity  # switch.coffee_maker - "Coffee Maker"
-    dryer: SwitchEntity  # switch.dryer - "Dryer"
-    garage_door_opener: SwitchEntity  # switch.garage_door_opener - "Garage Door Opener"
-    kitchen_outlet: SwitchEntity  # switch.kitchen_outlet - "Kitchen Outlet"
-    living_room_tv: SwitchEntity  # switch.living_room_tv - "Living Room TV"
-    office_monitor: SwitchEntity  # switch.office_monitor - "Office Monitor"
-    porch: SwitchEntity  # switch.porch - "Porch Switch"
-    pump: SwitchEntity  # switch.pump - "Pump Switch"
-    washing_machine: SwitchEntity  # switch.washing_machine - "Washing Machine"
-    workshop_outlet: SwitchEntity  # switch.workshop_outlet - "Workshop Outlet"
+    bathroom_exhaust: SwitchEntity
+    "Bathroom Exhaust -- switch.bathroom_exhaust (area: Utility)"
+    bedroom_fan: SwitchEntity
+    "Bedroom Fan Power -- switch.bedroom_fan (area: Bedroom)"
+    coffee_maker: SwitchEntity
+    "Coffee Maker -- switch.coffee_maker (area: Kitchen)"
+    dryer: SwitchEntity
+    "Dryer -- switch.dryer (area: Laundry)"
+    garage_door_opener: SwitchEntity
+    "Garage Door Opener -- switch.garage_door_opener (area: Garage)"
+    kitchen_outlet: SwitchEntity
+    "Kitchen Outlet -- switch.kitchen_outlet (area: Kitchen)"
+    living_room_tv: SwitchEntity
+    "Living Room TV -- switch.living_room_tv (area: Living Room)"
+    office_monitor: SwitchEntity
+    "Office Monitor -- switch.office_monitor (area: Office)"
+    porch: SwitchEntity
+    "Porch Switch -- switch.porch (area: Porch)"
+    pump: SwitchEntity
+    "Pump Switch -- switch.pump"
+    washing_machine: SwitchEntity
+    "Washing Machine -- switch.washing_machine (area: Laundry)"
+    workshop_outlet: SwitchEntity
+    "Workshop Outlet -- switch.workshop_outlet (area: Workshop)"
     def __getitem__(self, object_id: str) -> SwitchEntity: ...
 
 class _Timer:
-    kitchen: TimerEntity  # timer.kitchen - "Kitchen Timer"
+    kitchen: TimerEntity
+    "Kitchen Timer -- timer.kitchen"
     def __getitem__(self, object_id: str) -> TimerEntity: ...
 
 class _Update:
-    hass_os: UpdateEntity  # update.hass_os - "Home Assistant OS"
-    home_assistant_core: UpdateEntity  # update.home_assistant_core - "Home Assistant Core"
+    hass_os: UpdateEntity
+    "Home Assistant OS -- update.hass_os"
+    home_assistant_core: UpdateEntity
+    "Home Assistant Core -- update.home_assistant_core"
     def __getitem__(self, object_id: str) -> UpdateEntity: ...
 
 class _Vacuum:
-    downstairs: VacuumEntity  # vacuum.downstairs - "Downstairs Vacuum"
-    upstairs: VacuumEntity  # vacuum.upstairs - "Upstairs Vacuum"
+    downstairs: VacuumEntity
+    "Downstairs Vacuum -- vacuum.downstairs (area: Living Room)"
+    upstairs: VacuumEntity
+    "Upstairs Vacuum -- vacuum.upstairs (area: Bedroom)"
     def __getitem__(self, object_id: str) -> VacuumEntity: ...
 
 class _WaterHeater:
-    main: WaterHeaterEntity  # water_heater.main - "Main Water Heater"
+    main: WaterHeaterEntity
+    "Main Water Heater -- water_heater.main (area: Utility)"
     def __getitem__(self, object_id: str) -> WaterHeaterEntity: ...
 
 class _Weather:
-    home: WeatherEntity  # weather.home - "Weather at home"
-    hourly: WeatherEntity  # weather.hourly - "Hourly Weather"
+    home: WeatherEntity
+    "Weather at home -- weather.home"
+    hourly: WeatherEntity
+    "Hourly Weather -- weather.hourly"
     def __getitem__(self, object_id: str) -> WeatherEntity: ...
 
 class _Zone:
-    gym: ZoneEntity  # zone.gym - "Gym"
-    home: ZoneEntity  # zone.home - "Home"
-    work: ZoneEntity  # zone.work - "Work"
+    gym: ZoneEntity
+    "Gym -- zone.gym"
+    home: ZoneEntity
+    "Home -- zone.home"
+    work: ZoneEntity
+    "Work -- zone.work"
     def __getitem__(self, object_id: str) -> ZoneEntity: ...
 
 class _EntitiesRegistry:

@@ -6,9 +6,16 @@ attribute name becomes a pyright error, and typed service methods from
 `get_services` schemas.
 
 Digit-leading object_ids (`sensor.3d_printer`) get the underscore-prefix
-attribute name (`_3d_printer`) plus a comment naming the real entity_id, and
-every domain class also supports `__getitem__` indexing so `e.sensor["3d_printer"]`
-still works (the universal escape hatch, DESIGN §5.2).
+attribute name (`_3d_printer`) plus an attribute docstring naming the real
+entity_id, and every domain class also supports `__getitem__` indexing so
+`e.sensor["3d_printer"]` still works (the universal escape hatch, DESIGN §5.2).
+
+**ux/stub-docstrings:** each entity attribute's friendly name used to be a
+trailing `# comment` -- invisible to Pylance, which only surfaces docstrings
+on hover and in the completion documentation pane. It is now an attribute
+docstring: a string-literal statement immediately following the attribute
+declaration (`entity_name -- entity_id (area: Area Name)`), which pyright and
+Pylance both recognize as documentation for that attribute.
 
 **Deviation from DESIGN's illustrative snippet:** DESIGN §5.2 shows
 `LightEntity.turn_on(brightness_pct: int | Template = ..., transition: float =
@@ -24,7 +31,7 @@ introducing a new public type as part of an unrelated milestone.
 
 from __future__ import annotations
 
-from hassle.registry.snapshot import RegistrySnapshot, ServiceDef
+from hassle.registry.snapshot import EntityInfo, RegistrySnapshot, ServiceDef
 
 _PY_TYPE = {
     "integer": "int",
@@ -53,6 +60,100 @@ def _attr_name(object_id: str) -> str:
     if object_id and object_id[0].isdigit():
         return f"_{object_id}"
     return object_id
+
+
+def _format_str_literal(text: str) -> str:
+    """Render ``text`` as a ruff-format-clean Python string literal.
+
+    Matches `ruff format`'s (Black-derived) quote preference exactly: prefer
+    double quotes; fall back to single quotes only when the text contains a
+    `"` and no `'` (avoids an otherwise-unnecessary escape) -- verified
+    against real `ruff format` output in
+    `test_stub_is_ruff_format_clean`/the quote-preference experiments in this
+    branch's PR description. Names are user data (can contain quotes,
+    backslashes, newlines); this is a full literal-escaping pass, not a
+    sanitizer, so the docstring never drops data and the `.pyi` always
+    parses (I3-style "never drop data" applied to generated text).
+    """
+    has_double = '"' in text
+    has_single = "'" in text
+    quote = "'" if (has_double and not has_single) else '"'
+    out: list[str] = []
+    for ch in text:
+        if ch == "\\":
+            out.append("\\\\")
+        elif ch == quote:
+            out.append("\\" + quote)
+        elif ch == "\n":
+            out.append("\\n")
+        elif ch == "\r":
+            out.append("\\r")
+        elif ch == "\t":
+            out.append("\\t")
+        else:
+            out.append(ch)
+    return f"{quote}{''.join(out)}{quote}"
+
+
+def _entity_display_name(entity: EntityInfo) -> str:
+    """``entity.name`` or `original_name`, falling back to the entity_id
+    itself when both are ``None`` (ux/stub-docstrings)."""
+    return entity.name or entity.original_name or entity.entity_id
+
+
+def _area_name(snapshot: RegistrySnapshot, entity: EntityInfo) -> str | None:
+    """The area display name for ``entity``, resolved via `area_id` ->
+    `snapshot.areas`, or ``None`` if unset/unresolvable."""
+    if entity.area_id is None:
+        return None
+    for area in snapshot.areas:
+        if area.area_id == entity.area_id:
+            return area.name
+    return None
+
+
+def _entity_docstring_line(snapshot: RegistrySnapshot, entity: EntityInfo) -> str:
+    """Build the attribute-docstring line (indented, quoted, format-clean)
+    for ``entity``: display name -- entity_id (area: Area Name).
+
+    R7's >100-char fallback rule, adapted for docstrings: truncate/drop the
+    area clause first, keeping the load-bearing display name + entity_id
+    (needed for the digit-leading rule) intact; if the line is STILL over 100
+    columns even without the area (an implausibly long display name), the
+    display name itself is truncated with an ellipsis -- the entity_id is
+    never shortened, since dropping it would leave a docstring documenting a
+    different-looking entity."""
+    display_name = _entity_display_name(entity)
+    area = _area_name(snapshot, entity)
+
+    def _line(text: str) -> str:
+        return f"    {_format_str_literal(text)}"
+
+    if area:
+        text = f"{display_name} -- {entity.entity_id} (area: {area})"
+        line = _line(text)
+        if len(line) <= 100:
+            return line
+
+    text = f"{display_name} -- {entity.entity_id}"
+    line = _line(text)
+    if len(line) <= 100:
+        return line
+
+    # Still too long without the area: truncate the display name (keep the
+    # entity_id fully intact) until it fits. Shrunk one character at a time
+    # against the fully-escaped rendered line (not the raw character count) --
+    # escaping can expand length (e.g. a `"`-heavy name forced into
+    # double-quote-with-escape mode), so a naive pre-escape character budget
+    # can undershoot and still overflow 100 columns.
+    suffix = f"... -- {entity.entity_id}"
+    name_budget = len(display_name)
+    while name_budget > 0:
+        candidate = _line(f"{display_name[:name_budget]}{suffix}")
+        if len(candidate) <= 100:
+            return candidate
+        name_budget -= 1
+    return _line(suffix)
 
 
 def _field_type(field_type: str | None) -> str:
@@ -133,16 +234,8 @@ def generate_entities_stub(snapshot: RegistrySnapshot) -> str:
         for object_id in object_ids:
             attr = _attr_name(object_id)
             entity = next(e for e in snapshot.entities if e.entity_id == f"{domain}.{object_id}")
-            comment_bits = [f"{domain}.{object_id}"]
-            if entity.name:
-                comment_bits.append(f'"{entity.name}"')
-            line = f"    {attr}: {entity_type}  # {' - '.join(comment_bits)}"
-            if len(line) > 100:
-                # Keep the real entity_id (the load-bearing part, needed for the
-                # digit-leading rule) and drop the display-name comment rather
-                # than overflow the line-length convention (R7).
-                line = f"    {attr}: {entity_type}  # {domain}.{object_id}"
-            lines.append(line)
+            lines.append(f"    {attr}: {entity_type}")
+            lines.append(_entity_docstring_line(snapshot, entity))
         lines.append(f"    def __getitem__(self, object_id: str) -> {entity_type}: ...")
         lines.append("")
 

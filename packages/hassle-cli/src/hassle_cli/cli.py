@@ -331,6 +331,25 @@ def pull(allow_dirty: bool) -> None:
         # category-based placement for newly-adopted objects (below).
         registry_snapshot = _write_registry_snapshot(backend, root)
 
+    # ux/stub-docstrings item 2: `typings/hassle/registry/__init__.pyi` is
+    # regenerated from the just-refreshed registry snapshot on every pull
+    # (write-if-changed, same convention as `_write_registry_snapshot`
+    # itself), so stubs can never go stale -- a bundle that never ran
+    # `hassle stubs` by hand used to have NO `typings/` dir at all, even
+    # after many pulls. `hassle stubs` stays available for a manual,
+    # on-demand refresh. Best-effort: skipped when the backend lacked the
+    # registry surface (`registry_snapshot is None`, same guard the
+    # category-placement code below uses).
+    if registry_snapshot is not None:
+        stub_changed = _stub_changed(registry_snapshot, root)
+        stub_path = _write_stub_if_changed(registry_snapshot, root)
+        if stub_changed:
+            # Root-relative (matches `scaffold_pyproject_file`'s "wrote
+            # pyproject.toml" convention, `hassle_cli.init_cmd`) -- shorter,
+            # never wraps mid-word in a narrow CI console, and nicer than an
+            # absolute /tmp-in-tests or /home/user path in real UX.
+            console.print(f"[cyan]hassle pull: wrote {_esc(stub_path.relative_to(root))}[/cyan]")
+
     # MILESTONES M15 work item B: an old-layout bundle (the RETIRED
     # `automations/`/`scripts/`/`helpers/` per-kind trees) is migrated into
     # the new category-first, root-level layout on this pull -- BEFORE the
@@ -1020,7 +1039,6 @@ def stubs(refresh: bool) -> None:
     docs/ha-api-notes.md.
     """
     from hassle.registry.snapshot import RegistrySnapshot
-    from hassle.registry.stubs import generate_entities_stub
 
     console = get_console()
     root = _bundle_root_or_fail()
@@ -1037,17 +1055,50 @@ def stubs(refresh: bool) -> None:
         raise SystemExit(1)
 
     snapshot = RegistrySnapshot.load(registry_path)
-    stub_text = generate_entities_stub(snapshot)
+    out_path = _write_stub_if_changed(snapshot, root)
+    # Root-relative (matches `scaffold_pyproject_file`'s "wrote
+    # pyproject.toml" convention) -- see the matching comment on the `pull`
+    # print site.
+    console.print(f"[green]hassle stubs: wrote {_esc(out_path.relative_to(root))}[/green]")
+
+
+def _write_stub_if_changed(snapshot: object, root: Path) -> Path:
+    """Generate `typings/hassle/registry/__init__.pyi` from `snapshot` and
+    write it write-if-changed (ux/stub-docstrings item 2 -- the same
+    convention `_write_registry_snapshot` uses for `.hassle/registry.json`,
+    so an unchanged registry never dirties the tree / rewrites the file).
+
+    Shared by both `hassle stubs` (manual refresh) and `hassle pull`
+    (automatic, every pull) so the two commands can never disagree on what
+    "the stub for this snapshot" looks like. Returns the path written (or
+    that would have been written) so the caller can report it.
+    """
+    from hassle.registry.stubs import generate_entities_stub
+
+    stub_text = generate_entities_stub(snapshot)  # type: ignore[arg-type]
     stub_dir = root / "typings" / "hassle" / "registry"
     stub_dir.mkdir(parents=True, exist_ok=True)
     out_path = stub_dir / "__init__.pyi"
-    out_path.write_text(stub_text, encoding="utf-8")
+    if not (out_path.is_file() and out_path.read_text(encoding="utf-8") == stub_text):
+        out_path.write_text(stub_text, encoding="utf-8")
     # Package marker so pyright treats the synthetic `hassle` stub package as
     # a regular package (matches the real runtime `hassle` package shape).
     package_marker = root / "typings" / "hassle" / "__init__.pyi"
     if not package_marker.is_file():
         package_marker.write_text("", encoding="utf-8")
-    console.print(f"[green]hassle stubs: wrote {_esc(out_path)}[/green]")
+    return out_path
+
+
+def _stub_changed(snapshot: object, root: Path) -> bool:
+    """Whether writing the stub for `snapshot` would change the file on disk
+    (checked BEFORE writing, so `pull` can print its step line only when the
+    stub actually changed -- matching `_write_registry_snapshot`'s
+    write-if-changed convention)."""
+    from hassle.registry.stubs import generate_entities_stub
+
+    stub_text = generate_entities_stub(snapshot)  # type: ignore[arg-type]
+    out_path = root / "typings" / "hassle" / "registry" / "__init__.pyi"
+    return not (out_path.is_file() and out_path.read_text(encoding="utf-8") == stub_text)
 
 
 def _write_registry_snapshot(backend: object, root: Path):
