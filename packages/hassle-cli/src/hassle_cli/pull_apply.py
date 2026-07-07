@@ -112,7 +112,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import libcst as cst
 
@@ -124,6 +124,9 @@ from hassle.ir.modernize import modernize_for_comparison
 from hassle.sync.models import Conflict, Plan, PlanAction, PlanEntry
 from hassle.sync.pull import PullResult
 from hassle.sync.source_writer import SourceWriter
+
+if TYPE_CHECKING:
+    from hassle.registry.snapshot import RegistrySnapshot
 
 
 class DecompiledBatchDoesNotCompileError(Exception):
@@ -202,17 +205,36 @@ def _parsed(object_key: str, config: dict[str, Any]) -> Any:
 
 
 def _decompiled_source(
-    object_key: str, config: dict[str, Any], script_refs: dict[str, ScriptRef] | None = None
+    object_key: str,
+    config: dict[str, Any],
+    script_refs: dict[str, ScriptRef] | None = None,
+    *,
+    snapshot: RegistrySnapshot | None = None,
 ) -> str:
-    return decompile_bundle({object_key: _parsed(object_key, config)}, script_refs=script_refs)
+    return decompile_bundle(
+        {object_key: _parsed(object_key, config)}, script_refs=script_refs, snapshot=snapshot
+    )
 
 
-def _refresh(entry: PlanEntry, source_writer: SourceWriter) -> None:
+def _refresh(
+    entry: PlanEntry, source_writer: SourceWriter, *, snapshot: RegistrySnapshot | None = None
+) -> None:
     assert entry.remote is not None
     # No script_refs here -- see module docstring: a single-object LibCST
-    # splice cannot also inject a new top-level import line.
+    # splice cannot also inject a new top-level import line for the CROSS-FILE
+    # script-call rewrite. `snapshot` (MILESTONES M18) is different: any
+    # `from hassle.services import <domain>` import the namespace form needs
+    # is emitted as part of THIS SAME single-object decompile's own header
+    # (never a separate top-level statement to splice in), so
+    # `SplicingSourceWriter.splice_object`'s existing `merge_missing_imports`
+    # seam (which already merges the `_ENTITIES_IMPORT_LINE`/star-import
+    # header on a fresh file) merges it into an existing file the identical
+    # way -- this is safe on the splice path where the cross-file script-call
+    # import is not.
     source_writer.splice_object(
-        _entry_path(entry), entry.object_key, _decompiled_source(entry.object_key, entry.remote)
+        _entry_path(entry),
+        entry.object_key,
+        _decompiled_source(entry.object_key, entry.remote, snapshot=snapshot),
     )
 
 
@@ -366,7 +388,10 @@ def _self_check_adopt_batches(
 
 
 def _adopt_batch_source(
-    entries: list[PlanEntry], script_refs: dict[str, ScriptRef] | None
+    entries: list[PlanEntry],
+    script_refs: dict[str, ScriptRef] | None,
+    *,
+    snapshot: RegistrySnapshot | None = None,
 ) -> tuple[Path, str]:
     """Decompile all ADOPTs destined for one file into ONE multi-object
     module, without writing it (per-object whole-file writes were
@@ -375,10 +400,16 @@ def _adopt_batch_source(
     ``decompile_bundle`` natively emits multi-object modules, so batching is
     also the natural codegen shape). Source-only (no write) so
     `apply_pull_with_decompiler` can self-check every destination together
-    before any of them is written (module docstring, coordinator task 4)."""
+    before any of them is written (module docstring, coordinator task 4).
+
+    ``snapshot`` (MILESTONES M18): threaded straight through to
+    ``decompile_bundle`` -- a whole-file ADOPT batch can safely gain the new
+    ``from hassle.services import <domains>`` header line (unlike `_refresh`'s
+    single-object splice, a fresh whole-file write has no existing content to
+    merge into)."""
     path = _entry_path(entries[0])
     objs = {e.object_key: _parsed(e.object_key, e.remote) for e in entries if e.remote is not None}
-    return path, decompile_bundle(objs, script_refs=script_refs)
+    return path, decompile_bundle(objs, script_refs=script_refs, snapshot=snapshot)
 
 
 def _insert_category_global(source: str, category_name: str) -> str:
@@ -465,6 +496,7 @@ def apply_pull_with_decompiler(
     source_writer: SourceWriter,
     *,
     category_display_names: dict[str, str] | None = None,
+    snapshot: RegistrySnapshot | None = None,
 ) -> PullResult:
     """Same action dispatch as `hassle.sync.pull.apply_pull`, but real
     decompiled DSL content for `refresh`/`adopt` instead of the M5 placeholder.
@@ -485,6 +517,13 @@ def apply_pull_with_decompiler(
     already has its `CATEGORY` line, if any, and this function never
     touches an existing file's content before deciding whether to insert
     one).
+
+    ``snapshot`` (MILESTONES M18): the same registry snapshot `cli.py`'s pull
+    command already refreshes every pull -- threaded through to every
+    `decompile_bundle` call this function makes, so a plain service-call
+    action decompiles to the typed namespace form when the snapshot confirms
+    the service exists (falls back to `service(...)` when `None`, unchanged
+    pre-M18 behavior).
     """
     script_refs = _script_refs_for_plan(plan)
     conflicts: list[Conflict] = []
@@ -492,7 +531,7 @@ def apply_pull_with_decompiler(
     conflict_blocks_by_path: dict[Path, list[str]] = {}
     for entry in plan.entries:
         if entry.action is PlanAction.REFRESH:
-            _refresh(entry, source_writer)
+            _refresh(entry, source_writer, snapshot=snapshot)
         elif entry.action is PlanAction.ADOPT:
             adopts_by_path.setdefault(_entry_path(entry), []).append(entry)
         elif entry.action is PlanAction.DROP:
@@ -515,7 +554,7 @@ def apply_pull_with_decompiler(
     all_object_keys: list[str] = []
     original_configs: dict[str, dict[str, Any]] = {}
     for path, entries in adopts_by_path.items():
-        batch_path, source = _adopt_batch_source(entries, script_refs)
+        batch_path, source = _adopt_batch_source(entries, script_refs, snapshot=snapshot)
         assert batch_path == path
         # MILESTONES M12: emit CATEGORY only for a file that doesn't exist
         # yet (pull is creating it) and only when a real display name is

@@ -31,6 +31,39 @@ from hassle.ir.models import HelperConfig
 _DECLARED: list[HelperConfig] = []
 
 
+class _EntityServiceMethod:
+    """The object ``e.<domain>.<object_id>.<service_name>`` evaluates to
+    (MILESTONES M18, entity-method sugar): callable, records the identical
+    action a ``service("<domain>.<service_name>", target=..., **fields)`` call
+    would, with ``target={"entity_id": "<domain>.<object_id>"}`` implicit.
+
+    Only a CALL records anything (milestone surface 2: "Bare attribute access
+    stays an attribute ref ... only CALLS record actions") -- merely
+    evaluating ``e.cover.x.close_cover`` (no parens) builds this object but
+    calls no recording function at all, so it is inert until called, exactly
+    like any other unbound method reference.
+
+    Delegates to :func:`hassle.compiler.actions.service` (imported lazily to
+    avoid a helpers<->actions import cycle: ``actions.py`` imports
+    ``record_action`` from ``recording.py``, which does not import this
+    module, but going through the actual verb -- rather than re-implementing
+    it -- is what GUARANTEES byte-identical IR and span capture: ``capture_span``
+    walks outward past every ``hassle.*`` frame regardless of nesting depth, so
+    calling the real ``service()`` from here still lands the span on the
+    user's own call site.
+    """
+
+    def __init__(self, entity_id: str, service_name: str) -> None:
+        self._entity_id = entity_id
+        self._service_name = service_name
+
+    def __call__(self, **fields: Any) -> None:
+        from hassle.compiler.actions import service
+
+        domain = self._entity_id.partition(".")[0]
+        service(f"{domain}.{self._service_name}", target={"entity_id": self._entity_id}, **fields)
+
+
 class EntityRef(str):
     """An entity id, usable directly as a string (``"input_boolean.guest_mode"``)
     or introspected for its domain/object_id.
@@ -65,6 +98,21 @@ class EntityRef(str):
         from hassle.compiler.templates import TemplateExpr
 
         return TemplateExpr(f"state_attr({str(self)!r}, {attribute!r})")
+
+    def __getattr__(self, name: str) -> _EntityServiceMethod:
+        """Entity-method sugar (MILESTONES M18, DESIGN §5.2/§5.3):
+        ``e.cover.x.close_cover`` (any name not already a real attribute of
+        ``EntityRef``/``str``, i.e. anything reaching ``__getattr__`` at all)
+        returns a callable that records ``close_cover`` as a service call on
+        this entity when actually invoked. ``__getattr__`` only fires on
+        lookup MISS -- ``.attr(...)``, ``.domain``, ``.object_id``, and every
+        ordinary ``str`` method are found by normal attribute lookup first and
+        never reach here, so this can never shadow existing EntityRef/str
+        behavior.
+        """
+        if name.startswith("__") and name.endswith("__"):  # pragma: no cover - dunder probes
+            raise AttributeError(name)
+        return _EntityServiceMethod(str(self), name)
 
 
 def reset_declared_helpers() -> None:

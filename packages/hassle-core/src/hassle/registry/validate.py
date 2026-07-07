@@ -296,6 +296,86 @@ def _matches_type(value: Any, type_name: str | None) -> bool:
     return True
 
 
+def _validate_unknown_services(result: CompileResult, snapshot: RegistrySnapshot) -> list[Finding]:
+    """M18 addition: an `{"action": "<domain>.<service>", ...}` that closely
+    resembles (but does not exactly match) a real `domain.service` in the
+    registry snapshot gets an `unknown-service` Finding naming the close match
+    -- the namespace form (`hassle.services.<domain>.<service>(...)`) and the
+    entity-method form (`e.<domain>.<id>.<service>(...)`) compile to the
+    identical `{"action": ...}` IR shape as `service(...)`, so this check
+    (like `_validate_service_params` below) is driven purely by that shape and
+    fires identically for all three call forms.
+
+    **Deliberately did-you-mean-gated, not "any unrecognized domain.service"**
+    (verified against the fixture-corpus false-positive gate,
+    `test_registry_validate.py::test_no_false_positives_on_golden_corpus`,
+    which caught two successively broader designs as too aggressive): real HA
+    services are not a stable, fully-enumerable set the way entities are.
+    `notify.<device_slug>` is a per-device service HA registers dynamically
+    per notify-capable integration (never in a static capture unless that
+    exact device happens to be present when the snapshot was taken); a
+    domain's static services can be under-captured by a particular
+    `get_services` snapshot (added in a newer HA release, or an integration
+    simply not loaded when the snapshot was taken -- `cover`/`scene`/`siren`/
+    `weather`/`persistent_notification` all reproduced this against the M0
+    fixture corpus's registry snapshot, which only enumerates the handful of
+    domains its own entities span). None of that resembles an EXISTING
+    `domain.service` string by edit distance, though -- a real typo (`ligth.
+    turn_on`, `light.turn_of`) does. So: only flag when :func:`did_you_mean`
+    actually finds a close match over every known `domain.service` string;
+    silent otherwise (an entirely novel, correctly-spelled domain/service this
+    snapshot never captured has no reason to resemble anything already known).
+    This intentionally narrows "catch a typo" to cases with positive
+    evidence of one, rather than flagging every gap in a schema capture that
+    is inherently a snapshot-in-time, never a complete enumeration.
+
+    Only checked when the snapshot actually has services data at all (an
+    empty `snapshot.services` -- no registry snapshot pulled yet -- means
+    "unknown" can't be distinguished from "not captured", so this check is
+    silent rather than false-positiving on every service in the bundle).
+    """
+    if not snapshot.services:
+        return []
+    findings: list[Finding] = []
+    known_pairs = {
+        f"{domain}.{service_name}"
+        for domain, services in snapshot.services.items()
+        for service_name in services
+    }
+    for obj in result.objects.values():
+        body = obj.to_ha()
+        blocks = as_dict_list(body.get("actions"))
+        for i, block in enumerate(blocks):
+            action_raw = block.get("action")
+            if not isinstance(action_raw, str) or "." not in action_raw:
+                continue
+            action = action_raw
+            if "{{" in action:
+                continue  # templated service name -- nothing literal to check
+            if action in known_pairs:
+                continue
+            suggestion = did_you_mean(action, known_pairs)
+            if suggestion is None:
+                continue  # no close match -- likely a real, just-uncaptured domain/service
+            span = result.span_at(obj, "actions", i)
+            file, line = _where(span)
+            fix = f"Did you mean `{suggestion}`?"
+            findings.append(
+                Finding(
+                    code="unknown-service",
+                    severity="error",
+                    file=file,
+                    line=line,
+                    message=(
+                        f"`{action}` is not a known service in the registry snapshot; it closely "
+                        f"resembles `{suggestion}`."
+                    ),
+                    fix=fix,
+                )
+            )
+    return findings
+
+
 def _validate_service_params(result: CompileResult, snapshot: RegistrySnapshot) -> list[Finding]:
     findings: list[Finding] = []
     for obj in result.objects.values():
@@ -547,6 +627,7 @@ def validate_bundle(
     findings: list[Finding] = []
     findings.extend(_validate_references(result, snapshot))
     findings.extend(_validate_purpose_vocabulary(result, snapshot))
+    findings.extend(_validate_unknown_services(result, snapshot))
     findings.extend(_validate_service_params(result, snapshot))
     findings.extend(_validate_helper_slugs(result, snapshot, adopted_helper_keys))
     findings.extend(_validate_category_globals(result))

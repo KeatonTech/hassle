@@ -141,7 +141,36 @@ def test_namespace_golden_pair_compiles() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_validate_unknown_service_via_namespace_has_did_you_mean(tmp_path: Path) -> None:
+def test_validate_unknown_domain_typo_via_namespace_has_did_you_mean(tmp_path: Path) -> None:
+    from hassle.registry.snapshot import RegistrySnapshot
+    from hassle.registry.validate import validate_bundle
+
+    # `ligth` (a typo'd `light`) is close enough (Levenshtein) to a real,
+    # known `domain.service` string that did-you-mean fires.
+    source = (
+        "from hassle import automation\n"
+        "from hassle.services import ligth\n"
+        "\n"
+        "@automation(id='x')\n"
+        "def x():\n"
+        "    ligth.turn_on(target={'entity_id': 'light.hallway'})\n"
+    )
+    bundle_dir = _write_bundle(tmp_path, source)
+    result = compile_bundle(bundle_dir)
+    snapshot = RegistrySnapshot.load(REPO_ROOT / "fixtures" / "registry" / "home.json")
+    findings = validate_bundle(result, snapshot)
+    unknown = [f for f in findings if f.code == "unknown-service"]
+    assert len(unknown) == 1
+    assert "ligth.turn_on" in unknown[0].message
+    assert unknown[0].fix is not None and "light.turn_on" in unknown[0].fix
+    assert unknown[0].file is not None and unknown[0].file.endswith("objects.py")
+    assert unknown[0].line == 6
+
+
+def test_validate_known_domain_service_typo_via_namespace_has_did_you_mean(tmp_path: Path) -> None:
+    # A typo'd SERVICE within a real, known domain (`light.turn_of` instead
+    # of `light.turn_off`/`light.turn_on`) is close enough to fire too -- the
+    # check is gated on edit-distance evidence, not "is the domain known".
     from hassle.registry.snapshot import RegistrySnapshot
     from hassle.registry.validate import validate_bundle
 
@@ -159,10 +188,33 @@ def test_validate_unknown_service_via_namespace_has_did_you_mean(tmp_path: Path)
     findings = validate_bundle(result, snapshot)
     unknown = [f for f in findings if f.code == "unknown-service"]
     assert len(unknown) == 1
-    assert "turn_of" in unknown[0].message
-    assert unknown[0].fix is not None and "turn_on" in unknown[0].fix
-    assert unknown[0].file is not None and unknown[0].file.endswith("objects.py")
-    assert unknown[0].line == 6
+    assert "light.turn_of" in unknown[0].message
+
+
+def test_validate_uncaptured_but_plausible_service_is_not_flagged(tmp_path: Path) -> None:
+    """Deliberate scope boundary (fixture-corpus false-positive evidence,
+    `docs/ha-api-notes.md` §33 predecessor / `_validate_unknown_services`'s
+    docstring): a real HA service simply absent from this snapshot's
+    necessarily-incomplete `get_services` capture (an integration not loaded
+    when the snapshot was taken) must not be flagged merely for having no
+    close lexical match to anything already known -- `cover.set_cover_position`
+    is real HA, genuinely just not in this particular snapshot."""
+    from hassle.registry.snapshot import RegistrySnapshot
+    from hassle.registry.validate import validate_bundle
+
+    source = (
+        "from hassle import automation\n"
+        "from hassle.services import cover\n"
+        "\n"
+        "@automation(id='x')\n"
+        "def x():\n"
+        "    cover.set_cover_position(target={'entity_id': 'cover.blind'}, position=50)\n"
+    )
+    bundle_dir = _write_bundle(tmp_path, source)
+    result = compile_bundle(bundle_dir)
+    snapshot = RegistrySnapshot.load(REPO_ROOT / "fixtures" / "registry" / "home.json")
+    findings = validate_bundle(result, snapshot)
+    assert [f for f in findings if f.code == "unknown-service"] == []
 
 
 def test_validate_known_namespace_service_has_no_unknown_service_finding(tmp_path: Path) -> None:
@@ -184,27 +236,6 @@ def test_validate_known_namespace_service_has_no_unknown_service_finding(tmp_pat
     assert [f for f in findings if f.code == "unknown-service"] == []
 
 
-def test_validate_unknown_domain_via_namespace_has_finding(tmp_path: Path) -> None:
-    from hassle.registry.snapshot import RegistrySnapshot
-    from hassle.registry.validate import validate_bundle
-
-    source = (
-        "from hassle import automation\n"
-        "from hassle.services import ligth\n"
-        "\n"
-        "@automation(id='x')\n"
-        "def x():\n"
-        "    ligth.turn_on(target={'entity_id': 'light.hallway'})\n"
-    )
-    bundle_dir = _write_bundle(tmp_path, source)
-    result = compile_bundle(bundle_dir)
-    snapshot = RegistrySnapshot.load(REPO_ROOT / "fixtures" / "registry" / "home.json")
-    findings = validate_bundle(result, snapshot)
-    unknown = [f for f in findings if f.code == "unknown-service"]
-    assert len(unknown) == 1
-    assert "ligth.turn_on" in unknown[0].message
-
-
 def test_validate_unknown_service_via_plain_service_call_unaffected(tmp_path: Path) -> None:
     # Sanity: the plain `service(...)` verb (pre-existing) gets the exact same
     # unknown-service Finding -- proves the check is IR-shape-driven, not
@@ -217,7 +248,7 @@ def test_validate_unknown_service_via_plain_service_call_unaffected(tmp_path: Pa
         "\n"
         "@automation(id='x')\n"
         "def x():\n"
-        "    service('light.turn_of', target={'entity_id': 'light.hallway'})\n"
+        "    service('ligth.turn_on', target={'entity_id': 'light.hallway'})\n"
     )
     bundle_dir = _write_bundle(tmp_path, source)
     result = compile_bundle(bundle_dir)
@@ -234,18 +265,22 @@ def test_validate_unknown_service_via_plain_service_call_unaffected(tmp_path: Pa
 
 
 def test_simulator_executes_namespace_and_entity_method_calls_identically() -> None:
+    import contextlib
+    from datetime import datetime
+
     from hassle import services
     from hassle.testing.actions import ActionContext, _run_one
     from hassle.testing.state import StateStore
     from hassle.testing.templates import TemplateEngine
 
     def _run(action: dict[str, object]) -> list[object]:
-        ctx = ActionContext(states=StateStore(), templates=TemplateEngine(), calls=[])
+        states = StateStore()
+        ctx = ActionContext(
+            states=states, templates=TemplateEngine(states, lambda: datetime(2026, 1, 1)), calls=[]
+        )
         gen = _run_one(action, ctx)
-        try:
+        with contextlib.suppress(StopIteration):
             next(gen)
-        except StopIteration:
-            pass
         return list(ctx.calls)
 
     with recording(kind="automation", id="x") as rec_ns:
@@ -256,7 +291,7 @@ def test_simulator_executes_namespace_and_entity_method_calls_identically() -> N
     calls_ns = _run(rec_ns.actions[0].body)
     calls_entity = _run(rec_entity.actions[0].body)
     assert calls_ns == calls_entity
-    assert calls_ns[0].service == "light.turn_on"  # type: ignore[attr-defined]
+    assert calls_ns[0].action == "light.turn_on"  # type: ignore[attr-defined]
     assert calls_ns[0].data.get("brightness_pct") == 60  # type: ignore[attr-defined]
 
 

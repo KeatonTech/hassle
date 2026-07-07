@@ -13,10 +13,7 @@ through BOTH branches).
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-
-import pytest
 
 from hassle.compiler.bundle import compile_bundle
 from hassle.decompiler import decompile_bundle
@@ -140,6 +137,31 @@ def test_import_lines_sorted_deterministically_multi_domain() -> None:
     obj = parse(_automation(actions), kind="automation", key_hint="x")
     source = decompile_bundle({obj.object_key(): obj}, snapshot=SNAPSHOT)
     assert "from hassle.services import light, switch" in source
+
+
+def test_domain_colliding_with_star_import_surface_gets_aliased(tmp_path: Path) -> None:
+    """Regression (found via the fixture corpus's own `automation.trigger`-
+    calling fixtures): `automation` is BOTH a real HA service domain and the
+    frozen `@automation` decorator name. A plain, unaliased
+    `from hassle.services import automation` would silently shadow the
+    decorator import (later import wins at module scope), breaking every
+    automation in the file. The namespace form must alias the import
+    (`from hassle.services import automation as svc_automation`) and call
+    through the alias, and this must round-trip byte-stably."""
+    action = {"action": "automation.trigger", "target": {"entity_id": "automation.other"}}
+    obj = parse(_automation([action]), kind="automation", key_hint="x")
+    source = decompile_bundle({obj.object_key(): obj}, snapshot=SNAPSHOT)
+    assert "from hassle.services import automation as svc_automation" in source
+    assert "svc_automation.trigger(" in source
+    # The decorator's own `automation` name must be untouched/unshadowed.
+    assert "@automation(" in source
+
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir()
+    (bundle_dir / "objects.py").write_text(source, encoding="utf-8")
+    result = compile_bundle(bundle_dir)
+    (recompiled,) = result.objects.values()
+    assert recompiled.to_ha() == _automation([action])
 
 
 def test_refresh_splice_merges_namespace_import(tmp_path: Path) -> None:

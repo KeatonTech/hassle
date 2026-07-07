@@ -481,7 +481,10 @@ def pull(allow_dirty: bool) -> None:
     # self-check can't cover -- see that module's docstring).
     try:
         result = apply_pull_with_decompiler(
-            plan, writer, category_display_names=category_display_names
+            plan,
+            writer,
+            category_display_names=category_display_names,
+            snapshot=registry_snapshot,
         )
     except (DecompiledBatchDoesNotCompileError, DecompiledValueMismatchError) as exc:
         console.print(

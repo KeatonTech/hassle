@@ -16,7 +16,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from hassle.compiler.enums import MaxExceeded, Mode
 from hassle.decompiler.actions import INDENT, CallResolver, CallTarget, decompile_action
@@ -30,6 +30,9 @@ from hassle.ir.models import (
     TemplateHelperConfig,
 )
 from hassle.ir.normalize import normalize_ha
+
+if TYPE_CHECKING:
+    from hassle.registry.snapshot import RegistrySnapshot
 
 # Owner preference (DESIGN §7.3): a fresh whole-bundle decompile always emits a
 # star import of the frozen F3 DSL surface (`hassle.__all__` defines it, so
@@ -874,6 +877,7 @@ def _build_resolver(
     objects: dict[str, IRObject],
     script_names: dict[str, str],
     script_refs: dict[str, ScriptRef] | None,
+    snapshot: RegistrySnapshot | None = None,
 ) -> tuple[CallResolver, list[str]]:
     """Build the :class:`CallResolver` for one :func:`decompile_bundle` call,
     plus the list of ``from <module> import <fn>`` lines it needs.
@@ -948,11 +952,14 @@ def _build_resolver(
             )
             import_lines.add(import_line)
 
-    return CallResolver(targets, frozenset(cycle_broken)), sorted(import_lines)
+    return CallResolver(targets, frozenset(cycle_broken), snapshot=snapshot), sorted(import_lines)
 
 
 def decompile_bundle(
-    objects: dict[str, IRObject], *, script_refs: dict[str, ScriptRef] | None = None
+    objects: dict[str, IRObject],
+    *,
+    script_refs: dict[str, ScriptRef] | None = None,
+    snapshot: RegistrySnapshot | None = None,
 ) -> str:
     """Decompile every object in ``objects`` into one ruff-formatted module.
 
@@ -973,6 +980,16 @@ def decompile_bundle(
     and sorted) when ``<id>`` resolves via ``objects`` (same file, no import)
     or ``script_refs`` (cross-file); otherwise it stays ``service()`` (task
     spec: "unknown scripts stay service()", never ``raw``).
+
+    ``snapshot`` (MILESTONES M18): when supplied, a plain service-call action
+    whose literal ``"domain.service"`` exists in the snapshot and whose data
+    is kwarg-expressible decompiles to the typed namespace form
+    (``light.turn_on(target=..., **fields)``) with a per-file
+    ``from hassle.services import <domains>`` import line (domains sorted,
+    deduplicated, and only ever the ones actually used -- never a dangling
+    unused import). ``None`` (the default -- e.g. the M2 corpus round-trip
+    test, which never had a snapshot to give) means every service call stays
+    ``service(...)``, unchanged from pre-M18 behavior.
     """
     # Naming pre-pass: derive every object's function/variable name ONCE, in
     # the same sorted-key order `decompile_object` itself would use, so the
@@ -989,12 +1006,32 @@ def decompile_bundle(
         if isinstance(obj, ScriptConfig):
             script_names[_script_object_id(key)] = ident
 
-    resolver, import_lines = _build_resolver(objects, script_names, script_refs)
+    resolver, import_lines = _build_resolver(objects, script_names, script_refs, snapshot)
+
+    # Object bodies are decompiled BEFORE the import header is assembled: the
+    # services-namespace import line depends on `resolver.used_service_domains`,
+    # which is only known once every action has actually been decompiled
+    # (a side effect of `decompile_action`, MILESTONES M18).
+    object_sources = [
+        decompile_object(key, objects[key], resolver=resolver, _ident=idents[key])
+        for key in sorted(objects)
+    ]
 
     parts = [_STAR_IMPORT_LINE, _ENTITIES_IMPORT_LINE]
+    if resolver.used_service_domains:
+        # Each entry renders as `domain` (the common case) or `domain as
+        # svc_domain` when `service_domain_name` aliased it to avoid
+        # shadowing a star-imported name (MILESTONES M18 regression fix,
+        # e.g. `automation`/`script`/`zone` collide with real DSL names) --
+        # sorted by the DOMAIN (not the possibly-aliased local name) for
+        # determinism independent of which names happened to need aliasing.
+        import_names = [
+            domain if local_name == domain else f"{domain} as {local_name}"
+            for domain, local_name in sorted(resolver.used_service_domains.items())
+        ]
+        parts.append(f"from hassle.services import {', '.join(import_names)}\n")
     parts.extend(f"{line}\n" for line in import_lines)
     parts.append("")
-    for key in sorted(objects):
-        parts.append(decompile_object(key, objects[key], resolver=resolver, _ident=idents[key]))
+    parts.extend(object_sources)
     source = "\n".join(parts) + "\n"
     return _format_with_ruff(source)
