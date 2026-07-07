@@ -712,6 +712,54 @@ through HA; it is NOT source-only metadata. DESIGN §7.3 must be amended in the 
 
 ---
 
+## M16 — String-state expression vocabulary (owner-commissioned)
+
+**Goal:** the `TemplateExpr` surface (M1.1) reads entity state ONLY numerically —
+`expr(x)` renders `states('x') | float` — so a string-state check like
+`is_state('sensor.keaton_watch_beacon_area', 'Living Room')` is inexpressible, and
+(equivalently) `is_state`/bare-`states()` templates are not invertible. The owner wants
+custom helper functions like `check_beacon(sensor, area)` composing with `&`/`|`/`~`.
+Composition already works (plain Python functions returning `TemplateExpr`); the missing
+piece is the string vocabulary.
+
+**Surface (F3 additions only; exact names final unless pyright/collision forces change):**
+- `state_of(entity_or_id) -> TemplateExpr` — bare string read, renders `states('<id>')`
+  (accepts `e.`-registry refs and strings, like `expr`).
+- String comparisons via the existing `.eq()/.ne()` methods against string literals
+  (renders `states('x') == 'y'`); membership `.in_(["a", "b"])` renders `in ['a', 'b']`.
+- Boolean composition/negation unchanged (`&`/`|`/`~`).
+
+**Inverter coverage (both real-world spellings normalize to the DSL, then render
+canonically):**
+- `states('x') == 'y'` / `!=` / `in [...]` → `state_of(...)` forms.
+- `is_state('x', 'y')` → `state_of('x').eq('y')` — NOTE: the renderer emits
+  `states('x') == 'y'`, so a UI-authored `is_state(...)` template inverts to Python but
+  its re-render differs textually → byte-exact gate fails → falls back THIS pull; after
+  the user converts by hand (or pushes any edit), the canonical spelling is stored and
+  inverts forever after. Document this explicitly in docs/DSL.md ("one-time
+  canonicalization on push"). Do NOT weaken the byte-exact rule to force it.
+
+**Write these tests first**
+1. Unit: `state_of(...).eq("Living Room")` renders exactly `{{ states('sensor.x') ==
+   'Living Room' }}`; composition `a | b`, `a & b`, `~a` parenthesization matches the
+   renderer's precedence rules; `e.`-ref and string args both accepted.
+2. Custom-function composition test mirroring the owner's case: a plain function
+   returning `state_of(...).eq(...)`, composed with `|`, used as a
+   `@template_binary_sensor` body, compiles to the exact expected template (golden pair
+   fixture).
+3. Inverter: `states('x') == 'y'`, `!=`, `in [...]` forms invert and re-render
+   byte-exactly (I3 nice branch); the owner's real Bermuda template
+   (`is_state(...) or is_state(...)`, multi-line) still falls back cleanly (byte-exact
+   gate holds), while its hand-converted canonical form round-trips as Python.
+4. Simulator: templates using bare `states()`/string equality evaluate correctly in
+   `hassle test` (extend the M4 Jinja subset if bare `states()` string reads are not
+   already supported there — verify, don't assume).
+5. Error surface: `.eq()` against a non-literal/non-expr, or `state_of()` on a non-entity
+   arg → R6 compile error, snapshot-tested.
+6. Docs gate: new constructs in the construct map; DSL.md regenerated via `--update`.
+
+---
+
 ## Milestone sizing (rough, for planning the swarm)
 
 | Milestone | Size | Parallel workstreams inside |
