@@ -60,6 +60,25 @@ def test_services_stub_module_getattr_present(snapshot: RegistrySnapshot) -> Non
     assert "def __getattr__(" in stub
 
 
+def test_services_stub_module_getattr_suppresses_incomplete_stub(
+    snapshot: RegistrySnapshot,
+) -> None:
+    """N1 (reviewer non-blocking note): a bare module-level ``def
+    __getattr__`` trips pyright's ``reportIncompleteStub`` ("obscures type
+    errors for module") -- unlike the entities stub, `hassle.services` is a
+    REAL module at runtime (not a variable holding an instance), so the
+    class-indirection trick the entities stub uses for ITS `__getattr__`
+    doesn't apply here without breaking the direct `from hassle.services
+    import light` import shape. Explicitly suppressed with a targeted
+    `# pyright: ignore[reportIncompleteStub]` instead (verified end-to-end by
+    the pyright integration test, which escalates the rule to `error` and
+    asserts zero)."""
+    stub = generate_services_stub(snapshot)
+    getattr_lines = [line for line in stub.splitlines() if line.startswith("def __getattr__(")]
+    assert len(getattr_lines) == 1
+    assert "# pyright: ignore[reportIncompleteStub]" in getattr_lines[0]
+
+
 def test_services_stub_is_valid_python(snapshot: RegistrySnapshot) -> None:
     stub = generate_services_stub(snapshot)
     ast.parse(stub)

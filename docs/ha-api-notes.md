@@ -2990,3 +2990,105 @@ word as an annotation. Regression-pinned in
 `test_registry_stubs_selector_types.py`, including a standalone pyright check
 over a generated stub containing a `location`-selector field (the class of
 test that would have caught the whole bug, per the coordinator's ask).
+
+## 34. M18 reviewer round: binding-module resolution for the `hassle.__init__.pyi` re-export stub (B1/B2/N1/N2)
+
+Reviewer BLOCKED PR #17 on the coordinator-added `generate_hassle_reexport_stub`
+(§33 above). Two blocking findings, both fixed here; two non-blocking notes
+folded in alongside.
+
+**B1 — wrong binding-module resolution for module-level VALUE instances.**
+`generate_hassle_reexport_stub` originally grouped every `hassle.__all__` name
+by `getattr(obj, "__module__", None)`. That is correct for a function or class
+(`__module__` reports where it was *defined*, which is also where it's bound
+at that name) but WRONG for `hassle.E_`/`PI`/`TAU`: these are `TemplateExpr`
+**instances**, built at module scope inside `hassle.compiler.math_expr`, but
+`TemplateExpr` the *class* is defined in `hassle.compiler.templates` —
+`__module__` reports the class's home, not the instance's binding site. The
+generator therefore emitted `from hassle.compiler.templates import E_ as E_`,
+an unimportable line (`hassle.compiler.templates` has no `E_` attribute at
+all): pyright reports `reportAttributeAccessIssue` ("X is unknown import
+symbol") on all three names, in every generated `typings/` tree, and
+`E_`/`PI`/`TAU` lose all typing in every bundle.
+
+**Fix — binding-module resolution by provenance, not `__module__`**
+(`hassle.registry.stubs._resolve_binding_module`): for each name, walk every
+already-imported `hassle`/`hassle.*` entry in `sys.modules` (importing
+top-level `hassle` transitively imports all of `hassle.compiler.*`, so every
+relevant submodule is already loaded by the time this runs) and collect every
+module whose OWN namespace binds this exact object under this exact name
+(`getattr(module, name, sentinel) is obj` — identity, never equality, so a
+coincidentally-equal-but-different object elsewhere is never mistaken for the
+real binding).
+
+**Tie-break (deterministic, R8):** more than one module legitimately binds the
+same name to the same object in practice — every frozen name is ALSO
+re-exported through the `hassle.compiler` barrel package
+(`hassle/compiler/__init__.py`'s own aggregating imports), so e.g. `E_` binds
+under both `hassle.compiler` (the barrel) and `hassle.compiler.math_expr` (the
+true defining module). The candidate with the MOST dot-separated segments
+(the deepest/most-specific module) wins — verified empirically for every name
+in `hassle.__all__` (the barrel is, by construction, never deeper than the
+module that actually defines a name, since it just imports from it). Ties at
+equal depth (not observed for any current name, but handled for robustness)
+break alphabetically by module name, for full determinism regardless of
+`sys.modules`' iteration order. Falls back to `"hassle"` itself if no
+`hassle.*` submodule binds the name at all (should never happen for anything
+in `hassle.__all__`, but never crashes the generator if it somehow did).
+
+**B2 — the original defining-module test was vacuous by construction.**
+`test_reexport_stub_reexports_from_true_defining_module` derived its expected
+module the SAME WAY the generator computed it (`getattr(obj, "__module__",
+...)`), so it could never fail for a generator bug in that exact computation
+— by definition, comparing a thing to itself. Replaced with two ground-truth
+layers (neither derives its expectation from the generator's own algorithm):
+(a) `test_reexport_stub_every_import_is_actually_importable_and_correct`
+parses every `from M import N as N` line the generator actually emits with
+real `ast`, then calls real `importlib.import_module(M)` and asserts
+`getattr(mod, N) is getattr(hassle, N)` — this fails immediately and
+concretely for the B1 bug (`hassle.compiler.templates` genuinely has no `E_`
+attribute); (b) `test_generated_typings_tree_itself_is_pyright_clean` runs
+pyright over the FULL generated typings tree and asserts zero
+`reportAttributeAccessIssue`/`reportUnknownVariableType` **on the stub files
+themselves** (not just a downstream sample bundle file) — the prior pyright
+integration test only ever filtered `reportUndefinedVariable` in a sample
+file, which is exactly the gap that let B1 ship uncaught.
+
+**N1 — `reportIncompleteStub` on the services stub's module-level
+`__getattr__`.** `hassle/services.pyi`'s bare module-level `def __getattr__`
+(PEP 562 fallback for an unlisted domain) trips pyright's "obscures type
+errors for module" heuristic. It's a `warning` by default (invisible unless a
+config escalates it, which is why it wasn't caught earlier). Unlike the
+entities stub's `_EntitiesRegistry.__getattr__` (a class METHOD on a
+module-level *variable* — a real workaround), `hassle.services` is itself a
+REAL module at runtime; there is no variable to wrap in a class here without
+breaking the direct `from hassle.services import light` import shape.
+Suppressed explicitly with a targeted `# pyright: ignore[reportIncompleteStub]`
+comment on both `__getattr__` emission sites (populated-domains and
+empty-snapshot branches) rather than silently accepting the warning; verified
+end-to-end by a dedicated pyright test that escalates the rule to `error` and
+asserts zero.
+
+**N2 — snapshot-test the `unknown-service` Finding (R6).** Added
+`test_snapshot_unknown_service` to `test_registry_finding_snapshots.py`
+(golden: `tests/snapshots/findings/unknown_service.txt`), alongside the
+existing substring-assertion coverage in `test_service_namespaces.py`.
+
+**Incidental fix while implementing B1: `__all__`/import-block ruff
+cleanliness.** The reexport stub is real, checked-in-adjacent Python (unlike
+a hand-authored golden fixture) — a user's own `ruff check`/`ruff format` run
+over their bundle's `typings/` tree must never want to reorder it. Two ruff
+quirks discovered empirically (verified via `ruff check --select I001/RUF022
+--fix` on the actual generated content, not assumed): (1) `RUF022`'s
+"isort-style" `__all__`/import-name ordering groups `ALL_CAPS` constants
+first, then `PascalCase` classes, then everything else, alphabetically within
+each group — plain lexicographic sort puts `E_`/`PI`/`TAU` in the wrong
+place; (2) ruff's isort treats the `X as X` explicit-reexport idiom (PEP
+484's convention for a stub re-exporting a name) as its own logical import to
+sort, and always wants ONE name per `from module import ...` line for it —
+never combined multi-name re-export imports, regardless of internal
+ordering. `hassle.registry.stubs._isort_all_sort_key` implements the category
+ordering; the generator now emits one `from module import name as name` line
+per name (wrapped in parens when it would overflow 100 columns, matching
+`ruff format`'s own convention) and renders `__all__` one name per line via
+the same category-then-alphabetical sort.

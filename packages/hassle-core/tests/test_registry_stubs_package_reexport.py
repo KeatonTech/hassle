@@ -16,6 +16,12 @@ AND the stub package itself carries the full top-level surface regardless.
 from __future__ import annotations
 
 import ast
+import importlib
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
 
 from hassle.registry.stubs import generate_hassle_reexport_stub
 
@@ -30,16 +36,57 @@ def test_reexport_stub_contains_every_all_name() -> None:
         )
 
 
-def test_reexport_stub_reexports_from_true_defining_module() -> None:
+def _parse_import_lines(stub: str) -> list[tuple[str, str]]:
+    """Every ``(module, name)`` pair the generated stub's ``from <module>
+    import <name> as <name>`` lines actually emit -- parsed with the real
+    ``ast`` module (not a substring/regex guess) so this is robust to the
+    multi-line-wrapped form long import lists use."""
+    tree = ast.parse(stub)
+    pairs: list[tuple[str, str]] = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module is not None
+            and node.module != "__future__"
+        ):
+            for alias in node.names:
+                bound_name = alias.asname or alias.name
+                pairs.append((node.module, bound_name))
+    return pairs
+
+
+def test_reexport_stub_every_import_is_actually_importable_and_correct() -> None:
+    """GROUND-TRUTH check (reviewer finding B2: the prior version of this
+    test derived its expectation the SAME WAY the generator computes it, so
+    it could never fail for a generator bug -- vacuous by construction).
+
+    For every ``from M import N as N`` line the generator actually emits,
+    real `importlib.import_module(M)` must succeed AND `getattr(mod, N)`
+    must be the identical object `hassle.__all__` itself exposes -- this is
+    independent of whatever module-resolution algorithm the generator uses
+    internally, so it catches the exact `__module__`-vs-true-binding-module
+    bug (B1: `E_`/`PI`/`TAU` are `TemplateExpr` INSTANCES built in
+    `hassle.compiler.math_expr`, but `__module__` reports the CLASS's module,
+    `hassle.compiler.templates`, which does not define these names at all).
+    """
     import hassle
 
     stub = generate_hassle_reexport_stub()
-    for name in hassle.__all__:
-        obj = getattr(hassle, name)
-        module = getattr(obj, "__module__", None)
-        assert module is not None
-        assert f"from {module} import" in stub, (
-            f"{name!r} (module {module}) not re-exported from its defining module"
+    pairs = _parse_import_lines(stub)
+    assert pairs, "expected at least one import line in the generated re-export stub"
+
+    emitted_names = {name for _, name in pairs}
+    all_names = set(hassle.__all__)
+    assert emitted_names == all_names, (
+        f"emitted names do not match hassle.__all__: "
+        f"missing={all_names - emitted_names}, extra={emitted_names - all_names}"
+    )
+
+    for module_name, name in pairs:
+        mod = importlib.import_module(module_name)  # raises ImportError if wrong/unimportable
+        assert hasattr(mod, name), f"{module_name!r} has no attribute {name!r}"
+        assert getattr(mod, name) is getattr(hassle, name), (
+            f"from {module_name} import {name} -- resolves to a DIFFERENT object than hassle.{name}"
         )
 
 
@@ -52,6 +99,25 @@ def test_reexport_stub_is_deterministic() -> None:
 def test_reexport_stub_is_valid_python() -> None:
     stub = generate_hassle_reexport_stub()
     ast.parse(stub)
+
+
+def test_reexport_stub_is_ruff_clean(tmp_path: Path) -> None:
+    """Real, checked-in-adjacent Python (unlike a golden fixture) -- a user's
+    own `ruff check`/`ruff format` run over their bundle's `typings/` tree
+    must never want to reorder or reformat this generated file."""
+    if shutil.which("ruff") is None:
+        pytest.skip("ruff not available in this environment")
+
+    stub = generate_hassle_reexport_stub()
+    stub_path = tmp_path / "__init__.pyi"
+    stub_path.write_text(stub, encoding="utf-8")
+
+    fmt = subprocess.run(
+        ["ruff", "format", "--check", str(stub_path)], capture_output=True, text=True
+    )
+    assert fmt.returncode == 0, f"ruff format --check failed:\n{fmt.stdout}\n{fmt.stderr}"
+    lint = subprocess.run(["ruff", "check", str(stub_path)], capture_output=True, text=True)
+    assert lint.returncode == 0, f"ruff check failed:\n{lint.stdout}\n{lint.stderr}"
 
 
 def test_reexport_stub_grouped_and_sorted_by_module() -> None:

@@ -239,3 +239,71 @@ def test_star_import_names_are_not_undefined_with_full_typings_tree(tmp_path: Pa
         f"expected zero reportUndefinedVariable with the full typings tree present; "
         f"got: {undefined}\n{proc.stdout}\n{proc.stderr}"
     )
+
+
+def test_generated_typings_tree_itself_is_pyright_clean(tmp_path: Path) -> None:
+    """Reviewer finding B2 item (b): the prior pyright integration test only
+    ever filtered on `reportUndefinedVariable` in a SAMPLE bundle file,
+    never inspected pyright's diagnostics ON the generated `.pyi` files
+    themselves -- which is exactly where the B1 bug (`E_`/`PI`/`TAU`
+    re-exported from the wrong, non-defining module) actually surfaces:
+    `reportAttributeAccessIssue` ("X is unknown import symbol") and
+    `reportUnknownVariableType` inside `typings/hassle/__init__.pyi` itself.
+    Widened here to check the WHOLE typings tree's own diagnostics, not just
+    a downstream sample file's."""
+    _setup_full_typings_tree(tmp_path)
+    _write_pyrightconfig(tmp_path)
+    # A minimal, unrelated sample so pyright has at least one non-stub file
+    # to analyze (the config's `.` scope already includes `typings/`).
+    (tmp_path / "sample.py").write_text("from hassle import automation\n", encoding="utf-8")
+
+    proc = _run_pyright(tmp_path)
+    payload = json.loads(proc.stdout or "{}")
+    diagnostics = payload.get("generalDiagnostics", [])
+    flagged_rules = {"reportAttributeAccessIssue", "reportUnknownVariableType"}
+    stub_diagnostics = [
+        d for d in diagnostics if d.get("rule") in flagged_rules and "typings" in d.get("file", "")
+    ]
+    assert stub_diagnostics == [], (
+        f"generated typings tree has pyright diagnostics on itself: {stub_diagnostics}\n"
+        f"{proc.stdout}\n{proc.stderr}"
+    )
+
+
+def _write_pyrightconfig_escalating_incomplete_stub(tmp_path: Path) -> None:
+    """Same as :func:`_write_pyrightconfig`, but escalates
+    ``reportIncompleteStub`` from its default `warning` severity to `error`
+    (N1: a bare module-level ``def __getattr__`` in ``hassle/services.pyi``
+    trips this rule -- it's a `warning` by default, so the shared config
+    above never surfaced it; escalating here proves the generator's targeted
+    `# pyright: ignore[reportIncompleteStub]` suppression actually works,
+    isolated to this one test so it never masks a REAL incomplete-stub bug
+    the rest of this file's tests would otherwise catch)."""
+    config = {
+        "typeCheckingMode": "basic",
+        "stubPath": "typings",
+        "extraPaths": [str(CORE_SRC)],
+        "reportMissingImports": True,
+        "reportIncompleteStub": "error",
+        "pythonVersion": "3.12",
+    }
+    (tmp_path / "pyrightconfig.json").write_text(json.dumps(config), encoding="utf-8")
+
+
+def test_services_stub_getattr_does_not_trigger_incomplete_stub(tmp_path: Path) -> None:
+    _setup_full_typings_tree(tmp_path)
+    _write_pyrightconfig_escalating_incomplete_stub(tmp_path)
+    sample = tmp_path / "sample.py"
+    sample.write_text(
+        "from hassle.services import light\nlight.turn_on(brightness_pct=50)\n",
+        encoding="utf-8",
+    )
+
+    proc = _run_pyright(tmp_path)
+    payload = json.loads(proc.stdout or "{}")
+    diagnostics = payload.get("generalDiagnostics", [])
+    incomplete = [d for d in diagnostics if d.get("rule") == "reportIncompleteStub"]
+    assert incomplete == [], (
+        f"expected zero reportIncompleteStub with the generated services stub; "
+        f"got: {incomplete}\n{proc.stdout}\n{proc.stderr}"
+    )

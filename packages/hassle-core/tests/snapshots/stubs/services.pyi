@@ -88,4 +88,4 @@ switch: _SwitchServices
 timer: _TimerServices
 vacuum: _VacuumServices
 
-def __getattr__(name: str) -> _AutomationServices: ...
+def __getattr__(name: str) -> _AutomationServices: ...  # pyright: ignore[reportIncompleteStub]
