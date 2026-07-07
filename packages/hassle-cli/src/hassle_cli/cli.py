@@ -444,6 +444,20 @@ def pull(allow_dirty: bool) -> None:
         )
         raise SystemExit(1) from exc
 
+    # Polish-batch item 3: a loop-splice reconcile -- `writer.reconcile_
+    # warnings` (SplicingSourceWriter, `hassle.sync.source_writer`) is
+    # populated when a REFRESH's append path fired for a metaprogrammed
+    # object (a compile-time loop, so the splicer had no single literal
+    # statement to replace) -- the very next compile of this bundle will
+    # raise `DuplicateObjectError` (which also names this same reconcile
+    # flow) until the user reconciles it by hand. `markup=False` + no
+    # f-string interpolation into a `[...]`-bearing string: the warning text
+    # embeds a bundle-relative path and object key, neither escaped for rich
+    # markup (polish-batch item 5's rule -- interpolated user/bundle data is
+    # never trusted as markup).
+    for warning in writer.reconcile_warnings:
+        console.print(f"hassle pull: {warning}", style="yellow", markup=False)
+
     # Safety backstop (``ux/shared-script-calls-fix``): pull just wrote real
     # DSL source from the decompiler -- recompile the bundle it produced
     # before trusting it (manifest bookkeeping below establishes the new
@@ -474,6 +488,26 @@ def pull(allow_dirty: bool) -> None:
     try:
         _, post_write_result = bundle_ops.compile_local_objects(root)
     except Exception as exc:
+        from hassle.compiler.errors import DuplicateObjectError
+
+        # Polish-batch item 3: a `DuplicateObjectError` here for an object key
+        # this same pull already flagged in `writer.reconcile_warnings` is the
+        # EXPECTED consequence of a loop-splice reconcile (module docstring:
+        # the append path landed a UI edit next to its metaprogrammed
+        # original) -- never a Hassle bug. `DuplicateObjectError.object_key`
+        # names exactly which object collided.
+        if isinstance(exc, DuplicateObjectError) and any(
+            exc.object_key in warning for warning in writer.reconcile_warnings
+        ):
+            console.print(f"hassle pull: {exc}", style="bold red", markup=False)
+            console.print(
+                "hassle pull: this is expected, not a Hassle bug -- see the reconcile "
+                "warning above. The files just written are left in place; reconcile the "
+                "duplicate id by hand, then re-run `hassle validate`.",
+                style="bold red",
+            )
+            raise SystemExit(1) from exc
+
         console.print(
             f"[bold red]hassle pull: the bundle just written to {root} does not compile "
             f"({type(exc).__name__}: {exc}). This is a bug in Hassle's decompiler, not a "

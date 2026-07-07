@@ -208,6 +208,83 @@ def test_splicing_source_writer_satisfies_protocol(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Polish-batch item 3: loop-splice reconcile warning. A compile-time loop
+# generates an object with no single literal statement for the splicer to
+# target -- the append path fires (same as a stale-manifest miss), but here
+# the file's CURRENT content already compiles to that object key (it's
+# metaprogrammed, not actually missing), so the append is about to create a
+# same-file duplicate the next compile will reject.
+# ---------------------------------------------------------------------------
+
+LOOP_GENERATED_ROOMS = """\
+from hassle import automation, service, state, when
+
+ROOMS = ["kitchen", "office"]
+
+for room in ROOMS:
+
+    @automation(id=f"motion_{room}", alias=f"Motion light: {room}")
+    def _motion(room: str = room):
+        when(state(f"binary_sensor.{room}_motion").to("on"))
+        service("light.turn_on", entity_id=f"light.{room}")
+"""
+
+KITCHEN_REPLACEMENT = """\
+from hassle import *
+from hassle.registry import entities as e
+
+
+@automation(id="motion_kitchen", alias="Motion light: kitchen (UI edit)")
+def motion_kitchen_ui_edit():
+    when(state("binary_sensor.kitchen_motion").to("on"))
+    service("light.turn_on", entity_id="light.kitchen")
+    service("light.turn_on", entity_id="light.extra")
+"""
+
+
+def test_splice_of_metaprogrammed_object_appends_and_warns(tmp_path: Path) -> None:
+    writer = SplicingSourceWriter(updated_on="2026-07-05")
+    target = tmp_path / "rooms.py"
+    target.write_text(LOOP_GENERATED_ROOMS, encoding="utf-8")
+
+    writer.splice_object(target, "automation:motion_kitchen", KITCHEN_REPLACEMENT)
+
+    after = target.read_text(encoding="utf-8")
+    # I6: the loop is untouched, the UI edit is appended, nothing is lost.
+    assert "for room in ROOMS:" in after
+    assert "def motion_kitchen_ui_edit():" in after
+    assert "# hassle: updated from UI on 2026-07-05" in after
+
+    assert len(writer.reconcile_warnings) == 1
+    warning = writer.reconcile_warnings[0]
+    assert "automation:motion_kitchen" in warning
+    assert "metaprogramming" in warning.lower()
+    assert "fold" in warning.lower()
+    assert "extract" in warning.lower()
+    assert "delete" in warning.lower()
+    assert "validate" in warning.lower()
+
+
+def test_splice_of_a_genuinely_stale_manifest_entry_does_not_warn(tmp_path: Path) -> None:
+    # Ordinary stale-manifest append (object simply isn't defined anywhere in
+    # this file, not because of a loop) -- must NOT be misdiagnosed as a
+    # metaprogramming reconcile situation.
+    writer = SplicingSourceWriter(updated_on="2026-07-05")
+    target = _write(tmp_path)  # TWO_AUTOMATIONS, no closet automation at all
+
+    writer.splice_object(target, "automation:closet_light_on_motion", HALL_REPLACEMENT)
+
+    assert writer.reconcile_warnings == []
+
+
+def test_reconcile_warnings_reset_per_writer_instance(tmp_path: Path) -> None:
+    # A fresh writer (one per `hassle pull` invocation, per the CLI wiring)
+    # starts with no accumulated warnings.
+    writer = SplicingSourceWriter(updated_on="2026-07-05")
+    assert writer.reconcile_warnings == []
+
+
+# ---------------------------------------------------------------------------
 # `find_object_statement_name`'s fallback must never match a statement that
 # declares a DIFFERENT object (reviewer finding on this workstream): the plain
 # name-equals-identity fallback exists for object forms the resolver doesn't
