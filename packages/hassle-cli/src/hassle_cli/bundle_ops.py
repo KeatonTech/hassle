@@ -241,11 +241,21 @@ def category_divergence_warnings(
         scopes_involved = sorted({_SCOPE_FOR_KIND.get(kind, kind) for kind in kinds_involved})
         if len(scopes_involved) < 2:
             continue  # e.g. every helper kind shares "helpers" -- not a real divergence
+        # Never render a Python list/`[...]`-bracketed group directly into the
+        # message: `hassle pull`'s CLI layer prints warnings through rich's
+        # `Console.print`, which treats a bare `[...]` substring as markup
+        # (a style tag) and SILENTLY SWALLOWS it -- an earlier version of
+        # this message rendered `scopes_involved` and a `[{destinations}]`
+        # bracketed list directly and the scope names/destination paths
+        # vanished from the printed warning entirely (field failure caught
+        # by `test_pull_category_divergence.py`). Comma-joined, unbracketed
+        # text only, from here on.
+        scopes_text = ", ".join(scopes_involved)
         destinations = ", ".join(sorted(new_paths))
         warnings.append(
-            f"hassle pull: {old_path!r} used to be shared by scopes {scopes_involved} -- "
+            f"hassle pull: {old_path!r} used to be shared by scopes {scopes_text} -- "
             f"their category names have since diverged in HA's UI, so this pull splits it "
-            f"across [{destinations}] (placing each object under its own scope's category, "
+            f"across {destinations} (placing each object under its own scope's category, "
             "never guessing which side is right). Fix: rename the category consistently "
             "across HA's automation/script/helpers tables if you want them back in one file."
         )

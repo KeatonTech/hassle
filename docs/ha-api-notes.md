@@ -2838,3 +2838,53 @@ create_entry body was "flat... not a WS-style `{"result": {...}}` envelope"
 example JSON), is corrected too — `FlowStep.result` is FakeBackend's own
 internal test-log bookkeeping shape, never a literal wire-response mirror,
 since `FakeBackend` never parses JSON for this path at all.
+
+### 31.9 M15 work item B: implementation notes (`m15/category-layout`)
+
+Two decisions the binding spec (§"Binding layout decisions") left to the
+implementer, recorded here per this doc's own convention:
+
+- **`category_shaped_stem`'s root-level shape excludes ALL nested paths, not
+  just `lib`/`tests`/`docs`/dot-dirs by name.** The spec's phrasing
+  ("root-level `<stem>.py`, stem != `misc`, excluding reserved non-category
+  files") left open whether the predicate should enumerate reserved
+  directory names or simply require zero nesting. Implemented as the
+  latter: `category_shaped_stem` returns `None` for ANY path with more than
+  one `/`-separated component, never an explicit `lib`/`tests`/`docs`/
+  `.hassle` denylist. This is strictly simpler (one depth check instead of a
+  name list that would need to grow if a bundle ever gained a new reserved
+  top-level directory) and already correct for every reserved name that
+  exists today, since none of them are root-level `.py` FILES to begin with
+  — they're directories. Documented in `AGENTS.md`'s generator
+  (`hassle.docs.agents_md`) per the spec's own "document in AGENTS.md"
+  instruction.
+- **Divergence-warning mechanism (§"Per-scope creation/divergence policy"):
+  detected by comparing each object's PRE-pull manifest-recorded
+  `source` against its freshly computed placement, grouped by the OLD
+  shared file.** Placement itself
+  (`hassle_cli.bundle_ops._category_source_path`) never needs to know about
+  divergence at all — it only ever resolves one object's own scope+category
+  independently, so a scope-name split falls out for free. The separate
+  question ("did a formerly-ONE-file group of objects, sharing different
+  scopes, just split across multiple new files because their scopes'
+  category names diverged in HA?") is answered by
+  `hassle_cli.bundle_ops.category_divergence_warnings`: group every object
+  by its manifest-recorded OLD `source_path`, compare against this pull's
+  freshly computed new paths, and warn (naming the scopes, never guessing a
+  winner) only when (a) more than one new path resulted AND (b) more than
+  one DISTINCT category-registry SCOPE is involved (nine helper kinds
+  splitting amongst themselves, all still under the single shared
+  `"helpers"` scope, is not a cross-scope divergence and produces no
+  warning). Wired into `hassle pull` (`hassle_cli.cli.pull`) right after
+  `source_paths` is computed for this pull's plan entries, comparing against
+  `manifest.objects[...].source` (the base, pre-pull placement) for every
+  object already on record.
+- **Migration's old-file deletion reuses `hassle.decompiler.splice.
+  remove_object`'s existing "nothing but imports left" rule verbatim**,
+  rather than defining a second, migration-specific "is this file now
+  empty" predicate. This was a deliberate reuse, not an oversight: it is the
+  EXACT same rule `SplicingSourceWriter.delete_object` already applies to an
+  ordinary DROP (§7.3), so a user's bare comment or a custom top-level `def`
+  survives a migration exactly as it would survive an ordinary object
+  deletion — one predicate, two callers, never two slightly-different "is
+  this file empty" implementations that could disagree.

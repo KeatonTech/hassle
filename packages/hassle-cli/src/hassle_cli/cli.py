@@ -368,6 +368,31 @@ def pull(allow_dirty: bool) -> None:
         }
     )
 
+    # MILESTONES M15 §31.6.2: a mixed-kind category file that used to be
+    # shared by objects of different category-registry scopes may have split
+    # this pull, if HA-side renames made those scopes' category names
+    # diverge -- placement itself already handles the split correctly (each
+    # object is placed by its OWN scope, independently); this only detects
+    # that it happened and warns, naming the scopes, never guessing a winner.
+    # Checked over EVERY manifest-tracked object (not just this pull's plan
+    # entries): a pure category-registry rename never changes an object's
+    # compiled hash, so `compute_plan` reports "nothing to merge" for it --
+    # divergence can happen with no other plan action at all.
+    previous_source_paths = {key: entry.source for key, entry in manifest.objects.items()}
+    # Deliberately `default_source_path` (the fresh, category-derived
+    # placement), never `source_path_for`/`source_paths` above (which read
+    # the object's EXISTING declaration site -- unchanged for an object no
+    # plan action touched, so it could never reveal a divergence on its own).
+    recomputed_source_paths = {
+        key: bundle_ops.default_source_path(key, registry=registry_snapshot)
+        for key in manifest.objects
+        if registry_snapshot is not None
+    }
+    for warning in bundle_ops.category_divergence_warnings(
+        previous_source_paths, recomputed_source_paths
+    ):
+        console.print(f"[yellow]{warning}[/yellow]")
+
     # The REAL splicer-backed writer: REFRESH/DROP touch exactly one object's
     # statement, so sibling objects sharing a source file survive (I6 -- the
     # `test_pull_refresh_splice.py` regression: `WholeFileSourceWriter` here
