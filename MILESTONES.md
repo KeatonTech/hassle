@@ -836,6 +836,59 @@ otherwise (works once `hassle-cli` is published).
 
 ---
 
+## M18 — Typed service namespaces: `cover.close_cover(...)` (owner-commissioned)
+
+**Goal:** almost every action decompiles to `service("cover.close_cover", target=..., ...)`.
+The owner wants domain-namespaced calls — and the design already half-promised the sibling
+form: `hassle stubs` has ALWAYS emitted typed service methods on entity classes
+(`stubs._service_method`), but the runtime never implemented them (calling
+`e.cover.x.close_cover()` is a TypeError today while Pylance blesses it — a latent
+stub/runtime mismatch this milestone closes).
+
+**Surfaces (F3: `hassle.services` is a new module, imported explicitly per domain — NOT
+part of the `from hassle import *` star surface, since domains are instance-dynamic; note
+in docs/dsl-f3.md):**
+1. `from hassle.services import cover` → `cover.close_cover(target=..., **fields)` records
+   byte-identical IR to the equivalent `service(...)` call. Module-level PEP 562
+   `__getattr__` accepts any domain; domain objects accept any service name (offline
+   compile never fails on an unknown service — that's validate's job: unknown
+   `domain.service` → Finding with did-you-mean, wired through the existing
+   `hassle.registry.didyoumean`/service-param machinery).
+2. Entity-method sugar: `e.cover.x.close_cover(position=60)` records the same IR with
+   `target={"entity_id": "cover.x"}` implicit. Bare attribute access stays an attribute
+   ref (`.attr(...)` etc. unchanged) — only CALLS record actions.
+3. Stubs: new generated `typings` for `hassle.services` (per-domain classes, typed kwargs
+   from `snapshot.services`, reusing `_service_method`'s field typing); entity-method
+   stubs already exist and become truthful.
+
+**Decompiler canonical form:** a plain service-call action whose literal
+`"domain.service"` exists in the registry snapshot and whose data is kwarg-expressible
+emits the namespace call plus a per-file `from hassle.services import <domains>` line
+(splice refresh path merges the import via the existing `merge_missing_imports` seam).
+Everything else (templated service names, snapshot-absent services, no snapshot
+available, non-kwarg-safe data keys) falls back to today's `service(...)` — I3 byte-exact
+through BOTH branches. Entity-method form is author-only sugar, never emitted (one
+canonical form; no placement-dependent output).
+
+**Write these tests first**
+1. Regression pinning today's mismatch: calling a stub-promised entity method currently
+   raises TypeError (red against main); green = records the service action.
+2. IR equivalence: namespace call, entity-method call, and `service(...)` compile to
+   byte-identical IR for the same inputs (golden pair fixture incl. multi-domain file).
+3. Decompiler: snapshot-present plain calls emit namespace form (golden update via
+   `hassle-dev goldens --update`, diff visible); templated/unknown/no-snapshot inputs
+   fall back to `service(...)`; both branches round-trip byte-stably (I3); refresh
+   splice merges the new import into an existing file.
+4. Validate: unknown service via namespace → Finding with did-you-mean, file:line of the
+   call (span capture like other builders); service-param validation applies equally.
+5. Stubs: generated hassle.services stub is deterministic, format-clean, typo-squiggle
+   effective (extend the M8 pyright integration test with a misspelled service).
+6. Simulator: namespace/entity-method calls execute identically to `service(...)` in
+   `hassle test` (I5).
+7. Docs gate: constructs documented; DSL.md regenerated via `--update`.
+
+---
+
 ## Milestone sizing (rough, for planning the swarm)
 
 | Milestone | Size | Parallel workstreams inside |
