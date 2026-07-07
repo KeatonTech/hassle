@@ -91,4 +91,7 @@ def test_insert_category_global_uses_shared_resolver(tmp_path, monkeypatch) -> N
     monkeypatch.setenv("PATH", str(tmp_path / "empty"))
 
     out = _insert_category_global("from hassle import *\n", "Automatic HVAC")
-    assert 'CATEGORY = "Automatic HVAC"' in out
+    # The fake ruff is an identity formatter (real ruff would normalize the
+    # quotes); the property under test is that NO FileNotFoundError is raised
+    # and the global landed.
+    assert "CATEGORY = 'Automatic HVAC'" in out or 'CATEGORY = "Automatic HVAC"' in out

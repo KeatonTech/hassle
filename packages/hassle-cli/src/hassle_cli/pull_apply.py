@@ -110,7 +110,6 @@ transform itself.
 from __future__ import annotations
 
 import json
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -413,12 +412,12 @@ def _insert_category_global(source: str, category_name: str) -> str:
     new_body = list(module.body)
     new_body.insert(last_import_index + 1, category_stmt)
     new_source = module.with_changes(body=new_body).code
-    proc = subprocess.run(
-        ["ruff", "format", "-"], input=new_source, capture_output=True, text=True, check=False
-    )
-    if proc.returncode != 0 or not proc.stdout:
-        return new_source  # pragma: no cover - defensive, mirrors codegen._format_with_ruff
-    return proc.stdout
+    # Shared resolver (field failure #2, 2026-07-06): a bare "ruff" here
+    # crashed standalone tool installs where the binary lives in the venv's
+    # bin dir, not on PATH -- exactly the bug codegen._format_with_ruff had.
+    from hassle.decompiler.codegen import _format_with_ruff  # pyright: ignore[reportPrivateUsage]
+
+    return _format_with_ruff(new_source)
 
 
 def _drop(entry: PlanEntry, source_writer: SourceWriter) -> None:
