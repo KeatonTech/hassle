@@ -1,0 +1,1 @@
+`.eq(['a', 'b'])` at test_string_state_errors.py:66: comparison operands must be a template expression or a bare int/float/str/bool literal, not list. Fix: pass a literal value (e.g. `.eq('on')`), another template expression, or -- for membership against a list of strings -- use `.in_([...])` instead of `.eq(...)`.

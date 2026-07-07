@@ -121,6 +121,7 @@ NAME_TO_CASES: dict[str, list[str]] = {
     "seconds": ["repeat_count"],
     # template expression builder
     "expr": ["template_expr_golden"],
+    "state_of": ["state_of_string_golden", "beacon_area_composition"],
     "param": ["shared_script_call"],
     # runtime-math expression surface
     "sin": ["math_expr_reference"],

@@ -14,13 +14,19 @@ category/misc rule as the nine storage-collection helpers
 **M13 update:** `_template_helper_source` now tries the bounded Jinja
 inverter first (`hassle.decompiler.template_invert`) and only falls back to
 the call form asserted here when a `state=` Jinja string is outside the
-inverter's bounded grammar. Of this fixture's four objects, exactly
+inverter's bounded grammar. Of this fixture's four objects,
 `template_sensor:average_temp`'s state (`(states('sensor.a') | float +
-states('sensor.b') | float) / 2`) is inside that grammar -- the other three
-use `is_state(...)`/a bare `states(...)` read (no `| float`)/a `selectattr`
-filter chain, none of which this parser models. See
+states('sensor.b') | float) / 2`) is inside that grammar -- the other two
+(`is_state(...)`/a `selectattr` filter chain) are not, and fall back. See
 `test_template_helper_decorator_form.py` for the decorator-form-specific
 contract (M13 tests 1-5).
+
+**M16 update:** a bare `states(...)` read (no `| float`) is now ALSO inside
+the bounded grammar (`state_of(...)`, DESIGN §5.4 extension) --
+`template_select:house_scene`'s state (`states('input_select.house_mode')`)
+inverts cleanly too, so three of the four objects invert now; only
+`template_binary_sensor:any_door_open`'s `is_state(...)` call form still
+falls back (documented one-time-canonicalization behavior, docs/dsl-f3.md).
 
 **M14 update:** the fallback branch is ALSO the decorator form now (owner
 feedback) -- the other three objects decompile to `@builder(...)` / `def
@@ -101,6 +107,7 @@ def test_decompile_recompile_round_trip_is_byte_stable_for_options_body(
     lines = [
         "from hassle import (",
         "    expr,",  # M13: average_temp now decompiles to the decorator form
+        "    state_of,",  # M16: house_scene now decompiles to the decorator form too
         "    template_binary_sensor,",
         "    template_number,",
         "    template_select,",
@@ -111,9 +118,10 @@ def test_decompile_recompile_round_trip_is_byte_stable_for_options_body(
         # §7.3's entity-reference cosmetic rewrite) emits as `e.<domain>.<id>`
         # -- needs this import, exactly like any generated bundle would carry.
         # M13: the inverted `average_temp` decorator body also references `e.`
-        # entities directly (`expr(e.sensor.a)`). M14: the other three
-        # objects' fallback decorator bodies are `return "<raw string>"` --
-        # no `expr`/`e.` reference needed for those, but the import stays
+        # entities directly (`expr(e.sensor.a)`). M16: `house_scene`'s inverted
+        # body does too (`state_of(e.input_select.house_mode)`). M14: the
+        # remaining fallback decorator body is `return "<raw string>"` -- no
+        # `expr`/`e.` reference needed for that one, but the import stays
         # harmless (unused-import isn't checked by this test).
         "from hassle.registry import entities as e",
         "",
@@ -154,7 +162,8 @@ def test_decompiled_write_target_helpers_recompile_without_error(tmp_path: Path)
         bundle_dir = tmp_path / key.replace(":", "_")
         bundle_dir.mkdir()
         (bundle_dir / "helpers.py").write_text(
-            "from hassle import template_number, template_select\n"
+            # M16: house_scene's inverted body references state_of(e....).
+            "from hassle import state_of, template_number, template_select\n"
             "from hassle.registry import entities as e\n\n" + source + "\n",
             encoding="utf-8",
         )

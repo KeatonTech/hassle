@@ -1,1 +1,1 @@
-`expr()`/`state(...).value` at test_template_entity_ref_error.py:48: expected an entity id string or a `state(...)` builder, got 123 (int). Fix: pass a single entity id string (or a `state(...)` builder built from one) -- a template read always names exactly one entity.
+`expr()`/`state(...).value`/`state_of()` at test_template_entity_ref_error.py:48: expected an entity id string or a `state(...)` builder, got 123 (int). Fix: pass a single entity id string (or a `state(...)` builder built from one) -- a template read always names exactly one entity.

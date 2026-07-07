@@ -110,6 +110,41 @@
 > `OnlyIfBlockCoverageError`) and `only_if`'s existing frozen entry is
 > untouched (only its usage — bare vs. `with` — widened).
 
+> **Widened 2026-07-06 (`m16/string-exprs`, owner-commissioned, F3-additive,
+> surface count 105 → 106):** one new name, `state_of(entity_or_id)` — a
+> bare STRING-context template read (`states('x')`, no `| float`), mirroring
+> `expr()`'s argument handling exactly (accepts a plain entity id string, an
+> `e.`-registry ref, or a `state(...)` builder). String comparisons are
+> spelled via the ALREADY-frozen `.eq()`/`.ne()` methods (no new comparison
+> names); membership is a new method on the existing `TemplateExpr` class,
+> `.in_(["a", "b"])` → `in ['a', 'b']` (not added to `hassle.__all__` — it's a
+> method, not a module-level name, same convention as `.eq()`/`.ne()`
+> themselves). Boolean composition (`&`/`|`/`~`) and the `__bool__`/
+> `CompileTimeBranchError` trap are unchanged — `state_of(...)` just produces
+> another `TemplateExpr`. New error `TemplateComparisonOperandError` (module-
+> internal, `hassle.compiler.templates` — NOT added to `hassle.__all__`,
+> same non-public-error convention as `TemplateEntityRefError`): `.eq()`/
+> `.ne()` against something that is neither a `TemplateExpr` nor a bare
+> int/float/str/bool literal (e.g. a list/dict) raises this instead of
+> silently `repr()`-ing the value into nonsense Jinja. Inverter coverage
+> (`hassle.decompiler.template_invert`, non-public tooling): bare
+> `states('x')` (no `| float`) plus `==`/`!=`/`in [...]` against a string now
+> invert to `state_of(...)` forms; `is_state('x', 'y')` is NOT accepted by
+> the parser at all — it re-renders as `states('x') == 'y'`, which differs
+> textually from an `is_state(...)`-authored template, so the byte-exact
+> acceptance gate (already the enforced rule, MILESTONES M13) correctly
+> rejects it and the caller falls back to the unchanged string form. This is
+> a one-time canonicalization: only after the user's own edit (or Hassle's
+> compiled re-render) replaces the stored template with the canonical
+> `states(...) == ...` spelling does it invert cleanly forever after — never
+> weakened to force a match. Regression fix alongside this addition (see
+> `hassle.decompiler.template_invert`'s module docstring / M16 test file):
+> `invert_template`'s acceptance check compared its re-render against
+> `jinja_text.strip()` instead of the original, unstripped `jinja_text` — a
+> pre-existing bug (reachable via `expr(...)`'s `| float` grammar too) that
+> silently dropped a leading/trailing newline around a `{{ ... }}` block on
+> inversion, violating I3; now compares against the original text.
+
 The public surface is exactly `hassle.__all__` (module
 `packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.
@@ -259,11 +294,19 @@ bundles are written.
 
 ### Template expression builder
 - `expr(entity)` — numeric-context template read (`states('x') | float`).
+- `state_of(entity)` (M16 ADDITION) — string-context template read
+  (`states('x')`, no `| float`); accepts the same argument shapes as
+  `expr()` (plain entity id string, `e.`-registry ref, or `state(...)`
+  builder). Compose string comparisons via the same `.eq()`/`.ne()` methods
+  (`states('x') == 'y'` / `!=`), and membership via `.in_(["a", "b"])` →
+  `states('x') in ['a', 'b']`.
 - `template(raw)` — raw Jinja passthrough (see the trigger/condition note above).
 - `param(name)` — inside a `@shared_script` body, a runtime reference to a field.
-- (Operators `>`, `<`, `+`, `-`, `&`, `|`, `~`, `.eq`, `.ne`, … on the returned
-  expression build up the Jinja string; a native Python `if` on one raises
-  `CompileTimeBranchError`.)
+- (Operators `>`, `<`, `+`, `-`, `&`, `|`, `~`, `.eq`, `.ne`, `.in_`, … on the
+  returned expression build up the Jinja string; a native Python `if` on one
+  raises `CompileTimeBranchError`. `.eq()`/`.ne()` against something that
+  isn't a `TemplateExpr` or a bare int/float/str/bool literal raises
+  `TemplateComparisonOperandError`, M16 ADDITION.)
 
 ### Runtime-math expression surface (M1.1 ADDITION, DESIGN §5.4 extension)
 Symbolic-expression extension of the template builder (docs/ha-api-notes.md

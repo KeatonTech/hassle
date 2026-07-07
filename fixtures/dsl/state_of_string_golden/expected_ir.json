@@ -1,0 +1,29 @@
+{
+  "automation:string_state_demo": {
+    "id": "string_state_demo",
+    "alias": "String state expression demo",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.motion",
+        "to": "on"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "notify.mobile_app",
+        "data": {
+          "raw_state": "{{ states('sensor.time_of_day') }}",
+          "is_daytime": "{{ states('sensor.time_of_day') == 'day' }}",
+          "is_not_night": "{{ states('sensor.time_of_day') != 'night' }}",
+          "is_transition": "{{ states('sensor.time_of_day') in ['dawn', 'dusk'] }}",
+          "is_daytime_via_ref": "{{ states('sensor.time_of_day') == 'day' }}",
+          "day_and_hot": "{{ (states('sensor.time_of_day') == 'day') and (states('sensor.outdoor_temp') | float > 25) }}",
+          "dawn_or_dusk": "{{ (states('sensor.time_of_day') == 'dawn') or (states('sensor.time_of_day') == 'dusk') }}",
+          "not_night": "{{ not (states('sensor.time_of_day') == 'night') }}"
+        }
+      }
+    ]
+  }
+}

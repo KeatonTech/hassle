@@ -7,6 +7,13 @@ filters that stock jinja2 lacks (sin/cos/tan/asin/acos/atan/atan2/sqrt/log,
 pi/e/tau, round/min/max/abs), plus `variables:` scope resolution. Anything
 outside the supported subset raises `UnsupportedTemplateError` naming the
 construct and pointing at `hassle render --live` -- never silently wrong.
+
+M16 test 4 (bottom of this file): bare `states()`/string-equality templates
+(the `state_of(...)` DSL surface's compiled output) evaluate correctly too --
+verified directly rather than assumed, since `states()` already returns a
+plain Python `str` and stock jinja2's own `==`/`in` operators need no HA-
+specific registration to work on it (unlike `is_state`/`state_attr`, which
+DO need the explicit globals registered above).
 """
 
 from __future__ import annotations
@@ -454,3 +461,92 @@ def test_unsupported_template_names_the_construct(tmp_path: Path) -> None:
     with pytest.raises(UnsupportedTemplateError) as excinfo:
         sim.state_change("button.go", "off", "on")
     assert "integration_entities" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# M16 test 4: bare states()/string-equality templates (state_of(...) surface)
+# ---------------------------------------------------------------------------
+
+
+def test_bare_states_string_equality_evaluates_in_simulator(tmp_path: Path) -> None:
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, service, state_of, state, when
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("button.go").to("on"))
+            service(
+                "notify.mobile_app",
+                message=state_of("sensor.time_of_day").eq("day"),
+            )
+        """,
+    )
+    sim.set_state("sensor.time_of_day", "day")
+    sim.state_change("button.go", "off", "on")
+    sim.assert_called("notify.mobile_app", message="True")
+
+
+def test_bare_states_string_inequality_evaluates_in_simulator(tmp_path: Path) -> None:
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, service, state_of, state, when
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("button.go").to("on"))
+            service(
+                "notify.mobile_app",
+                message=state_of("sensor.time_of_day").ne("night"),
+            )
+        """,
+    )
+    sim.set_state("sensor.time_of_day", "day")
+    sim.state_change("button.go", "off", "on")
+    sim.assert_called("notify.mobile_app", message="True")
+
+
+def test_bare_states_string_membership_evaluates_in_simulator(tmp_path: Path) -> None:
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, service, state_of, state, when
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("button.go").to("on"))
+            service(
+                "notify.mobile_app",
+                message=state_of("sensor.time_of_day").in_(["dawn", "dusk"]),
+            )
+        """,
+    )
+    sim.set_state("sensor.time_of_day", "dawn")
+    sim.state_change("button.go", "off", "on")
+    sim.assert_called("notify.mobile_app", message="True")
+
+
+def test_only_if_condition_using_state_of_eq(tmp_path: Path) -> None:
+    """`state_of(...).eq(...)` used as a `only_if(...)` template condition
+    (DESIGN §5.4's `template()` condition path) gates the action correctly."""
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, only_if, service, state_of, state, when
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("button.go").to("on"))
+            only_if(state_of("sensor.time_of_day").eq("day"))
+            service("notify.mobile_app", message="daytime action")
+        """,
+    )
+    sim.set_state("sensor.time_of_day", "night")
+    sim.state_change("button.go", "off", "on")
+    assert sim.calls("notify.mobile_app") == []
+
+    sim.set_state("sensor.time_of_day", "day")
+    sim.state_change("button.go", "off", "on")
+    sim.assert_called("notify.mobile_app", message="daytime action")
