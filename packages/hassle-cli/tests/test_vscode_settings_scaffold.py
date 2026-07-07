@@ -76,3 +76,19 @@ def test_pull_writes_vscode_settings_when_scaffolding(
 
     assert result.exit_code == 0, result.output
     assert (bundle_dir / ".vscode" / "settings.json").is_file()
+
+
+def test_settings_default_interpreter_points_at_bundle_venv(tmp_path) -> None:
+    """Owner field report (2026-07-07): with the M17 uv-project scaffold in
+    place, VS Code's Python extension could sit on an interpreter with no
+    `hassle` installed -- every `from hassle import *` name squiggled as
+    undefined while the (interpreter-independent) entity stubs still
+    resolved. The generated settings must default the interpreter to the
+    bundle's own venv so a fresh checkout works with zero clicks."""
+    import json
+
+    from hassle_cli.init_cmd import scaffold_vscode_settings
+
+    scaffold_vscode_settings(tmp_path)
+    settings = json.loads((tmp_path / ".vscode" / "settings.json").read_text())
+    assert settings["python.defaultInterpreterPath"] == "${workspaceFolder}/.venv/bin/python"

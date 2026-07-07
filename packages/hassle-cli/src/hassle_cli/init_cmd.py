@@ -28,9 +28,17 @@ from hassle_cli.uv_project import scaffold_pyproject
 # resolves the same PEP 420 namespace-package cross-file imports
 # (`from lib.x import y`, `from helpers.modes import guest_mode`) the
 # compiler's own loader does (DESIGN §6, docs/ha-api-notes.md §17.9).
+# `python.defaultInterpreterPath` points at the bundle's own uv-project venv
+# (MILESTONES M17): without it, VS Code's Python extension may keep/select an
+# interpreter that has no `hassle` installed, and every `from hassle import *`
+# name shows as undefined even though the entity stubs (interpreter-
+# independent) still resolve -- exactly the owner field report this line
+# fixes. It is a DEFAULT: VS Code ignores it once a user explicitly selects
+# an interpreter for the workspace.
 VSCODE_SETTINGS = {
     "python.analysis.stubPath": "typings",
     "python.analysis.extraPaths": ["."],
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
 }
 
 CI_WORKFLOW = """\
