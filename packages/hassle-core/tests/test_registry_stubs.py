@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from hassle.registry.snapshot import AreaInfo, EntityInfo, RegistrySnapshot
+from hassle.registry.snapshot import AreaInfo, DeviceInfo, EntityInfo, RegistrySnapshot
 from hassle.registry.stubs import generate_entities_stub
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -148,9 +148,11 @@ def test_stub_docstring_handles_missing_area(snapshot: RegistrySnapshot) -> None
 
 
 def _snapshot_with_entity(
-    entity: EntityInfo, areas: list[AreaInfo] | None = None
+    entity: EntityInfo,
+    areas: list[AreaInfo] | None = None,
+    devices: list[DeviceInfo] | None = None,
 ) -> RegistrySnapshot:
-    return RegistrySnapshot(entities=[entity], areas=areas or [])
+    return RegistrySnapshot(entities=[entity], areas=areas or [], devices=devices or [])
 
 
 def test_stub_docstring_escapes_quotes_and_backslash() -> None:
@@ -196,6 +198,114 @@ def test_stub_docstring_falls_back_to_entity_id_when_both_names_none() -> None:
     idx = next(i for i, line in enumerate(lines) if line.strip().startswith("no_name:"))
     doc_line = lines[idx + 1].strip()
     assert "sensor.no_name" in doc_line
+    # No device resolves here -- entity_id must appear exactly ONCE in the
+    # docstring, never the doubled "x -- x" wart (ux/stub-device-names).
+    assert doc_line.count("sensor.no_name") == 1
+
+
+def _line_after(stub: str, attr_prefix: str) -> str:
+    lines = stub.splitlines()
+    idx = next(i for i, line in enumerate(lines) if line.strip().startswith(attr_prefix))
+    return lines[idx + 1].strip()
+
+
+def test_stub_docstring_uses_device_name_when_entity_names_are_null() -> None:
+    """ux/stub-device-names: `has_entity_name` integrations (Matter, etc.)
+    leave BOTH `entity.name` and `entity.original_name` null -- the friendly
+    name lives on the device instead (HA's own composition rule). Mirrors
+    the owner's real showcase entity:
+    `cover.primary_bedroom_bedroom_privacy_curtain` with a device named
+    "Primary Bedroom Privacy Curtain" via `name_by_user`."""
+    device = DeviceInfo(
+        device_id="dev1", name="Privacy Curtain", name_by_user="Primary Bedroom Privacy Curtain"
+    )
+    entity = EntityInfo(
+        entity_id="cover.primary_bedroom_bedroom_privacy_curtain",
+        name=None,
+        original_name=None,
+        device_id="dev1",
+    )
+    snapshot = _snapshot_with_entity(entity, devices=[device])
+    stub = generate_entities_stub(snapshot)
+    doc_line = _line_after(stub, "primary_bedroom_bedroom_privacy_curtain:")
+    assert "Primary Bedroom Privacy Curtain" in doc_line
+    # device.name_by_user (user override) wins over device.name.
+    assert "-- Privacy Curtain" not in doc_line
+    entity_id = "cover.primary_bedroom_bedroom_privacy_curtain"
+    assert doc_line.count(entity_id) == 1
+
+
+def test_stub_docstring_composes_device_name_with_original_name() -> None:
+    """HA's `has_entity_name` friendly-name rule: when the entity has an
+    `original_name` (a sub-entity label distinguishing it from siblings on
+    the same device), the composed name is `device_name + " " +
+    original_name` -- e.g. a device named "Kitchen Thermostat" with a
+    sub-entity `original_name="Humidity"` reads as "Kitchen Thermostat
+    Humidity"."""
+    device = DeviceInfo(device_id="dev2", name="Kitchen Thermostat")
+    entity = EntityInfo(
+        entity_id="sensor.kitchen_thermostat_humidity",
+        name=None,
+        original_name="Humidity",
+        device_id="dev2",
+    )
+    snapshot = _snapshot_with_entity(entity, devices=[device])
+    stub = generate_entities_stub(snapshot)
+    doc_line = _line_after(stub, "kitchen_thermostat_humidity:")
+    assert "Kitchen Thermostat Humidity" in doc_line
+
+
+def test_stub_docstring_device_resolution_prefers_name_by_user_with_original_name() -> None:
+    """`name_by_user` still wins over `name` even when composing with
+    `original_name`."""
+    device = DeviceInfo(device_id="dev3", name="Integration Name", name_by_user="My Thermostat")
+    entity = EntityInfo(
+        entity_id="sensor.my_thermostat_humidity",
+        name=None,
+        original_name="Humidity",
+        device_id="dev3",
+    )
+    snapshot = _snapshot_with_entity(entity, devices=[device])
+    stub = generate_entities_stub(snapshot)
+    doc_line = _line_after(stub, "my_thermostat_humidity:")
+    assert "My Thermostat Humidity" in doc_line
+    assert "Integration Name" not in doc_line
+
+
+def test_stub_docstring_no_device_resolution_falls_back_to_entity_id_once() -> None:
+    """`device_id` set but unresolvable (not in `snapshot.devices`) must still
+    land on the entity_id fallback -- the entity_id must appear exactly once
+    in the docstring, never the doubled "entity_id -- entity_id" form."""
+    entity = EntityInfo(
+        entity_id="sensor.orphaned_device_ref",
+        name=None,
+        original_name=None,
+        device_id="does_not_exist",
+    )
+    snapshot = _snapshot_with_entity(entity, devices=[])
+    stub = generate_entities_stub(snapshot)
+    doc_line = _line_after(stub, "orphaned_device_ref:")
+    entity_id = "sensor.orphaned_device_ref"
+    assert entity_id in doc_line
+    assert doc_line.count(entity_id) == 1
+    assert " -- " not in doc_line or doc_line.count(entity_id) == 1
+
+
+def test_stub_docstring_device_with_no_name_at_all_falls_back_to_entity_id_once() -> None:
+    """A device resolves but has neither `name_by_user` nor `name` -- falls
+    through to `original_name`, then entity_id, still without doubling."""
+    device = DeviceInfo(device_id="dev4", name=None, name_by_user=None)
+    entity = EntityInfo(
+        entity_id="sensor.nameless_device_entity",
+        name=None,
+        original_name=None,
+        device_id="dev4",
+    )
+    snapshot = _snapshot_with_entity(entity, devices=[device])
+    stub = generate_entities_stub(snapshot)
+    doc_line = _line_after(stub, "nameless_device_entity:")
+    entity_id = "sensor.nameless_device_entity"
+    assert doc_line.count(entity_id) == 1
 
 
 def test_stub_docstring_long_line_truncates_area_first() -> None:

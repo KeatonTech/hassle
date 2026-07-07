@@ -68,6 +68,12 @@ class DeviceInfo(BaseModel):
 
     device_id: str
     name: str | None = None
+    # HA's device-registry user override (ux/stub-device-names): when the
+    # user renames a device in the UI, HA writes `name_by_user` and leaves
+    # `name` as the integration-reported name -- `name_by_user` wins whenever
+    # both are set (mirrors HA's own `Device.name_by_user or Device.name`
+    # composition, e.g. `homeassistant.helpers.device_registry`).
+    name_by_user: str | None = None
     area_id: str | None = None
 
 

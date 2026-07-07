@@ -17,6 +17,21 @@ docstring: a string-literal statement immediately following the attribute
 declaration (`entity_name -- entity_id (area: Area Name)`), which pyright and
 Pylance both recognize as documentation for that attribute.
 
+**ux/stub-device-names:** `has_entity_name` integrations (Matter and others)
+routinely leave BOTH `entity.name` and `entity.original_name` null -- the
+friendly name lives on the DEVICE instead. `_entity_display_name` mirrors
+HA's own name composition (`homeassistant.helpers.entity.Entity.name`/
+device_registry's `name_by_user or name`), best-effort, in this order:
+1. `entity.name` (user override) -- unchanged;
+2. else, if `entity.device_id` resolves against `snapshot.devices`:
+   `device_name + (" " + original_name if original_name else "")`, where
+   `device_name` is the device's `name_by_user` (user override) if set, else
+   its `name`;
+3. else `entity.original_name`;
+4. else `entity.entity_id` -- and in that last case the docstring emits the
+   entity_id ONCE (`"sensor.x"`), never the doubled `"sensor.x -- sensor.x"`
+   form (a pre-existing wart, fixed regardless of which fallback rung is hit).
+
 **Deviation from DESIGN's illustrative snippet:** DESIGN §5.2 shows
 `LightEntity.turn_on(brightness_pct: int | Template = ..., transition: float =
 ...)`. There is no `Template` type anywhere in this codebase (verified: only
@@ -31,7 +46,7 @@ introducing a new public type as part of an unrelated milestone.
 
 from __future__ import annotations
 
-from hassle.registry.snapshot import EntityInfo, RegistrySnapshot, ServiceDef
+from hassle.registry.snapshot import DeviceInfo, EntityInfo, RegistrySnapshot, ServiceDef
 
 _PY_TYPE = {
     "integer": "int",
@@ -95,10 +110,40 @@ def _format_str_literal(text: str) -> str:
     return f"{quote}{''.join(out)}{quote}"
 
 
-def _entity_display_name(entity: EntityInfo) -> str:
-    """``entity.name`` or `original_name`, falling back to the entity_id
-    itself when both are ``None`` (ux/stub-docstrings)."""
-    return entity.name or entity.original_name or entity.entity_id
+def _device_name(device: DeviceInfo) -> str | None:
+    """HA's own device display-name rule: the user override
+    (`name_by_user`) wins over the integration-reported `name`."""
+    return device.name_by_user or device.name
+
+
+def _device_for_entity(snapshot: RegistrySnapshot, entity: EntityInfo) -> DeviceInfo | None:
+    if entity.device_id is None:
+        return None
+    for device in snapshot.devices:
+        if device.device_id == entity.device_id:
+            return device
+    return None
+
+
+def _entity_display_name(snapshot: RegistrySnapshot, entity: EntityInfo) -> str | None:
+    """``entity.name`` (user override) -- unchanged; else, if a device
+    resolves, HA's `has_entity_name` composition (device display name,
+    optionally suffixed with `original_name` when the entity is one of
+    several sub-entities on that device); else `entity.original_name`; else
+    ``None`` (the caller falls back to the entity_id itself,
+    ux/stub-device-names)."""
+    if entity.name:
+        return entity.name
+
+    device = _device_for_entity(snapshot, entity)
+    if device is not None:
+        device_name = _device_name(device)
+        if device_name:
+            if entity.original_name:
+                return f"{device_name} {entity.original_name}"
+            return device_name
+
+    return entity.original_name
 
 
 def _area_name(snapshot: RegistrySnapshot, entity: EntityInfo) -> str | None:
@@ -114,20 +159,28 @@ def _area_name(snapshot: RegistrySnapshot, entity: EntityInfo) -> str | None:
 
 def _entity_docstring_line(snapshot: RegistrySnapshot, entity: EntityInfo) -> str:
     """Build the attribute-docstring line (indented, quoted, format-clean)
-    for ``entity``: display name -- entity_id (area: Area Name).
+    for ``entity``: display name -- entity_id (area: Area Name) -- or, when
+    no display name resolves at all (ux/stub-device-names), just the
+    entity_id ONCE (never the doubled ``"entity_id -- entity_id"`` form).
 
     R7's >100-char fallback rule, adapted for docstrings: truncate/drop the
     area clause first, keeping the load-bearing display name + entity_id
     (needed for the digit-leading rule) intact; if the line is STILL over 100
-    columns even without the area (an implausibly long display name), the
-    display name itself is truncated with an ellipsis -- the entity_id is
-    never shortened, since dropping it would leave a docstring documenting a
-    different-looking entity."""
-    display_name = _entity_display_name(entity)
+    columns even without the area (an implausibly long display name -- device
+    names can be long too), the display name itself is truncated with an
+    ellipsis -- the entity_id is never shortened, since dropping it would
+    leave a docstring documenting a different-looking entity."""
+    display_name = _entity_display_name(snapshot, entity)
     area = _area_name(snapshot, entity)
 
     def _line(text: str) -> str:
         return f"    {_format_str_literal(text)}"
+
+    if display_name is None:
+        # No name resolved anywhere in the chain (entity.name, device, nor
+        # original_name) -- the entity_id IS the display name here, so it
+        # must appear only once, never doubled as "entity_id -- entity_id".
+        return _line(entity.entity_id)
 
     if area:
         text = f"{display_name} -- {entity.entity_id} (area: {area})"
