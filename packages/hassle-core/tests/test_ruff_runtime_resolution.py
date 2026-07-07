@@ -67,8 +67,6 @@ def test_declared_as_runtime_dependency() -> None:
     the decompiler needs the binary at runtime in any install."""
     import tomllib
 
-    pyproject = (
-        Path(__file__).resolve().parents[1] / "pyproject.toml"
-    ).read_text(encoding="utf-8")
+    pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
     deps = tomllib.loads(pyproject)["project"]["dependencies"]
     assert any(d.split(">=")[0].split("==")[0].strip() == "ruff" for d in deps), deps

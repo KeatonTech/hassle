@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, cast
 
 from hassle.compiler.enums import MaxExceeded, Mode
@@ -788,10 +789,39 @@ def decompile_object(
     raise TypeError(f"cannot decompile object of type {type(obj).__name__}")  # pragma: no cover
 
 
+class RuffNotFoundError(RuntimeError):
+    """The `ruff` executable is required at runtime (every decompiled file is
+    formatted with it) but could not be located."""
+
+
+def _resolve_ruff_executable() -> str | None:
+    """Locate the `ruff` binary: the running interpreter's own bin directory
+    first (the venv / `uv tool install` case, where ruff is a dependency of
+    this package but the venv's bin is NOT on PATH -- the 2026-07-06 field
+    failure), then PATH."""
+    import shutil
+    import sys
+
+    candidate = Path(sys.executable).parent / "ruff"
+    if candidate.is_file():
+        return str(candidate)
+    return shutil.which("ruff")
+
+
 def _format_with_ruff(source: str) -> str:
     """Run ``ruff format -`` over ``source`` (deterministic, no network)."""
+    ruff = _resolve_ruff_executable()
+    if ruff is None:
+        raise RuffNotFoundError(
+            "hassle needs the `ruff` executable to format decompiled Python, but it "
+            "was not found next to the running interpreter or on PATH. This usually "
+            "means hassle was installed without its dependencies. Fix: reinstall the "
+            "CLI (`uv tool install --force -e <hassle repo>/packages/hassle-cli`) so "
+            "ruff is included in its environment, or `uv tool install ruff` / add "
+            "ruff to PATH."
+        )
     proc = subprocess.run(
-        ["ruff", "format", "-"],
+        [ruff, "format", "-"],
         input=source,
         capture_output=True,
         text=True,

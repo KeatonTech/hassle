@@ -8,6 +8,9 @@ dependencies = [
     "jinja2>=3.1",
     "libcst>=1.4",
     "aiohttp>=3.9",
+    # Runtime dependency, not just dev tooling: the decompiler formats every
+    # generated file by shelling out to the ruff binary (codegen._format_with_ruff).
+    "ruff>=0.4",
 ]
 
 [project.entry-points.pytest11]
