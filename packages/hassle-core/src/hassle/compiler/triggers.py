@@ -17,6 +17,7 @@ Python ``if`` on one of them fails loudly with ``CompileTimeBranchError``.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, TypeVar
 
 from hassle.compiler.durations import normalize_duration
@@ -95,13 +96,16 @@ class _TriggerBase:
 class NumericStateExpr(_TriggerBase):
     """``numeric_state(entity, above=..., below=..., for_=...)`` — trigger + condition.
 
-    ``entity_id`` accepts a single entity or a list (real-world smoke-test
-    addition: the HA UI always stores this as a list, even for one entity).
+    ``entity_id`` accepts a single entity or a sequence (real-world
+    smoke-test addition: the HA UI always stores this as a list, even for one
+    entity; widened ``list[str]`` -> ``Sequence[str]`` in the task #28
+    annotation-truth pass -- see ``StateExpr``'s docstring, ``builders.py``,
+    for the invariance rationale).
     """
 
     def __init__(
         self,
-        entity_id: str | list[str],
+        entity_id: str | Sequence[str],
         *,
         above: float | None = None,
         below: float | None = None,
@@ -143,7 +147,7 @@ class NumericStateExpr(_TriggerBase):
 
 
 def numeric_state(
-    entity_id: str | list[str],
+    entity_id: str | Sequence[str],
     *,
     above: float | None = None,
     below: float | None = None,
@@ -156,7 +160,7 @@ def numeric_state(
     ``attribute=`` (M1.1 addition) reads an entity attribute instead of its
     main state (HA's ``numeric_state`` schema field of the same name; see
     ``fixtures/dsl/shade_tracks_sun``'s sun-elevation condition). ``entity_id``
-    accepts a list too (real-world smoke-test addition, same rationale as
+    accepts a sequence too (real-world smoke-test addition, same rationale as
     ``state()``).
     """
     return NumericStateExpr(

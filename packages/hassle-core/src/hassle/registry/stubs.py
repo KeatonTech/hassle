@@ -42,6 +42,23 @@ name. This generator instead widens numeric/bool fields to also accept `str`
 accepts a template string wherever it accepts the field's native type) --
 e.g. `brightness_pct: int | str = ...` -- documented here rather than
 introducing a new public type as part of an unrelated milestone.
+
+**Annotation-truth pass (task #28):** every generated ``<Domain>Entity`` class
+now inherits ``str`` -- matching the REAL runtime type (verified in
+``hassle/compiler/helpers.py``: every entity reference the DSL hands back,
+whether from a helper declaration or ``hassle.registry.entities``, is an
+:class:`~hassle.compiler.helpers.EntityRef`, itself a ``str`` subclass). Before
+this, a real decompiled bundle's ``state(e.binary_sensor.hall_motion)`` was a
+**pyright error** even though it is correct, runnable HA-equivalent code: the
+stub's ``BinarySensorEntity`` had no relationship to ``str`` at all, so it
+failed every ``str``-typed (or ``str | list[str]``-typed) parameter pyright
+checked it against. See ``hassle.compiler.builders``/``hassle.compiler.triggers``/
+``hassle.compiler.purpose`` for the matching ``Sequence[str]``/``Sequence[...]``
+widening this pass also applies to invariant ``list[...]``-typed parameters
+(a *second*, independent reason a decompiled bundle used to fail pyright: a
+list of ``EntityRef``/entity-class values is never assignable to an
+invariant ``list[str]``-typed parameter, even once every element type is
+itself ``str``-compatible).
 """
 
 from __future__ import annotations
@@ -297,8 +314,28 @@ def _service_function(service_name: str, service_def: ServiceDef) -> list[str]:
     no instance at all at runtime, `hassle.services._ServiceDomain` -- the
     stub models the call signature pyright checks against, and a plain
     (non-static) method's first parameter would otherwise be mistaken for
-    ``self``, MILESTONES M18)."""
-    params: list[str] = []
+    ``self``, MILESTONES M18).
+
+    **Annotation-truth pass (task #28):** unlike the entity-bound form
+    (:func:`_service_method`, called as ``e.<domain>.<id>.<service>(...)``,
+    where the target entity is implicit -- see
+    ``hassle.compiler.helpers._EntityServiceMethod.__call__``), the namespace
+    form (``hassle.services.<domain>.<service>(...)``) has NO implicit target
+    at all: it delegates straight to ``hassle.compiler.actions.service``,
+    whose ``target=`` is a real, commonly-passed keyword
+    (`docs/dsl-f3.md`/DESIGN §5.3's "target= also accepts the bare entity
+    target sugar"). The generated stub previously had no ``target`` parameter
+    whatsoever, so every decompiled ``<domain>.<service>(target=..., ...)``
+    call -- the decompiler's own canonical namespace-form output, MILESTONES
+    M18 -- was a hard pyright ``reportCallIssue`` ("No parameter named
+    'target'") in a real bundle. Typed the same permissive way
+    ``normalize_target`` actually accepts (a bare entity ref/string, a
+    sequence of them, or an already-built target dict) -- never the
+    non-public ``AreaTarget``/``FloorTarget``/``LabelTarget``/``DeviceIdTarget``
+    helper-return types, which are internal (not part of ``hassle.__all__``,
+    docs/dsl-f3.md) and would make the generated stub reference an
+    unimportable name."""
+    params: list[str] = ["target: str | Sequence[str] | dict[str, Any] = ..."]
     for field_name, field in sorted(service_def.fields.items()):
         py_type = _field_type(field.type, selector=field.selector)
         params.append(f"{field_name}: {py_type} = ...")
@@ -394,11 +431,24 @@ def generate_services_stub(snapshot: RegistrySnapshot) -> str:
         "from __future__ import annotations",
         "",
     ]
-    # `Any` only needed (and only imported) when a selector-typed field
-    # actually rendered to it (`_SELECTOR_PY_TYPE`'s `dict[str, Any]` entries)
-    # or the domain-less fallback above -- never an unused import otherwise.
+    # `Sequence`/`Any` share ONE stdlib import block (ruff/isort's own
+    # grouping: `collections.abc` and `typing` are both stdlib, so there is
+    # no blank line between them -- only before the block and after it,
+    # verified against actual `ruff check --select I001` output on this
+    # generator's content). `Sequence` is only needed when at least one
+    # domain actually rendered a `target=` parameter (task #28: every real
+    # service function gets one; the domain-less `__getattr__`-only fallback
+    # body never does); `Any` is needed for that same `target=` parameter, a
+    # selector-typed field (`_SELECTOR_PY_TYPE`'s `dict[str, Any]` entries),
+    # or the domain-less fallback's `Any` return type -- never an unused
+    # import otherwise.
+    stdlib_imports: list[str] = []
+    if "Sequence" in body_text:
+        stdlib_imports.append("from collections.abc import Sequence")
     if "Any" in body_text:
-        header.append("from typing import Any")
+        stdlib_imports.append("from typing import Any")
+    if stdlib_imports:
+        header.extend(stdlib_imports)
         header.append("")
     return "\n".join(header) + "\n" + body_text
 
@@ -427,14 +477,14 @@ def generate_entities_stub(snapshot: RegistrySnapshot) -> str:
         if method_lines:
             if lines and lines[-1] != "":
                 lines.append("")
-            lines.append(f"class {entity_type}:")
+            lines.append(f"class {entity_type}(str):")
             lines.extend(method_lines)
             lines.append("")
             prev_was_empty = False
         else:
             if not prev_was_empty and lines and lines[-1] != "":
                 lines.append("")
-            lines.append(f"class {entity_type}: ...")
+            lines.append(f"class {entity_type}(str): ...")
             prev_was_empty = True
     if lines and lines[-1] != "":
         lines.append("")

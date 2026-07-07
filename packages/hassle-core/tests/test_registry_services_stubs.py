@@ -52,6 +52,20 @@ def test_services_stub_contains_typed_service_method(snapshot: RegistrySnapshot)
     assert "brightness_pct" in stub
 
 
+def test_services_stub_service_functions_accept_target(snapshot: RegistrySnapshot) -> None:
+    """Regression test (task #28, annotation-truth pass): every generated
+    ``@staticmethod`` service function must accept a ``target=`` parameter --
+    the decompiler's own canonical namespace-form output
+    (``light.turn_on(target=e.light.hallway, ...)``, MILESTONES M18) was a
+    hard `reportCallIssue` ("No parameter named 'target'") in a real
+    decompiled bundle before this, since the underlying
+    ``hassle.compiler.actions.service`` call this delegates to always accepts
+    ``target=``."""
+    stub = generate_services_stub(snapshot)
+    assert "target: str | Sequence[str] | dict[str, Any] = ..." in stub
+    assert "from collections.abc import Sequence" in stub
+
+
 def test_services_stub_module_getattr_present(snapshot: RegistrySnapshot) -> None:
     """The module-level `__getattr__` PEP 562 fallback must ALSO be typed (so
     an unlisted/future domain doesn't become a hard pyright error) -- matches

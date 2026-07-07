@@ -73,6 +73,30 @@ def test_stub_supports_indexing_form(snapshot: RegistrySnapshot) -> None:
     assert "__getitem__" in stub
 
 
+def test_stub_entity_classes_inherit_str(snapshot: RegistrySnapshot) -> None:
+    """Regression test (task #28, annotation-truth pass): every generated
+    ``<Domain>Entity`` class must inherit ``str`` -- matching the REAL
+    runtime type (``hassle.compiler.helpers.EntityRef(str)``). Before this,
+    ``BinarySensorEntity``/``LightEntity``/etc. had no relationship to ``str``
+    at all, so a decompiled bundle's ``state(e.binary_sensor.hall_motion)``
+    was a pyright error (`reportArgumentType`) even though it is correct,
+    runnable code."""
+    stub = generate_entities_stub(snapshot)
+    assert "class LightEntity(str):" in stub
+    assert "class BinarySensorEntity(str): ..." in stub
+    # No entity class may be left without the `str` base (would silently
+    # regress this fix for one specific domain without failing the two
+    # explicit checks above).
+    import re
+
+    class_lines = re.findall(r"^class \w+Entity[^:]*:", stub, flags=re.MULTILINE)
+    assert class_lines, "expected at least one generated entity class"
+    for line in class_lines:
+        assert line.startswith(("class ", "class")) and "(str)" in line, (
+            f"entity class not inheriting str: {line!r}"
+        )
+
+
 def test_stub_uses_attribute_docstrings_not_comments(snapshot: RegistrySnapshot) -> None:
     """The friendly name must be a docstring (a string-literal statement
     immediately following the attribute declaration), not a trailing `#`

@@ -323,13 +323,19 @@ output form, independent of how the DSL source happened to be written).
   `.to(v, id=, enabled=, variables=, for_=)` / `.is_(...)` / `.with_options(...)`;
   for the classic-builder family via `.with_options(...)`.
 - `state(entity_id)`'s `entity_id` (and `.to()`/`.is_()`'s `value`) and
-  `numeric_state(entity_id, ...)`'s `entity_id` accept `str | list[str]`
-  (real-world smoke-test ADDITION, docs/ha-api-notes.md §19.2): the HA UI
-  always stores these fields as a list, even for a single entity/value, and a
-  singleton list decompiles back to a list, never a scalar. Residue-coverage
-  round 2 (docs/ha-api-notes.md §20) extended the **decompiler** side of this
-  to the `state` **condition** path (`to_condition()`'s `entity_id`/`state`
-  were already list-capable at the builder level since round 1; only
+  `numeric_state(entity_id, ...)`'s `entity_id` accept `str | Sequence[str]`
+  (real-world smoke-test ADDITION, docs/ha-api-notes.md §19.2; widened from
+  `str | list[str]` to `str | Sequence[str]` in the task #28 annotation-truth
+  pass — `list[X]` is invariant, so a decompiled bundle's
+  `state(e.<domain>.<id>)` — an entity STUB CLASS, a `str` subclass but not
+  literally `str` — was a pyright error even though it is correct, runnable
+  code; `Sequence` is covariant, and a bare `str` is itself a `Sequence[str]`,
+  so the single-entity form is unaffected): the HA UI always stores these
+  fields as a list, even for a single entity/value, and a singleton list
+  decompiles back to a list, never a scalar. Residue-coverage round 2
+  (docs/ha-api-notes.md §20) extended the **decompiler** side of this to the
+  `state` **condition** path (`to_condition()`'s `entity_id`/`state` were
+  already list-capable at the builder level since round 1; only
   `hassle.decompiler.exprs._cond_state` needed the matching widening) — no
   further DSL surface change, since `state()` is the same dual-purpose builder.
 - `time(at=, after=, before=, weekday=)`: `weekday=` is now also emitted on the

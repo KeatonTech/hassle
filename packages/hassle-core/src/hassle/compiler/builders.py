@@ -9,6 +9,7 @@ HA dicts so compiler output is byte-stable (R8).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from hassle.compiler.durations import normalize_duration
@@ -43,13 +44,24 @@ class StateExpr(_NoBool):
     DESIGN §5.4) are accepted directly on ``.to()`` / ``.is_()`` / ``.with_options()``
     — there is no separate ``with_trigger_options`` wrapper.
 
-    ``entity_id`` (and ``.to()``/``.is_()``'s ``value``) accept ``str | list[str]``
-    (real-world smoke-test addition): the HA UI always stores these as *lists*,
-    even for a single entity/value, and a singleton list must round-trip as a
-    list — never normalized to a scalar (I3, docs/ha-api-notes.md).
+    ``entity_id`` (and ``.to()``/``.is_()``'s ``value``) accept
+    ``str | Sequence[str]`` (real-world smoke-test addition; widened from
+    ``str | list[str]`` to ``str | Sequence[str]`` in the task #28
+    annotation-truth pass -- ``list[X]`` is invariant, so a decompiled
+    bundle's ``state(e.binary_sensor.hall_motion)`` -- an ``EntityRef``/entity
+    stub CLASS, a ``str`` subclass but not literally ``str`` -- and
+    ``state([e.binary_sensor.a, e.binary_sensor.b])`` -- a ``list`` of THOSE,
+    never assignable to an invariant ``list[str]`` parameter even once each
+    element is itself ``str``-compatible -- were both real pyright errors
+    against genuinely correct code. ``Sequence`` is covariant, so both forms
+    typecheck; a bare ``str`` is itself a ``Sequence[str]``, so the
+    single-entity form is unaffected): the HA UI always stores these as
+    *lists*, even for a single entity/value, and a singleton list must
+    round-trip as a list — never normalized to a scalar (I3,
+    docs/ha-api-notes.md).
     """
 
-    def __init__(self, entity_id: str | list[str]) -> None:
+    def __init__(self, entity_id: str | Sequence[str]) -> None:
         self._entity_id = entity_id
         self._from: Any = _UNSET
         self._to: Any = _UNSET
@@ -57,7 +69,7 @@ class StateExpr(_NoBool):
         self._options: dict[str, Any] = {}
 
     @property
-    def entity_id(self) -> str | list[str]:
+    def entity_id(self) -> str | Sequence[str]:
         """The entity id(s) this expression reads (public accessor, DESIGN §5.4)."""
         return self._entity_id
 
@@ -135,11 +147,13 @@ class _Unset:
 _UNSET = _Unset()
 
 
-def state(entity_id: str | list[str]) -> StateExpr:
+def state(entity_id: str | Sequence[str]) -> StateExpr:
     """Build a state trigger/condition for ``entity_id`` (DESIGN §5.3).
 
-    ``entity_id`` accepts a single entity or a list (real-world smoke-test
-    addition: the HA UI always stores this as a list, even for one entity).
+    ``entity_id`` accepts a single entity or a sequence of them (real-world
+    smoke-test addition: the HA UI always stores this as a list, even for one
+    entity; widened to ``Sequence[str]`` in the task #28 annotation-truth
+    pass -- see :class:`StateExpr`'s docstring).
     """
     return StateExpr(entity_id)
 

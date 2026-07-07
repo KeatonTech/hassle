@@ -11,7 +11,7 @@ each other (determinism, R8) and repeated imports in one process stay isolated.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
@@ -111,7 +111,7 @@ def _register(
     options: dict[str, Any],
     func: Callable[..., Any],
     *,
-    decorator_triggers: list[TriggerBuilder] | None = None,
+    decorator_triggers: Sequence[TriggerBuilder] | None = None,
 ) -> None:
     span = options.pop("__span__", None)
     check_options(kind, options, span)
@@ -129,11 +129,11 @@ def _register(
 
 
 def automation(
-    *, triggers: list[TriggerBuilder] | None = None, **options: Any
+    *, triggers: Sequence[TriggerBuilder] | None = None, **options: Any
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Register an automation (DESIGN §5.3). Accepts every HA automation option.
 
-    ``triggers=`` (F3-additive, docs/dsl-f3.md): a list of ``TriggerBuilder``
+    ``triggers=`` (F3-additive, docs/dsl-f3.md): a sequence of ``TriggerBuilder``
     objects -- the same objects ``when()`` accepts -- evaluated at decoration
     time (i.e. built when the ``@automation(...)`` line itself runs, before the
     compiler ever invokes the function body). This is the preferred, canonical
@@ -143,6 +143,17 @@ def automation(
     append after it, in call order (``bundle.py``'s ``compile_registered``).
     ``when()`` remains fully supported and is still the right tool for a
     dynamically-built trigger list (F3 forbids removing it).
+
+    Widened ``list[TriggerBuilder]`` -> ``Sequence[TriggerBuilder]`` in the
+    task #28 annotation-truth pass: this is a type-annotation-only change (no
+    behavior/interface change -- the implementation always just copies the
+    given iterable via ``list(decorator_triggers)``, so anything iterable was
+    already accepted at runtime), needed because ``list[TriggerBuilder]`` is
+    INVARIANT -- a real decompiler-emitted ``triggers=[state(e.<domain>.<x>)
+    .to(...)]`` (a ``list[StateExpr]``) is not assignable to an invariant
+    ``list[TriggerBuilder]``-typed parameter even though every ``StateExpr``
+    structurally satisfies the ``TriggerBuilder`` protocol; ``Sequence`` is
+    covariant, so it does.
 
     The undecorated function is returned unchanged, so a bundle can still call it
     (e.g. a test importing the function). Compilation runs it inside a recorder.

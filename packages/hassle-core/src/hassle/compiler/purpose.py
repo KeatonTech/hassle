@@ -13,10 +13,20 @@ Target forms (DESIGN §5.4): a plain entity_id string (the ``e.<domain>.<id>``
 stub sugar is a later-milestone convenience over the same primitive),
 ``area("...")``, ``floor("...")``, ``label("...")``, ``device_id("...")``.
 Type strings pass through unvalidated here — vocabulary validation is M3.
+
+**Annotation-truth pass (task #28):** each target-helper constructor
+(``area``/``floor``/``label``/``device_id``) accepts ``str | Sequence[str]``,
+not just a bare ``str`` -- a real decompiled bundle's purpose trigger can
+target MULTIPLE areas/floors/labels/devices (HA stores ``target.area_id`` as
+a list whenever more than one area is selected, same "list-valued target
+field" shape already established for ``state()``'s ``entity_id`` /
+``service()``'s ``target=``), and ``area(["back_yard", "front_yard"])`` was a
+hard pyright error before this pass even though it round-trips correctly.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, cast
 
 from hassle.compiler.durations import normalize_duration
@@ -27,7 +37,7 @@ Target = "str | AreaTarget | FloorTarget | LabelTarget | DeviceIdTarget"
 
 
 class AreaTarget:
-    def __init__(self, area_id: str) -> None:
+    def __init__(self, area_id: str | Sequence[str]) -> None:
         self.area_id = area_id
 
     def to_target_dict(self) -> dict[str, Any]:
@@ -35,7 +45,7 @@ class AreaTarget:
 
 
 class FloorTarget:
-    def __init__(self, floor_id: str) -> None:
+    def __init__(self, floor_id: str | Sequence[str]) -> None:
         self.floor_id = floor_id
 
     def to_target_dict(self) -> dict[str, Any]:
@@ -43,7 +53,7 @@ class FloorTarget:
 
 
 class LabelTarget:
-    def __init__(self, label_id: str) -> None:
+    def __init__(self, label_id: str | Sequence[str]) -> None:
         self.label_id = label_id
 
     def to_target_dict(self) -> dict[str, Any]:
@@ -51,30 +61,43 @@ class LabelTarget:
 
 
 class DeviceIdTarget:
-    def __init__(self, device_id: str) -> None:
+    def __init__(self, device_id: str | Sequence[str]) -> None:
         self.device_id = device_id
 
     def to_target_dict(self) -> dict[str, Any]:
         return {"device_id": self.device_id}
 
 
-def area(area_id: str) -> AreaTarget:
-    """``area("office")`` — a purpose-trigger/condition target (DESIGN §5.4)."""
+def area(area_id: str | Sequence[str]) -> AreaTarget:
+    """``area("office")`` — a purpose-trigger/condition target (DESIGN §5.4).
+
+    Also accepts a sequence of area ids (``area(["back_yard", "front_yard"])``,
+    task #28) — HA stores a multi-area purpose-trigger target as a list.
+    """
     return AreaTarget(area_id)
 
 
-def floor(floor_id: str) -> FloorTarget:
-    """``floor("upstairs")`` — a purpose-trigger/condition target (DESIGN §5.4)."""
+def floor(floor_id: str | Sequence[str]) -> FloorTarget:
+    """``floor("upstairs")`` — a purpose-trigger/condition target (DESIGN §5.4).
+
+    Also accepts a sequence of floor ids (task #28), same rationale as ``area()``.
+    """
     return FloorTarget(floor_id)
 
 
-def label(label_id: str) -> LabelTarget:
-    """``label("security")`` — a purpose-trigger/condition target (DESIGN §5.4)."""
+def label(label_id: str | Sequence[str]) -> LabelTarget:
+    """``label("security")`` — a purpose-trigger/condition target (DESIGN §5.4).
+
+    Also accepts a sequence of label ids (task #28), same rationale as ``area()``.
+    """
     return LabelTarget(label_id)
 
 
-def device_id(device_id: str) -> DeviceIdTarget:
-    """``device_id("...")`` — a purpose-trigger/condition target (DESIGN §5.4)."""
+def device_id(device_id: str | Sequence[str]) -> DeviceIdTarget:
+    """``device_id("...")`` — a purpose-trigger/condition target (DESIGN §5.4).
+
+    Also accepts a sequence of device ids (task #28), same rationale as ``area()``.
+    """
     return DeviceIdTarget(device_id)
 
 

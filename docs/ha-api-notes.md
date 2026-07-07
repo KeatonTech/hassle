@@ -3092,3 +3092,72 @@ ordering; the generator now emits one `from module import name as name` line
 per name (wrapped in parens when it would overflow 100 columns, matching
 `ruff format`'s own convention) and renders `__all__` one name per line via
 the same category-then-alphabetical sort.
+
+## 35. Type-annotation truth pass (task #28, `fix/annotation-truth`): the DSL's own stub annotations rejected correct decompiled code
+
+**Field evidence** (owner's real bundle, Pylance *standard* mode — not an HA
+API disagreement, a DSL-internal typing bug; recorded here anyway per this
+repo's established convention of tracking every real-world-bundle finding in
+this file): a decompiled bundle that compiles, validates, and runs correctly
+was full of pyright errors, all traceable to two independent causes:
+
+1. **Generated entity stub classes were never related to `str`.** Runtime
+   truth (verified in `hassle/compiler/helpers.py` before making any change,
+   per this task's explicit instruction): `class EntityRef(str)` — every
+   entity reference the DSL hands back (`hassle.registry.entities`, a helper
+   declaration's return value) genuinely IS a `str` subclass at runtime. The
+   *generated* `.pyi` stub classes (`LightEntity`, `BinarySensorEntity`, …,
+   `hassle.registry.stubs.generate_entities_stub`) had no such relationship
+   — plain classes with no base at all — so `state(e.input_select.day_phase)`
+   was rejected (`BinarySensorEntity`/`InputSelectEntity`/etc. "not
+   assignable to `str`") even though the value really is a `str` at runtime.
+   Fixed: every generated `<Domain>Entity` class now inherits `str`.
+2. **`list[X]`-typed DSL parameters are invariant.** Even after (1), a
+   *list* of entity values (`state([e.input_select.a, e.input_select.b])`, or
+   a `triggers=[state(...).to(...)]` decorator list) still failed: pyright
+   does NOT invariance-check a list-literal argument against its parameter's
+   expected type (it infers the literal's element type FROM the expected
+   type instead — a special case for literal arguments), but a
+   *variable* holding a `list[SomeConcreteClass]` passed to a
+   `list[SomeOtherType]`-typed parameter fails, since `list` is invariant —
+   confirmed empirically with a minimal pyright repro before touching any
+   source. This bites the decompiler specifically because it sometimes emits
+   trigger lists as a pre-built expression the type checker cannot special-
+   case, and always emits `triggers=[...]` as a decorator kwarg whose
+   contents are concretely-typed builder instances (`StateExpr`,
+   `NumericStateExpr`, …), not the `TriggerBuilder` protocol type the
+   parameter is declared with. Fixed: every affected parameter across the
+   compiler surface (`state`/`numeric_state`'s `entity_id`,
+   `area`/`floor`/`label`/`device_id`'s id parameter, `@automation`'s
+   `triggers=`) widened from an invariant `list[X]` to `collections.abc.
+   Sequence[X]` (covariant) — `str` is itself `Sequence[str]`, so the
+   single-value form is unaffected, and every existing caller (a list
+   literal or a `list[...]`-typed variable) still satisfies the wider type.
+
+**Incidental gap found while building the pyright gate test (not named in
+the field evidence, but the same class of bug and squarely in scope):** the
+generated `hassle.services` stub (`hassle.registry.stubs.
+generate_services_stub`, MILESTONES M18) never had a `target=` parameter on
+any generated service function at all — every decompiled namespace-form
+service call (`light.turn_on(target=e.light.hallway, ...)`, the decompiler's
+own canonical M18 output whenever a registry snapshot is supplied) was a hard
+`reportCallIssue` ("No parameter named 'target'") in a real bundle, since
+`target=` is a real, always-available keyword on the underlying
+`hassle.compiler.actions.service` call every namespace method delegates to.
+Fixed: `target: str | Sequence[str] | dict[str, Any] = ...` added as the
+first parameter of every generated service function (never on the
+entity-bound method form, `e.<domain>.<id>.<service>(...)` — there the
+target entity is implicit, per `hassle.compiler.helpers.
+_EntityServiceMethod.__call__`, which does not and must not accept a
+`target=` override).
+
+**Scope discipline:** `zone(entity_id, ...)`/`calendar(entity_id, ...)` were
+deliberately NOT widened — no corpus fixture or field report shows either
+accepting a list-valued `entity_id`, and DESIGN §5.4 documents them as
+single-entity only; widening them would be speculative, not evidence-driven.
+`normalize_target`/`service()`/`ServiceAction`'s `target: Any` parameters were
+already maximally permissive and needed no change. Runtime behavior is
+unchanged everywhere (annotations + the one `.pyi` generator addition only);
+the full test suite proves it (`pytest`/`ruff`/`pyright --strict` all green,
+plus the new pyright-gate tests in
+`packages/hassle-dev/tests/test_annotation_truth_pyright_gate.py`).
