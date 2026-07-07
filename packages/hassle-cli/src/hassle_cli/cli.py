@@ -344,7 +344,11 @@ def pull(allow_dirty: bool) -> None:
         stub_changed = _stub_changed(registry_snapshot, root)
         stub_path = _write_stub_if_changed(registry_snapshot, root)
         if stub_changed:
-            console.print(f"[cyan]hassle pull: wrote {_esc(stub_path)}[/cyan]")
+            # Root-relative (matches `scaffold_pyproject_file`'s "wrote
+            # pyproject.toml" convention, `hassle_cli.init_cmd`) -- shorter,
+            # never wraps mid-word in a narrow CI console, and nicer than an
+            # absolute /tmp-in-tests or /home/user path in real UX.
+            console.print(f"[cyan]hassle pull: wrote {_esc(stub_path.relative_to(root))}[/cyan]")
 
     # MILESTONES M15 work item B: an old-layout bundle (the RETIRED
     # `automations/`/`scripts/`/`helpers/` per-kind trees) is migrated into
@@ -1052,7 +1056,10 @@ def stubs(refresh: bool) -> None:
 
     snapshot = RegistrySnapshot.load(registry_path)
     out_path = _write_stub_if_changed(snapshot, root)
-    console.print(f"[green]hassle stubs: wrote {_esc(out_path)}[/green]")
+    # Root-relative (matches `scaffold_pyproject_file`'s "wrote
+    # pyproject.toml" convention) -- see the matching comment on the `pull`
+    # print site.
+    console.print(f"[green]hassle stubs: wrote {_esc(out_path.relative_to(root))}[/green]")
 
 
 def _write_stub_if_changed(snapshot: object, root: Path) -> Path:

@@ -26,6 +26,18 @@ def _stub_path(root: Path) -> Path:
     return root / "typings" / "hassle" / "registry" / "__init__.pyi"
 
 
+def _unwrapped(output: str) -> str:
+    """Undo rich's console-width word-wrap before a substring check.
+
+    A long path (or any long literal) printed via `Console.print` can be
+    hard-wrapped mid-word at the runner's console width (observed in CI:
+    ``hassle/registry/__in\\nit__.pyi``) -- the exact wrap point depends on
+    terminal width, which varies between local runs, macOS CI, and ubuntu CI.
+    Stripping newlines before a substring assertion makes the check
+    width-independent (the underlying content is unaffected either way)."""
+    return output.replace("\n", "")
+
+
 def test_pull_writes_stub_when_missing(git_repo: Path, cli, fake_backend, toml_writer) -> None:
     _backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
@@ -52,8 +64,12 @@ def test_pull_prints_step_line_only_when_stub_changes(
 
     first = cli(["pull"], cwd=git_repo)
     assert first.exit_code == 0, first.output
-    assert "typings" in first.output
-    assert "hassle/registry/__init__.pyi" in first.output.replace("\\", "/")
+    # `_unwrapped` guards against rich hard-wrapping the (now root-relative,
+    # but still occasionally long) path mid-word at the runner's console
+    # width -- reproduced in CI as `hassle/registry/__in\nit__.pyi`.
+    first_output = _unwrapped(first.output).replace("\\", "/")
+    assert "typings" in first_output
+    assert "hassle/registry/__init__.pyi" in first_output
 
     _commit_all(git_repo, "first pull")
 
@@ -66,7 +82,7 @@ def test_pull_prints_step_line_only_when_stub_changes(
     # and pull must not print a step line for a no-op stub refresh (matches
     # `_write_registry_snapshot`'s write-if-changed convention).
     assert stub_path.read_text(encoding="utf-8") == before
-    assert "typings" not in second.output
+    assert "typings" not in _unwrapped(second.output)
 
 
 def test_pull_stub_is_byte_stable_across_second_pull(
@@ -144,7 +160,7 @@ def test_pull_stub_updates_when_registry_snapshot_changes(
 
     result = cli(["pull"], cwd=git_repo)
     assert result.exit_code == 0, result.output
-    assert "typings" in result.output
+    assert "typings" in _unwrapped(result.output)
 
     stub_text = _stub_path(git_repo).read_text(encoding="utf-8")
     assert "brand_new: LightEntity" in stub_text
