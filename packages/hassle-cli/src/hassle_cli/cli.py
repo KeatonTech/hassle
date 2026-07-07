@@ -306,6 +306,45 @@ def pull(allow_dirty: bool) -> None:
         # category-based placement for newly-adopted objects (below).
         registry_snapshot = _write_registry_snapshot(backend, root)
 
+    # MILESTONES M15 work item B: an old-layout bundle (the RETIRED
+    # `automations/`/`scripts/`/`helpers/` per-kind trees) is migrated into
+    # the new category-first, root-level layout on this pull -- BEFORE the
+    # rest of the pull pipeline runs, so every downstream step (plan,
+    # manifest advance) sees each migrated object already at its new home.
+    # Never touches HA or the manifest itself (source-only reorganization,
+    # DESIGN §7.3/§8.2: the plan diffs on compiled-JSON hash, never on
+    # `source_path`, so this is a pure no-op for compute_plan).
+    from hassle_cli.layout_migration import bundle_has_old_layout, migrate_old_layout
+
+    if bundle_has_old_layout(root):
+        new_paths = {
+            key: bundle_ops.default_source_path(key, registry=registry_snapshot)
+            for key in compile_result.objects
+        }
+        migration_report = migrate_old_layout(
+            root, compile_result, registry=registry_snapshot, new_source_path_for=new_paths
+        )
+        for move in migration_report.moves:
+            console.print(
+                f"[cyan]  migrated[/cyan]  {move.object_key}: {move.old_path} -> {move.new_path}"
+            )
+        for deleted in migration_report.deleted_files:
+            console.print(f"[cyan]   deleted[/cyan]  {deleted} (no content left after migration)")
+        if migration_report.migrated:
+            # The working tree just changed under compile_result's feet --
+            # recompile so the rest of this pull sees each object's NEW
+            # source_path (source_path_for below reads decl_span_for, which
+            # is only valid against the just-compiled tree).
+            local_objects, compile_result = bundle_ops.compile_local_objects(root)
+            from hassle_cli.config import CURRENT_BUNDLE_FORMAT, bump_bundle_format
+
+            if load_config(root).bundle_format < CURRENT_BUNDLE_FORMAT:
+                bump_bundle_format(root)
+                console.print(
+                    f"[cyan]hassle pull: bundle_format upgraded to {CURRENT_BUNDLE_FORMAT} "
+                    "(category-first layout, MILESTONES M15).[/cyan]"
+                )
+
     ignore_result = apply_ignore_globs(
         local_objects=local_objects, remote_objects=remote_objects, ignore_globs=config.ignore
     )

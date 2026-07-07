@@ -22,6 +22,16 @@ Fields:
   that Hassle must never adopt, refresh, or delete -- see `hassle_cli.ignore_filter`
   for the filtering semantics. Defaults to empty (today's "nothing is ever
   unmanaged" behavior is unchanged unless the user opts in).
+
+MILESTONES M15 work item B bumps `CURRENT_BUNDLE_FORMAT` to 2 (the
+category-first, root-level bundle layout -- the RETIRED per-kind trees
+`automations/`/`scripts/`/`helpers/` are a breaking layout change an OLDER
+CLI build cannot make sense of, the exact M9-test-4 "older CLI, newer bundle"
+shape). Unlike a hand-authored `hassle.toml` bump, format `2` is written by
+`hassle pull` ITSELF (`bump_bundle_format`) the moment it finishes migrating
+an old-layout bundle -- never by `hassle init` retroactively rewriting an
+existing bundle's file, and never required before migration can run (a
+format-`1` bundle is exactly what triggers migration in the first place).
 """
 
 from __future__ import annotations
@@ -38,7 +48,13 @@ CONFIG_FILENAME = "hassle.toml"
 #: ever one "major" component, matching how `format_version`/`bundle_format`
 #: has always been stored, a single int) refuses to run with a clear upgrade
 #: error rather than attempting a partial operation.
-CURRENT_BUNDLE_FORMAT = 1
+#:
+#: MILESTONES M15 work item B: bumped 1 -> 2 for the category-first,
+#: root-level layout (the RETIRED `automations/`/`scripts/`/`helpers/` trees).
+#: A format-1 bundle is NOT refused (only NEWER-than-understood is, per M9
+#: test 4's "older CLI accepts older/equal" rule) -- `hassle pull` migrates it
+#: in place and writes `bundle_format = 2` itself once migration completes.
+CURRENT_BUNDLE_FORMAT = 2
 
 
 @dataclass
@@ -107,6 +123,37 @@ def persist_ha_url(bundle_root: Path, ha_url: str) -> None:
     else:
         for i, line in enumerate(lines):
             if placeholder.match(line):
+                lines[i] = new_line
+                break
+        else:
+            lines.append(new_line)
+    toml_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def bump_bundle_format(bundle_root: Path, *, to: int = CURRENT_BUNDLE_FORMAT) -> None:
+    """Write/replace `bundle_format` in the bundle's `hassle.toml` (MILESTONES
+    M15 work item B: `hassle pull` calls this itself once it finishes
+    migrating an old-layout bundle to the new one -- never a hand-authored
+    step). Line-surgical, same convention as `persist_ha_url`: every other
+    line is preserved byte-for-byte. Also replaces a legacy `format_version =`
+    line in place (rather than leaving a stale key alongside a new one) since
+    `load_config` prefers `bundle_format` but a leftover `format_version` line
+    would be confusing to a human reading the file afterward."""
+    toml_path = bundle_root / CONFIG_FILENAME
+    new_line = f"bundle_format = {to}"
+    if not toml_path.is_file():
+        toml_path.write_text(new_line + "\n", encoding="utf-8")
+        return
+    lines = toml_path.read_text(encoding="utf-8").splitlines()
+    bundle_format_re = re.compile(r"^\s*bundle_format\s*=")
+    format_version_re = re.compile(r"^\s*format_version\s*=")
+    for i, line in enumerate(lines):
+        if bundle_format_re.match(line):
+            lines[i] = new_line
+            break
+    else:
+        for i, line in enumerate(lines):
+            if format_version_re.match(line):
                 lines[i] = new_line
                 break
         else:
