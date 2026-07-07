@@ -228,9 +228,16 @@ def test_presupposition_add_automation_purpose_trigger(sample_bundle: Path) -> N
 def test_presupposition_refactor_into_macro(sample_bundle: Path) -> None:
     """Task 7: MORE THAN ONE automation sends the same kind of notification
     (same service, same shape) -- real duplication to extract, not falling
-    back to "add a second one first"."""
+    back to "add a second one first".
+
+    MILESTONES M18: `notify.notify` exists in the acceptance snapshot, so a
+    real `hassle pull` now decompiles it to the typed namespace form
+    (`notify.notify(...)`) rather than `service("notify.notify", ...)` --
+    the duplication presupposition itself is unaffected (still MORE THAN ONE
+    call site), only the literal call-site spelling changed.
+    """
     src = _misc_source(sample_bundle)
-    assert src.count('"notify.notify"') >= 2
+    assert src.count("notify.notify(") >= 2
     assert (sample_bundle / "lib" / "README.md").is_file()
 
 
