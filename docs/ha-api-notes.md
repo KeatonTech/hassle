@@ -2888,3 +2888,42 @@ implementer, recorded here per this doc's own convention:
   survives a migration exactly as it would survive an ordinary object
   deletion — one predicate, two callers, never two slightly-different "is
   this file empty" implementations that could disagree.
+
+## 32. M17: bundle-as-uv-project scaffold — auto-detected toolchain path is
+machine-specific by design; acceptance-bundle determinism (`m17/bundle-uv-project`)
+
+`hassle init`/`hassle pull` scaffold `pyproject.toml` at the bundle root
+(MILESTONES M17, `hassle_cli.uv_project`), with a `[tool.uv.sources]`
+`hassle-cli = { path = ..., editable = true }` entry when the running CLI is
+itself an editable install from a resolvable Hassle source checkout
+(auto-detected by walking up from `hassle_cli.__file__` to a directory whose
+`pyproject.toml` has `[project].name == "hassle-cli"`), or from an explicit
+`toolchain_path` in `hassle.toml` (highest priority — beats auto-detection).
+
+**This auto-detected path is deliberately machine-specific.** Two developers
+(or two machines for the same developer) cloning this repo to different
+absolute paths get different `[tool.uv.sources]` entries in bundles they
+`init`/`pull` locally — this is intentional (the whole point is pointing at
+*this machine's* checkout) and not a bug to "fix" by normalizing it away in
+general. The one place this bites: `hassle-dev acceptance-bundle` drives the
+REAL `hassle pull` pipeline (`hassle_dev.bundle_gen`, MILESTONES M9 test 3)
+from inside THIS repo's own dev checkout, so without intervention its output
+would embed the CI runner's/developer's own absolute checkout path — breaking
+the generator's byte-identical-across-machines determinism contract (R8).
+Fixed the same way that module already normalizes `hassle.toml`'s
+`ha_url`/`manifest.lock`'s `synced_at` (`_normalize_for_determinism`): after
+the real pull completes, the generator deletes the just-scaffolded
+`pyproject.toml` and re-scaffolds it with `scaffold_pyproject(...,
+suppress_sources=True)`, producing the exact bare-dependency shape a
+published-from-PyPI `hassle-cli` (no checkout to find at all) would. This is
+a post-processing normalization of the generator's OWN output, not a
+hand-edit of "a bundle" in the R3/golden-files sense — same category as the
+existing `ha_url`/`synced_at` normalizations it sits next to in that
+function.
+
+`doctor_report_lines` (the `hassle doctor` uv-project status check) is
+filesystem-only by contract (no `uv`/subprocess spawned) specifically so it
+stays usable and testable offline — it inspects the resolved
+`[tool.uv.sources]` path's existence on disk, never attempts to actually run
+`uv run hassle --help`, even though its text mentions that as the thing the
+resolved state should make possible.

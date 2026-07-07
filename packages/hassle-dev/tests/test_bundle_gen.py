@@ -60,6 +60,31 @@ def test_generated_bundle_has_no_fake_backend_token_or_pycache(sample_bundle: Pa
     assert not list(sample_bundle.rglob("__pycache__"))
 
 
+# -- MILESTONES M17: uv-project scaffold determinism -------------------------
+
+
+def test_generated_bundle_has_pyproject_without_absolute_path(sample_bundle: Path) -> None:
+    # `hassle pull` (driven by this generator) now scaffolds `pyproject.toml`
+    # (MILESTONES M17) -- it must use the bare-dependency shape here (no
+    # [tool.uv.sources]), never embedding a path specific to the machine/
+    # checkout that happened to run this generator (R8/M9 test 3 precondition).
+    pyproject = sample_bundle / "pyproject.toml"
+    assert pyproject.is_file()
+    text = pyproject.read_text(encoding="utf-8")
+    assert "[tool.uv.sources]" not in text
+    assert 'dependencies = ["hassle-cli"]' in text
+
+
+def test_generated_bundle_contains_no_absolute_path_anywhere(sample_bundle: Path) -> None:
+    repo_root_str = str(REPO_ROOT)
+    for path in sample_bundle.rglob("*"):
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        assert repo_root_str not in text, path
+        assert str(sample_bundle) not in text, path
+
+
 def test_generated_sources_are_decompiled_not_handwritten(sample_bundle: Path) -> None:
     # The decompiler's own canonical form (`@automation(...)`, `e.<domain>.<id>`
     # entity refs, `from hassle import *`) -- proof this came out of the real

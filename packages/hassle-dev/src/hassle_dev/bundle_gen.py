@@ -84,6 +84,17 @@ the R3/golden-files sense) so the emitted tree is byte-identical seed-to-seed;
 also removed for the same reason (they are already `.gitignore`d,
 docs/`hassle_cli.git_support.GITIGNORE_CONTENT`, and are not part of what a
 git clone of a real pulled bundle would ever contain).
+
+MILESTONES M17 adds a second such normalization: `hassle pull` now scaffolds
+`pyproject.toml` (bundle-as-uv-project), with a `[tool.uv.sources]` entry
+pointing at whatever toolchain checkout auto-detection resolves ON THE
+MACHINE RUNNING THIS GENERATOR (real, useful behavior for an actual user --
+see `hassle_cli.uv_project`'s module docstring -- but machine/checkout-
+specific BY DESIGN, so it would break this generator's byte-identical-
+across-machines contract). `_normalize_for_determinism` re-scaffolds it with
+`suppress_sources=True` immediately after the real pull, the exact
+bare-dependency shape a published-from-PyPI `hassle-cli` (no checkout to
+find) would produce.
 """
 
 from __future__ import annotations
@@ -362,6 +373,23 @@ def _normalize_for_determinism(bundle_root: Path) -> None:
             for line in lines
         ]
         toml_path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+
+    # MILESTONES M17: `hassle pull` (driven above) scaffolds `pyproject.toml`
+    # with a `[tool.uv.sources]` entry pointing at whatever toolchain checkout
+    # auto-detection resolves on THIS machine -- for a real user that's the
+    # useful, intended behavior, but it would make this generator's output
+    # embed a machine/checkout-specific absolute path (R8/M9 test 3's
+    # determinism precondition: byte-identical across machines and runs).
+    # Rewritten here to the bare-dependency shape, same
+    # normalize-after-the-real-pull convention as `ha_url` above (rather than
+    # threading a suppress flag through the CLI's `pull` command, which has no
+    # other reason to know about this generator).
+    pyproject_path = bundle_root / "pyproject.toml"
+    if pyproject_path.is_file():
+        from hassle_cli.uv_project import scaffold_pyproject
+
+        pyproject_path.unlink()
+        scaffold_pyproject(bundle_root, toolchain_path=None, suppress_sources=True)
 
     for pycache in bundle_root.rglob("__pycache__"):
         shutil.rmtree(pycache, ignore_errors=True)

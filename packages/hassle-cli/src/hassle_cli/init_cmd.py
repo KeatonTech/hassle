@@ -8,7 +8,8 @@ import json
 from pathlib import Path
 
 from hassle_cli import git_support
-from hassle_cli.config import CONFIG_FILENAME, write_default_config
+from hassle_cli.config import CONFIG_FILENAME, load_config, write_default_config
+from hassle_cli.uv_project import scaffold_pyproject
 
 # DESIGN §11 layer 1 ("free": generated stubs + shipped `.vscode/settings.json`
 # -> Pylance autocompletion/typo-squiggles with zero configuration).
@@ -188,6 +189,24 @@ def scaffold_vscode_settings(root: Path) -> list[str]:
     return steps
 
 
+def scaffold_pyproject_file(root: Path) -> list[str]:
+    """Write `pyproject.toml` at `root` IF MISSING (MILESTONES M17:
+    bundle-as-uv-project) -- never touches an existing one (I6, same
+    convention as `lib/README.md`/`tests/README.md`; unlike
+    `.vscode/settings.json`, which is wholly machine-generated and always
+    rewritten). Reads the bundle's `toolchain_path` config (if any) so an
+    explicit setting beats auto-detection (`hassle_cli.uv_project`'s
+    resolution order). Shared by `hassle init` and `hassle pull`."""
+    steps: list[str] = []
+    toolchain_path = load_config(root).toolchain_path
+    result = scaffold_pyproject(root, toolchain_path=toolchain_path)
+    if result.wrote:
+        steps.append("wrote pyproject.toml")
+        if result.note is not None:
+            steps.append(result.note)
+    return steps
+
+
 def init_bundle(root: Path) -> list[str]:
     """Scaffold `root` as a fresh Hassle bundle. Idempotent (safe to re-run).
     Returns a list of human-readable steps taken, for the CLI to print."""
@@ -216,6 +235,11 @@ def init_bundle(root: Path) -> list[str]:
     if not config_path.is_file():
         write_default_config(root)
         steps.append(f"wrote {CONFIG_FILENAME}")
+
+    # MILESTONES M17: bundle-as-uv-project scaffold -- after hassle.toml
+    # exists (a fresh one has no `toolchain_path`, but a pre-existing bundle
+    # re-running `init` may already have one set by hand).
+    steps.extend(scaffold_pyproject_file(root))
 
     workflow_dir = root / ".github" / "workflows"
     workflow_dir.mkdir(parents=True, exist_ok=True)

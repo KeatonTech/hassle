@@ -760,6 +760,82 @@ canonically):**
 
 ---
 
+## M17 — Bundle-as-uv-project scaffold (local path source; PyPI deferred) (owner-commissioned)
+
+**Goal:** `uv run hassle ...` should work standalone inside a bundle directory, without the
+user having to know this is a monorepo workspace member. `hassle init`/`hassle pull` scaffold
+a `pyproject.toml` at the bundle root that declares the bundle as its own tiny uv project
+depending on `hassle-cli`, using a local path source when a toolchain source checkout can be
+resolved (this repo, cloned, not yet published to PyPI) and falling back to a bare dependency
+otherwise (works once `hassle-cli` is published).
+
+**Binding semantics:**
+- `hassle init` and `hassle pull` scaffold `pyproject.toml` at the bundle root **if missing**,
+  and **never touch an existing one** — pyproject is user territory once created (I6), unlike
+  `.vscode/settings.json` (which is wholly machine-generated and rewritten every time). This
+  holds even if the existing file is malformed TOML: Hassle never parses or validates it, just
+  checks for its existence.
+- Content when scaffolding: `[project]` `name` = slugified bundle directory name (reuses
+  `hassle.ir.keys.slugify`), `version = "0.0.0"`, `requires-python = ">=3.12"`,
+  `dependencies = ["hassle-cli"]`. When a toolchain source checkout is resolvable (see below),
+  additionally: `[tool.uv.sources]` `hassle-cli = { path = "<toolchain>/packages/hassle-cli",
+  editable = true }`.
+- **Toolchain path resolution order** (first hit wins):
+  1. An explicit `toolchain_path` key in `hassle.toml` (new config-surface field, `config.py`;
+     documented in that module's docstring same as `ha_url`/`ignore`/etc.).
+  2. Auto-detect: resolve `hassle_cli.__file__` upward looking for a directory containing a
+     `pyproject.toml` whose `[project].name == "hassle-cli"` (i.e. the running CLI is an
+     editable install from a source checkout, exactly this repo's own dev loop) — the
+     `[tool.uv.sources]` path then points at that checkout's `packages/hassle-cli`.
+  3. Neither resolves → scaffold WITHOUT `[tool.uv.sources]` (bare dependency, the shape that
+     works once `hassle-cli` is on PyPI) and print a one-line note that `uv run hassle` needs
+     either a published package or a `toolchain_path` set in `hassle.toml`.
+- `.vscode/settings.json` is unchanged by this milestone (no settings-merge implemented; out of
+  scope, left exactly as today's rewrite-every-time behavior).
+- `hassle doctor` reports uv-project status as three offline, filesystem-only checks (no
+  subprocess spawning `uv` in unit tests — a live `uv run hassle --help` invocation is
+  mentioned in doctor's text but never executed by the check itself):
+  1. `pyproject.toml` present?
+  2. If present and it has a `[tool.uv.sources]` `hassle-cli` path entry, does that path exist
+     on disk?
+  3. A one-line "looks runnable via `uv run hassle`" / actionable-note summary derived purely
+     from (1)+(2), never a real subprocess call.
+- **Determinism:** the scaffolded `pyproject.toml` is byte-stable given the same bundle dir
+  name + the same resolved toolchain path (or its absence) — no wall-clock, no randomness. The
+  auto-detected path is machine-specific BY DESIGN (a comment line inside the generated
+  `[tool.uv.sources]` block says so, and this is documented in `docs/ha-api-notes.md`) — but
+  `hassle-dev acceptance-bundle`'s output must stay byte-identical across machines/runs
+  regardless (R8/M9 test 3's harness precondition): since that generator drives the real
+  `hassle pull` pipeline from inside THIS repo's own editable checkout, auto-detection would
+  otherwise resolve to a real (machine/checkout-specific, but for CI still absolute-path-
+  shaped) path and embed it — this generator suppresses `[tool.uv.sources]` in its output
+  (bare-dependency shape only), the same normalize-after-the-fact convention
+  `_normalize_for_determinism` already uses for `hassle.toml`'s `ha_url`/`synced_at`.
+
+**Write these tests first**
+1. `init` scaffolds `pyproject.toml` with a `[tool.uv.sources]` `hassle-cli` path entry when
+   the toolchain resolution seam is faked to resolve (unit test fakes the seam — this repo's
+   own checkout is also a real, incidental positive case, exercised separately).
+2. Existing `pyproject.toml` is NEVER modified by `init` or `pull`, byte-identical before/after
+   both — including when the existing file is malformed TOML (Hassle must not even attempt to
+   parse it, only check existence).
+3. `toolchain_path` in `hassle.toml` beats auto-detection (a fake auto-detect result present
+   but a different explicit `toolchain_path` config wins); neither resolves → bare
+   `dependencies = ["hassle-cli"]` with no `[tool.uv.sources]` table, plus the one-line note
+   printed by `init`/`pull`.
+4. `doctor` prints the right line for each of: no `pyproject.toml`; `pyproject.toml` present
+   with a resolving sources path; present with a non-resolving (stale) sources path; present
+   with no sources table at all (bare-dependency shape) — all filesystem-only, no `uv`
+   subprocess spawned (assert via monkeypatching `subprocess.run`/`Popen` to raise if called).
+5. `hassle-dev acceptance-bundle` output is byte-identical across two separate runs, and
+   contains no absolute filesystem path anywhere under the generated `pyproject.toml` (or
+   anywhere else in the tree) — extends the existing determinism test for this generator.
+6. `config.py` round-trip: `toolchain_path` written/read via `load_config`/a
+   `persist_toolchain_path`-style writer (line-surgical, same convention as `persist_ha_url`),
+   defaults to `None` when absent.
+
+---
+
 ## Milestone sizing (rough, for planning the swarm)
 
 | Milestone | Size | Parallel workstreams inside |

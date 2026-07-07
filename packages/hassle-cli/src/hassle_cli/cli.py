@@ -272,12 +272,18 @@ def pull(allow_dirty: bool) -> None:
     from hassle_cli.init_cmd import (
         scaffold_agent_docs,
         scaffold_lib_and_tests_readmes,
+        scaffold_pyproject_file,
         scaffold_vscode_settings,
     )
 
     scaffold_lib_and_tests_readmes(root)
     scaffold_vscode_settings(root)
     scaffold_agent_docs(root)
+    # MILESTONES M17: same idempotent-scaffold contract -- a bundle predating
+    # the bundle-as-uv-project change gets `pyproject.toml` on its first pull
+    # too, never overwriting one the user already created.
+    for pyproject_step in scaffold_pyproject_file(root):
+        console.print(f"[dim]{pyproject_step}[/dim]")
 
     ha_url, token = _require_backend_config(root)
     config = load_config(root)
@@ -1120,6 +1126,7 @@ def doctor(sweep_shadows: bool) -> None:
     """Diagnostics: committed-secret scan, orphaned shadow sweep, HA version check."""
     from hassle.backend.version import TESTED_HA_MAX, TESTED_HA_MIN, version_warning
     from hassle_cli.doctor import find_committed_tokens, sweep_orphaned_shadows
+    from hassle_cli.uv_project import doctor_report_lines
 
     console = get_console()
     root = _bundle_root_or_fail()
@@ -1146,6 +1153,12 @@ def doctor(sweep_shadows: bool) -> None:
         f"[dim]doctor: Hassle is tested against Home Assistant "
         f"{TESTED_HA_MIN}-{TESTED_HA_MAX}[/dim]"
     )
+
+    # MILESTONES M17: bundle-as-uv-project status -- filesystem-only, no `uv`
+    # subprocess ever spawned by this check (see `uv_project.doctor_report_lines`
+    # docstring).
+    for line in doctor_report_lines(root):
+        console.print(f"[dim]{line}[/dim]")
 
     if sweep_shadows:
         config = load_config(root)
