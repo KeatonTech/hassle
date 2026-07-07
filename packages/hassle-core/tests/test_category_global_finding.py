@@ -44,10 +44,11 @@ def _normalize(msg: str) -> str:
 
 
 def _write_bundle(tmp_path: Path, filename: str, code: str) -> Path:
+    # MILESTONES M15 work item B: category-shaped files are root-level now
+    # (`<slug>.py`), not under a per-kind tree (`automations/<slug>.py`).
     bundle = tmp_path / "bundle"
     bundle.mkdir(exist_ok=True)
-    (bundle / "automations").mkdir(exist_ok=True)
-    (bundle / "automations" / filename).write_text(code, encoding="utf-8")
+    (bundle / filename).write_text(code, encoding="utf-8")
     return bundle
 
 

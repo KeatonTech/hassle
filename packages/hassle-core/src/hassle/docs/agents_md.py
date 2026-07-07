@@ -34,7 +34,7 @@ hand-edit (your own notes belong in `lib/README.md` or a project README instead)
 
 Every change to this bundle follows the same loop, in this order:
 
-1. **Edit** the `.py` files under `automations/`, `scripts/`, `helpers/`, `lib/`.
+1. **Edit** the root-level `.py` files (e.g. `hvac.py`, `misc.py`) and `lib/`.
 2. **`hassle validate`** — offline; catches unknown entities, bad service params,
    Jinja syntax errors, duplicate ids, and DSL misuse before anything touches HA.
 3. **`hassle test`** — runs this bundle's `tests/` against the deterministic
@@ -80,11 +80,16 @@ planning/pushing.
   — this is what lets the decompiler's helper-declaration check treat the id and
   the Python binding as the same thing on a later pull, and avoids the
   `helper-id-name-mismatch` validator finding.
-- **File organization is user-controlled after the first placement.** The
-  decompiler only picks a default location (by HA UI category, or `*/misc.py`) for
-  an object it has never seen before; after that, an object stays in whatever file
-  you put it in. Feel free to reorganize `automations/`/`scripts/`/`helpers/` by
-  hand — Hassle tracks each object's file in the manifest, not by convention.
+- **Category-first layout: one root-level file per category, mixing kinds; file
+  organization is user-controlled after the first placement.** The decompiler
+  only picks a default location for an object it has never seen before:
+  `<slug(category)>.py` at the bundle root if the object has an HA UI category
+  (automations, scripts, AND every helper kind all share this same rule — a
+  category named "HVAC" puts the HVAC automation, the HVAC script, and the
+  HVAC helpers all in one `hvac.py`), else the shared `misc.py`. After that
+  first placement, an object stays in whatever file you put it in — feel free
+  to reorganize by hand; Hassle tracks each object's file in the manifest, not
+  by convention.
 - **A `hassle push` of a legacy-form remote object may show a one-time
   "modernization (one-time)" diff.** That's expected the first time you re-push an
   object that predates Hassle (inner `platform:`, scalar `delay:`, ...) — Hassle

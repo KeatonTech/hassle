@@ -17,7 +17,7 @@ def test_init_creates_bundle_scaffolding(tmp_path: Path, cli) -> None:
     assert result.exit_code == 0, result.output
     assert (project / "hassle.toml").is_file()
     assert (project / ".gitignore").is_file()
-    assert (project / "automations").is_dir()
+    assert (project / "lib").is_dir()
     assert (project / "tests").is_dir()
     assert (project / ".github" / "workflows").is_dir()
     # git init offered by default in a non-repo dir
@@ -25,18 +25,25 @@ def test_init_creates_bundle_scaffolding(tmp_path: Path, cli) -> None:
 
 
 def test_init_scaffolds_the_full_design_section_6_tree(tmp_path: Path, cli) -> None:
-    """M7.1: `hassle init` follows the tree layout (DESIGN §6), not just a
-    bare `automations/` -- scripts/helpers/lib are scaffolded too, and no
-    `__init__.py` is written (the loader uses PEP 420 namespace packages,
-    docs/ha-api-notes.md §17.9 RESOLVED)."""
+    """M7.1 (updated by MILESTONES M15 work item B): `hassle init` follows
+    the category-first tree layout (DESIGN §6) -- `lib/`/`tests/` are real
+    scaffolded directories; the OLD per-kind trees (`automations/`,
+    `scripts/`, `helpers/`) are RETIRED (root-level `<slug>.py` files are the
+    layout now, created on demand by the compiler/decompiler, not scaffolded
+    empty directories). No `__init__.py` is written (the loader uses PEP 420
+    namespace packages, docs/ha-api-notes.md §17.9 RESOLVED)."""
     project = tmp_path / "new-house"
     project.mkdir()
     result = cli(["init"], cwd=project)
     assert result.exit_code == 0, result.output
-    for name in ("automations", "scripts", "helpers", "lib", "tests"):
+    for name in ("lib", "tests"):
         assert (project / name).is_dir(), f"missing {name}/"
         assert not (project / name / "__init__.py").exists(), (
             f"{name}/__init__.py should not be scaffolded -- namespace packages need none"
+        )
+    for retired in ("automations", "scripts", "helpers"):
+        assert not (project / retired).exists(), (
+            f"{retired}/ is a RETIRED per-kind tree (MILESTONES M15) -- must not be scaffolded"
         )
 
 

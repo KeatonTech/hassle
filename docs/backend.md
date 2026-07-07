@@ -317,9 +317,11 @@ design work. Concretely, a new domain (e.g. `threshold`) needs:
    at all (there's no identity kwarg to rename, §26.6) — the stored body's
    keys map straight onto the builder's kwargs, generic per-domain (keyed
    off `TEMPLATE_DOMAINS` membership, not a hardcoded domain name);
-   `default_source_path`'s `helpers/misc.py` rule already covers
-   `TEMPLATE_DOMAINS` as a set, so a domain added to that set needs no
-   placement-code change at all.
+   `default_source_path`'s shared root-level `misc.py` rule (MILESTONES M15:
+   category-first layout, superseding the earlier per-kind `helpers/misc.py`)
+   already covers `TEMPLATE_DOMAINS` as a set via `_SCOPE_FOR_KIND`'s shared
+   `"helpers"` scope, so a domain added to that set needs no placement-code
+   change at all.
 6. **Apply order / validation / ignore-glob:** all three are driven by
    `hassle.ir.OBJECT_KINDS` membership or plain object-key string matching —
    zero code changes for a new domain that's added to `OBJECT_KINDS`.

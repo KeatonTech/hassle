@@ -1,11 +1,11 @@
 """M11 — category write-back on push-create (MILESTONES M11, DESIGN §7.3/§9.2).
 
-Pull-side placement (`ux/pull-organization`, docs/ha-api-notes.md §22) already
-maps an HA UI category -> `automations/<slug(category)>.py` /
-`scripts/<slug(category)>.py`. M11 is the reverse: when `hassle push` CREATEs a
-brand-new automation/script whose source file lives at that same
-`<tree>/<slug>.py` shape, Hassle assigns the matching HA category to the new
-object's entity-registry entry -- first registry WRITE (I1: the same
+Pull-side placement (`ux/pull-organization`, docs/ha-api-notes.md §22,
+updated to the M15 work item B root-level shape) maps an HA UI category ->
+root-level `<slug(category)>.py`. M11 is the reverse: when `hassle push`
+CREATEs a brand-new object whose source file lives at that same `<slug>.py`
+shape, Hassle assigns the matching HA category to the new object's
+entity-registry entry -- first registry WRITE (I1: the same
 `config/entity_registry/update` + `config/category_registry/*` WS commands the
 UI itself uses).
 
@@ -25,12 +25,14 @@ category-registry/entity-registry model this milestone adds, described in
 category registry was never actually restricted to the `automation`/`script`
 scopes -- ALL 13 helper kinds (9 storage-collection + 4 template config-entry)
 carry categories under the shared frontend scope `"helpers"`, and `helpers`
-IS now a scope `_SCOPE_FOR_KIND` maps to. Bundle PLACEMENT for helpers is
-UNCHANGED this round (still the flat `helpers/misc.py`, work item B's job) --
-`category_shaped_stem` still only recognizes the `automations/`/`scripts/`
-trees, so a helper CREATE still takes no category action in practice (there is
-no category-shaped helper file yet); `test_scope_for_kind_covers_all_13_helper_kinds`
-below pins the underlying scope map directly, independent of placement.
+IS now a scope `_SCOPE_FOR_KIND` maps to.
+
+**M15 work item B**: bundle PLACEMENT for helpers is no longer the flat
+`helpers/misc.py` -- `category_shaped_stem` is root-level and kind-independent
+now, so a helper CREATEd at a root-level category-shaped file DOES take a
+category action (`test_push_create_helper_assigns_matching_category_under_helpers_scope`),
+under the shared `"helpers"` scope; `test_scope_for_kind_covers_all_13_helper_kinds`
+still pins the underlying scope map directly, independent of placement.
 """
 
 from __future__ import annotations
@@ -86,7 +88,7 @@ def test_push_create_assigns_matching_category_from_source_file() -> None:
                 "automation:auto_hvac_1",
                 "automation",
                 {"id": "auto_hvac_1", "alias": "Keep temp steady"},
-                "automations/automatic_hvac.py",
+                "automatic_hvac.py",
             )
         ]
     )
@@ -107,7 +109,7 @@ def test_push_create_assigns_matching_category_for_script_scope() -> None:
                 "script:take_out_trash",
                 "script",
                 {"alias": "Take out the trash", "sequence": []},
-                "scripts/chores.py",
+                "chores.py",
             )
         ]
     )
@@ -130,7 +132,7 @@ def test_push_create_creates_missing_category_then_assigns() -> None:
                 "automation:auto_hvac_1",
                 "automation",
                 {"id": "auto_hvac_1", "alias": "Keep temp steady"},
-                "automations/automatic_hvac.py",
+                "automatic_hvac.py",
             )
         ]
     )
@@ -153,7 +155,7 @@ def test_push_create_from_misc_file_takes_no_category_action() -> None:
                 "automation:auto_misc_1",
                 "automation",
                 {"id": "auto_misc_1", "alias": "Whatever"},
-                "automations/misc.py",
+                "misc.py",
             )
         ]
     )
@@ -180,22 +182,36 @@ def test_push_create_with_no_source_path_takes_no_category_action() -> None:
     assert backend.categories_for("automation", "auto_none_1") == {}
 
 
-def test_push_create_helper_takes_no_category_action() -> None:
-    """§31.5a correction: helpers DO have a category-registry scope in real
-    HA (the shared `"helpers"` scope, `_SCOPE_FOR_KIND` now maps every helper
-    kind to it) -- this is no longer "helpers have no scope". But M15 work
-    item A does not change bundle PLACEMENT for helpers (still the flat
-    `helpers/misc.py`; work item B's job): `category_shaped_stem` only
-    recognizes the `automations/`/`scripts/` trees, so a helper CREATE still
-    takes no category action in practice, whatever its (hypothetical) source
-    file is named -- there is no category-shaped helper file yet for it to
-    match."""
+def test_push_create_helper_assigns_matching_category_under_helpers_scope() -> None:
+    """MILESTONES M15 work item B: bundle PLACEMENT for helpers now uses the
+    same root-level category-shaped shape as automations/scripts
+    (`category_shaped_stem` is kind-independent and root-level as of work
+    item B) -- so a helper CREATEd at a category-shaped root-level file DOES
+    take a category action now, under the shared `"helpers"` scope
+    (§31.2/§31.6), extending the work-item-A scope map to real placement."""
+    backend = FakeBackend()
+    backend.seed_category("helpers", "cat_hvac", "HVAC")
+
+    plan = Plan(
+        entries=[
+            _create_entry(
+                "input_boolean:hb", "input_boolean", {"id": "hb", "name": "HB"}, "hvac.py"
+            )
+        ]
+    )
+    result = apply_plan(plan, backend, _manifest())
+
+    assert result.succeeded is True
+    assert backend.categories_for("input_boolean", "hb") == {"helpers": "cat_hvac"}
+
+
+def test_push_create_helper_from_misc_file_takes_no_category_action() -> None:
     backend = FakeBackend()
 
     plan = Plan(
         entries=[
             _create_entry(
-                "input_boolean:hb", "input_boolean", {"id": "hb", "name": "HB"}, "helpers/hvac.py"
+                "input_boolean:hb", "input_boolean", {"id": "hb", "name": "HB"}, "misc.py"
             )
         ]
     )
@@ -203,6 +219,7 @@ def test_push_create_helper_takes_no_category_action() -> None:
 
     assert result.succeeded is True
     assert backend.list_categories("input_boolean") == {}
+    assert backend.categories_for("input_boolean", "hb") == {}
 
 
 def test_scope_for_kind_covers_all_13_helper_kinds() -> None:
@@ -235,7 +252,7 @@ def test_category_assignment_failure_does_not_fail_or_rollback_apply() -> None:
                 "automation:auto_hvac_1",
                 "automation",
                 {"id": "auto_hvac_1", "alias": "Keep temp steady"},
-                "automations/automatic_hvac.py",
+                "automatic_hvac.py",
             )
         ]
     )
@@ -264,13 +281,13 @@ def test_category_assignment_failure_does_not_rollback_other_objects_this_run() 
     plan = Plan(
         entries=[
             _create_entry(
-                "input_boolean:hb", "input_boolean", {"id": "hb", "name": "HB"}, "helpers/misc.py"
+                "input_boolean:hb", "input_boolean", {"id": "hb", "name": "HB"}, "misc.py"
             ),
             _create_entry(
                 "automation:auto_hvac_1",
                 "automation",
                 {"id": "auto_hvac_1", "alias": "Keep temp steady"},
-                "automations/automatic_hvac.py",
+                "automatic_hvac.py",
             ),
         ]
     )
@@ -311,7 +328,7 @@ def test_existing_update_never_touches_categories() -> None:
                 "automation",
                 {"id": "auto_hvac_1", "alias": "New alias"},
                 plan_hash,
-                "automations/automatic_hvac.py",
+                "automatic_hvac.py",
             )
         ]
     )
@@ -339,7 +356,7 @@ def test_adopt_action_never_touches_categories() -> None:
                 kind="automation",
                 action=PlanAction.ADOPT,
                 remote=backend.list_remote("automation")[identity],
-                source_path="automations/automatic_hvac.py",
+                source_path="automatic_hvac.py",
             )
         ]
     )

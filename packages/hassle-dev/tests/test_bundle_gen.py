@@ -64,10 +64,10 @@ def test_generated_sources_are_decompiled_not_handwritten(sample_bundle: Path) -
     # The decompiler's own canonical form (`@automation(...)`, `e.<domain>.<id>`
     # entity refs, `from hassle import *`) -- proof this came out of the real
     # pull/decompile pipeline, not a hand-authored fixture file.
-    automations_src = (sample_bundle / "automations" / "misc.py").read_text(encoding="utf-8")
-    assert "from hassle import *" in automations_src
-    assert "hall_light_on_motion" in automations_src
-    assert "e.light.hallway" in automations_src
+    misc_src = (sample_bundle / "misc.py").read_text(encoding="utf-8")
+    assert "from hassle import *" in misc_src
+    assert "hall_light_on_motion" in misc_src
+    assert "e.light.hallway" in misc_src
 
 
 def test_manifest_lock_tracks_every_seeded_object(sample_bundle: Path) -> None:
@@ -117,15 +117,18 @@ def test_untouched_bundle_test_output_shows_the_seeded_xfail(sample_bundle: Path
 # -- 4. emit_tasks' 10 prompts' presuppositions, pinned against this bundle --
 
 
-def _automations_source(bundle: Path) -> str:
-    return (bundle / "automations" / "misc.py").read_text(encoding="utf-8")
+def _misc_source(bundle: Path) -> str:
+    """MILESTONES M15: every seeded object here is uncategorized, so ALL of
+    them (automations, the helper, the script) share the one root-level
+    misc.py -- this helper is named for that shared file, not any one kind."""
+    return (bundle / "misc.py").read_text(encoding="utf-8")
 
 
 def test_presupposition_entity_swap(sample_bundle: Path) -> None:
     """Task 1: hallway motion automation controls `light.hallway` with
     `brightness_pct`, and the swap target `light.living_room` is a real,
     validate-able entity (present in the registry snapshot)."""
-    src = _automations_source(sample_bundle)
+    src = _misc_source(sample_bundle)
     assert "hall_light_on_motion" in src or "hallway_light_on_motion" in src
     assert "e.light.hallway" in src
     assert "brightness_pct=60" in src
@@ -138,16 +141,16 @@ def test_presupposition_add_helper_and_use_it(sample_bundle: Path) -> None:
     """Task 2: the bundle must NOT already have `input_boolean.night_mode`
     (the session adds it) -- and the hallway automation must be a real target
     to wire it into."""
-    helpers_src = (sample_bundle / "helpers" / "misc.py").read_text(encoding="utf-8")
+    helpers_src = (sample_bundle / "misc.py").read_text(encoding="utf-8")
     assert "night_mode" not in helpers_src
-    assert "hall_light_on_motion" in _automations_source(sample_bundle)
+    assert "hall_light_on_motion" in _misc_source(sample_bundle)
 
 
 def test_presupposition_add_condition(sample_bundle: Path) -> None:
     """Task 3: hallway automation currently has NO guest-mode check, but
     `input_boolean.guest_mode` already exists as a declared helper (so the
     session only needs to add the condition, not the helper)."""
-    src = _automations_source(sample_bundle)
+    src = _misc_source(sample_bundle)
     # Isolate the hallway automation's own source block from the file (the
     # file has multiple @automation defs) -- crude but sufficient: guest_mode
     # must not appear anywhere near the hallway function body.
@@ -156,7 +159,7 @@ def test_presupposition_add_condition(sample_bundle: Path) -> None:
     hallway_block = src[start : end if end != -1 else len(src)]
     assert "guest_mode" not in hallway_block
 
-    helpers_src = (sample_bundle / "helpers" / "misc.py").read_text(encoding="utf-8")
+    helpers_src = (sample_bundle / "misc.py").read_text(encoding="utf-8")
     assert 'id="guest_mode"' in helpers_src
 
 
@@ -165,7 +168,7 @@ def test_presupposition_write_sim_test(sample_bundle: Path) -> None:
     condition) so "motion during the day does NOT turn the light on" is a
     real, testable claim -- and the `sim` fixture convention is already used
     in tests/ for the session to pattern-match on."""
-    src = _automations_source(sample_bundle)
+    src = _misc_source(sample_bundle)
     assert "sun(after=" in src
     hallway_test = (sample_bundle / "tests" / "test_hallway.py").read_text(encoding="utf-8")
     assert "simulate(" in hallway_test
@@ -201,7 +204,7 @@ def test_presupposition_refactor_into_macro(sample_bundle: Path) -> None:
     """Task 7: MORE THAN ONE automation sends the same kind of notification
     (same service, same shape) -- real duplication to extract, not falling
     back to "add a second one first"."""
-    src = _automations_source(sample_bundle)
+    src = _misc_source(sample_bundle)
     assert src.count('"notify.notify"') >= 2
     assert (sample_bundle / "lib" / "README.md").is_file()
 
@@ -217,7 +220,7 @@ def test_presupposition_explain_plan_diff(sample_bundle: Path) -> None:
     """Task 9: purely conceptual, but needs the hallway automation's
     `brightness_pct=60` to exist so "changed locally from 60 to 80" makes
     sense (same presupposition as task 1)."""
-    assert "brightness_pct=60" in _automations_source(sample_bundle)
+    assert "brightness_pct=60" in _misc_source(sample_bundle)
 
 
 def test_presupposition_fix_validation_finding(sample_bundle: Path) -> None:
@@ -257,7 +260,7 @@ def test_scoring_nuance_fixing_logic_without_removing_xfail_still_fails(
 
     work = tmp_path / "half_fixed"
     shutil.copytree(sample_bundle, work)
-    automations_path = work / "automations" / "misc.py"
+    automations_path = work / "misc.py"
     text = automations_path.read_text(encoding="utf-8")
     assert 'state(e.input_boolean.holiday_mode).is_("on")' in text
     automations_path.write_text(
@@ -281,7 +284,7 @@ def test_scoring_nuance_fixing_logic_and_removing_xfail_passes(
     work = tmp_path / "fully_fixed"
     shutil.copytree(sample_bundle, work)
 
-    automations_path = work / "automations" / "misc.py"
+    automations_path = work / "misc.py"
     automations_path.write_text(
         automations_path.read_text(encoding="utf-8").replace(
             'state(e.input_boolean.holiday_mode).is_("on")',

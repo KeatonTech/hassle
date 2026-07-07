@@ -165,14 +165,18 @@ accepted keywords; anything the wrapper doesn't understand falls back to a plain
 `service("script.<id>", ...)` action instead of a rewritten call, so no data is
 ever silently dropped (I3).
 
-## Category-based file placement
+## Category-first file placement
 
 The decompiler only decides file placement for an object it has never seen before:
-its default is one file per HA UI category (`automations/<slug(category)>.py`, from
-the entity registry's category, if any) else `automations/misc.py` /
-`scripts/misc.py` / `helpers/misc.py`. After that first placement, **file
-organization is entirely user-controlled** — an object always stays in whatever
-file the user puts it in (tracked by the manifest), never auto-moved.
+its default is one **root-level, mixed-kind** file per HA UI category —
+`<slug(category)>.py`, from the object's OWN entity-registry category (automations
+and scripts each have their own category-registry scope; every helper kind shares
+one scope, `"helpers"` — a category named "HVAC" puts the HVAC automation, the
+HVAC script, and the HVAC helpers all in the SAME `hvac.py`) — else the single
+shared `misc.py` for every uncategorized object of every kind. After that first
+placement, **file organization is entirely user-controlled** — an object always
+stays in whatever file the user puts it in (tracked by the manifest), never
+auto-moved.
 
 An optional module-level `CATEGORY: str = "Automatic HVAC"` in a category-shaped
 file supplies the *exact* display name Hassle uses if it ever has to create that

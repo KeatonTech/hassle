@@ -71,7 +71,7 @@ def test_direct_backend_create_category_payload_uses_category_global_exactly() -
         backend,
         "automation",
         "auto_hvac_1",
-        "automations/automatic_hvac.py",
+        "automatic_hvac.py",
         category_override="Automatic HVAC",
     )
 

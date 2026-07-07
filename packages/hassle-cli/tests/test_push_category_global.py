@@ -14,6 +14,12 @@ Covers the milestone's push-side tests:
    by `test_push_category_writeback.py`; not duplicated here).
 5. An existing category match is reused verbatim and never renamed, even
    when the file also carries a (matching) `CATEGORY` global.
+
+MILESTONES M15 work item B: category-shaped files are root-level now
+(`<slug>.py`). The `git_repo` fixture's own seed file, `hallway.py`, is ITSELF
+category-shaped under the new layout -- every test below deletes it first so
+its own "Hallway" category never pollutes the exact-category assertions here
+(this suite is about the ONE file each test writes, not the fixture's seed).
 """
 
 from __future__ import annotations
@@ -21,13 +27,22 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def _remove_fixture_seed_file(git_repo: Path) -> None:
+    """The `git_repo` fixture seeds a root-level `hallway.py`, which is
+    itself category-shaped under MILESTONES M15's layout -- remove it so this
+    module's exact-category assertions test only the ONE file each test
+    writes, not an incidental second "Hallway" category."""
+    (git_repo / "hallway.py").unlink()
+
+
 def test_push_create_uses_category_global_as_exact_display_name(
     git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
     backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
+    _remove_fixture_seed_file(git_repo)
 
-    (git_repo / "automations" / "automatic_hvac.py").write_text(
+    (git_repo / "automatic_hvac.py").write_text(
         """
 from hassle import automation, service, state, when
 
@@ -64,8 +79,9 @@ def test_push_create_uses_punctuated_category_global_verbatim(
     some slug-derived approximation of it."""
     backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
+    _remove_fixture_seed_file(git_repo)
 
-    (git_repo / "automations" / "automatic_hvac.py").write_text(
+    (git_repo / "automatic_hvac.py").write_text(
         """
 from hassle import automation, service, state, when
 
@@ -94,8 +110,9 @@ def test_push_create_mismatched_category_global_ignored_with_warning(
 ) -> None:
     backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
+    _remove_fixture_seed_file(git_repo)
 
-    (git_repo / "automations" / "automatic_hvac.py").write_text(
+    (git_repo / "automatic_hvac.py").write_text(
         """
 from hassle import automation, service, state, when
 
@@ -131,12 +148,13 @@ def test_push_existing_category_match_never_renamed_even_with_category_global(
 ) -> None:
     backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
+    _remove_fixture_seed_file(git_repo)
     # Slugifies to the SAME slug the source path implies ("automatic_hvac")
     # but is spelled differently from the CATEGORY global below, so a
     # renaming write-back would be observable if it (wrongly) happened.
     backend.seed_category("automation", "cat_hvac", "automatic hvac")
 
-    (git_repo / "automations" / "automatic_hvac.py").write_text(
+    (git_repo / "automatic_hvac.py").write_text(
         """
 from hassle import automation, service, state, when
 

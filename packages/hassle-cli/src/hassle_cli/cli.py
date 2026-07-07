@@ -306,6 +306,45 @@ def pull(allow_dirty: bool) -> None:
         # category-based placement for newly-adopted objects (below).
         registry_snapshot = _write_registry_snapshot(backend, root)
 
+    # MILESTONES M15 work item B: an old-layout bundle (the RETIRED
+    # `automations/`/`scripts/`/`helpers/` per-kind trees) is migrated into
+    # the new category-first, root-level layout on this pull -- BEFORE the
+    # rest of the pull pipeline runs, so every downstream step (plan,
+    # manifest advance) sees each migrated object already at its new home.
+    # Never touches HA or the manifest itself (source-only reorganization,
+    # DESIGN §7.3/§8.2: the plan diffs on compiled-JSON hash, never on
+    # `source_path`, so this is a pure no-op for compute_plan).
+    from hassle_cli.layout_migration import bundle_has_old_layout, migrate_old_layout
+
+    if bundle_has_old_layout(root):
+        new_paths = {
+            key: bundle_ops.default_source_path(key, registry=registry_snapshot)
+            for key in compile_result.objects
+        }
+        migration_report = migrate_old_layout(
+            root, compile_result, registry=registry_snapshot, new_source_path_for=new_paths
+        )
+        for move in migration_report.moves:
+            console.print(
+                f"[cyan]  migrated[/cyan]  {move.object_key}: {move.old_path} -> {move.new_path}"
+            )
+        for deleted in migration_report.deleted_files:
+            console.print(f"[cyan]   deleted[/cyan]  {deleted} (no content left after migration)")
+        if migration_report.migrated:
+            # The working tree just changed under compile_result's feet --
+            # recompile so the rest of this pull sees each object's NEW
+            # source_path (source_path_for below reads decl_span_for, which
+            # is only valid against the just-compiled tree).
+            local_objects, compile_result = bundle_ops.compile_local_objects(root)
+            from hassle_cli.config import CURRENT_BUNDLE_FORMAT, bump_bundle_format
+
+            if load_config(root).bundle_format < CURRENT_BUNDLE_FORMAT:
+                bump_bundle_format(root)
+                console.print(
+                    f"[cyan]hassle pull: bundle_format upgraded to {CURRENT_BUNDLE_FORMAT} "
+                    "(category-first layout, MILESTONES M15).[/cyan]"
+                )
+
     ignore_result = apply_ignore_globs(
         local_objects=local_objects, remote_objects=remote_objects, ignore_globs=config.ignore
     )
@@ -328,6 +367,31 @@ def pull(allow_dirty: bool) -> None:
             ]
         }
     )
+
+    # MILESTONES M15 §31.6.2: a mixed-kind category file that used to be
+    # shared by objects of different category-registry scopes may have split
+    # this pull, if HA-side renames made those scopes' category names
+    # diverge -- placement itself already handles the split correctly (each
+    # object is placed by its OWN scope, independently); this only detects
+    # that it happened and warns, naming the scopes, never guessing a winner.
+    # Checked over EVERY manifest-tracked object (not just this pull's plan
+    # entries): a pure category-registry rename never changes an object's
+    # compiled hash, so `compute_plan` reports "nothing to merge" for it --
+    # divergence can happen with no other plan action at all.
+    previous_source_paths = {key: entry.source for key, entry in manifest.objects.items()}
+    # Deliberately `default_source_path` (the fresh, category-derived
+    # placement), never `source_path_for`/`source_paths` above (which read
+    # the object's EXISTING declaration site -- unchanged for an object no
+    # plan action touched, so it could never reveal a divergence on its own).
+    recomputed_source_paths = {
+        key: bundle_ops.default_source_path(key, registry=registry_snapshot)
+        for key in manifest.objects
+        if registry_snapshot is not None
+    }
+    for warning in bundle_ops.category_divergence_warnings(
+        previous_source_paths, recomputed_source_paths
+    ):
+        console.print(f"[yellow]{warning}[/yellow]")
 
     # The REAL splicer-backed writer: REFRESH/DROP touch exactly one object's
     # statement, so sibling objects sharing a source file survive (I6 -- the

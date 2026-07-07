@@ -389,7 +389,7 @@ def generate_sample_bundle(out_dir: Path, *, repo_root: Path | None = None) -> N
     from hassle.registry.snapshot import RegistrySnapshot
     from hassle_cli.backend_factory import register_fake_backend, unregister_fake_backend
     from hassle_cli.cli import main
-    from hassle_cli.config import write_default_config
+    from hassle_cli.config import CURRENT_BUNDLE_FORMAT, write_default_config
 
     root = repo_root or find_repo_root()
     if root is None:
@@ -408,8 +408,14 @@ def generate_sample_bundle(out_dir: Path, *, repo_root: Path | None = None) -> N
         _write_seed_tests(out_dir)
 
         write_default_config(out_dir)
+        # A freshly-generated sample bundle is never "old-layout" (nothing
+        # exists on disk before this pull runs at all) -- it should start at
+        # THIS CLI build's current bundle_format directly, exactly like a
+        # real `hassle init` would (MILESTONES M15 bumped this to 2), not the
+        # pre-M15 hardcoded `1` that would otherwise misrepresent a fresh
+        # bundle as one needing migration.
         (out_dir / "hassle.toml").write_text(
-            f'ha_url = "fake://{token}"\nbundle_format = 1\nmirror = false\n',
+            f'ha_url = "fake://{token}"\nbundle_format = {CURRENT_BUNDLE_FORMAT}\nmirror = false\n',
             encoding="utf-8",
         )
 
