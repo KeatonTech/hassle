@@ -86,43 +86,48 @@ def slugify(name: str) -> str:
     return slug or "item"
 
 
-_CATEGORY_TREES: frozenset[str] = frozenset({"automations", "scripts"})
-
-
 def category_shaped_stem(source_path: str) -> str | None:
     """The category-name slug/stem a bundle file's OWN placement implies, or
-    `None` if `source_path` doesn't have the category-shaped
-    ``automations/<stem>.py`` / ``scripts/<stem>.py`` shape at all -- a nested
-    path (``automations/sub/x.py``), the bundle root, any tree other than
-    those two, or the ``misc`` fallback file.
+    `None` if `source_path` doesn't have the category-shaped, ROOT-LEVEL
+    ``<stem>.py`` shape at all -- any nested path (``lib/x.py``,
+    ``tests/test_x.py``, ``docs/x.py``, ``.hassle/x.py``, and -- MILESTONES
+    M15 work item B -- the RETIRED per-kind-tree shape ``automations/<stem>.py``
+    / ``scripts/<stem>.py`` / ``helpers/<stem>.py``, now just ordinary nested
+    paths like any other), or the ``misc`` fallback file.
 
-    **Kind-independent** (MILESTONES M12 reviewer finding): unlike
-    `hassle.sync.category_writeback._category_slug_from_source_path` (which
-    additionally checks the OBJECT's kind against the tree, since it only
-    ever runs for a specific just-created object), this only looks at the
-    PATH -- both ``automations/`` and ``scripts/`` are checked regardless of
-    what (if anything) lives in the file. This is the predicate
-    `hassle.compiler.bundle`'s `CATEGORY`-global capture needs: at capture
-    time there is no single object's kind to check against yet (a category
-    file may hold several objects, or none), so path-shape alone is the
-    right and only test -- exactly mirroring how `bundle_ops.
+    **MILESTONES M15 work item B (category-first bundle layout,
+    docs/ha-api-notes.md §31.6): root-level, not per-kind-tree.** Every
+    kind's category-shaped file is now `<slug(category_name)>.py` directly at
+    the bundle root -- a mixed-kind file holding an automation, a script, and
+    a helper that all share one category name. `lib/`, `tests/`, `docs/`, and
+    any dot-directory (`.hassle/`) are never category-shaped regardless of
+    their own filename -- there is no need to special-case them by name here:
+    they are never root-level (``len(parts) != 1``), so the depth check alone
+    already excludes them.
+
+    **Kind-independent** (MILESTONES M12 reviewer finding, still true under
+    the new shape): unlike `hassle.sync.category_writeback.
+    _category_slug_from_source_path` (a thin wrapper that no longer even
+    consults `kind`, now that there's no per-kind tree left to check), this
+    only looks at the PATH. This is the predicate `hassle.compiler.bundle`'s
+    `CATEGORY`-global capture needs: at capture time there is no single
+    object's kind to check against yet (a category file may hold several
+    objects of different kinds, or none), so path-shape alone is the right
+    and only test -- exactly mirroring how `bundle_ops.
     default_source_path`/`_category_source_path` derive a category-shaped
     placement from a category NAME in the other direction.
 
     Shared by :mod:`hassle.compiler.bundle` (CATEGORY-global capture),
     :mod:`hassle.registry.validate` (the `category-slug-mismatch` Finding),
     and :func:`hassle.sync.category_writeback._category_slug_from_source_path`
-    (which further narrows by kind) -- one predicate, never duplicated.
+    -- one predicate, never duplicated.
     """
     if not source_path.endswith(".py"):
         return None
     parts = source_path.split("/")
-    if len(parts) != 2:
-        return None  # bundle root (len 1) or nested (len >= 3) -- never category-shaped
-    tree, filename = parts
-    if tree not in _CATEGORY_TREES:
-        return None
-    stem = filename[: -len(".py")]
+    if len(parts) != 1:
+        return None  # nested (incl. the retired automations//scripts//helpers/ trees)
+    stem = parts[0][: -len(".py")]
     if not stem or stem == "misc":
         return None
     return stem

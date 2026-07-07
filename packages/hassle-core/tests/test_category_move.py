@@ -36,6 +36,12 @@ Covers (this file's test names):
 
 All against `FakeBackend` (R2: no network in unit tests), at the `apply_plan`
 level -- the same test shape `test_category_writeback.py` (M11) uses.
+
+Source paths below use the MILESTONES M15 work item B root-level shape
+(`"automatic_hvac.py"`, not the work-item-A-era `"automations/automatic_hvac.py"`)
+-- `local_category_for_source_path` delegates entirely to `category_shaped_stem`,
+so this file's actual logic under test (the three-way category-move rule) is
+unaffected by which shape the paths use; only the literal strings changed.
 """
 
 from __future__ import annotations
@@ -90,7 +96,7 @@ def test_move_between_category_files_pushes_new_category() -> None:
     backend.reset_write_tracking()
 
     manifest = _manifest_with_category(
-        "automation:auto_1", plan_hash, "automatic_hvac", "automations/automatic_hvac.py"
+        "automation:auto_1", plan_hash, "automatic_hvac", "automatic_hvac.py"
     )
     plan = Plan(
         entries=[
@@ -99,7 +105,7 @@ def test_move_between_category_files_pushes_new_category() -> None:
                 "automation",
                 {"id": "auto_1", "alias": "Keep temp steady"},
                 plan_hash,
-                "automations/lighting.py",  # moved to a different category file
+                "lighting.py",  # moved to a different category file
             )
         ]
     )
@@ -124,7 +130,7 @@ def test_move_to_misc_unassigns_category() -> None:
     backend.reset_write_tracking()
 
     manifest = _manifest_with_category(
-        "automation:auto_1", plan_hash, "automatic_hvac", "automations/automatic_hvac.py"
+        "automation:auto_1", plan_hash, "automatic_hvac", "automatic_hvac.py"
     )
     plan = Plan(
         entries=[
@@ -133,7 +139,7 @@ def test_move_to_misc_unassigns_category() -> None:
                 "automation",
                 {"id": "auto_1", "alias": "Keep temp steady"},
                 plan_hash,
-                "automations/misc.py",
+                "misc.py",
             )
         ]
     )
@@ -162,7 +168,7 @@ def test_remote_only_recategorization_is_pull_only_no_push_action() -> None:
     backend.reset_write_tracking()
 
     manifest = _manifest_with_category(
-        "automation:auto_1", plan_hash, "automatic_hvac", "automations/automatic_hvac.py"
+        "automation:auto_1", plan_hash, "automatic_hvac", "automatic_hvac.py"
     )
     plan = Plan(
         entries=[
@@ -172,7 +178,7 @@ def test_remote_only_recategorization_is_pull_only_no_push_action() -> None:
                 {"id": "auto_1", "alias": "Keep temp steady"},
                 plan_hash,
                 # Local source path UNCHANGED from base -- the object didn't move.
-                "automations/automatic_hvac.py",
+                "automatic_hvac.py",
             )
         ]
     )
@@ -204,7 +210,7 @@ def test_conflicting_move_and_remote_recategorization_is_a_conflict() -> None:
     backend.reset_write_tracking()
 
     manifest = _manifest_with_category(
-        "automation:auto_1", plan_hash, "automatic_hvac", "automations/automatic_hvac.py"
+        "automation:auto_1", plan_hash, "automatic_hvac", "automatic_hvac.py"
     )
     plan = Plan(
         entries=[
@@ -214,7 +220,7 @@ def test_conflicting_move_and_remote_recategorization_is_a_conflict() -> None:
                 {"id": "auto_1", "alias": "Keep temp steady"},
                 plan_hash,
                 # ... but the LOCAL bundle moved it to a DIFFERENT category, "security".
-                "automations/security.py",
+                "security.py",
             )
         ]
     )
@@ -246,7 +252,7 @@ def test_noop_when_local_and_remote_both_match_base() -> None:
     backend.reset_write_tracking()
 
     manifest = _manifest_with_category(
-        "automation:auto_1", plan_hash, "automatic_hvac", "automations/automatic_hvac.py"
+        "automation:auto_1", plan_hash, "automatic_hvac", "automatic_hvac.py"
     )
     plan = Plan(
         entries=[
@@ -255,7 +261,7 @@ def test_noop_when_local_and_remote_both_match_base() -> None:
                 "automation",
                 {"id": "auto_1", "alias": "Keep temp steady"},
                 plan_hash,
-                "automations/automatic_hvac.py",
+                "automatic_hvac.py",
             )
         ]
     )

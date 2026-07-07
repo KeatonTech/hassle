@@ -65,10 +65,11 @@ def test_full_daily_loop_in_under_ten_hassle_commands(
     _git_commit_if_dirty("sync: UI changes", cwd=project)
 
     # Author a bundle file by hand (not a `hassle` command -- editing .py files
-    # is the human's job in the loop). DSL sources live under the DESIGN §6
-    # tree (docs/ha-api-notes.md §17.9 RESOLVED: the loader recurses into
-    # subdirectory packages, `hassle init` scaffolds automations/).
-    (project / "automations" / "hallway.py").write_text(
+    # is the human's job in the loop). DSL sources live at the bundle root
+    # (MILESTONES M15 work item B: category-first layout, root-level
+    # `<slug>.py` files -- the old `automations/`/`scripts/`/`helpers/` trees
+    # are retired and no longer scaffolded by `hassle init`).
+    (project / "hallway.py").write_text(
         """
 from hassle import automation, service, state, when
 

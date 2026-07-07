@@ -198,9 +198,14 @@ def init_bundle(root: Path) -> list[str]:
     # convenience). No `__init__.py` in any of them -- the bundle loader
     # relies on PEP 420 namespace packages (the bundle root is put on
     # `sys.path` at compile time), so none is needed for
-    # `from helpers.modes import guest_mode`-style cross-file imports to work.
-    for name in ("automations", "scripts", "helpers", "lib"):
-        (root / name).mkdir(exist_ok=True)
+    # `from lib.x import y`-style cross-file imports to work.
+    #
+    # MILESTONES M15 work item B: the OLD per-kind trees (`automations/`,
+    # `scripts/`, `helpers/`) are RETIRED and no longer scaffolded -- the
+    # category-first layout is root-level `<slug>.py` files, created on
+    # demand by the compiler/decompiler (`misc.py` for every uncategorized
+    # object), never empty directories a fresh `init` pre-creates.
+    (root / "lib").mkdir(exist_ok=True)
     (root / "tests").mkdir(exist_ok=True)
     (root / ".hassle").mkdir(exist_ok=True)
     steps.extend(scaffold_lib_and_tests_readmes(root))

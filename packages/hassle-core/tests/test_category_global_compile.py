@@ -46,10 +46,11 @@ def _normalize(msg: str) -> str:
 
 
 def _write_bundle(tmp_path: Path, filename: str, code: str) -> Path:
+    # MILESTONES M15 work item B: category-shaped files are root-level now
+    # (`<slug>.py`), not under a per-kind tree (`automations/<slug>.py`).
     bundle = tmp_path / "bundle"
     bundle.mkdir(exist_ok=True)
-    (bundle / "automations").mkdir(exist_ok=True)
-    (bundle / "automations" / filename).write_text(code, encoding="utf-8")
+    (bundle / filename).write_text(code, encoding="utf-8")
     return bundle
 
 
@@ -70,7 +71,7 @@ def auto_hvac_1():
 """,
     )
     result = compile_bundle(bundle)
-    entry = result.category_global_for("automations/automatic_hvac.py")
+    entry = result.category_global_for("automatic_hvac.py")
     assert entry is not None
     assert entry.value == "Automatic HVAC"
 
@@ -92,7 +93,7 @@ def auto_hvac_1():
 """,
     )
     result = compile_bundle(bundle)
-    entry = result.category_global_for("automations/automatic_hvac.py")
+    entry = result.category_global_for("automatic_hvac.py")
     assert entry is not None
     assert entry.span is not None
     assert entry.span.file.endswith("automatic_hvac.py")
@@ -114,7 +115,7 @@ def auto_1():
 """,
     )
     result = compile_bundle(bundle)
-    assert result.category_global_for("automations/misc.py") is None
+    assert result.category_global_for("misc.py") is None
 
 
 def test_non_str_category_global_is_a_compile_error(tmp_path: Path) -> None:
@@ -143,8 +144,7 @@ def test_category_global_survives_bundle_with_multiple_files(tmp_path: Path) -> 
     (sidecar map is keyed per source path, not a single process-wide value)."""
     bundle = tmp_path / "bundle"
     bundle.mkdir()
-    (bundle / "automations").mkdir()
-    (bundle / "automations" / "hvac.py").write_text(
+    (bundle / "hvac.py").write_text(
         """
 from hassle import automation, service, state, when
 
@@ -158,7 +158,7 @@ def auto_hvac_1():
 """,
         encoding="utf-8",
     )
-    (bundle / "automations" / "misc.py").write_text(
+    (bundle / "misc.py").write_text(
         """
 from hassle import automation, service, state, when
 
@@ -171,7 +171,7 @@ def auto_misc_1():
         encoding="utf-8",
     )
     result = compile_bundle(bundle)
-    hvac_entry = result.category_global_for("automations/hvac.py")
+    hvac_entry = result.category_global_for("hvac.py")
     assert hvac_entry is not None
     assert hvac_entry.value == "Automatic HVAC"
-    assert result.category_global_for("automations/misc.py") is None
+    assert result.category_global_for("misc.py") is None

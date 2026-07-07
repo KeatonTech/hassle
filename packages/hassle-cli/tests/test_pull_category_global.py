@@ -55,8 +55,8 @@ def test_pull_creates_new_category_file_with_category_global(
     result = cli(["pull"], cwd=git_repo)
     assert result.exit_code == 0, result.output
 
-    placed = git_repo / "automations" / "automatic_hvac.py"
-    assert placed.is_file(), sorted(p.name for p in (git_repo / "automations").iterdir())
+    placed = git_repo / "automatic_hvac.py"
+    assert placed.is_file(), sorted(p.name for p in git_repo.iterdir())
     content = placed.read_text(encoding="utf-8")
     assert 'CATEGORY = "Automatic HVAC"' in content, content
 
@@ -77,7 +77,7 @@ def test_repull_of_categorized_bundle_is_byte_stable(
     _seed_categorized_automation(backend, "Automatic HVAC", "hvac")
 
     assert cli(["pull"], cwd=git_repo).exit_code == 0
-    placed = git_repo / "automations" / "automatic_hvac.py"
+    placed = git_repo / "automatic_hvac.py"
     first = placed.read_text(encoding="utf-8")
     _commit_all(git_repo, "first pull")
 
@@ -101,7 +101,7 @@ def test_pull_refresh_preserves_existing_category_global_line(
     assert cli(["pull"], cwd=git_repo).exit_code == 0
     _commit_all(git_repo, "first pull")
 
-    before = (git_repo / "automations" / "automatic_hvac.py").read_text(encoding="utf-8")
+    before = (git_repo / "automatic_hvac.py").read_text(encoding="utf-8")
     assert before.count('CATEGORY = "Automatic HVAC"') == 1
 
     # Drift the automation remotely (simulate a UI edit) -- triggers REFRESH.
@@ -111,7 +111,7 @@ def test_pull_refresh_preserves_existing_category_global_line(
     result = cli(["pull"], cwd=git_repo)
     assert result.exit_code == 0, result.output
 
-    after = (git_repo / "automations" / "automatic_hvac.py").read_text(encoding="utf-8")
+    after = (git_repo / "automatic_hvac.py").read_text(encoding="utf-8")
     # Exactly one CATEGORY line -- never duplicated, never moved to a
     # different position relative to the rest of the (single-object) file.
     assert after.count('CATEGORY = "Automatic HVAC"') == 1, after
@@ -139,7 +139,7 @@ def test_pull_drop_preserves_category_global_line_for_remaining_objects(
     assert cli(["pull"], cwd=git_repo).exit_code == 0
     _commit_all(git_repo, "first pull")
 
-    placed = git_repo / "automations" / "automatic_hvac.py"
+    placed = git_repo / "automatic_hvac.py"
     before = placed.read_text(encoding="utf-8")
     assert "hvac_2" in before  # both objects landed in the shared category file
     assert before.count('CATEGORY = "Automatic HVAC"') == 1

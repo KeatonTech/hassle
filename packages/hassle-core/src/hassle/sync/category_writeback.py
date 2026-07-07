@@ -24,14 +24,25 @@ freshly-succeeded CREATE. It has no opinion about UPDATE/REFRESH/ADOPT and
 `apply_plan` never calls it for those actions — existing/adopted objects'
 categories are simply never touched by this code path at all.
 
-**MILESTONES M15 work item A (docs/ha-api-notes.md §31) widens the scope map
-this module owns (`_SCOPE_FOR_KIND`/`_TREE_FOR_KIND`) to cover all 13 helper
-kinds under the shared `"helpers"` scope** — §31.5a source-corrects the
-earlier (wrong) belief that HA's category registry only ever had the
-`automation`/`script` scopes. This module's own CREATE-only behavior is
-otherwise unchanged; the sibling module `hassle.sync.category_move` is where
-M15's new UPDATE-side ("moving an existing object") sync logic lives, reusing
-this module's scope map and slug-derivation helper.
+**MILESTONES M15 work item A (docs/ha-api-notes.md §31) widened the scope map
+this module owns (`_SCOPE_FOR_KIND`) to cover all 13 helper kinds under the
+shared `"helpers"` scope** — §31.5a source-corrects the earlier (wrong) belief
+that HA's category registry only ever had the `automation`/`script` scopes.
+This module's own CREATE-only behavior is otherwise unchanged; the sibling
+module `hassle.sync.category_move` is where M15's new UPDATE-side ("moving an
+existing object") sync logic lives, reusing this module's scope map and
+slug-derivation helper.
+
+**MILESTONES M15 work item B (docs/ha-api-notes.md §31.6) retires the old
+per-kind tree shape this module's `_category_slug_from_source_path` checked
+(`automations/<slug>.py` / `scripts/<slug>.py` / -- never actually reachable
+for helpers -- `helpers/<slug>.py`) in favor of the root-level, cross-kind
+shape: every kind's category-shaped file is just `<slug>.py` at the bundle
+root. `_TREE_FOR_KIND` is retired along with it (kind no longer selects a
+tree at all -- `category_shaped_stem` alone decides path shape, kind-
+independently, exactly as `hassle.ir.keys.category_shaped_stem`'s own
+docstring already promised it would once a real category-shaped helper file
+existed).
 
 Backend surface used (additive, NOT part of the frozen `Backend` Protocol F2 —
 same `getattr`-probed pattern as `entry_id_for`/`fetch_registry_snapshot`,
@@ -63,18 +74,14 @@ from hassle.ir.keys import HELPER_DOMAINS, TEMPLATE_DOMAINS, category_shaped_ste
 # category registry has no scope allowlist whatsoever, §31.1, and the
 # frontend's helpers page shares ONE scope, `"helpers"`, across all 13 helper
 # kinds -- 9 storage-collection (`HELPER_DOMAINS`) + 4 template config-entry
-# (`TEMPLATE_DOMAINS`)). Bundle PLACEMENT for helpers is UNCHANGED this round
-# (M15 work item A; work item B's job) -- every helper still lands at the
-# flat `helpers/misc.py`, so `category_shaped_stem` (which only recognizes
-# the `automations/`/`scripts/` trees) never actually matches a helper's
-# source path yet; this map exists so the write-back MECHANISM already
-# understands every kind's scope once work item B gives helpers real
-# category-shaped files.
+# (`TEMPLATE_DOMAINS`)). Bundle PLACEMENT (MILESTONES M15 work item B) now
+# gives every kind a real root-level category-shaped file (`<slug>.py`) --
+# `category_shaped_stem` recognizes it kind-independently; this map is what
+# lets `_category_slug_from_source_path` additionally confirm a specific
+# object's OWN kind is entitled to a category action at all (every real
+# `OBJECT_KINDS` entry is, so in practice this is just a scope lookup).
 _SCOPE_FOR_KIND = {"automation": "automation", "script": "script"}
 _SCOPE_FOR_KIND.update({kind: "helpers" for kind in HELPER_DOMAINS | TEMPLATE_DOMAINS})
-
-_TREE_FOR_KIND = {"automation": "automations", "script": "scripts"}
-_TREE_FOR_KIND.update({kind: "helpers" for kind in HELPER_DOMAINS | TEMPLATE_DOMAINS})
 
 
 @dataclass(frozen=True)
@@ -87,25 +94,25 @@ class CategoryWritebackResult:
 
 def _category_slug_from_source_path(kind: str, source_path: str | None) -> str | None:
     """The category-name slug a CREATEd object's source file implies, or
-    `None` if it doesn't have the ``<tree>/<slug>.py`` shape at all (a nested
-    path, the bundle root, or any name other than the expected tree) or names
-    the ``misc`` fallback file (MILESTONES M11 test 2: `misc.py` -> no
-    category action, exactly mirroring the pull-side placement's own
-    "uncategorized -> misc.py" fallback in `bundle_ops.default_source_path`).
+    `None` if it doesn't have the root-level ``<slug>.py`` shape at all (a
+    nested path) or names the ``misc`` fallback file (MILESTONES M11 test 2:
+    `misc.py` -> no category action, exactly mirroring the pull-side
+    placement's own "uncategorized -> misc.py" fallback in `bundle_ops.
+    default_source_path`).
 
-    Delegates the path-shape check to :func:`hassle.ir.keys.category_shaped_stem`
+    Delegates entirely to :func:`hassle.ir.keys.category_shaped_stem`
     (MILESTONES M12 reviewer finding: one shared, kind-independent predicate,
     never duplicated across this module / the compiler's CATEGORY-global
-    capture / the validator) -- this wrapper adds the one thing that IS
-    specific to a just-created object: its `kind` must match the tree the
-    path is actually under (an automation's source path can never imply a
-    `scripts/` category, and vice versa)."""
+    capture / the validator). MILESTONES M15 work item B retired the
+    per-kind tree shape (`automations/<slug>.py` etc.) this wrapper used to
+    additionally check `kind` against -- the new root-level shape has no
+    per-kind tree left to check: every kind's category-shaped file is simply
+    `<slug>.py`, so `kind` is accepted only for interface symmetry with
+    every other call site in this module (`attempt_category_writeback`,
+    `hassle.sync.category_move.local_category_for_source_path`) and is no
+    longer consulted here at all."""
+    del kind
     if source_path is None:
-        return None
-    tree = _TREE_FOR_KIND.get(kind)
-    if tree is None:
-        return None
-    if not source_path.startswith(f"{tree}/"):
         return None
     return category_shaped_stem(source_path)
 

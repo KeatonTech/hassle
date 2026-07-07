@@ -37,7 +37,7 @@ def test_attempt_category_writeback_uses_override_display_name() -> None:
         backend,
         "automation",
         "auto_hvac_1",
-        "automations/automatic_hvac.py",
+        "automatic_hvac.py",
         category_override="Automatic HVAC",
     )
 
@@ -64,7 +64,7 @@ def test_attempt_category_writeback_uses_override_with_punctuation_verbatim() ->
         backend,
         "automation",
         "auto_hvac_1",
-        "automations/automatic_hvac.py",
+        "automatic_hvac.py",
         category_override="Automatic HVAC (with punctuation!)",
     )
 
@@ -92,7 +92,7 @@ def test_apply_plan_threads_category_overrides_by_source_path() -> None:
                 kind="automation",
                 action=PlanAction.CREATE,
                 local={"id": "auto_hvac_1", "alias": "Keep temp steady"},
-                source_path="automations/automatic_hvac.py",
+                source_path="automatic_hvac.py",
             )
         ]
     )
@@ -100,7 +100,7 @@ def test_apply_plan_threads_category_overrides_by_source_path() -> None:
         plan,
         backend,
         _manifest(),
-        category_overrides={"automations/automatic_hvac.py": "Automatic HVAC"},
+        category_overrides={"automatic_hvac.py": "Automatic HVAC"},
     )
 
     assert result.succeeded is True
@@ -122,7 +122,7 @@ def test_apply_plan_with_no_category_overrides_keeps_m11_behavior() -> None:
                 kind="automation",
                 action=PlanAction.CREATE,
                 local={"id": "auto_hvac_1", "alias": "Keep temp steady"},
-                source_path="automations/automatic_hvac.py",
+                source_path="automatic_hvac.py",
             )
         ]
     )
@@ -146,7 +146,7 @@ def test_apply_plan_category_overrides_missing_for_path_falls_back_to_humanize()
                 kind="automation",
                 action=PlanAction.CREATE,
                 local={"id": "auto_hvac_1", "alias": "Keep temp steady"},
-                source_path="automations/automatic_hvac.py",
+                source_path="automatic_hvac.py",
             )
         ]
     )
@@ -171,7 +171,7 @@ def test_attempt_category_writeback_override_only_used_for_create_not_reuse() ->
         backend,
         "automation",
         "auto_hvac_1",
-        "automations/automatic_hvac.py",
+        "automatic_hvac.py",
         category_override="Automatic HVAC",
     )
 

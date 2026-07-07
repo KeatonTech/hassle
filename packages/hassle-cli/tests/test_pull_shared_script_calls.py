@@ -1,8 +1,9 @@
 """`ux/shared-script-calls` (owner feedback): end-to-end (FakeBackend) `hassle
 pull` rewrites a caller's `script.<id>` action to a real function call, with a
-cross-file `from scripts.<module> import <fn>` import when the script and its
+cross-file `from <module> import <fn>` import when the script and its
 caller land in different destination files (category-based placement,
-DESIGN §7.3, `bundle_ops.default_source_path`).
+DESIGN §7.3, `bundle_ops.default_source_path`; MILESTONES M15 work item B:
+root-level, cross-kind file layout).
 """
 
 from __future__ import annotations
@@ -64,8 +65,8 @@ def test_pull_rewrites_cross_file_script_call_with_import(
     )
 
     # Distinct categories so the two objects land in different destination
-    # files (automations/reminders.py vs scripts/notify.py) -- the shape that
-    # actually requires a cross-file import for the rewrite.
+    # files (reminders.py vs notify.py) -- the shape that actually requires a
+    # cross-file import for the rewrite.
     snapshot = backend.registry_snapshot
     snapshot.categories["automation"] = {"reminders": "Reminders"}
     snapshot.categories["script"] = {"notify": "Notify"}
@@ -94,13 +95,13 @@ def test_pull_rewrites_cross_file_script_call_with_import(
     result = cli(["pull"], cwd=git_repo)
     assert result.exit_code == 0, result.output
 
-    automation_file = git_repo / "automations" / "reminders.py"
-    script_file = git_repo / "scripts" / "notify.py"
-    assert automation_file.is_file(), sorted(p.name for p in (git_repo / "automations").iterdir())
-    assert script_file.is_file(), sorted(p.name for p in (git_repo / "scripts").iterdir())
+    automation_file = git_repo / "reminders.py"
+    script_file = git_repo / "notify.py"
+    assert automation_file.is_file(), sorted(p.name for p in git_repo.iterdir())
+    assert script_file.is_file(), sorted(p.name for p in git_repo.iterdir())
 
     automation_src = automation_file.read_text(encoding="utf-8")
-    assert "from scripts.notify import dismiss_notification" in automation_src
+    assert "from notify import dismiss_notification" in automation_src
     assert 'dismiss_notification(notification_id="guest_reminder", metadata={})' in automation_src
     assert "script.dismiss_notification" not in automation_src
 
@@ -126,7 +127,14 @@ def test_pull_rewrites_rich_field_script_call_same_batch(
     saves, mirroring `call_to_action_notification`) is called by an
     automation in the SAME pull batch -- the widened emit decision must
     still pick `@shared_script` (not fall back to `@script`), and the caller
-    rewrite must still fire."""
+    rewrite must still fire.
+
+    MILESTONES M15 work item B: both objects here are uncategorized, so they
+    both land in the SAME shared root-level `misc.py` (mixed-kind) -- this is
+    now a same-FILE call (no import needed at all), not just a same-batch
+    one. `test_pull_rewrites_cross_file_script_call_with_import` above is the
+    genuinely cross-FILE case (distinct categories -> distinct destination
+    files)."""
     backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
     _commit_toml_change(git_repo)
@@ -183,14 +191,14 @@ def test_pull_rewrites_rich_field_script_call_same_batch(
     result = cli(["pull"], cwd=git_repo)
     assert result.exit_code == 0, result.output
 
-    misc_automation = (git_repo / "automations" / "misc.py").read_text(encoding="utf-8")
-    misc_script = (git_repo / "scripts" / "misc.py").read_text(encoding="utf-8")
+    # Both objects are uncategorized -> the SAME shared root-level misc.py.
+    misc_src = (git_repo / "misc.py").read_text(encoding="utf-8")
 
-    assert "@shared_script(" in misc_script
-    assert "@script(" not in misc_script
-    assert "fields={" in misc_script
-    assert "call_to_action_notification(" in misc_automation
-    assert "script.call_to_action_notification" not in misc_automation
+    assert "@shared_script(" in misc_src
+    assert "@script(" not in misc_src
+    assert "fields={" in misc_src
+    assert "call_to_action_notification(" in misc_src
+    assert "script.call_to_action_notification" not in misc_src
 
     compiled = compile_bundle(git_repo)
     recompiled_call = compiled.objects["automation:garage_door_opened_notify"].to_ha()["actions"][0]

@@ -151,7 +151,7 @@ def test_push_create_assigns_category_creating_it_first(
                     "conditions": [],
                     "actions": [],
                 },
-                source_path=f"automations/{slug}.py",
+                source_path=f"{slug}.py",
             )
         ]
     )
@@ -200,7 +200,7 @@ def test_push_create_reuses_existing_matching_category(ha: DirectBackend, cleanu
                     "conditions": [],
                     "actions": [],
                 },
-                source_path=f"automations/{slug}.py",
+                source_path=f"{slug}.py",
             )
         ]
     )
@@ -238,7 +238,7 @@ def test_push_create_script_scope_assigns_category(ha: DirectBackend, cleanup_ca
                     "alias": "M11 integration script",
                     "sequence": [],
                 },
-                source_path=f"scripts/{slug}.py",
+                source_path=f"{slug}.py",
             )
         ]
     )
@@ -293,7 +293,7 @@ def test_push_create_preserves_other_scope_category_assignment(
                 kind="script",
                 action=PlanAction.CREATE,
                 local={"id": script_object_id, "alias": "Existing chores script", "sequence": []},
-                source_path=f"scripts/{script_slug}.py",
+                source_path=f"{script_slug}.py",
             )
         ]
     )
@@ -323,7 +323,7 @@ def test_push_create_preserves_other_scope_category_assignment(
                         "conditions": [],
                         "actions": [],
                     },
-                    source_path=f"automations/{auto_slug}.py",
+                    source_path=f"{auto_slug}.py",
                 )
             ]
         )
@@ -391,12 +391,12 @@ def test_push_create_with_category_global_uses_exact_display_name(
                     "conditions": [],
                     "actions": [],
                 },
-                source_path=f"automations/{slug}.py",
+                source_path=f"{slug}.py",
             )
         ]
     )
     result = apply_plan(
-        plan, ha, _manifest(), category_overrides={f"automations/{slug}.py": display_name}
+        plan, ha, _manifest(), category_overrides={f"{slug}.py": display_name}
     )
     assert result.succeeded is True, result.outcomes
     assert result.category_warnings == [], result.category_warnings
@@ -495,7 +495,7 @@ def test_same_object_two_scope_category_assignment_preserved(
                     "conditions": [],
                     "actions": [],
                 },
-                source_path=f"automations/{slug}.py",
+                source_path=f"{slug}.py",
             )
         ]
     )
