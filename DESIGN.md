@@ -58,9 +58,11 @@ implementing agents).
 ┌────────────────────── laptop ──────────────────────┐      ┌───── Home Assistant ─────┐
 │  bundle/  — a git repo (source of truth for        │      │                          │
 │  sources + tests); ZIP is just a transport format  │      │  HA Core APIs (the same  │
-│   ├── automations/*.py                             │ pull │  ones the UI uses):      │
-│   ├── scripts/*.py            ◄────────────────────┼──────┼─ config REST API         │
-│   ├── helpers/*.py                                 │      │  (automations, scripts)  │
+│   ├── <category>.py, misc.py  (see §6 for the      │ pull │  ones the UI uses):      │
+│   │    current, category-first layout — MILESTONES │──────┼─ config REST API         │
+│   │    M15 retired the old automations/scripts/    │      │  (automations, scripts)  │
+│   │    helpers/ per-kind trees this diagram once    │      │                          │
+│   │    showed here)                                │      │                          │
 │   ├── lib/*.py      (macros)  ─────────────────────┼──────┼─►WebSocket API (helpers, │
 │   ├── tests/test_*.py                       push   │      │  registry, validation,   │
 │   ├── stubs/  (generated .pyi)         (plan/apply)│      │  traces, templates)      │
@@ -423,6 +425,8 @@ The decompiler's "DSL coverage %" over the fixture corpus is a tracked metric (M
 
 ## 6. Bundle format
 
+~~Original (v1, superseded by MILESTONES M15):~~
+
 ```
 my-home/                   # a git repository (hassle init/pull offers to `git init`)
 ├── hassle.toml            # bundle settings: HA URL (never the token), formatting opts, plugins
@@ -443,19 +447,75 @@ my-home/                   # a git repository (hassle init/pull offers to `git i
 └── docs/                  # generated DSL reference + cookbook (stable content, versioned)
 ```
 
+**Revised (MILESTONES M15, "category-first bundle layout" — owner-commissioned,
+evidence base docs/ha-api-notes.md §31): root-level, mixed-kind category files, not
+a per-kind tree.** The `automations/`/`scripts/`/`helpers/` trees above are RETIRED —
+every category (automation, script, or any of the 13 helper kinds sharing HA's
+`"helpers"` category-registry scope) now gets ONE root-level file that can hold
+objects of every kind at once:
+
+```
+my-home/                   # a git repository (hassle init/pull offers to `git init`)
+├── hassle.toml            # bundle settings: HA URL (never the token), formatting opts, plugins
+├── hvac.py                 # a category-shaped file: mixes automations/scripts/helpers
+├── misc.py                 # every uncategorized object, of every kind
+├── lib/                   # macros, shared scripts, constants — yours, never auto-regenerated
+│                          # (README.md written once by `init`/`pull`, explaining the directory)
+├── tests/                 # pytest files — yours; persist in git (G5)
+├── stubs/                 # generated .pyi (checked in so pyright works immediately)
+├── .vscode/settings.json  # points pyright at stubs/; generated once, then left alone
+├── .hassle/
+│   ├── manifest.lock      # machine-owned sync baseline (§8.1) — committed, never hand-edited
+│   ├── registry.json      # snapshot: entities, services, areas, devices, labels, categories (§9.2)
+│   └── plan.json          # last computed plan (transient, gitignored)
+├── .gitignore             # generated: plan.json, caches
+├── AGENTS.md              # generated agent instructions (§12)
+└── docs/                  # generated DSL reference + cookbook (stable content, versioned)
+```
+
+`lib/`, `tests/`, `stubs/`, `docs/`, and `.hassle/` are unchanged by this revision.
+An old-layout bundle (the retired per-kind trees, `bundle_format` 1) is migrated
+in place by the next `hassle pull` — see the migration bullet below.
+
 - The **directory (a git repo)** is the working format; **ZIP** is a transport/interchange
   format (`hassle pull --zip out.zip`, `hassle push --zip in.zip`) per G1 — useful for moving a
   bundle without git, and what the optional mirror stores (§8.5).
-- File organization is user-controlled: the decompiler only decides placement for objects it has
+- ~~File organization is user-controlled: the decompiler only decides placement for objects it has
   never seen (defaults: one file per HA UI category if the object's entity-registry entry has one
   — `automations/<slug(category name)>.py` / `scripts/<slug(category name)>.py`, fetched via WS
   `config/category_registry/list` per scope; else `automations/misc.py` / `scripts/misc.py` /
   `helpers/misc.py` — helpers have no category-registry scope in HA, so they always use the domain
-  default); after that, objects stay in whatever file the user puts them in (tracked by manifest).
+  default); after that, objects stay in whatever file the user puts them in (tracked by
+  manifest).~~ **Revised (MILESTONES M15):** file organization is still user-controlled after
+  first placement, but the DEFAULT for a never-seen object is now root-level and cross-kind:
+  `<slug(category name)>.py` at the bundle root, derived from the object's OWN scope's category
+  (automation → category-registry scope `"automation"`, script → `"script"`, every helper kind →
+  the single shared scope `"helpers"`, all confirmed live, docs/ha-api-notes.md §31.2/§31.6) —
+  same category name across scopes lands every object in the SAME file (a mixed-kind category
+  file); else the single shared `misc.py`, replacing the old three-tree `automations/misc.py` /
+  `scripts/misc.py` / `helpers/misc.py` fallback. **Local moves sync back:** moving an EXISTING
+  object to a different category-shaped file is a category reassignment on the next push
+  (`ManifestEntry.category`, three-way against the base recorded at last sync — F2 amendment) —
+  extends the create-only write-back below to updates; a local move + a conflicting HA-side
+  recategorization surfaces as a conflict (I6), never silently overwritten either way. A
+  mixed-kind file maps to up to three real category ROWS (one per scope, sharing only a name) —
+  created per scope on demand; if HA-side renames make the scopes' names diverge for what was one
+  file, the next pull places each object by its own scope's category (the file may split) and
+  emits a divergence warning, never guessing a winner.
   **`hassle init` and `hassle pull`** (when it scaffolds missing directories) also write
   `lib/README.md` (explaining `@macro`/`@shared_script`/plain constants, §5.6) and, when `tests/`
   is otherwise empty, a one-line `tests/README.md` — both idempotent, never overwriting an
   existing file.
+- **Migration (MILESTONES M15):** an old-layout bundle is detected by `hassle pull` (populated
+  `automations/`/`scripts/`/`helpers/` trees) and restructured in place: every managed object is
+  spliced out of its old file and regenerated at its new root-level destination; an old file is
+  deleted only when nothing but imports would remain in it (I6 — a user's own comment or a custom
+  `def` keeps the file alive, with just the migrated object's statement removed). Every move is
+  reported in `hassle pull`'s output. `hassle.toml`'s `bundle_format` bumps once migration
+  completes (the M9 versioning surface: an OLDER CLI opening a NEWER bundle_format refuses with a
+  clear upgrade error; an older bundle_format itself is never refused — it's exactly what
+  triggers migration). Migration only moves DSL source, never changes an object's compiled
+  config, so the very next plan is a NOOP and a second pull is byte-stable.
 - **`ignore` (owner amendment, `ux/pull-organization`):** `hassle.toml` may declare
   `ignore = ["input_boolean:material_you_*", …]` — `fnmatch` globs matched against object keys.
   This REVISES §8.2's "first-ever pull adopts everything; nothing is ever unmanaged": an object
@@ -665,9 +725,10 @@ for-byte, verified over the whole round-trip corpus):**
   "ha_version": "2026.6.3",
   "objects": {
     "automation:hall_light_on_motion": {
-      "source": "automations/hallway.py",
+      "source": "hallway.py",           // root-level (MILESTONES M15 category-first layout, §6)
       "compiled_hash": "sha256:…",     // hash of canonical JSON at last successful sync
-      "kind": "dsl"                     // dsl | raw | blueprint
+      "kind": "dsl",                    // dsl | raw | blueprint
+      "category": null                  // base category slug at last sync (F2 amendment, MILESTONES M15)
     },
     "input_boolean:guest_mode": { … }
   }
@@ -842,7 +903,7 @@ with `hassle init`: `hassle validate && hassle test` on every push).
 
 ### 10.4 Live test-run (G9)
 
-`hassle run automations/hallway.py::hall_light_on_motion --live`:
+`hassle run hallway.py::hall_light_on_motion --live` (root-level path, MILESTONES M15 §6):
 
 1. Compile + validate the single object; push it as a **shadow automation**
    (`id="hassle_shadow_<hash>"`), **enabled**, with its own trigger list replaced by a single
