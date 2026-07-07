@@ -2784,12 +2784,37 @@ needs to branch on kind at all. `DirectBackend._unique_id_to_match` is the
 one-line abstraction this collapses to; the `config_entry_id`-based
 `_entity_registry_matcher` branch from the first round of this PR is gone.
 
-**Fix.** `_acreate_template_helper` now reads `result.get("result") or
-{}`, then `entry_id` off THAT dict (falling back to `flow_id` only if
-`result["result"]["entry_id"]` is itself falsy/missing — defensive, not
-expected against real HA). `DirectBackend._aassign_category`/`categories_for`
-anchor on `unique_id`, matching either `identity` (every kind except
-`TEMPLATE_DOMAINS`) or the cached `entry_id` (`TEMPLATE_DOMAINS`).
+**Fix.** `_acreate_template_helper` now reads `result.get("result") or {}`,
+then `entry_id` off THAT dict. `DirectBackend._aassign_category`/
+`categories_for` anchor on `unique_id`, matching either `identity` (every
+kind except `TEMPLATE_DOMAINS`) or the cached `entry_id` (`TEMPLATE_DOMAINS`).
+
+**Reviewer finding (round 2): no `flow_id` fallback on a missing
+`result.entry_id` either.** The first version of this fix still had
+`entry_id = str(entry_json.get("entry_id") or flow_id)` — the EXACT same
+silent-wrong-cache bug class this whole section documents, just narrowed to
+a hypothetical (a future HA change, or an unexpected result shape such as an
+abort/re-prompt) rather than the every-single-call case that shipped. Fixed
+to raise `HaApiError` immediately when `result.entry_id` is missing/falsy,
+naming the endpoint, the object key, and the top-level/`result` keys HA
+actually returned, with a pointer back to this section — never a guessed
+cache value. Regression-tested
+(`test_create_template_helper_raises_when_result_entry_id_is_missing`) with
+a fake client returning a `create_entry` envelope that omits `result.entry_id`
+entirely, confirmed to fail against the pre-fix `or flow_id` line first.
+
+**Blast radius for pre-existing manifests, for the record.** Any
+`ManifestEntry.entry_id` a `hassle push`-driven CREATE recorded for a
+template helper under the ORIGINAL buggy code would hold a flow_id, not the
+real entry_id (pull-recorded ones were always correct — `hassle pull`
+derives `entry_id_for` from `_alist_template_helpers`, which reads
+`config_entries/get`, a completely different, always-correctly-shaped code
+path never affected by this bug). As of this writing no real bundle has ever
+push-created a template helper against a persistent HA instance — the only
+place `_acreate_template_helper` has run at all is this milestone's
+ephemeral, single-run Docker CI containers — so no manifest migration is
+needed. Recorded here so a future reader investigating a stale/wrong
+`entry_id` doesn't have to re-derive this.
 
 **Fake-fidelity gap, fixed.** Neither `FakeBackend` nor any prior unit test
 exercised the actual JSON-shape parsing boundary `_acreate_template_helper`'s

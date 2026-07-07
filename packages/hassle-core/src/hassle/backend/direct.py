@@ -512,8 +512,32 @@ class DirectBackend:
         # ALWAYS silently fell back to `flow_id` (a real, truthy string --
         # nothing ever raised) -- every `_template_entry_ids` cache entry
         # this backend ever wrote held a flow_id, not the real entry_id.
+        #
+        # **Reviewer finding (PR #10 round 2): no silent fallback here
+        # either.** A `flow_id`-on-missing-key fallback would recreate the
+        # exact same bug class this correction exists to fix -- if a future
+        # HA change (or an unexpected result shape, e.g. an abort) ever omits
+        # `result.entry_id`, this must raise immediately, from the call site
+        # that found it missing, rather than cache a guessed value that
+        # surfaces as a confusing `LookupError` much later during category
+        # write-back.
         entry_json = cast("dict[str, Any]", result.get("result") or {})
-        entry_id = str(entry_json.get("entry_id") or flow_id)
+        entry_id_value = entry_json.get("entry_id")
+        if not entry_id_value:
+            raise HaApiError(
+                f"POST /api/config/config_entries/flow/{flow_id}: the create_entry "
+                f"response for {kind}:{identity} had no result.entry_id (received "
+                f"top-level keys {sorted(result)}, result keys "
+                f"{sorted(entry_json) if entry_json else '<result missing/empty>'}). "
+                "This is a Hassle bug, not a mistake in your configuration -- the "
+                "expected shape is documented at docs/ha-api-notes.md §31.8. Fix: "
+                "please report this (include the keys listed above) at "
+                "https://github.com/hassle-project/hassle/issues; the config entry "
+                "may have been created in HA regardless -- check the HA UI's "
+                "Settings -> Devices & services page before retrying, to avoid a "
+                "duplicate."
+            )
+        entry_id = str(entry_id_value)
         self._template_entry_ids[(kind, identity)] = entry_id
         return identity
 

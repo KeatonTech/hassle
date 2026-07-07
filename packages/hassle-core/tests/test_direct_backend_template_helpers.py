@@ -233,6 +233,60 @@ def test_create_template_helper_extracts_entry_id_from_nested_result_key() -> No
     assert not cached_entry_id.startswith("flow_")
 
 
+class _MissingEntryIdClient(_FakeClient):
+    """An unexpected create_entry envelope with no `result.entry_id` at all
+    (e.g. a future HA change, or an abort/re-prompt this code doesn't
+    otherwise expect) -- reviewer finding on PR #10 round 2: the fixed code
+    must never silently cache a flow_id here (that is the EXACT bug class
+    §31.8 documents), it must raise a clear error instead."""
+
+    async def rest_post(self, path: str, json: Any = None, *, expect: str = "json") -> Any:
+        if (
+            path.startswith("/api/config/config_entries/flow/")
+            and isinstance(json, dict)
+            and "next_step_id" not in json
+        ):
+            self.rest_calls.append(("POST", path, json))
+            flow_id = path.rsplit("/", 1)[1]
+            return {
+                "type": "create_entry",
+                "flow_id": flow_id,
+                "handler": "template",
+                "result": {"domain": "template", "title": str(json["name"])},
+            }
+        return await super().rest_post(path, json, expect=expect)
+
+
+def test_create_template_helper_raises_when_result_entry_id_is_missing() -> None:
+    """Reviewer finding on PR #10 round 2: `entry_id = str(entry_json.get(
+    "entry_id") or flow_id)` recreated the exact silent-wrong-cache bug class
+    §31.8 describes -- if a future/unexpected create_entry envelope has no
+    nested `result.entry_id`, the OLD (still-buggy) fallback line would
+    silently cache a flow_id again, only to surface confusingly as a
+    category-assign `LookupError` much later. This must instead raise
+    immediately, from the exact call site that discovered the missing key,
+    naming the endpoint and the keys HA actually returned."""
+    client = _MissingEntryIdClient(entries={}, entities=[])
+    backend = _make_backend(client)
+
+    with pytest.raises(HaApiError, match=r"config_entries/flow.*result\.entry_id"):
+        asyncio.run(
+            backend._acreate_template_helper(  # type: ignore[attr-defined]
+                "template_number",
+                {
+                    "name": "Tank Level",
+                    "state": "{{ 3 }}",
+                    "set_value": _SET_VALUE,
+                    "min": 0,
+                    "max": 8,
+                    "step": 1,
+                },
+            )
+        )
+    # Nothing was cached under a guessed/wrong value.
+    assert ("template_number", "tank_level") not in backend._template_entry_ids  # type: ignore[attr-defined]
+
+
 def test_list_remote_reads_back_name_and_options_via_options_flow_suggested_values() -> None:
     # Regression for CI round 3's `KeyError: 'name'` / `KeyError: 'state'`:
     # `config_entries/get` alone never has enough to reconstruct the stored
