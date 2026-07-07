@@ -36,7 +36,11 @@ from pathlib import Path
 import pytest
 
 from hassle.registry.snapshot import RegistrySnapshot
-from hassle.registry.stubs import generate_entities_stub, generate_services_stub
+from hassle.registry.stubs import (
+    generate_entities_stub,
+    generate_hassle_reexport_stub,
+    generate_services_stub,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = REPO_ROOT / "fixtures" / "registry" / "home.json"
@@ -192,3 +196,46 @@ def test_pyright_accepts_correct_service_call(tmp_path: Path) -> None:
     diagnostics = payload.get("generalDiagnostics", [])
     errors = [d for d in diagnostics if d.get("severity") == "error"]
     assert errors == [], f"unexpected pyright errors on a correct service call: {errors}"
+
+
+# ---------------------------------------------------------------------------
+# Coordinator-flagged regression: a `typings/hassle/` dir with ONLY submodule
+# stubs (registry/services) and no top-level `typings/hassle/__init__.pyi`
+# risks pyright treating `hassle` as a namespace/partial stub package for
+# that dotted path, silently hiding the REAL package's own top-level surface
+# (`from hassle import *` names). This is the assertion class that was
+# MISSING from the M8/M18 pyright integration tests -- it must hold with the
+# FULL typings tree (entities + services + the reexport stub) present.
+# ---------------------------------------------------------------------------
+
+
+def _setup_full_typings_tree(tmp_path: Path) -> None:
+    _setup_typings(tmp_path)
+    _setup_services_typings(tmp_path)
+    hassle_dir = tmp_path / "typings" / "hassle"
+    reexport_stub = generate_hassle_reexport_stub()
+    (hassle_dir / "__init__.pyi").write_text(reexport_stub, encoding="utf-8")
+
+
+def test_star_import_names_are_not_undefined_with_full_typings_tree(tmp_path: Path) -> None:
+    _setup_full_typings_tree(tmp_path)
+    _write_pyrightconfig(tmp_path)
+    sample = tmp_path / "sample.py"
+    sample.write_text(
+        "from hassle import automation, service, state, Mode\n"
+        "\n"
+        "@automation(id='x', mode=Mode.RESTART)\n"
+        "def x():\n"
+        "    service('light.turn_on', target={'entity_id': 'light.hallway'})\n"
+        "    _ = state('light.hallway')\n",
+        encoding="utf-8",
+    )
+
+    proc = _run_pyright(tmp_path)
+    payload = json.loads(proc.stdout or "{}")
+    diagnostics = payload.get("generalDiagnostics", [])
+    undefined = [d for d in diagnostics if d.get("rule") == "reportUndefinedVariable"]
+    assert undefined == [], (
+        f"expected zero reportUndefinedVariable with the full typings tree present; "
+        f"got: {undefined}\n{proc.stdout}\n{proc.stderr}"
+    )

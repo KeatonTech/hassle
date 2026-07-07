@@ -2927,3 +2927,66 @@ stays usable and testable offline — it inspects the resolved
 `[tool.uv.sources]` path's existence on disk, never attempts to actually run
 `uv run hassle --help`, even though its text mentions that as the thing the
 resolved state should make possible.
+
+## 33. M18: typed service namespaces + entity-method sugar — two coordinator-flagged stub-generator hardenings
+
+**Milestone text vs. observed `main` behavior (recorded per CLAUDE.md's rule):**
+MILESTONES.md's M18 write-up describes today's mismatch as "calling
+`e.cover.x.close_cover()` is a `TypeError`" -- verified against actual `main`
+(pre-M18) behavior, it is an `AttributeError` (`'EntityRef' object has no
+attribute 'close_cover'`), since `EntityRef` had no `__getattr__` at all
+before this milestone (only the unrelated `.attr()` method). The test list's
+item 1 ("Regression pinning today's mismatch") is written against the real
+observed exception type, not the milestone prose's.
+
+**Hardening 1 — partial-stub-package poisoning risk (owner-reported, field
+evidence on the owner's real bundle):** a `typings/hassle/` directory
+containing ONLY submodule stubs (`registry/__init__.pyi` from M3, and this
+milestone's new `services.pyi`) with no top-level `typings/hassle/__init__.pyi`
+risks pyright treating `hassle` as a namespace/partial stub package for that
+dotted path once a config's default `stubPath` (`"typings"`) picks it up --
+which can hide the REAL installed package's own top-level surface (every
+`from hassle import *` name) in a bundle file. This was NOT reproducible in
+this sandbox across several pyright 1.1.411 configurations (bare, `basic`,
+`standard`, with/without `pyrightconfig.json`, with/without `extraPaths`, one
+vs. two submodule stubs) -- every attempt scored 0 `reportUndefinedVariable`.
+Likely explanations for the gap: a different pyright/Pylance version, VS
+Code's Pylance language server (which can differ from the open-source CLI on
+partial-stub-package resolution specifically), or some other real-bundle
+factor (e.g. a `pyrightconfig.json`/`pyproject.toml` `[tool.pyright]` option
+this sandbox's minimal repro didn't reproduce). Regardless of root cause, the
+fix `hassle stubs`/`hassle pull` now apply is unconditionally correct and
+low-risk: always generate and write `typings/hassle/__init__.pyi`, re-exporting
+every `hassle.__all__` name from its true defining module
+(`hassle.registry.stubs.generate_hassle_reexport_stub`, grouped/sorted by
+module for determinism) -- so pyright's `stubPath` override always carries the
+full top-level surface itself, regardless of how any given
+pyright/Pylance version resolves the partial-stub-package fallback. Extended
+`test_registry_stubs_pyright.py` with the assertion class that was missing
+(zero `reportUndefinedVariable` on `automation`/`service`/`state`/`Mode` with
+the FULL typings tree present) so this stays covered going forward even
+though the failure mode itself didn't reproduce here.
+
+**Hardening 2 — selector-typed service fields (owner-reported: `typings/hassle/
+registry/__init__.pyi:67 "location" is not defined` on a real bundle):** real
+HA `get_services` field schemas mostly describe a field's shape via
+`selector: {<selector_type>: {...}}` (§6 above), not a flat `type:` string --
+`ServiceField.type` is `None` for most real captures, and the pre-M18 stub
+generator only ever consulted `type`, silently falling back to `str` for
+every selector-shaped field (safe, if imprecise -- this sandbox could not
+reproduce a bare-`location`-annotation leak from that code path specifically
+with a hand-built `ServiceField(type="location")`, since `_field_type`
+already treated `type` as an opaque lookup key with a safe `str` fallback
+regardless of the string's value). Hardened anyway, defensively and for
+precision: `ServiceField` gained a real, validated `selector: dict[str, Any]
+| None` field (previously silently retained only via `extra="allow"`, never
+read), and `_field_type` now also consults the selector's own key
+(`_SELECTOR_PY_TYPE`) when `type` is absent -- mapping common selector types
+(`location`/`target`/`object`/`action` -> `dict[str, Any]`, `boolean` ->
+`bool`, etc.) to a real, always-resolvable annotation, and falling back to
+plain `str` for anything neither map recognizes. This makes it structurally
+impossible for the generator to ever emit a bare, unmapped type/selector-type
+word as an annotation. Regression-pinned in
+`test_registry_stubs_selector_types.py`, including a standalone pyright check
+over a generated stub containing a `location`-selector field (the class of
+test that would have caught the whole bug, per the coordinator's ask).

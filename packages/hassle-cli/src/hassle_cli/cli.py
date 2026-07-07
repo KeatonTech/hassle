@@ -1025,8 +1025,9 @@ def fmt() -> None:
     help="Refresh the registry snapshot first (needs a connection).",
 )
 def stubs(refresh: bool) -> None:
-    """Generate `typings/hassle/registry/__init__.pyi` from the registry
-    snapshot (DESIGN §11).
+    """Generate `typings/hassle/registry/__init__.pyi` AND
+    `typings/hassle/services.pyi` from the registry snapshot (DESIGN §11;
+    MILESTONES M18 added the services stub alongside the entities one).
 
     **M8 layer-1 fix:** this used to write `.hassle/entities.pyi` -- a path no
     pyright/Pylance configuration (including `hassle init`'s own
@@ -1062,43 +1063,91 @@ def stubs(refresh: bool) -> None:
     console.print(f"[green]hassle stubs: wrote {_esc(out_path.relative_to(root))}[/green]")
 
 
+def _write_if_changed(path: Path, content: str) -> bool:
+    """Write `content` to `path` only if it differs (write-if-changed, the
+    same convention `_write_registry_snapshot` uses) -- returns whether the
+    file was actually written (changed)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_file() and path.read_text(encoding="utf-8") == content:
+        return False
+    path.write_text(content, encoding="utf-8")
+    return True
+
+
 def _write_stub_if_changed(snapshot: object, root: Path) -> Path:
-    """Generate `typings/hassle/registry/__init__.pyi` from `snapshot` and
-    write it write-if-changed (ux/stub-docstrings item 2 -- the same
-    convention `_write_registry_snapshot` uses for `.hassle/registry.json`,
-    so an unchanged registry never dirties the tree / rewrites the file).
+    """Generate `typings/hassle/registry/__init__.pyi` (entity stub),
+    `typings/hassle/services.pyi` (MILESTONES M18: typed service namespaces),
+    AND `typings/hassle/__init__.pyi` (coordinator hardening, M18 round: a
+    re-export of every `hassle.__all__` name from its true defining module --
+    guards against pyright treating `hassle` as a namespace/partial stub
+    package once submodule stubs exist for it, which would otherwise hide the
+    real package's own top-level surface) from `snapshot`, each
+    write-if-changed (ux/stub-docstrings item 2 -- the same convention
+    `_write_registry_snapshot` uses for `.hassle/registry.json`, so an
+    unchanged registry never dirties the tree / rewrites any of the files).
 
     Shared by both `hassle stubs` (manual refresh) and `hassle pull`
     (automatic, every pull) so the two commands can never disagree on what
-    "the stub for this snapshot" looks like. Returns the path written (or
-    that would have been written) so the caller can report it.
+    "the stubs for this snapshot" look like. Returns the entities stub's path
+    (the caller's printed "wrote ..." message anchor, unchanged from pre-M18
+    behavior) -- the other two are written alongside it as a side effect.
     """
-    from hassle.registry.stubs import generate_entities_stub
+    from hassle.registry.stubs import (
+        generate_entities_stub,
+        generate_hassle_reexport_stub,
+        generate_services_stub,
+    )
 
-    stub_text = generate_entities_stub(snapshot)  # type: ignore[arg-type]
-    stub_dir = root / "typings" / "hassle" / "registry"
-    stub_dir.mkdir(parents=True, exist_ok=True)
-    out_path = stub_dir / "__init__.pyi"
-    if not (out_path.is_file() and out_path.read_text(encoding="utf-8") == stub_text):
-        out_path.write_text(stub_text, encoding="utf-8")
-    # Package marker so pyright treats the synthetic `hassle` stub package as
-    # a regular package (matches the real runtime `hassle` package shape).
-    package_marker = root / "typings" / "hassle" / "__init__.pyi"
-    if not package_marker.is_file():
-        package_marker.write_text("", encoding="utf-8")
+    entities_text = generate_entities_stub(snapshot)  # type: ignore[arg-type]
+    entities_dir = root / "typings" / "hassle" / "registry"
+    out_path = entities_dir / "__init__.pyi"
+    _write_if_changed(out_path, entities_text)
+
+    services_text = generate_services_stub(snapshot)  # type: ignore[arg-type]
+    services_path = root / "typings" / "hassle" / "services.pyi"
+    _write_if_changed(services_path, services_text)
+
+    # The re-export stub is a pure function of `hassle.__all__` (no snapshot
+    # input at all) -- but still write-if-changed, keyed to whatever this
+    # installed `hassle-core` version's surface currently is, so it stays in
+    # lockstep with the running toolchain across an upgrade.
+    reexport_text = generate_hassle_reexport_stub()
+    reexport_path = root / "typings" / "hassle" / "__init__.pyi"
+    _write_if_changed(reexport_path, reexport_text)
+
     return out_path
 
 
 def _stub_changed(snapshot: object, root: Path) -> bool:
-    """Whether writing the stub for `snapshot` would change the file on disk
-    (checked BEFORE writing, so `pull` can print its step line only when the
-    stub actually changed -- matching `_write_registry_snapshot`'s
-    write-if-changed convention)."""
-    from hassle.registry.stubs import generate_entities_stub
+    """Whether writing any of the three stubs (entities, services, or the
+    top-level re-export) for `snapshot` would change a file on disk (checked
+    BEFORE writing, so `pull` can print its step line only when something
+    actually changed -- matching `_write_registry_snapshot`'s write-if-changed
+    convention)."""
+    from hassle.registry.stubs import (
+        generate_entities_stub,
+        generate_hassle_reexport_stub,
+        generate_services_stub,
+    )
 
-    stub_text = generate_entities_stub(snapshot)  # type: ignore[arg-type]
-    out_path = root / "typings" / "hassle" / "registry" / "__init__.pyi"
-    return not (out_path.is_file() and out_path.read_text(encoding="utf-8") == stub_text)
+    entities_text = generate_entities_stub(snapshot)  # type: ignore[arg-type]
+    entities_path = root / "typings" / "hassle" / "registry" / "__init__.pyi"
+    entities_changed = not (
+        entities_path.is_file() and entities_path.read_text(encoding="utf-8") == entities_text
+    )
+
+    services_text = generate_services_stub(snapshot)  # type: ignore[arg-type]
+    services_path = root / "typings" / "hassle" / "services.pyi"
+    services_changed = not (
+        services_path.is_file() and services_path.read_text(encoding="utf-8") == services_text
+    )
+
+    reexport_text = generate_hassle_reexport_stub()
+    reexport_path = root / "typings" / "hassle" / "__init__.pyi"
+    reexport_changed = not (
+        reexport_path.is_file() and reexport_path.read_text(encoding="utf-8") == reexport_text
+    )
+    return entities_changed or services_changed or reexport_changed
 
 
 def _write_registry_snapshot(backend: object, root: Path):

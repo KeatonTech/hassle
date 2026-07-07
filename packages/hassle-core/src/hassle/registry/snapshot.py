@@ -84,6 +84,14 @@ class ServiceField(BaseModel):
     description: str | None = None
     example: Any = None
     required: bool = False
+    # Real HA `get_services` schemas (docs/ha-api-notes.md §6) mostly describe
+    # a field's shape via a `selector: {<selector_type>: {...}}` dict, not a
+    # flat `type:` string -- `type` is often just absent for a real capture.
+    # Modeled explicitly (rather than left as an unstructured `extra="allow"`
+    # passthrough) so the stub generator's selector-aware typing
+    # (`hassle.registry.stubs._field_type`, M18 hardening) has a real,
+    # validated field to read the selector's key off of.
+    selector: dict[str, Any] | None = None
 
 
 class ServiceDef(BaseModel):
