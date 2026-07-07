@@ -70,3 +70,25 @@ def test_declared_as_runtime_dependency() -> None:
     pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
     deps = tomllib.loads(pyproject)["project"]["dependencies"]
     assert any(d.split(">=")[0].split("==")[0].strip() == "ruff" for d in deps), deps
+
+
+def test_insert_category_global_uses_shared_resolver(tmp_path, monkeypatch) -> None:
+    """Regression (owner field failure #2, same day): `hassle_cli.pull_apply.
+    _insert_category_global` had its OWN bare `subprocess.run(["ruff", ...])`,
+    crashing standalone installs even after codegen's site was fixed. It must
+    go through the shared resolver: with PATH empty but a working ruff next to
+    the interpreter, insertion succeeds instead of raising FileNotFoundError."""
+    import sys
+
+    from hassle_cli.pull_apply import _insert_category_global
+
+    fake_bin = tmp_path / "venv-bin"
+    fake_bin.mkdir()
+    fake_ruff = fake_bin / "ruff"
+    fake_ruff.write_text("#!/bin/sh\ncat\n")  # identity formatter
+    fake_ruff.chmod(0o755)
+    monkeypatch.setattr(sys, "executable", str(fake_bin / "python"))
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+
+    out = _insert_category_global("from hassle import *\n", "Automatic HVAC")
+    assert 'CATEGORY = "Automatic HVAC"' in out
