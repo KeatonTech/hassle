@@ -18,7 +18,12 @@ import pytest
 
 from hassle.compiler.builders import state
 from hassle.compiler.recording import recording
-from hassle.compiler.templates import TemplateComparisonOperandError, TemplateEntityRefError, expr, state_of
+from hassle.compiler.templates import (
+    TemplateComparisonOperandError,
+    TemplateEntityRefError,
+    expr,
+    state_of,
+)
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 

@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from hassle.compiler import math_expr
 from hassle.compiler.helpers import EntityRef
@@ -91,6 +91,13 @@ def _tokenize(text: str) -> list[_Token]:
 class _Node:
     value: Any  # TemplateExpr, or a plain int/float/str/bool literal
     source: str  # Python source text reproducing `value` when compiled
+    # M16: set only by `_call("states", ...)`, to the entity id, for a still-
+    # undecided bare `states('x')` read (source defaults to `state_of(...)`).
+    # `_filtered`'s `| float` handling checks this to upgrade the SAME node to
+    # `expr(...)` (M1's original mapping) when the filter immediately
+    # follows; every other consumer just uses `.source`/`.value` as-is, so a
+    # non-`None` value here never leaks into a final result.
+    bare_states_entity_id: str | None = None
 
 
 class _ParseError(Exception):
@@ -262,6 +269,21 @@ class _Parser:
             else:
                 src = f"({left.source} {op_tok.text} {right.source})"
             return _Node(value, src)
+        if self._peek().kind == "name" and self._peek().text == "in":
+            # `states('x') in ['a', 'b']` -- M16's `.in_([...])` membership.
+            # The right side is always a literal list in the renderer's own
+            # grammar (`TemplateExpr.in_`'s only emitted shape); a bare list
+            # atom is exactly what `_atom`'s `[` branch already parses.
+            self._advance()
+            right = self._add_expr()
+            if not isinstance(left.value, TemplateExpr):
+                raise _ParseError("`in` left operand is not a template expression")
+            right_value: Any = right.value
+            if not isinstance(right_value, list):
+                raise _ParseError("`in` right operand is not a list literal")
+            value = left.value.in_(cast("list[Any]", right_value))
+            src = f"{left.source}.in_({right.source})"
+            return _Node(value, src)
         return left
 
     # -- arithmetic ---------------------------------------------------------
@@ -319,10 +341,21 @@ class _Parser:
             raise _ParseError(f"expected filter name, got {name_tok.kind} {name_tok.text!r}")
         name = name_tok.text
         if name == "float":
-            # `states('x') | float` -- the numeric-read leaf `expr`/`.value`
-            # emit; only valid directly after a bare `states('x')` call
-            # (checked by the caller via a marker on the node's source).
-            return _Node(operand.value, operand.source)
+            if operand.bare_states_entity_id is not None:
+                # `states('x') | float` immediately after a bare `states(...)`
+                # call -- the numeric-read leaf `expr`/`.value` emit (M1's
+                # original mapping), NOT `state_of(...)` (M16's default for
+                # an unfiltered bare `states(...)` read).
+                entity_id = operand.bare_states_entity_id
+                return _Node(
+                    TemplateExpr(f"states({entity_id!r}) | float"),
+                    f"expr({_entity_source(entity_id)})",
+                )
+            # `| float` anywhere else (an already-filtered/combined operand):
+            # not part of the renderer's grammar (`| float` only ever
+            # follows a bare `states(...)` call in emitted output) -- reject
+            # rather than silently accept a construct that can't round-trip.
+            raise _ParseError("`| float` only valid directly after states(...)")
         args: list[_Node] = []
         if self._peek().kind == "op" and self._peek().text == "(":
             self._advance()
@@ -403,13 +436,14 @@ class _Parser:
             if len(args) != 1 or not isinstance(args[0].value, str):
                 raise _ParseError("states(...) needs exactly one string arg")
             entity_id = args[0].value
-            # Only valid as the operand of a `| float` filter (numeric read);
-            # bare `states('x')` (no filter) never appears in the renderer's
-            # grammar, so tag the node's source so `_filtered` can recognize
-            # the `| float` pair and collapse it to `expr(...)`.
+            # Bare `states('x')` (M16: `state_of(...)`'s own grammar) is the
+            # DEFAULT interpretation; `_filter_call`'s `float` branch upgrades
+            # this specific node to `expr(...)` (numeric read) when a `| float`
+            # filter immediately follows, via `bare_states_entity_id`.
             return _Node(
-                TemplateExpr(f"states({entity_id!r}) | float"),
-                f"expr({_entity_source(entity_id)})",
+                TemplateExpr(f"states({entity_id!r})"),
+                f"state_of({_entity_source(entity_id)})",
+                bare_states_entity_id=entity_id,
             )
         if name == "state_attr":
             if (
@@ -494,7 +528,16 @@ def invert_template(jinja_text: str) -> InvertedTemplate | None:
     rendered = _render_result(node.value)
     if rendered is None:
         return None
-    if rendered != jinja_text.strip():
+    # Compare against the ORIGINAL, unstripped text (bug found while adding
+    # M16's bare-`states(...)` grammar coverage: comparing against
+    # `jinja_text.strip()` instead treats surrounding whitespace -- e.g. a
+    # leading/trailing newline around the `{{ ... }}` block, matched by real
+    # `template_sensor(state=...)` fixture data -- as a match even though the
+    # renderer never reproduces it, silently dropping it on inversion and
+    # violating I3. `render()`/`_render_result` always emits the canonical,
+    # unpadded form, so only a `jinja_text` with no such padding can ever
+    # legitimately match here.
+    if rendered != jinja_text:
         return None
     return InvertedTemplate(source=node.source)
 

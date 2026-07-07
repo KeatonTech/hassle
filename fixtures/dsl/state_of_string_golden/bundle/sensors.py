@@ -25,8 +25,7 @@ def string_state_demo():
         # e.-registry ref argument (mirrors expr()'s accepted shapes)
         is_daytime_via_ref=state_of(e.sensor.time_of_day).eq("day"),
         # boolean and/or/not composition
-        day_and_hot=state_of("sensor.time_of_day").eq("day")
-        & (expr("sensor.outdoor_temp") > 25),
+        day_and_hot=state_of("sensor.time_of_day").eq("day") & (expr("sensor.outdoor_temp") > 25),
         dawn_or_dusk=state_of("sensor.time_of_day").eq("dawn")
         | state_of("sensor.time_of_day").eq("dusk"),
         not_night=~state_of("sensor.time_of_day").eq("night"),

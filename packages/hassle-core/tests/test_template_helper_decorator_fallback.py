@@ -66,16 +66,17 @@ def _ruff_format(source: str) -> str:
 
 
 def test_noninvertible_template_helpers_decompile_to_decorator_form() -> None:
-    """The three `template_helper_declarations` objects whose `state=` is
-    outside the M13 bounded inverter's grammar (active_hvac_zones,
-    any_door_open, house_scene -- see test_decompile_template_helpers.py's
-    module docstring) now decompile to the DECORATOR form, not the call form:
-    `@builder(...)` / `def <ident>(): return "<verbatim Jinja>"`."""
+    """The `template_helper_declarations` objects whose `state=` is outside
+    the bounded inverter's grammar -- `active_hvac_zones` (a `selectattr`
+    filter chain) and `any_door_open` (`is_state(...)`; M16 update: `house_
+    scene`'s bare `states(...)` read is now INSIDE the grammar, see
+    test_decompile_template_helpers.py's module docstring) -- decompile to
+    the DECORATOR form, not the call form: `@builder(...)` / `def <ident>():
+    return "<verbatim Jinja>"`."""
     result = compile_bundle(FALLBACK_FIXTURE)
     fallback_keys = {
         "template_number:active_hvac_zones": "template_number",
         "template_binary_sensor:any_door_open": "template_binary_sensor",
-        "template_select:house_scene": "template_select",
     }
     for key, builder in fallback_keys.items():
         obj = result.objects[key]
@@ -117,6 +118,7 @@ def test_noninvertible_template_helper_round_trips_byte_stably(tmp_path: Path) -
     lines = [
         "from hassle import (",
         "    expr,",
+        "    state_of,",  # M16: house_scene now inverts (bare states() read)
         "    template_binary_sensor,",
         "    template_number,",
         "    template_select,",

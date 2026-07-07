@@ -16,6 +16,15 @@ Both real-world spellings normalize to the DSL, then render canonically:
 
 The owner's real multi-line Bermuda template (`is_state(...) or
 is_state(...)`) is the driving fallback case, verbatim.
+
+**Regression (bug found while adding this coverage):** `invert_template`
+compared its re-render against `jinja_text.strip()` instead of the original
+`jinja_text` -- a pre-existing bug (reachable via `expr(...)`'s `| float`
+grammar too, just never exercised by a torture case that combined
+surrounding whitespace with an otherwise-invertible template before M16
+added a bare `states(...)` case to that same test matrix), silently dropping
+a leading/trailing newline around the `{{ ... }}` block on inversion and
+violating I3. Fixed by comparing against the unstripped original text.
 """
 
 from __future__ import annotations
@@ -38,21 +47,54 @@ def test_bare_states_eq_string_inverts_to_state_of_eq() -> None:
     jinja_text = "{{ states('sensor.time_of_day') == 'day' }}"
     result = invert_template(jinja_text)
     assert result is not None
-    assert result.source == "state_of('sensor.time_of_day').eq('day')"
+    assert result.source == "state_of(e.sensor.time_of_day).eq('day')"
 
 
 def test_bare_states_ne_string_inverts_to_state_of_ne() -> None:
     jinja_text = "{{ states('sensor.time_of_day') != 'night' }}"
     result = invert_template(jinja_text)
     assert result is not None
-    assert result.source == "state_of('sensor.time_of_day').ne('night')"
+    assert result.source == "state_of(e.sensor.time_of_day).ne('night')"
 
 
 def test_bare_states_in_list_inverts_to_state_of_in() -> None:
     jinja_text = "{{ states('sensor.time_of_day') in ['dawn', 'dusk'] }}"
     result = invert_template(jinja_text)
     assert result is not None
-    assert result.source == "state_of('sensor.time_of_day').in_(['dawn', 'dusk'])"
+    assert result.source == "state_of(e.sensor.time_of_day).in_(['dawn', 'dusk'])"
+
+
+# ---------------------------------------------------------------------------
+# Regression: surrounding whitespace around an otherwise-invertible `{{ ... }}`
+# block must NOT be silently dropped (bug found via this milestone's own
+# torture-template coverage -- see module docstring).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "jinja_text",
+    [
+        "\n{{ states('sensor.a') }}",
+        "{{ states('sensor.a') }}\n",
+        "  {{ states('sensor.a') }}",
+        "{{ states('sensor.a') }}  ",
+    ],
+)
+def test_surrounding_whitespace_is_not_silently_dropped(jinja_text: str) -> None:
+    """`invert_template` must reject (fall back), not silently match, when
+    the original text has padding around the `{{ ... }}` block that its own
+    canonical re-render would never reproduce -- this would otherwise
+    violate I3 (a leading/trailing newline dropped on inversion)."""
+    assert invert_template(jinja_text) is None
+
+
+def test_exact_no_padding_form_still_inverts() -> None:
+    """Sanity check alongside the regression above: the SAME template with no
+    surrounding padding still inverts cleanly -- the fix rejects padding
+    specifically, not bare `states(...)` reads in general."""
+    result = invert_template("{{ states('sensor.a') }}")
+    assert result is not None
+    assert result.source == "state_of(e.sensor.a)"
 
 
 @pytest.mark.parametrize(
@@ -71,14 +113,14 @@ def test_state_of_forms_round_trip_byte_exactly_through_decorator(
     result = invert_template(jinja_text)
     assert result is not None
     reset_declared_template_helpers()
-    from hassle import template_sensor
     from hassle.compiler.registry import fresh
 
     fresh()
     bundle_dir = tmp_path / "bundle"
     bundle_dir.mkdir()
     (bundle_dir / "helpers.py").write_text(
-        "from hassle import state_of, template_sensor\n\n"
+        "from hassle import state_of, template_sensor\n"
+        "from hassle.registry import entities as e\n\n"
         f"@template_sensor(name='probe')\ndef probe():\n    return {result.source}\n",
         encoding="utf-8",
     )
@@ -161,6 +203,6 @@ def test_hand_converted_canonical_form_round_trips_as_python() -> None:
     result = invert_template(canonical)
     assert result is not None
     assert result.source == (
-        "(state_of('sensor.keaton_watch_beacon_area').eq('Living Room') | "
-        "state_of('sensor.keaton_phone_beacon_area').eq('Living Room'))"
+        "(state_of(e.sensor.keaton_watch_beacon_area).eq('Living Room') | "
+        "state_of(e.sensor.keaton_phone_beacon_area).eq('Living Room'))"
     )

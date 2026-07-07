@@ -24,7 +24,6 @@
           "not_night": "{{ not (states('sensor.time_of_day') == 'night') }}"
         }
       }
-    ],
-    "mode": "single"
+    ]
   }
 }

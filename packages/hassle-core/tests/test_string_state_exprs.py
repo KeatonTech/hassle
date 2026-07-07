@@ -72,12 +72,10 @@ def test_boolean_composition_parenthesization_matches_renderer_rules() -> None:
     a = state_of("sensor.time_of_day").eq("day")
     b = state_of("sensor.time_of_day").eq("dawn")
     assert (a & b).to_template() == (
-        "{{ (states('sensor.time_of_day') == 'day') and "
-        "(states('sensor.time_of_day') == 'dawn') }}"
+        "{{ (states('sensor.time_of_day') == 'day') and (states('sensor.time_of_day') == 'dawn') }}"
     )
     assert (a | b).to_template() == (
-        "{{ (states('sensor.time_of_day') == 'day') or "
-        "(states('sensor.time_of_day') == 'dawn') }}"
+        "{{ (states('sensor.time_of_day') == 'day') or (states('sensor.time_of_day') == 'dawn') }}"
     )
     assert (~a).to_template() == "{{ not (states('sensor.time_of_day') == 'day') }}"
 
@@ -129,8 +127,7 @@ def test_state_of_string_golden_bundle() -> None:
         "(states('sensor.outdoor_temp') | float > 25) }}"
     )
     assert data["dawn_or_dusk"] == (
-        "{{ (states('sensor.time_of_day') == 'dawn') or "
-        "(states('sensor.time_of_day') == 'dusk') }}"
+        "{{ (states('sensor.time_of_day') == 'dawn') or (states('sensor.time_of_day') == 'dusk') }}"
     )
     assert data["not_night"] == "{{ not (states('sensor.time_of_day') == 'night') }}"
 

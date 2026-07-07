@@ -169,7 +169,14 @@ from hassle.compiler.template_helpers import (
     template_select,
     template_sensor,
 )
-from hassle.compiler.templates import PythonMathMisuseError, TemplateExpr, expr, template, var
+from hassle.compiler.templates import (
+    PythonMathMisuseError,
+    TemplateExpr,
+    expr,
+    state_of,
+    template,
+    var,
+)
 from hassle.compiler.triggers import (
     CalendarTrigger,
     DeviceTrigger,
@@ -345,6 +352,7 @@ __all__ = [
     "sin",
     "sqrt",
     "state",
+    "state_of",
     "stop",
     "sun",
     "tag",

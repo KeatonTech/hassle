@@ -37,8 +37,10 @@ wrapped in parens to preserve grouping:
 | Python            | Jinja (simple operands) | Notes                    |
 |--------------------|---------------------------|----------------------------|
 | ``state(x).value`` / ``expr(x)`` | ``states('x') \\| float`` | numeric read |
+| ``state_of(x)`` | ``states('x')`` | string read (M16) |
 | ``a > b`` / ``a < b`` | ``a > b`` / ``a < b`` | also ``>=``/``<=`` |
 | ``a == b`` / ``a != b`` | ``a == b`` / ``a != b`` | via ``.eq()``/``.ne()`` |
+| ``a.in_(["x", "y"])`` | ``a in ['x', 'y']`` | membership (M16) |
 | ``a + b`` / ``a - b`` | ``a + b`` / ``a - b`` | also ``*``/``/`` |
 | ``a // b`` | ``a // b`` | floor division (M1.1) |
 | ``a % b`` | ``a % b`` | modulo (M1.1) |
@@ -117,19 +119,49 @@ class PythonMathMisuseError(CompileError):
 
 
 class TemplateEntityRefError(CompileError):
-    """`expr()`/`state(...).value` was given something that doesn't name
-    exactly one entity (R6: what/where/fix -- M9 error-message audit
-    finding. Previously a bare `TypeError` with no file:line, reachable from
-    ordinary bundle authoring, e.g. `expr(state(["light.a", "light.b"]))` or
-    `expr(123)`)."""
+    """`expr()`/`state(...).value`/`state_of()` was given something that
+    doesn't name exactly one entity (R6: what/where/fix -- M9 error-message
+    audit finding. Previously a bare `TypeError` with no file:line, reachable
+    from ordinary bundle authoring, e.g. `expr(state(["light.a", "light.b"]))`
+    or `expr(123)`. `state_of()` (M16) reuses this same check -- it mirrors
+    `expr()`'s argument handling exactly, so the same misuse is reachable
+    from it too)."""
 
     def __init__(self, detail: str, span: Any) -> None:
         where = f" at {span.file}:{span.line}" if span is not None else ""
         super().__init__(
-            f"`expr()`/`state(...).value`{where}: {detail} Fix: pass a single "
-            f"entity id string (or a `state(...)` builder built from one) -- a "
+            f"`expr()`/`state(...).value`/`state_of()`{where}: {detail} Fix: pass a "
+            f"single entity id string (or a `state(...)` builder built from one) -- a "
             f"template read always names exactly one entity."
         )
+
+
+class TemplateComparisonOperandError(CompileError):
+    """`.eq()`/`.ne()` was given something that is neither a `TemplateExpr`
+    nor a bare Jinja-literal-compatible Python value (`int`/`float`/`str`/
+    `bool`) -- e.g. a list or dict (M16 test 5: what/where/fix, R6). Without
+    this check, `TemplateExpr._render_operand` would silently `repr()` the
+    value into nonsense Jinja (a Python list's repr happens to look like a
+    Jinja list literal for simple cases, but a dict, custom object, or nested
+    structure would not -- and even the list case is not the DSL's documented
+    membership spelling, `.in_([...])`, so letting it through `.eq()` would
+    be confusing either way)."""
+
+    def __init__(self, value: Any, method: str, span: Any) -> None:
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        super().__init__(
+            f"`.{method}({value!r})`{where}: comparison operands must be a template "
+            f"expression or a bare int/float/str/bool literal, not {type(value).__name__}. "
+            f"Fix: pass a literal value (e.g. `.{method}('on')`), another template "
+            f"expression, or -- for membership against a list of strings -- use "
+            f"`.in_([...])` instead of `.{method}(...)`."
+        )
+
+
+def _check_comparison_operand(value: Any, method: str) -> None:
+    if isinstance(value, (TemplateExpr, int, float, str, bool)):
+        return
+    raise TemplateComparisonOperandError(value, method, capture_span(depth=0))
 
 
 def _entity_ref_str(value: Any) -> str:
@@ -286,10 +318,24 @@ class TemplateExpr(_NoBool, str):
         return TemplateExpr._binop(self, other, "<=")
 
     def eq(self, other: Any) -> TemplateExpr:
+        _check_comparison_operand(other, "eq")
         return TemplateExpr._binop(self, other, "==")
 
     def ne(self, other: Any) -> TemplateExpr:
+        _check_comparison_operand(other, "ne")
         return TemplateExpr._binop(self, other, "!=")
+
+    def in_(self, values: list[Any]) -> TemplateExpr:
+        """``.in_(["a", "b"])`` -- Jinja membership (M16): ``in ['a', 'b']``.
+
+        Renders the list literal with the same call-argument style
+        ``hassle.compiler.math_expr``'s ``min_``/``max_`` use for their
+        list-literal collection (``", ".join`` of each rendered operand,
+        wrapped in ``[...]``) -- the canonical spacing every other DSL list
+        literal in this codebase already uses.
+        """
+        rendered = ", ".join(TemplateExpr._render_operand(v, min_prec=0) for v in values)
+        return TemplateExpr(f"{self._as_operand()} in [{rendered}]", compound=True)
 
     def __gt__(self, other: Any) -> TemplateExpr:  # type: ignore[override]
         return self.gt(other)
@@ -451,6 +497,22 @@ def expr(entity: Any) -> TemplateExpr:
     """
     entity_id = _entity_ref_str(entity)
     return TemplateExpr(f"states({entity_id!r}) | float")
+
+
+def state_of(entity: Any) -> TemplateExpr:
+    """``state_of(entity_ref)`` -- bare string-context template read (M16,
+    DESIGN §5.4 extension).
+
+    Mirrors :func:`expr`'s argument handling exactly (accepts a plain entity
+    id string, an ``e.``-registry ref, or a ``state(...)`` builder built from
+    one entity), but renders the bare ``states('x')`` call with no ``| float``
+    filter -- a string-state read, not a numeric one. Compose with
+    ``.eq()``/``.ne()``/``.in_([...])`` for string comparisons/membership, and
+    ``&``/``|``/``~`` for boolean composition, exactly like any other
+    :class:`TemplateExpr`.
+    """
+    entity_id = _entity_ref_str(entity)
+    return TemplateExpr(f"states({entity_id!r})")
 
 
 def template(raw: str) -> TemplateExpr:

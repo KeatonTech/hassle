@@ -95,7 +95,7 @@ def test_invert_template_is_byte_stable_when_it_succeeds(jinja_text: str) -> Non
     # run end-to-end through the compiler rather than trusting the inverter's
     # own internal comparison a second time with different code.
     reset_declared_template_helpers()
-    from hassle import expr, state, var
+    from hassle import expr, state, state_of, var
     from hassle.compiler.math_expr import (
         E_,
         PI,
@@ -124,6 +124,7 @@ def test_invert_template_is_byte_stable_when_it_succeeds(jinja_text: str) -> Non
     namespace = {
         "expr": expr,
         "state": state,
+        "state_of": state_of,
         "var": var,
         "e": e,
         "E_": E_,

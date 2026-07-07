@@ -1,0 +1,1 @@
+`.ne({'a': 1})` at test_string_state_errors.py:75: comparison operands must be a template expression or a bare int/float/str/bool literal, not dict. Fix: pass a literal value (e.g. `.ne('on')`), another template expression, or -- for membership against a list of strings -- use `.in_([...])` instead of `.ne(...)`.
