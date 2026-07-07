@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import { CliRunner } from "./cliRunner";
+import { CliInvocationError, CliRunner } from "./cliRunner";
 import { groupDiagnosticsByFile } from "./diagnostics";
-import { parseValidateJson } from "./findingsSchema";
+import { formatValidateFailureMessage, parseValidateJson } from "./findingsSchema";
 
 /** Runs `hassle validate --json` and republishes the result into a
  * `vscode.DiagnosticCollection` (the Problems pane) -- DESIGN §11 layer 2.
@@ -26,7 +26,33 @@ export class DiagnosticsManager {
 
   async refresh(workspaceRoot: string): Promise<void> {
     const requestId = ++this.latestRequestId;
-    const result = await this.cliRunner.run("validate", ["--json"], workspaceRoot);
+
+    let result;
+    let invocationAttempts: { label: string; command: string; args: string[]; error?: string }[] | undefined;
+    try {
+      result = await this.cliRunner.run("validate", ["--json"], workspaceRoot);
+    } catch (err) {
+      if (requestId !== this.latestRequestId) {
+        return;
+      }
+      // Every fallback candidate failed to spawn (CliInvocationError, see
+      // cliRunner.ts) -- there is no stdout at all. Route through
+      // formatValidateFailureMessage with the empty-stdout branch so the
+      // user sees each command tried, not the parse-failure wording.
+      this.collection.clear();
+      if (err instanceof CliInvocationError) {
+        invocationAttempts = err.attempts.map((a) => ({
+          label: a.candidate.label,
+          command: a.candidate.command,
+          args: a.candidate.args,
+          error: a.error,
+        }));
+        vscode.window.showErrorMessage(formatValidateFailureMessage("", err, invocationAttempts));
+      } else {
+        vscode.window.showErrorMessage(formatValidateFailureMessage("", err as Error));
+      }
+      return;
+    }
     if (requestId !== this.latestRequestId) {
       return; // superseded by a newer refresh() call while this one was in flight
     }
@@ -39,10 +65,7 @@ export class DiagnosticsManager {
       payload = parseValidateJson(result.stdout);
     } catch (err) {
       this.collection.clear();
-      vscode.window.showErrorMessage(
-        `Hassle: could not parse \`hassle validate --json\` output (${(err as Error).message}). ` +
-          "Fix: check the Hassle CLI version matches this extension's expected schema."
-      );
+      vscode.window.showErrorMessage(formatValidateFailureMessage(result.stdout, err as Error));
       return;
     }
     this.collection.clear();

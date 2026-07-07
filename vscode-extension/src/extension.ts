@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { CliRunner, NodeProcessRunner, ProcessRunner } from "./cliRunner";
+import { CliInvocationError, CliRunner, NodeProcessRunner, ProcessRunner } from "./cliRunner";
 import { DiagnosticsManager } from "./diagnosticsManager";
 import { ExplainPanel } from "./explainPanel";
 import { HassleStatusBar } from "./statusBar";
@@ -51,7 +51,18 @@ async function runAndShowOutput(
     return;
   }
   output.appendLine(`$ hassle --plain ${subcommand} ${args.join(" ")}`);
-  const result = await cliRunner.run(subcommand, args, root);
+  let result;
+  try {
+    result = await cliRunner.run(subcommand, args, root);
+  } catch (err) {
+    // Every fallback candidate failed to spawn (CliInvocationError lists each
+    // command tried, with its error -- see cliRunner.ts).
+    const message = err instanceof CliInvocationError ? err.message : (err as Error).message;
+    output.appendLine(message);
+    output.show(true);
+    vscode.window.showErrorMessage(`Hassle: ${label} could not run. See Output panel.`);
+    return;
+  }
   output.appendLine(result.stdout);
   if (result.stderr) {
     output.appendLine(result.stderr);
