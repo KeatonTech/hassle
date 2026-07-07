@@ -395,9 +395,7 @@ def test_push_create_with_category_global_uses_exact_display_name(
             )
         ]
     )
-    result = apply_plan(
-        plan, ha, _manifest(), category_overrides={f"{slug}.py": display_name}
-    )
+    result = apply_plan(plan, ha, _manifest(), category_overrides={f"{slug}.py": display_name})
     assert result.succeeded is True, result.outcomes
     assert result.category_warnings == [], result.category_warnings
 

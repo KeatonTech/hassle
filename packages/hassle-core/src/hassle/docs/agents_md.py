@@ -80,15 +80,16 @@ planning/pushing.
   — this is what lets the decompiler's helper-declaration check treat the id and
   the Python binding as the same thing on a later pull, and avoids the
   `helper-id-name-mismatch` validator finding.
-- **Category-first layout: one root-level file per category, mixing kinds.** The
-  decompiler only picks a default location for an object it has never seen
-  before: `<slug(category)>.py` at the bundle root if the object has an
-  HA UI category (automations, scripts, AND every helper kind all share this
-  same rule — a category named "HVAC" puts the HVAC automation, the HVAC
-  script, and the HVAC helpers all in one `hvac.py`), else the shared
-  `misc.py`. After that first placement, an object stays in whatever file you
-  put it in — feel free to reorganize by hand; Hassle tracks each object's
-  file in the manifest, not by convention.
+- **Category-first layout: one root-level file per category, mixing kinds; file
+  organization is user-controlled after the first placement.** The decompiler
+  only picks a default location for an object it has never seen before:
+  `<slug(category)>.py` at the bundle root if the object has an HA UI category
+  (automations, scripts, AND every helper kind all share this same rule — a
+  category named "HVAC" puts the HVAC automation, the HVAC script, and the
+  HVAC helpers all in one `hvac.py`), else the shared `misc.py`. After that
+  first placement, an object stays in whatever file you put it in — feel free
+  to reorganize by hand; Hassle tracks each object's file in the manifest, not
+  by convention.
 - **A `hassle push` of a legacy-form remote object may show a one-time
   "modernization (one-time)" diff.** That's expected the first time you re-push an
   object that predates Hassle (inner `platform:`, scalar `delay:`, ...) — Hassle

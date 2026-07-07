@@ -107,7 +107,7 @@ def migrate_old_layout(
     compile_result: CompileResult,
     *,
     registry: RegistrySnapshot | None,
-    new_source_path_for: "dict[str, str]",
+    new_source_path_for: dict[str, str],
 ) -> MigrationReport:
     """Move every compiled object whose CURRENT declaration lives under a
     RETIRED per-kind tree to its NEW (root-level, category-first) file,
@@ -119,8 +119,14 @@ def migrate_old_layout(
     ``new_source_path_for`` is `object_key -> new bundle-relative path`,
     precomputed by the caller (`hassle_cli.bundle_ops.build_source_paths`,
     the SAME placement every other pull path already uses -- migration does
-    not invent a second placement policy).
+    not invent a second placement policy). ``registry`` is accepted for
+    interface symmetry with that same caller-side placement call (and so a
+    future revision of this function can consult it directly without an API
+    change) but is not read here -- the placement decision it would inform is
+    already baked into ``new_source_path_for`` by the time this function
+    runs.
     """
+    del registry
     report = MigrationReport()
 
     # Group every to-be-migrated object by its OLD file (so a shared old
@@ -130,7 +136,7 @@ def migrate_old_layout(
     # ADOPT batch -- never last-writer-wins).
     by_old_path: dict[str, list[str]] = {}
     by_new_path: dict[str, list[str]] = {}
-    for object_key, obj in compile_result.objects.items():
+    for object_key in compile_result.objects:
         kind = object_key.partition(":")[0]
         if kind not in OBJECT_KINDS:
             continue  # defensive
@@ -195,7 +201,9 @@ def migrate_old_layout(
 
             import_sources, object_sources = split_module_source(new_source)
             existing = dest.read_text(encoding="utf-8")
-            appended = existing.rstrip("\n") + "\n\n\n" + "\n\n".join(object_sources).strip("\n") + "\n"
+            appended = (
+                existing.rstrip("\n") + "\n\n\n" + "\n\n".join(object_sources).strip("\n") + "\n"
+            )
             dest.write_text(merge_missing_imports(appended, import_sources), encoding="utf-8")
         else:
             dest.parent.mkdir(parents=True, exist_ok=True)

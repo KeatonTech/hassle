@@ -22,7 +22,7 @@ def _commit_all(repo: Path, message: str) -> None:
 def test_pull_migrates_old_layout_preserving_user_content_and_deleting_empty_files(
     git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
-    backend, token = fake_backend
+    _backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)  # writes bundle_format = 1 (old-layout signal)
 
     # The `git_repo` fixture's own seed automation moves from root-level
@@ -144,7 +144,7 @@ def hall_light_on_motion():
 def test_second_pull_after_migration_is_byte_stable(
     git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
-    backend, token = fake_backend
+    _backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
 
     (git_repo / "hallway.py").unlink()

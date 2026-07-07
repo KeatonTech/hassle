@@ -238,9 +238,7 @@ def category_divergence_warnings(
         kinds_involved = sorted({k.partition(":")[0] for k in member_keys if k in new_source_paths})
         if len(kinds_involved) < 2:
             continue  # split, but not a cross-SCOPE divergence
-        scopes_involved = sorted(
-            {_SCOPE_FOR_KIND.get(kind, kind) for kind in kinds_involved}
-        )
+        scopes_involved = sorted({_SCOPE_FOR_KIND.get(kind, kind) for kind in kinds_involved})
         if len(scopes_involved) < 2:
             continue  # e.g. every helper kind shares "helpers" -- not a real divergence
         destinations = ", ".join(sorted(new_paths))
