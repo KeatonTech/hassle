@@ -149,9 +149,15 @@ The public surface is exactly `hassle.__all__` (module
 `packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.
 
-Current surface: **72 names**, plus one dedicated entry point (`hassle.registry`,
-below) that is deliberately *not* folded into `hassle.__all__` because DESIGN
-§5.3 imports it under its own alias (`from hassle.registry import entities as e`).
+Current surface: **72 names**, plus TWO dedicated entry points that are
+deliberately *not* folded into `hassle.__all__`: `hassle.registry` (below;
+DESIGN §5.3 imports it under its own alias, `from hassle.registry import
+entities as e`) and `hassle.services` (MILESTONES M18, its own section
+below) — both are domain/instance-dynamic (their real shape depends on the
+bundle's own registry snapshot), which is exactly why neither is part of the
+star surface: `hassle.__all__` is a fixed, frozen contract, but which
+domains/services exist is a property of a specific HA install, not the DSL
+itself.
 
 ### Entity indexing form — `hassle.registry.entities` (DESIGN §5.2/§5.3, M1 test 8)
 
@@ -176,6 +182,58 @@ M3 layers generated, typed `.pyi`
 stub classes with the identical attribute/index shape on top, so a bad
 attribute name becomes a pyright error in the editor without changing how
 bundles are written.
+
+### Typed service namespaces — `hassle.services`, and entity-method sugar (MILESTONES M18)
+
+```python
+from hassle.services import cover, light
+from hassle.registry import entities as e
+
+light.turn_on(target=e.light.hallway, brightness_pct=60)   # namespace form
+cover.close_cover(target={"entity_id": "cover.blind"})
+e.cover.blind.close_cover()                                 # entity-method sugar
+```
+
+`hassle.services` is a **new, non-star module** (F3-additive; not part of
+`hassle.__all__` for the same domain-instance-dynamic reason
+`hassle.registry` isn't): a module-level PEP 562 `__getattr__` accepts ANY
+domain name and returns a namespace object whose own `__getattr__` accepts
+ANY service name and returns a callable — `light.turn_on(**fields)` records
+the identical action a `service("light.turn_on", **fields)` call would.
+Offline compile never fails on an unknown domain/service (that is
+`hassle validate`'s job — an `unknown-service` Finding with a did-you-mean
+suggestion, gated on real edit-distance evidence rather than "not in this
+snapshot", since HA's service catalog is per-installed-integration, never a
+complete, stable enumeration the way entities are).
+
+**Entity-method sugar:** `e.<domain>.<id>.<method>(**fields)` (any
+`EntityRef`, whether from `hassle.registry.entities` or a helper
+declaration) records the same action with `target={"entity_id": "<domain>.
+<id>"}` implicit. Only a CALL records anything — bare attribute access
+(`e.cover.x.close_cover`, no parens) stays inert, so it can never be mistaken
+for the pre-existing `.attr(name)` sugar (a real `EntityRef` method, found by
+normal attribute lookup before `__getattr__` is ever consulted) or plain
+`EntityRef`/`str` usage elsewhere.
+
+Both forms delegate to the exact same `hassle.compiler.actions.service()`
+verb internally, so IR and span capture (`hassle validate`'s file:line) are
+byte-identical to `service(...)` by construction — proven by a golden pair
+fixture (`fixtures/dsl/service_namespace_sugar/`) compiling all three forms
+to the identical IR.
+
+**Decompiler canonical form** (DESIGN §7.3): a plain service-call action
+whose literal `"domain.service"` exists in the registry snapshot AND whose
+`data` keys are all kwarg-expressible Python identifiers (not a reserved
+word) decompiles to the namespace form, with a per-file
+`from hassle.services import <domains>` import (sorted, deduplicated —
+aliased to `svc_<domain>` whenever the domain name collides with a
+star-imported DSL name, e.g. `automation`/`script`/`zone`/`schedule`/`time`
+are simultaneously real HA service domains and frozen DSL names). Everything
+else (a templated service name, a service/domain absent from the snapshot,
+no snapshot supplied at all, or a non-kwarg-safe data key) falls back to
+`service(...)` — I3 byte-exact through both branches. The entity-method form
+is author-only sugar and is never emitted by the decompiler (one canonical
+output form, independent of how the DSL source happened to be written).
 
 ## The frozen surface, grouped by role
 

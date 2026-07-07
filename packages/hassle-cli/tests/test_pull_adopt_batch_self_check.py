@@ -64,7 +64,7 @@ def _adopt_entry(object_key: str, kind: str, remote: dict, source_path: str) -> 
 def test_adopt_batch_self_check_catches_broken_decompile_before_writing(monkeypatch) -> None:
     import hassle_cli.pull_apply as pull_apply_mod
 
-    def _broken_decompile_bundle(objects, *, script_refs=None):
+    def _broken_decompile_bundle(objects, *, script_refs=None, snapshot=None):
         return (
             "from hassle import *\n\n"
             "from hassle.registry import entities as e\n\n\n"
@@ -120,7 +120,7 @@ def test_adopt_batch_self_check_catches_value_mismatch_that_still_compiles(monke
     """
     import hassle_cli.pull_apply as pull_apply_mod
 
-    def _silently_wrong_decompile_bundle(objects, *, script_refs=None):
+    def _silently_wrong_decompile_bundle(objects, *, script_refs=None, snapshot=None):
         # Reproduces the shape of the real bug: a `repeat.for_each` that should be
         # the template string verbatim instead gets exploded into a character list
         # -- valid Python, compiles cleanly, but a different value than the input.
@@ -187,7 +187,7 @@ def test_adopt_batch_self_check_does_not_false_positive_on_batch_context_text_di
     """
     import hassle_cli.pull_apply as pull_apply_mod
 
-    def _batch_context_name_collision_decompile_bundle(objects, *, script_refs=None):
+    def _batch_context_name_collision_decompile_bundle(objects, *, script_refs=None, snapshot=None):
         # Simulates what a real batch compile would emit when a SIBLING
         # object's alias collides and forces this one to a `_2` suffix --
         # the value (`to_ha()`) is untouched, only the Python identifier.

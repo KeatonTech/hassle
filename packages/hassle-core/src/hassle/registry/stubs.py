@@ -59,6 +59,40 @@ _PY_TYPE = {
     "bool": "bool",
 }
 
+# Selector-aware typing (coordinator hardening, M18 round): real HA
+# `get_services` field schemas mostly describe a field's shape via
+# `selector: {<selector_type>: {...}}` (docs/ha-api-notes.md §6), not a flat
+# `type:` string -- `field.type` is `None` for most real captures. Mapping
+# the selector's own key to a safe, always-resolvable Python annotation
+# (never the bare selector-type word itself, which is not a real Python name)
+# gives these fields a better type than the generic `str` fallback where a
+# safe, more specific one is known; anything NOT in this map still falls back
+# to `str` (or `dict[str, Any] | str` when the selector's own value shape is
+# genuinely a mapping, e.g. `location`/`target`/`object`) -- see
+# :func:`_field_type`.
+_SELECTOR_PY_TYPE = {
+    "boolean": "bool",
+    "number": "float",
+    "text": "str",
+    "select": "str",
+    "time": "str",
+    "date": "str",
+    "datetime": "str",
+    "duration": "dict[str, Any]",
+    "color_rgb": "list[int]",
+    "color_temp": "int",
+    # Location/target-ish selectors: HA stores these as a dict of named
+    # fields (e.g. `{"latitude": ..., "longitude": ..., "radius": ...}`) --
+    # never a scalar, and never a type named after the selector itself.
+    "location": "dict[str, Any]",
+    "target": "dict[str, Any]",
+    "object": "dict[str, Any]",
+    "action": "dict[str, Any]",
+    "entity": "str",
+    "device": "str",
+    "area": "str",
+}
+
 
 def _domain_class_name(domain: str) -> str:
     """``light`` -> ``_Light``, ``binary_sensor`` -> ``_BinarySensor``."""
@@ -209,19 +243,38 @@ def _entity_docstring_line(snapshot: RegistrySnapshot, entity: EntityInfo) -> st
     return _line(suffix)
 
 
-def _field_type(field_type: str | None) -> str:
+def _field_type(field_type: str | None, *, selector: dict[str, object] | None = None) -> str:
+    """Resolve a service field's HA schema type to a safe, ALWAYS-resolvable
+    Python annotation -- either from a flat legacy ``type:`` string
+    (``_PY_TYPE``) or, when absent (the common real-HA shape,
+    docs/ha-api-notes.md §6: ``selector: {<selector_type>: {...}}``), from
+    the selector's own key (``_SELECTOR_PY_TYPE``). Falls back to plain
+    ``str`` for anything neither map recognizes -- NEVER the raw, unmapped
+    type/selector-type word itself, which is not a real Python name and would
+    make the generated stub reference an undefined identifier (coordinator-
+    flagged regression, M18 round: a `location` selector previously leaked
+    through unmapped)."""
     py = _PY_TYPE.get(field_type or "")
-    if py is None:
-        return "str"
-    if py == "str":
-        return "str"
-    return f"{py} | str"
+    if py is not None:
+        if py == "str":
+            return "str"
+        return f"{py} | str"
+
+    if selector:
+        (selector_type,) = list(selector)[:1] or (None,)
+        mapped = _SELECTOR_PY_TYPE.get(selector_type or "")
+        if mapped is not None:
+            if mapped in ("str", "dict[str, Any]"):
+                return mapped
+            return f"{mapped} | str"
+
+    return "str"
 
 
 def _service_method(service_name: str, service_def: ServiceDef) -> list[str]:
     params = ["self"]
     for field_name, field in sorted(service_def.fields.items()):
-        py_type = _field_type(field.type)
+        py_type = _field_type(field.type, selector=field.selector)
         params.append(f"{field_name}: {py_type} = ...")
     joined = ", ".join(params)
     one_line = f"    def {service_name}({joined}) -> None: ..."
@@ -237,6 +290,119 @@ def _service_method(service_name: str, service_def: ServiceDef) -> list[str]:
     return lines
 
 
+def _service_function(service_name: str, service_def: ServiceDef) -> list[str]:
+    """Same shape as :func:`_service_method` but as a ``@staticmethod`` --
+    a domain namespace attribute (``light.turn_on(...)``) is called directly
+    on the module-level instance, never through an actual ``self`` (there is
+    no instance at all at runtime, `hassle.services._ServiceDomain` -- the
+    stub models the call signature pyright checks against, and a plain
+    (non-static) method's first parameter would otherwise be mistaken for
+    ``self``, MILESTONES M18)."""
+    params: list[str] = []
+    for field_name, field in sorted(service_def.fields.items()):
+        py_type = _field_type(field.type, selector=field.selector)
+        params.append(f"{field_name}: {py_type} = ...")
+    joined = ", ".join(params)
+    one_line = f"    def {service_name}({joined}) -> None: ..."
+    if len(one_line) <= 100 - 4:  # account for the `@staticmethod` line above it
+        return ["    @staticmethod", one_line]
+    lines = ["    @staticmethod", f"    def {service_name}("]
+    for param in params:
+        lines.append(f"        {param},")
+    lines.append("    ) -> None: ...")
+    return lines
+
+
+def _services_domain_class_name(domain: str) -> str:
+    """``light`` -> ``_LightServices`` (distinct from the entities stub's
+    ``_Light`` domain-accessor name -- both stubs can be generated into the
+    same ``typings/hassle/`` tree without a class-name collision)."""
+    return "_" + "".join(part.capitalize() for part in domain.split("_")) + "Services"
+
+
+def generate_services_stub(snapshot: RegistrySnapshot) -> str:
+    """Generate ``hassle/services.pyi`` content from a registry snapshot
+    (MILESTONES M18): a module-level ``__getattr__`` fallback (typed as
+    returning the first domain's namespace class -- matching the entities
+    stub's own ``_EntitiesRegistry.__getattr__`` convention, and keeping an
+    unlisted/future domain from becoming a hard pyright error) plus one typed
+    module-level attribute per known domain, each a namespace object exposing
+    every one of that domain's services as a typed function.
+
+    Reuses :func:`_service_method`'s field-typing logic (via
+    :func:`_service_function`, its self-less sibling) so the two stubs can
+    never disagree about how a service's fields are typed.
+    """
+    domains = sorted(snapshot.services)
+
+    body: list[str] = []
+    if not domains:
+        # No services captured at all -- an empty, still-valid module (the
+        # module-level __getattr__ fallback still makes every domain resolve
+        # to *something*, just untyped `Any`-shaped calls). The trailing
+        # `# pyright: ignore[reportIncompleteStub]` (N1, reviewer non-
+        # blocking note): a bare module-level `__getattr__` trips pyright's
+        # "obscures type errors for module" heuristic -- unlike the entities
+        # stub's `_EntitiesRegistry.__getattr__` (a CLASS method on a module-
+        # level VARIABLE), `hassle.services` is a REAL module at runtime, so
+        # that class-indirection trick doesn't apply here without breaking
+        # the direct `from hassle.services import light` import shape.
+        # Explicitly suppressed rather than silently accepting the warning.
+        body.append(
+            "def __getattr__(name: str) -> Any: ...  # pyright: ignore[reportIncompleteStub]"
+        )
+        body.append("")
+    else:
+        prev_was_empty = False
+        for domain in domains:
+            class_name = _services_domain_class_name(domain)
+            services = snapshot.services[domain]
+            method_lines: list[str] = []
+            for service_name in sorted(services):
+                method_lines.extend(_service_function(service_name, services[service_name]))
+            if method_lines:
+                if body and body[-1] != "":
+                    body.append("")
+                body.append(f"class {class_name}:")
+                body.extend(method_lines)
+                body.append("")
+                prev_was_empty = False
+            else:
+                if not prev_was_empty and body and body[-1] != "":
+                    body.append("")
+                body.append(f"class {class_name}: ...")
+                prev_was_empty = True
+        if body and body[-1] != "":
+            body.append("")
+
+        first_domain_class = _services_domain_class_name(domains[0])
+        for domain in domains:
+            body.append(f"{domain}: {_services_domain_class_name(domain)}")
+        body.append("")
+        # N1: see the domain-less branch's matching comment above -- same
+        # explicit, targeted suppression, same reason.
+        body.append(
+            f"def __getattr__(name: str) -> {first_domain_class}: ...  "
+            "# pyright: ignore[reportIncompleteStub]"
+        )
+        body.append("")
+
+    body_text = "\n".join(body)
+    header = [
+        '"""Generated by `hassle stubs` from the registry snapshot. Do not edit by hand."""',
+        "",
+        "from __future__ import annotations",
+        "",
+    ]
+    # `Any` only needed (and only imported) when a selector-typed field
+    # actually rendered to it (`_SELECTOR_PY_TYPE`'s `dict[str, Any]` entries)
+    # or the domain-less fallback above -- never an unused import otherwise.
+    if "Any" in body_text:
+        header.append("from typing import Any")
+        header.append("")
+    return "\n".join(header) + "\n" + body_text
+
+
 def generate_entities_stub(snapshot: RegistrySnapshot) -> str:
     """Generate ``entities.pyi`` content from a registry snapshot."""
     domains: dict[str, list[str]] = {}
@@ -244,12 +410,7 @@ def generate_entities_stub(snapshot: RegistrySnapshot) -> str:
         domain, _, object_id = entity.entity_id.partition(".")
         domains.setdefault(domain, []).append(object_id)
 
-    lines: list[str] = [
-        '"""Generated by `hassle stubs` from the registry snapshot. Do not edit by hand."""',
-        "",
-        "from __future__ import annotations",
-        "",
-    ]
+    lines: list[str] = []
 
     # --- one typed entity class per domain, with typed service methods ------
     # Matches `ruff format`'s `.pyi`-aware style: an empty class collapses to
@@ -302,4 +463,171 @@ def generate_entities_stub(snapshot: RegistrySnapshot) -> str:
     lines.append("entities: _EntitiesRegistry")
     lines.append("")
 
+    body_text = "\n".join(lines)
+    header = [
+        '"""Generated by `hassle stubs` from the registry snapshot. Do not edit by hand."""',
+        "",
+        "from __future__ import annotations",
+        "",
+    ]
+    # `Any` only needed (and only imported) when a selector-typed field
+    # actually rendered to it -- see `generate_services_stub`'s matching note.
+    if "Any" in body_text:
+        header.append("from typing import Any")
+        header.append("")
+    return "\n".join(header) + "\n" + body_text
+
+
+_UNSET = object()
+
+
+def _isort_all_sort_key(name: str) -> tuple[int, str]:
+    """Sort key matching ruff's `RUF022` ("unsorted __all__", isort
+    convention): `ALL_CAPS` constants first, then `PascalCase` classes, then
+    everything else -- alphabetical within each group. Verified against
+    `ruff check --select RUF022 --fix` on the actual generated content
+    (`hassle.__all__`'s real name set) rather than assumed; needed so this
+    generator's output is `ruff check`-clean without shelling out to ruff at
+    generation time (matching `generate_entities_stub`/`generate_services_
+    stub`'s own no-ruff-at-generation-time convention)."""
+    is_constant = name.replace("_", "").isupper() and any(c.isalpha() for c in name)
+    is_class = name[:1].isupper() and not is_constant
+    category = 0 if is_constant else (1 if is_class else 2)
+    return (category, name)
+
+
+def _resolve_binding_module(hassle_pkg: object, name: str) -> str:
+    """The module a ``hassle.__all__`` name should be re-exported FROM
+    (reviewer finding B1): NOT ``getattr(obj, "__module__", ...)`` -- that
+    reports the defining CLASS's module, which is wrong whenever ``obj`` is
+    an INSTANCE built somewhere else. ``hassle.E_``/``PI``/``TAU`` are
+    ``TemplateExpr`` instances constructed in ``hassle.compiler.math_expr``,
+    but ``TemplateExpr`` the class lives in ``hassle.compiler.templates`` --
+    ``__module__`` names the latter, which does not define ``E_`` at all
+    (``from hassle.compiler.templates import E_`` is an unimportable line;
+    pyright reports it as an unknown import symbol, and pyright/Pylance
+    alike lose all typing for these three names in every generated bundle).
+
+    Fix (adopted from reviewer direction): resolve the true BINDING module by
+    provenance instead -- walk every already-imported ``hassle.*`` submodule
+    (``sys.modules``, which already has every relevant submodule loaded,
+    since importing top-level ``hassle`` transitively imports all of
+    ``hassle.compiler.*``) and collect every module whose own namespace binds
+    this exact object under this exact name (``getattr(module, name, ...) is
+    obj`` -- identity, not equality, so a coincidentally-equal-but-different
+    object in an unrelated module is never mistaken for the real binding).
+
+    **Tie-break (deterministic, R8):** more than one module can legitimately
+    bind the same name to the same object -- every frozen name is ALSO
+    re-exported through the ``hassle.compiler`` barrel package
+    (``hassle/compiler/__init__.py``'s own aggregating imports), so a name
+    defined in ``hassle.compiler.math_expr`` binds under both
+    ``hassle.compiler`` and ``hassle.compiler.math_expr``. The DEEPEST module
+    (the most dot-separated segments) is preferred -- the barrel/aggregator
+    is, by construction, never deeper than the module that actually defines
+    the name, so this reliably picks the true defining module over any
+    re-exporting barrel; ties at equal depth (never observed in practice, but
+    handled for robustness) break alphabetically for full determinism.
+    Falls back to ``"hassle"`` itself if no ``hassle.*`` submodule binds the
+    name at all (should not happen for anything in ``hassle.__all__``, but
+    never crashes the generator if it somehow did).
+    """
+    import sys
+
+    obj = getattr(hassle_pkg, name)
+    candidates: list[str] = []
+    for module_name, module in sys.modules.items():
+        # By the time this runs, top-level `hassle` (and therefore every
+        # `hassle.compiler.*` submodule it transitively imports) has already
+        # fully imported -- `sys.modules["hassle...*"]` is never a `None`
+        # placeholder (that only arises mid-circular-import, which cannot be
+        # the case for an already-fully-loaded package).
+        if module_name != "hassle" and not module_name.startswith("hassle."):
+            continue
+        if getattr(module, name, _UNSET) is obj:
+            candidates.append(module_name)
+    if not candidates:
+        return "hassle"
+    candidates.sort(key=lambda m: (-m.count("."), m))
+    return candidates[0]
+
+
+def generate_hassle_reexport_stub() -> str:
+    """Generate ``typings/hassle/__init__.pyi``: a re-export of every
+    ``hassle.__all__`` name from its TRUE defining module (coordinator
+    hardening, M18 round; binding-module resolution fixed per reviewer
+    finding B1 -- see :func:`_resolve_binding_module`).
+
+    A ``typings/hassle/`` stub directory containing ONLY submodule stubs
+    (``registry/__init__.pyi``, ``services.pyi``) with no top-level
+    ``typings/hassle/__init__.pyi`` risks pyright treating ``hassle`` itself
+    as a namespace/partial stub package for that dotted path -- silently
+    hiding the REAL installed package's own top-level surface (every
+    ``from hassle import *`` name) in a bundle file. Always generating this
+    file alongside the other two stubs means pyright's ``stubPath`` override
+    carries the FULL top-level surface itself, regardless of how it resolves
+    partial-stub-package fallback for any given pyright version/configuration.
+
+    Grouped and sorted by defining module (``hassle.compiler.*`` throughout)
+    so this is deterministic (R8) and immune to ``hassle.__all__``'s (or a
+    dict's) iteration order -- and immune to ``hassle.compiler.__init__`` and
+    ``hassle.__all__`` ever drifting apart, since it reads each name's ACTUAL
+    runtime-resolved binding module rather than assuming one.
+    """
+    import hassle
+
+    by_module: dict[str, list[str]] = {}
+    for name in hassle.__all__:
+        module = _resolve_binding_module(hassle, name)
+        by_module.setdefault(module, []).append(name)
+
+    lines: list[str] = [
+        '"""Generated by `hassle stubs` from `hassle.__all__`. Do not edit by hand.',
+        "",
+        "Re-exports every frozen DSL name from its true defining module so pyright",
+        "never treats `hassle` as a namespace/partial stub package once a submodule",
+        'stub (`hassle/registry/__init__.pyi`, `hassle/services.pyi`) exists."""',
+        "",
+        "from __future__ import annotations",
+        "",
+    ]
+    for module in sorted(by_module):
+        # ONE `from module import name as name` statement per name (verified
+        # against `ruff check --select I001` on the actual generated
+        # content): ruff's isort treats the `X as X` explicit-reexport idiom
+        # (PEP 484's convention for a stub that re-exports a name) as its own
+        # logical import to sort, and always wants it split one-per-line --
+        # a combined `from module import a as a, b as b` is never isort-clean
+        # for this idiom, regardless of internal ordering.
+        names = sorted(by_module[module], key=_isort_all_sort_key)
+        for name in names:
+            one_line = f"from {module} import {name} as {name}"
+            if len(one_line) <= 100:
+                lines.append(one_line)
+            else:
+                # ruff-format's own wrap for a re-export line that overflows
+                # the line-length limit (verified against actual generated
+                # content, e.g. `DanglingTemplateHelperDeclarationError`).
+                lines.append(f"from {module} import (")
+                lines.append(f"    {name} as {name},")
+                lines.append(")")
+    lines.append("")
+    # Wrapped one name per line (ruff-format's own preference once a literal
+    # exceeds the line-length limit, matching the import blocks above) --
+    # `hassle.__all__` is long enough that a single-line `__all__ = [...]`
+    # is never ruff-format-clean. Sorted via `_isort_all_sort_key` (ruff's
+    # `RUF022`/isort convention: ALL_CAPS constants first, then PascalCase
+    # classes, then everything else, alphabetical within each group) so a
+    # downstream `ruff check`/`ruff format` over the generated `typings/`
+    # tree (this file is real, checked-in-adjacent Python, not exempt from
+    # either) never wants to reorder it.
+    lines.append("__all__ = [")
+    for name in sorted(hassle.__all__, key=_isort_all_sort_key):
+        # `_format_str_literal` (double-quote-preferring, matches ruff
+        # format's own quote style) rather than `!r` (always single-quoted)
+        # -- every name here is a plain identifier so this is just the
+        # quote-STYLE choice, never an escaping concern.
+        lines.append(f"    {_format_str_literal(name)},")
+    lines.append("]")
+    lines.append("")
     return "\n".join(lines)

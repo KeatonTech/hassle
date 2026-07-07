@@ -1,0 +1,31 @@
+{
+  "automation:namespace_sugar_demo": {
+    "id": "namespace_sugar_demo",
+    "alias": "Namespace sugar demo",
+    "triggers": [],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "light.turn_on",
+        "target": {
+          "entity_id": "light.hallway"
+        },
+        "data": {
+          "brightness_pct": 60
+        }
+      },
+      {
+        "action": "switch.turn_on",
+        "target": {
+          "entity_id": "switch.porch"
+        }
+      },
+      {
+        "action": "switch.turn_off",
+        "target": {
+          "entity_id": "switch.porch"
+        }
+      }
+    ]
+  }
+}

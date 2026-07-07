@@ -226,3 +226,23 @@ def a():
 """,
     )
     _check_snapshot("service_param_missing_required", text)
+
+
+def test_snapshot_unknown_service(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
+    """MILESTONES M18 (N2, reviewer non-blocking note): the `unknown-service`
+    Finding, snapshot-tested like every other Finding here (R6) rather than
+    just substring-asserted in test_service_namespaces.py."""
+    text = _find_one(
+        tmp_path,
+        snapshot,
+        "unknown-service",
+        """
+from hassle import automation
+from hassle.services import ligth
+
+@automation(id="a", alias="A")
+def a():
+    ligth.turn_on(target={"entity_id": "light.hallway"})
+""",
+    )
+    _check_snapshot("unknown_service", text)

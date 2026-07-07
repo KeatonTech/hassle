@@ -13,12 +13,37 @@ Falls back to ``raw_action({...})`` for any action shape not modeled here
 
 from __future__ import annotations
 
+import keyword
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from hassle.decompiler.exprs import decompile_condition, render_entity_position, render_literal
 
+if TYPE_CHECKING:
+    from hassle.registry.snapshot import RegistrySnapshot
+
 INDENT = "    "
+
+
+def _reserved_top_level_names() -> frozenset[str]:
+    """Every name a fresh whole-bundle decompile already binds at module
+    scope: the F3 star-import surface (``hassle.__all__``) plus the entities
+    accessor alias (``e``). Several REAL HA service domains are also frozen
+    DSL names (``automation``, ``script``, ``zone``, ``time``, ``schedule``,
+    ``event``, ``device``, ``sun``, ``tag``, ``template``, ``mqtt``,
+    ``webhook``, ``calendar``, ``timer``, ``on``, ``area``, every
+    ``input_*``/``counter`` helper builder, ...) -- a plain, unaliased
+    ``from hassle.services import automation`` would silently SHADOW the
+    ``@automation`` decorator import above it (both are module-level
+    ``automation``, and Python import order means the later one wins),
+    breaking every automation in the file (MILESTONES M18 regression, found
+    via the fixture corpus's own ``automation.trigger``-calling fixtures).
+    :func:`_service_domain_alias` uses this set to decide when a namespace
+    import needs an alias instead.
+    """
+    import hassle
+
+    return frozenset(hassle.__all__) | {"e"}
 
 
 def _indent_lines(lines: list[str], levels: int = 1) -> list[str]:
@@ -72,13 +97,45 @@ class CallResolver:
     """
 
     def __init__(
-        self, targets: dict[str, CallTarget], cycle_broken: frozenset[str] = frozenset()
+        self,
+        targets: dict[str, CallTarget],
+        cycle_broken: frozenset[str] = frozenset(),
+        *,
+        snapshot: RegistrySnapshot | None = None,
     ) -> None:
         self._targets = targets
         self._cycle_broken = cycle_broken
+        # MILESTONES M18: the registry snapshot backing the typed service-
+        # namespace canonical form (`None` -- no snapshot supplied to
+        # `decompile_bundle` -- always falls back to `service(...)`, matching
+        # the pre-M18 corpus round-trip test's call shape exactly).
+        self.snapshot = snapshot
+        # Domains the namespace form actually used across this decompile batch
+        # (populated as a side effect of `decompile_action`), mapped to the
+        # LOCAL NAME the call site binds to (the domain name itself, unless it
+        # collides with the star-import surface -- see `service_domain_name`)
+        # -- the source of truth for the `from hassle.services import
+        # <domain>[ as <alias>]` header line, so an unused domain never
+        # contributes a dangling import.
+        self.used_service_domains: dict[str, str] = {}
 
     def resolve(self, object_id: str) -> CallTarget | None:
         return self._targets.get(object_id)
+
+    def service_domain_name(self, domain: str) -> str:
+        """The LOCAL NAME a ``domain`` namespace call binds to in this file:
+        the domain name itself, unless it collides with the star-import
+        surface (``_reserved_top_level_names``), in which case an
+        ``svc_<domain>`` alias is used instead (MILESTONES M18 regression
+        fix: ``automation``/``script``/``zone``/... are both real HA service
+        domains AND frozen DSL names). Memoized per resolver instance so the
+        SAME call within one decompile batch always renders the same name,
+        and recorded in :attr:`used_service_domains` as a side effect."""
+        if domain in self.used_service_domains:
+            return self.used_service_domains[domain]
+        name = f"svc_{domain}" if domain in _reserved_top_level_names() else domain
+        self.used_service_domains[domain] = name
+        return name
 
     def is_cycle_broken(self, object_id: str) -> bool:
         return object_id in self._cycle_broken
@@ -100,6 +157,10 @@ def decompile_action(body: Any, *, resolver: CallResolver | None = None) -> list
         rewritten = _script_call(action_body, resolver) if resolver is not None else None
         if rewritten is not None:
             return rewritten
+        if resolver is not None and resolver.snapshot is not None:
+            namespace_lines = _namespace_service_call(action_body, resolver.snapshot, resolver)
+            if namespace_lines is not None:
+                return namespace_lines
         service_lines = _service_call(action_body)
         if resolver is not None:
             action = action_body.get("action")
@@ -279,6 +340,76 @@ def _target_src(target: Any) -> str:
         if set(target_dict) == {"device_id"}:
             return f"device_id({target_dict['device_id']!r})"
     return render_literal(target)
+
+
+def _is_kwarg_safe_key(key: str) -> bool:
+    """True if ``key`` can be written as a Python keyword-argument name
+    (``light.turn_on(brightness_pct=60)``) -- a valid identifier that is not a
+    reserved word (``class``, ``import``, ...). HA service field names are
+    otherwise unconstrained strings; anything that fails this check keeps the
+    action in `service(...)` form (MILESTONES M18 decompiler canonical-form
+    rule: "every data key is a valid Python kwarg")."""
+    return key.isidentifier() and not keyword.iskeyword(key)
+
+
+def _namespace_service_call(
+    body: dict[str, Any], snapshot: RegistrySnapshot, resolver: CallResolver
+) -> list[str] | None:
+    """Typed service-namespace canonical form (MILESTONES M18): a plain
+    service-call action whose literal ``"domain.service"`` exists in the
+    registry snapshot AND whose ``data`` keys are all kwarg-expressible
+    identifiers decompiles to ``<domain>.<service>(target=..., **fields)``
+    instead of ``service(...)``. Returns ``None`` (caller falls back to
+    :func:`_service_call`) for: a templated service name (no dot-delimited
+    literal to look up), a domain/service absent from the snapshot, or any
+    non-kwarg-safe data key -- I3 byte-exact through either branch, since both
+    forms compile to the identical ``{"action": ..., ...}`` IR (the namespace
+    form's builder is `hassle.services`, which delegates to the exact same
+    `service()` verb, MILESTONES M18 test 2).
+
+    ``resolver.service_domain_name(domain)`` gives the LOCAL name this call
+    binds to (aliased to ``svc_<domain>`` when ``domain`` collides with the
+    star-import surface, e.g. ``automation``/``script``/``zone`` are both real
+    HA service domains and frozen DSL names -- a regression found via the
+    fixture corpus's own `automation.trigger`-calling fixtures) -- called only
+    once this function has committed to emitting the namespace form, so a
+    domain that ultimately falls back to `service()` never contributes an
+    alias/import.
+    """
+    action = body["action"]
+    if "{{" in action:
+        return None  # templated service name -- not a literal domain.service
+    domain, dot, service_name = action.partition(".")
+    if not dot:
+        return None
+    if snapshot.service_def(domain, service_name) is None:
+        return None
+    data = body.get("data")
+    if data is not None and not isinstance(data, dict):
+        return None  # e.g. a bare list/scalar `data:` -- not kwarg-expressible
+    data_dict = cast("dict[str, Any]", data) if isinstance(data, dict) else {}
+    if not all(_is_kwarg_safe_key(k) for k in data_dict):
+        return None
+    if "data_template" in body:
+        # Legacy templated-data key: not reproducible via the namespace call's
+        # kwarg form at all (there is no way to spell a *second*, sibling
+        # `data_template` dict as kwargs) -- fall back to `service()`.
+        return None
+
+    parts: list[str] = []
+    if "target" in body:
+        parts.append(f"target={_target_src(body['target'])}")
+    for k, v in data_dict.items():
+        parts.append(f"{k}={render_literal(v)}")
+    if "response_variable" in body:
+        parts.append(f"response_variable={render_literal(body['response_variable'])}")
+    if "continue_on_error" in body:
+        parts.append(f"continue_on_error={render_literal(body['continue_on_error'])}")
+    if "metadata" in body:
+        parts.append(f"metadata={render_literal(body['metadata'])}")
+    parts.extend(_step_option_kwargs_src(body))
+    domain_name = resolver.service_domain_name(domain)
+    return [f"{domain_name}.{service_name}({', '.join(parts)})"]
 
 
 def _service_call(body: dict[str, Any]) -> list[str]:

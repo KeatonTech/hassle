@@ -1,0 +1,1 @@
+`ligth.turn_on` is not a known service in the registry snapshot; it closely resembles `light.turn_on`. at automation.py:7 Fix: Did you mean `light.turn_on`?
