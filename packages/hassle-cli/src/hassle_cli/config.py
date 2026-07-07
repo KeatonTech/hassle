@@ -22,6 +22,13 @@ Fields:
   that Hassle must never adopt, refresh, or delete -- see `hassle_cli.ignore_filter`
   for the filtering semantics. Defaults to empty (today's "nothing is ever
   unmanaged" behavior is unchanged unless the user opts in).
+- `toolchain_path` -- MILESTONES M17: an explicit path to a Hassle source
+  checkout (the directory containing `packages/`), used by
+  `hassle_cli.uv_project.resolve_toolchain_path` as the HIGHEST-priority entry
+  in the bundle-as-uv-project `[tool.uv.sources]` resolution order (beats
+  auto-detection). `None` (absent) is the common case -- auto-detection or the
+  bare-dependency fallback are used instead; see that module's docstring for
+  the full order.
 
 MILESTONES M15 work item B bumps `CURRENT_BUNDLE_FORMAT` to 2 (the
 category-first, root-level bundle layout -- the RETIRED per-kind trees
@@ -64,6 +71,7 @@ class BundleConfig:
     mirror: bool = False
     token: str | None = None  # only ever set if someone committed one (a bug)
     ignore: list[str] = field(default_factory=list)
+    toolchain_path: str | None = None
 
     @property
     def has_committed_token(self) -> bool:
@@ -100,6 +108,7 @@ def load_config(bundle_root: Path) -> BundleConfig:
         mirror=bool(data.get("mirror", False)),
         token=data.get("token"),
         ignore=list(data.get("ignore", [])),
+        toolchain_path=data.get("toolchain_path"),
     )
 
 
@@ -127,6 +136,26 @@ def persist_ha_url(bundle_root: Path, ha_url: str) -> None:
                 break
         else:
             lines.append(new_line)
+    toml_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def persist_toolchain_path(bundle_root: Path, toolchain_path: str) -> None:
+    """Write/replace `toolchain_path` in the bundle's `hassle.toml`, creating
+    the file if missing (MILESTONES M17). Line-surgical, same convention as
+    `persist_ha_url`: every other line is preserved byte-for-byte."""
+    toml_path = bundle_root / CONFIG_FILENAME
+    new_line = f'toolchain_path = "{toolchain_path}"'
+    if not toml_path.is_file():
+        toml_path.write_text(new_line + "\n", encoding="utf-8")
+        return
+    lines = toml_path.read_text(encoding="utf-8").splitlines()
+    live = re.compile(r"^\s*toolchain_path\s*=")
+    for i, line in enumerate(lines):
+        if live.match(line):
+            lines[i] = new_line
+            break
+    else:
+        lines.append(new_line)
     toml_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
