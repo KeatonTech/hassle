@@ -80,6 +80,11 @@ NAME_TO_CASES: dict[str, list[str]] = {
     # recording verbs
     "when": ["state_delay_service"],
     "only_if": ["classic_conditions"],
+    # public capture seam (task #30, `ux/capture-notify-recipe`): the `lib/`
+    # recipe-builder pair a bundle author uses to capture a block's actions
+    # once and splice the same bodies into more than one container.
+    "capture_actions": ["capture_emit_actions"],
+    "emit_actions": ["capture_emit_actions"],
     # core action verbs
     "service": ["state_delay_service"],
     "delay": ["state_delay_service"],

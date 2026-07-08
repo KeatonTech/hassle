@@ -1,0 +1,54 @@
+{
+  "automation:doors_porch_light": {
+    "id": "doors_porch_light",
+    "alias": "Doors: porch light off",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "binary_sensor.front_door",
+        "to": "open"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "choose": [
+          {
+            "conditions": [
+              {
+                "condition": "state",
+                "entity_id": "binary_sensor.front_door",
+                "state": "open"
+              }
+            ],
+            "sequence": [
+              {
+                "action": "light.turn_off",
+                "data": {
+                  "entity_id": "light.porch"
+                }
+              }
+            ]
+          },
+          {
+            "conditions": [
+              {
+                "condition": "state",
+                "entity_id": "binary_sensor.back_door",
+                "state": "open"
+              }
+            ],
+            "sequence": [
+              {
+                "action": "light.turn_off",
+                "data": {
+                  "entity_id": "light.porch"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

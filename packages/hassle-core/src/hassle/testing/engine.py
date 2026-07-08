@@ -29,11 +29,13 @@ from typing import Any
 
 from hassle.testing.actions import (
     ActionContext,
+    EventOccurrence,
     SunTimesProvider,
     Suspend,
     SuspendDelay,
     SuspendWaitForTrigger,
     SuspendWaitTemplate,
+    WaitResumeValue,
     evaluate_condition,
     no_sun_times,
     run_actions,
@@ -76,7 +78,7 @@ def _epoch() -> datetime:
 class _Run:
     """One in-flight (or queued) execution of an automation's action sequence."""
 
-    generator: Any  # Generator[Suspend, StateChange | None, bool] | None (None while queued)
+    generator: Any  # Generator[Suspend, WaitResumeValue, bool] | None (None while queued)
     ctx: ActionContext
     pending: Suspend | None = None
     wake_at: datetime | None = None
@@ -184,6 +186,14 @@ class AutomationEngine:
             self._start_or_queue(trigger_ctx={})
 
     def on_event(self, event_type: str, event_data: dict[str, Any]) -> None:
+        # First, resume any run waiting on a matching wait_for_trigger (task
+        # #32, docs/ha-api-notes.md §36.2 gap 1: this previously only ever
+        # started NEW runs via `_start_or_queue` below, so a run already
+        # suspended inside `wait_for_trigger([event(...)])` was never woken
+        # by a fired event -- mirrors `on_state_change`'s own
+        # resume-then-start-fresh order).
+        self._resume_waits_on_event(EventOccurrence(event_type, event_data))
+        # Then, evaluate this automation's own triggers for a fresh start.
         for trigger in self.config.get("triggers", []):
             if is_event_trigger(trigger) and trigger.get("event_type") == event_type:
                 self._start_or_queue(trigger_ctx={"event": {"data": event_data}})
@@ -293,7 +303,7 @@ class AutomationEngine:
         self._active.append(run)
         self._advance_run(run, resume_value=None)
 
-    def _advance_run(self, run: _Run, *, resume_value: StateChange | None) -> None:
+    def _advance_run(self, run: _Run, *, resume_value: WaitResumeValue) -> None:
         try:
             suspend = run.generator.send(resume_value)
         except StopIteration:
@@ -324,6 +334,17 @@ class AutomationEngine:
                 # template on every state change (any of them might be its
                 # dependency); the generator itself no-ops if still false.
                 self._advance_run(run, resume_value=change)
+
+    def _resume_waits_on_event(self, occurrence: EventOccurrence) -> None:
+        """The event-carrying counterpart of :meth:`_resume_waits_on_state`
+        (task #32). Only ``wait_for_trigger`` is resumable by an event --
+        ``wait_template`` has no event-shaped dependency to react to (it only
+        ever re-renders on a *state* change, per DESIGN §10.1's template
+        subset), so it is deliberately not woken here.
+        """
+        for run in list(self._active):
+            if isinstance(run.pending, SuspendWaitForTrigger):
+                self._advance_run(run, resume_value=occurrence)
 
     # -- clock -------------------------------------------------------------------
 

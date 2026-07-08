@@ -138,10 +138,21 @@ def _active() -> Recorder | None:
     return stack[-1] if stack else None
 
 
-def _require_active(call: str) -> Recorder:
+def _require_active(call: str, *, span: SourceSpan | None = None) -> Recorder:
+    """Return the active recorder, or raise :class:`NoRecordingContextError`.
+
+    ``span=`` lets a caller pre-capture the span at its OWN call site (needed
+    when ``_require_active`` is invoked from inside a
+    ``@contextlib.contextmanager``-decorated generator -- see
+    ``control_flow.py``'s module docstring on the extra contextlib trampoline
+    frame -- ``depth=1`` here would otherwise point into ``contextlib.py``
+    instead of the user's ``with ...():`` line). Defaults to ``depth=1``
+    (this function's immediate caller), correct for every plain-function
+    recording verb (``when``/``only_if``/``record_action`` and friends).
+    """
     rec = _active()
     if rec is None:
-        raise NoRecordingContextError(call, capture_span(depth=1))
+        raise NoRecordingContextError(call, span or capture_span(depth=1))
     return rec
 
 
@@ -251,6 +262,70 @@ def only_if(*conditions: ConditionBuilder) -> OnlyIfBlock:
     for cond in conditions:
         record_condition(cond, span=span)
     return OnlyIfBlock(_require_active("only_if"))
+
+
+@contextlib.contextmanager
+def capture_actions() -> Generator[list[dict[str, Any]]]:
+    """``with capture_actions() as bodies:`` -- capture a block's actions as
+    plain action-body dicts, WITHOUT appending them to the enclosing sequence
+    (task #30, ``ux/capture-notify-recipe``).
+
+    The public counterpart of ``push_actions`` for ``lib/`` recipe builders
+    that cannot legitimately reach the internal ``Recorder``/``RecordedNode``
+    seam ``if_then``/``choose`` are built on (docs/m1-internal-api.md §2):
+    a builder wants to record a block of actions once and then splice the
+    SAME bodies into one or more containers it assembles itself (e.g. one
+    notification action list reused across several ``choose()`` branches
+    keyed by which button the user tapped).
+
+    ``bodies`` is a plain ``list[dict[str, Any]]`` -- the same shape every
+    action builder's ``to_action()`` produces -- with no ``RecordedNode``/span
+    wrapper (those stay compiler-internal); mutate-in-place is intentionally
+    not required, callers should treat the yielded list as complete only once
+    the ``with`` block exits. Pass it to :func:`emit_actions` to splice the
+    bodies into the CURRENT recording context, each re-wrapped with a span
+    captured at the ``emit_actions(...)`` call site.
+
+    Requires an active recording context (R6, same style as every other
+    recording verb): raises :class:`NoRecordingContextError` otherwise.
+    """
+    # `depth=2` (not the default 1): this generator is itself
+    # `@contextlib.contextmanager`-decorated, so the frame between here and the
+    # user's `with capture_actions():` line is contextlib's own
+    # `_GeneratorContextManager.__enter__` trampoline -- exactly the depth
+    # documented in `control_flow.py`'s module docstring for every construct
+    # there, for the same reason.
+    span = capture_span(depth=2)
+    rec = _require_active("capture_actions", span=span)
+    nodes: list[RecordedNode] = []
+    captured: list[dict[str, Any]] = []
+    with rec.push_actions(nodes):
+        yield captured
+    captured.extend(n.body for n in nodes)
+
+
+def emit_actions(bodies: list[dict[str, Any]], *, span: SourceSpan | None = None) -> None:
+    """Splice previously captured action bodies (:func:`capture_actions`) into
+    the CURRENT recording context (task #30, ``ux/capture-notify-recipe``).
+
+    Each body is appended, in order, to ``rec.current_actions`` (so this
+    respects whatever nested container -- ``if_then``, a ``choose()`` branch,
+    etc. -- is active when ``emit_actions`` is called, exactly like a direct
+    action-builder call would). Every emitted action gets its OWN span
+    captured at the ``emit_actions(...)`` call site (or the given ``span``),
+    never the span of the original recording -- so an error later raised
+    against an emitted action points at the splice site, not some unrelated
+    earlier line. ``bodies`` is read, never consumed: emitting the same
+    captured list more than once (e.g. into two different branches) is
+    supported and produces independent, equal-but-distinct action entries.
+
+    Requires an active recording context (R6): raises
+    :class:`NoRecordingContextError` otherwise.
+    """
+    rec = _require_active("emit_actions")
+    resolved_span = span or capture_span(depth=1)
+    for body in bodies:
+        rec.current_actions.append(RecordedNode(dict(body), resolved_span))
 
 
 def check_options(kind: str, options: dict[str, Any], span: SourceSpan | None) -> None:
