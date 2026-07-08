@@ -463,29 +463,34 @@ def generate_entities_stub(snapshot: RegistrySnapshot) -> str:
     lines: list[str] = []
 
     # --- one typed entity class per domain, with typed service methods ------
-    # Matches `ruff format`'s `.pyi`-aware style: an empty class collapses to
-    # `class X: ...` on one line with no blank line before the next empty
-    # class, so the generated golden is format-clean without shelling out to
-    # ruff at generation time.
-    prev_was_empty = False
+    # Every entity class now ALWAYS has at least one member (the `.state`
+    # accessor, M20 entity-first conditions), so the previous "empty class
+    # collapses to `class X: ...` on one line" convention no longer applies to
+    # ANY domain -- there is no longer such a thing as a member-less entity
+    # class. `state` is typed `Any` (not the real, non-public
+    # `hassle.compiler.builders._StateAccessor`) -- same "widen rather than
+    # leak an internal type into a generated stub" convention this module's
+    # own docstring already documents for `Template`/service-field typing:
+    # the accessor's exact operator-overload return types (`_StateAccessor`
+    # for `>`/`<`, `_StateComparisonExpr` for `==`/`!=`, ...) are internal and
+    # not part of `hassle.__all__`, so re-deriving them precisely here would
+    # either leak a private name or drift the moment those internals change.
+    # `Any` still resolves `.state`/`.state == ...`/`.state.in_([...])`
+    # without a single false `reportAttributeAccessIssue` -- the actual gate
+    # this stub exists to satisfy (M28's decompiled-bundle pyright gate).
     for domain in sorted(domains):
         entity_type = _entity_type_name(domain)
         services = snapshot.services.get(domain, {})
         method_lines: list[str] = []
         for service_name in sorted(services):
             method_lines.extend(_service_method(service_name, services[service_name]))
-        if method_lines:
-            if lines and lines[-1] != "":
-                lines.append("")
-            lines.append(f"class {entity_type}(str):")
-            lines.extend(method_lines)
+        if lines and lines[-1] != "":
             lines.append("")
-            prev_was_empty = False
-        else:
-            if not prev_was_empty and lines and lines[-1] != "":
-                lines.append("")
-            lines.append(f"class {entity_type}(str): ...")
-            prev_was_empty = True
+        lines.append(f"class {entity_type}(str):")
+        lines.append("    @property")
+        lines.append("    def state(self) -> Any: ...")
+        lines.extend(method_lines)
+        lines.append("")
     if lines and lines[-1] != "":
         lines.append("")
 
@@ -539,11 +544,42 @@ def _isort_all_sort_key(name: str) -> tuple[int, str]:
     (`hassle.__all__`'s real name set) rather than assumed; needed so this
     generator's output is `ruff check`-clean without shelling out to ruff at
     generation time (matching `generate_entities_stub`/`generate_services_
-    stub`'s own no-ruff-at-generation-time convention)."""
+    stub`'s own no-ruff-at-generation-time convention).
+
+    Case-SENSITIVE within each group (`RUF022`'s own tie-break, verified: it
+    orders `InOperatorTrapError` before `InclusiveNumericBoundError` -- plain
+    codepoint order, `O` < `c`). This is the `__all__`-LIST convention only;
+    ruff's `I001` (import-statement sorting, a DIFFERENT rule) uses a
+    case-INSENSITIVE tie-break instead -- see :func:`_isort_import_sort_key`,
+    used for the import-line block above the `__all__` list, never this one.
+    """
     is_constant = name.replace("_", "").isupper() and any(c.isalpha() for c in name)
     is_class = name[:1].isupper() and not is_constant
     category = 0 if is_constant else (1 if is_class else 2)
     return (category, name)
+
+
+def _isort_import_sort_key(name: str) -> tuple[int, str]:
+    """Sort key for ONE `from module import name as name` re-export line
+    (ruff's `I001`, isort convention) -- same category bucketing as
+    :func:`_isort_all_sort_key` (`ALL_CAPS` constants first, then classes,
+    then everything else), but CASE-INSENSITIVE within each bucket.
+
+    Found the hard way (M20, entity-first conditions milestone): the two
+    conventions genuinely differ. `RUF022`'s `__all__`-list sort is case-
+    SENSITIVE (`InOperatorTrapError` before `InclusiveNumericBoundError`,
+    `O` < `c`), but `I001`'s import-statement sort is case-INSENSITIVE
+    (`InclusiveNumericBoundError` before `InOperatorTrapError`, `c` < `o`
+    case-folded) -- verified against actual `ruff check --select I001 --fix`
+    output on both orderings. Every name pair before this milestone happened
+    to sort identically either way, so this divergence was latent until
+    `InOperatorTrapError`/`InclusiveNumericBoundError` landed adjacent to
+    each other in the same module's import block.
+    """
+    is_constant = name.replace("_", "").isupper() and any(c.isalpha() for c in name)
+    is_class = name[:1].isupper() and not is_constant
+    category = 0 if is_constant else (1 if is_class else 2)
+    return (category, name.lower())
 
 
 def _resolve_binding_module(hassle_pkg: object, name: str) -> str:
@@ -649,7 +685,7 @@ def generate_hassle_reexport_stub() -> str:
         # logical import to sort, and always wants it split one-per-line --
         # a combined `from module import a as a, b as b` is never isort-clean
         # for this idiom, regardless of internal ordering.
-        names = sorted(by_module[module], key=_isort_all_sort_key)
+        names = sorted(by_module[module], key=_isort_import_sort_key)
         for name in names:
             one_line = f"from {module} import {name} as {name}"
             if len(one_line) <= 100:

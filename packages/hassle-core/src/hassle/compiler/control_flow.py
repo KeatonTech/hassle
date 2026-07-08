@@ -34,7 +34,7 @@ from collections.abc import Generator, Iterable
 from typing import Any
 
 from hassle.compiler.action_verbs import _RawAction  # pyright: ignore[reportPrivateUsage]
-from hassle.compiler.errors import ElseWithoutIfError
+from hassle.compiler.errors import ConditionArgumentTypeError, ElseWithoutIfError
 from hassle.compiler.protocols import ConditionBuilder, TriggerBuilder
 from hassle.compiler.recording import (
     RecordedNode,
@@ -57,7 +57,30 @@ _CM_DEPTH = 2
 # site below.
 
 
-def _condition_body(condition: ConditionBuilder) -> dict[str, Any]:
+def _condition_body(condition: ConditionBuilder, *, call: str = "only_if") -> dict[str, Any]:
+    # R6 bool-guard (M20, entity-first conditions milestone, absorbed scope
+    # item (c)): every condition-accepting entry point in this module
+    # (`if_then`, `else_if`, `choose().when_`, `repeat_while`, `repeat_until`)
+    # funnels through this one function -- a plain `bool` here is always the
+    # classic `==`/`!=` mistake, and would otherwise surface as a bare
+    # `AttributeError: 'bool' object has no attribute 'to_condition'` instead
+    # of a teaching error.
+    #
+    # Depth: every call site below sits inside a
+    # `@contextlib.contextmanager`-decorated generator frame -- this plain
+    # (non-generator) function adds exactly one more frame beyond that, so
+    # `_CM_DEPTH + 1` (this module's own verified generator-call depth, plus
+    # one for this helper's own frame) reaches the user's `with ...():` line,
+    # same empirical trampoline story as this module's docstring. (Verified:
+    # `_CM_DEPTH` alone under-walks by one frame here, landing on
+    # `contextlib.py` instead of the caller.)
+    #
+    # pyright statically sees `bool` can never satisfy `ConditionBuilder`
+    # (`to_condition()`), so this looks "unnecessary" against the declared
+    # type -- it defends a caller who ignored/couldn't satisfy that
+    # annotation at runtime (the documented typing dance, M20 spec).
+    if isinstance(condition, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise ConditionArgumentTypeError(call, condition, capture_span(depth=_CM_DEPTH + 1))
     return condition.to_condition()
 
 
@@ -84,7 +107,7 @@ def if_then(
     body: dict[str, Any] = {}
     if alias is not None:
         body["alias"] = alias
-    body["if"] = [_condition_body(condition)]
+    body["if"] = [_condition_body(condition, call="if_then")]
     body["then"] = [n.body for n in then_nodes]
     if enabled is not None:
         body["enabled"] = enabled
@@ -155,7 +178,10 @@ def else_if(condition: ConditionBuilder) -> Generator[None]:
     with rec.push_actions(branch_nodes):
         yield
     body["choose"].append(
-        {"conditions": [_condition_body(condition)], "sequence": [n.body for n in branch_nodes]}
+        {
+            "conditions": [_condition_body(condition, call="else_if")],
+            "sequence": [n.body for n in branch_nodes],
+        }
     )
 
 
@@ -199,7 +225,7 @@ class _ChooseBuilder:
         branch: dict[str, Any] = {}
         if alias is not None:
             branch["alias"] = alias
-        branch["conditions"] = [_condition_body(c) for c in conditions]
+        branch["conditions"] = [_condition_body(c, call="when_") for c in conditions]
         branch["sequence"] = [n.body for n in nodes]
         if enabled is not None:
             branch["enabled"] = enabled
@@ -295,14 +321,18 @@ def repeat_while(
     condition: ConditionBuilder, *, alias: str | None = None, enabled: bool | None = None
 ) -> Any:
     """``with repeat_while(cond): ...`` -> HA ``repeat.while`` (list of one condition)."""
-    return _repeat_cm("while", [_condition_body(condition)], alias=alias, enabled=enabled)
+    return _repeat_cm(
+        "while", [_condition_body(condition, call="repeat_while")], alias=alias, enabled=enabled
+    )
 
 
 def repeat_until(
     condition: ConditionBuilder, *, alias: str | None = None, enabled: bool | None = None
 ) -> Any:
     """``with repeat_until(cond): ...`` -> HA ``repeat.until`` (list of one condition)."""
-    return _repeat_cm("until", [_condition_body(condition)], alias=alias, enabled=enabled)
+    return _repeat_cm(
+        "until", [_condition_body(condition, call="repeat_until")], alias=alias, enabled=enabled
+    )
 
 
 def repeat_for_each(

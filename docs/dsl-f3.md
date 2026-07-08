@@ -172,6 +172,82 @@
 > (`notify_mobile`/`action`, `fixtures/cookbook/bundle/lib/notify_actions.py`)
 > is built on; neither name changes the meaning of any existing construct.
 
+> **Widened 2026-07-07 (`m20/entity-conditions`, owner-commissioned,
+> F3-additive, `hassle.__all__` itself untouched — every addition below is a
+> METHOD/PROPERTY, not a module-level name):** entity-first conditions,
+> `entity.state != ""`.
+>
+> `EntityRef.state` (a defined `@property`, so it wins over M18's
+> service-method `__getattr__` — no HA domain has a service literally named
+> `state`; property lookup is a data descriptor and is always checked before
+> `__getattr__` even runs) returns a comparison accessor
+> (`hassle.compiler.builders._StateAccessor`, non-public) bound to that one
+> entity id:
+> - `==`/`!=` → a native `state` condition (`state(x).is_(v)` /
+>   `state(x).is_not(v)`, byte-identical IR either spelling);
+> - `>`/`<` → `numeric_state(x, above=v)` / `(x, below=v)`;
+> - `>=`/`<=` → `InclusiveNumericBoundError` (added to `hassle.__all__` — see
+>   below): HA's `numeric_state` has no inclusive bound, so silently mapping
+>   these onto `above`/`below` would compile a condition that is subtly wrong
+>   right at the boundary value. Raised instead of a wrong compile, naming the
+>   honest exclusive-operator rewrite;
+> - `.in_([...])` → `state(x).is_(["a", "b"])` (HA's `state` condition already
+>   accepts a list value as OR-membership, verified against a real
+>   UI-authored config, `fixtures/configs/automation_condition_state_list_valued_fields.json`).
+>
+> Works identically on every `EntityRef` source — `e.<domain>.<id>` registry
+> refs AND helper-declaration handles (`input_text(id=...)` and friends all
+> return `EntityRef`), since both share the one implementation.
+>
+> The **`in`-operator trap** (Python semantics, non-negotiable): `x.state in
+> [...]` dispatches to `list.__contains__`, which calls `bool()` on each
+> element comparison to decide membership — no `__eq__` override can
+> intercept this. The comparison-RESULT object (what `==`/`!=` return) refuses
+> `__bool__` with a new error, `InOperatorTrapError` (added to
+> `hassle.__all__`), naming `.in_([...])` as the fix — the natural-but-
+> impossible spelling fails loudly, never silently.
+>
+> `StateExpr.is_not(v)` (a new method, mirroring `.is_()` exactly, including
+> its list-valued `entity_id`/`value` handling) compiles to
+> `{"condition": "not", "conditions": [<state-condition>]}`, byte-identical to
+> `not_(state(x).is_(v))`. The `.state` accessor's `==`/`!=` are REAL `__eq__`/
+> `__ne__` overloads — unlike `StateExpr`/`TemplateExpr` (both `str`
+> subclasses that must keep ordinary string equality, see
+> `hassle.compiler.templates`'s "Note on ==/!="), the accessor is a bespoke,
+> non-`str` object that exists only to be compared, so overloading can never
+> collide with string-equality semantics. (Typing-dance note: a class
+> overloading `__eq__` for a non-`bool` return needs an explicit
+> `# type: ignore[override]` on each of `__eq__`/`__ne__` — `object.__eq__`'s
+> signature returns `bool`, and pyright strict enforces that; the class also
+> loses its default identity-`__hash__` the moment it defines `__eq__` and
+> gets `__hash__` explicitly restored to `object.__hash__`, since nothing
+> requires this accessor to be unhashable and leaving it `None` would be a
+> landmine for a future caller.)
+>
+> Trigger/expression non-confusion (spec test 3): the accessor's comparison
+> result has `to_condition()` only, no `to_trigger` — passing it to `when(...)`
+> fails with a plain `AttributeError` on the missing method, never silently
+> compiling as some other trigger shape. Distinct from M16's `state_of(entity)`
+> (the Jinja TEMPLATE-STRING read, `states('x')`, for template/expression
+> composition): `.state` is the NATIVE-CONDITION read (a real `state`/
+> `numeric_state` condition dict for `only_if(...)`/`if_then(...)`/etc.) — the
+> two never produce the same IR shape.
+>
+> **Also lands a general R6 hardening (absorbed scope item, this same PR):**
+> every condition-accepting entry point (`only_if`, `if_then`, `else_if`,
+> `choose().when_`, `repeat_while`, `repeat_until`, `any_of`/`all_of`/`not_`)
+> now rejects a plain Python `bool` argument with a new error,
+> `ConditionArgumentTypeError` (added to `hassle.__all__`) — previously a bare
+> `AttributeError: 'bool' object has no attribute 'to_condition'` deep inside
+> the compiler, the classic `==`/`!=`-on-a-plain-value typo. Stubs: generated
+> entity classes type the `.state` accessor (`hassle.registry.stubs`'s
+> `generate_entities_stub`); the M28 decompiled-bundle pyright gate stays
+> zero. Decompiler canonical output is UNCHANGED this milestone (authoring
+> sugar only — the decompiler still emits `state(...)`/`numeric_state(...)`
+> builder calls, never the `.state` accessor form); `hassle.__all__` count
+> 108 → 111 (`InclusiveNumericBoundError`, `InOperatorTrapError`,
+> `ConditionArgumentTypeError`).
+
 The public surface is exactly `hassle.__all__` (module
 `packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.

@@ -87,6 +87,32 @@ _ERROR_DOCS: dict[str, str] = {
         "`@template_number(...)` (etc.) over a zero-arg function that "
         "`return`s the state expression."
     ),
+    "InclusiveNumericBoundError": (
+        "Raised by `entity.state >= v` / `entity.state <= v` (M20, "
+        "entity-first conditions). Home Assistant's `numeric_state` "
+        "condition only supports EXCLUSIVE bounds (`above`/`below`) -- there "
+        "is no inclusive form to map `>=`/`<=` onto, so compiling one would "
+        "silently produce a condition that is wrong right at the boundary "
+        "value. Fix: use the exclusive `>`/`<` operator instead (the exact "
+        "boundary value is excluded), or pick a value safely past it."
+    ),
+    "InOperatorTrapError": (
+        "Raised by `entity.state in [...]` (M20, entity-first conditions). "
+        "Python's `in` always calls `bool()` on each element comparison to "
+        "decide membership -- no overload can intercept this, so the natural "
+        "`in` spelling can never build a real condition. Fix: use "
+        "`entity.state.in_([...])` instead, which builds a real `state` "
+        "condition with list (OR) membership."
+    ),
+    "ConditionArgumentTypeError": (
+        "Raised when a condition-accepting entry point (`only_if`, "
+        "`if_then`, `else_if`, `choose().when_`, `repeat_while`, "
+        "`repeat_until`, `any_of`/`all_of`/`not_`) receives a plain Python "
+        "`bool` instead of a condition-builder object (M20) -- almost always "
+        "the classic `==`/`!=`-on-a-plain-value mistake. Fix: build a real "
+        'condition, e.g. `entity.state == "on"` or `state(entity_id).'
+        'is_("on")`, and pass that instead.'
+    ),
 }
 
 

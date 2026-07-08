@@ -99,6 +99,40 @@ class EntityRef(str):
 
         return TemplateExpr(f"state_attr({str(self)!r}, {attribute!r})")
 
+    @property
+    def state(self) -> Any:
+        """``entity.state`` (MILESTONES M20, entity-first conditions) -- a
+        comparison accessor building NATIVE HA conditions (structured
+        ``state``/``numeric_state``, never a template string): ``==``/``!=``
+        for state equality, ``>``/``<`` for ``numeric_state`` above/below,
+        ``.in_([...])`` for state-list membership. See
+        :class:`~hassle.compiler.builders._StateAccessor` for the full
+        operator table and the ``in``-operator trap it guards against.
+
+        A DEFINED property, not resolved through ``__getattr__`` -- Python's
+        attribute lookup finds a data descriptor (a ``property``) on the
+        class before ever falling back to ``__getattr__`` (MILESTONES M18's
+        entity-method sugar below), so this can never be shadowed by, or
+        shadow, ``e.<domain>.<id>.state(...)`` as a service call -- and in
+        fact no HA domain has a service literally named ``state``, so the
+        ambiguity is moot in practice too.
+
+        Distinct from M16's ``state_of(entity)``: that is the Jinja
+        TEMPLATE-STRING read (``states('x')``, for use inside a
+        ``@template_sensor``/expression composition); this is the
+        NATIVE-CONDITION read (a real ``state``/``numeric_state`` condition
+        dict, for use in ``only_if(...)``/``if_then(...)``/etc.). The two
+        never produce the same IR shape and are not interchangeable.
+
+        Imported lazily (same helpers<->builders avoidance convention as
+        ``.attr()``'s lazy ``templates`` import above).
+        """
+        from hassle.compiler.builders import (
+            _StateAccessor,  # pyright: ignore[reportPrivateUsage]
+        )
+
+        return _StateAccessor(str(self))
+
     def __getattr__(self, name: str) -> _EntityServiceMethod:
         """Entity-method sugar (MILESTONES M18, DESIGN §5.2/§5.3):
         ``e.cover.x.close_cover`` (any name not already a real attribute of

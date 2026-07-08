@@ -80,10 +80,18 @@ def test_stub_entity_classes_inherit_str(snapshot: RegistrySnapshot) -> None:
     ``BinarySensorEntity``/``LightEntity``/etc. had no relationship to ``str``
     at all, so a decompiled bundle's ``state(e.binary_sensor.hall_motion)``
     was a pyright error (`reportArgumentType`) even though it is correct,
-    runnable code."""
+    runnable code.
+
+    M20 update (entity-first conditions): every entity class now ALSO always
+    carries the typed ``.state`` accessor property, so a domain with no
+    services no longer collapses to the one-line ``class X(str): ...`` form
+    -- ``BinarySensorEntity`` (a domain this fixture snapshot gives no
+    services to) is exactly the case that used to collapse and now doesn't.
+    """
     stub = generate_entities_stub(snapshot)
     assert "class LightEntity(str):" in stub
-    assert "class BinarySensorEntity(str): ..." in stub
+    assert "class BinarySensorEntity(str):" in stub
+    assert "class BinarySensorEntity(str): ..." not in stub
     # No entity class may be left without the `str` base (would silently
     # regress this fix for one specific domain without failing the two
     # explicit checks above).

@@ -41,6 +41,13 @@ EXEMPT_NAMES: frozenset[str] = frozenset(
         "TemplateHelperDecoratorBodyError",
         # M13 reviewer finding B1: dangling state=-omitted declaration guard.
         "DanglingTemplateHelperDeclarationError",
+        # M20 (entity-first conditions): entity.state's >=/<= mapping guard,
+        # the in-operator trap guard, and the condition-entry-point bool guard
+        # -- all compile-time traps a bundle catches/reads the message of,
+        # never a construct with its own compiled YAML shape.
+        "InclusiveNumericBoundError",
+        "InOperatorTrapError",
+        "ConditionArgumentTypeError",
     }
 )
 
