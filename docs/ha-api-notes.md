@@ -3269,7 +3269,7 @@ service ran) cannot be written as a genuinely passing test against the
 CURRENT simulator — it would either hang (never resumed) or silently always
 take the `default`/no branch (condition never true). Per the STOP
 instruction, that specific test is NOT included; instead
-`test_capture_notify_recipe_ir_shape.py` proves the compiled IR shape
+`test_capture_notify_recipe.py` proves the compiled IR shape
 directly (I5-adjacent: it inspects the compiled action list, not simulated
 execution) and the cookbook's own `tests/test_recipes.py` addition proves
 only the always-true part of the flow (the notification's own service call

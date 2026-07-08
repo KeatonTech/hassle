@@ -18,7 +18,7 @@ Compiles to (DESIGN §5.5/§5.6 sugar, one-way -- see
    ``SLUGIFY(title).upper()``, e.g. ``"Open Blinds"`` -> ``"OPEN_BLINDS"``;
 2. a ``wait_for(event("mobile_app_notification_action"), timeout=...)`` step;
 3. a ``choose()`` whose branches are conditioned on
-   ``var("wait.trigger.event.data.action").eq(SLUG)`` -- HA's own Jinja
+   ``var("wait.trigger['event']['data']['action']").eq(SLUG)`` -- HA's own Jinja
    context after a satisfied ``wait_for_trigger`` exposes the firing
    trigger's data as ``wait.trigger`` (the only spelling for a wait-variable
    read documented anywhere in this DSL surface, docs/ha-api-notes.md §30) --
@@ -49,7 +49,7 @@ DEFAULT_TIMEOUT = "00:05:00"
 
 
 def _wait_action_id_var() -> Any:
-    """``var("wait.trigger.event.data.action")`` -- HA's own Jinja context
+    """``var("wait.trigger['event']['data']['action']")`` -- HA's own Jinja context
     exposing the firing event's data after a satisfied
     `wait_for_trigger` -- but spelled with bracket subscripts
     (``wait.trigger['event']['data']['action']``) instead of dotted attribute

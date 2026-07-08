@@ -147,7 +147,7 @@
 
 > **Widened 2026-07-07 (`ux/capture-notify-recipe`, task #30, F3-additive,
 > surface count 106 → 108):** two new names, `capture_actions()` /
-> `emit_actions(bodies, *, alias=)` — the public capture seam a `lib/`
+> `emit_actions(bodies, *, span=)` — the public capture seam a `lib/`
 > recipe builder uses to record a block's actions once and splice the SAME
 > bodies into more than one container it assembles itself (e.g. one shared
 > notification action list reused across several `choose()` branches).
