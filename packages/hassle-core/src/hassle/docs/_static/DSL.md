@@ -4774,73 +4774,86 @@ Compiles to (canonical IR / stored HA shape):
 }
 ```
 
-### `param_default`
+### `field_default`
 
-Golden case: `fixtures/dsl/shared_script_param_default/`.
+Golden case: `fixtures/dsl/shared_script_field_default_typed/`.
 
 ```python
-"""Golden case (M19 test 2): `param_default(name)` is the escape hatch for
-deliberate compile-time metaprogramming on a shared-script parameter -- the
-declared default (from the signature), a plain Python value, NOT a
-TemplateExpr. Unrolls `for _ in range(param_default("times")):` into that
-many literal actions at compile time (the classic pattern `param()`'s
-runtime-marker binding can no longer support, MILESTONES M19).
+"""Golden case (M19, owner-directed typing resolution): `field_default(...)`
+is the typed-default helper for a `@shared_script` signature parameter
+annotated `TemplateExpr` -- the BODY-TRUE type (every field-named parameter
+is a runtime template marker inside the body, never its declared Python
+default's type). `field_default(value)` is the identity function AT RUNTIME
+(the compiler's `inspect.signature(...)` introspection sees the real
+declared default, e.g. the plain `str` `""` below, completely unchanged) but
+is TYPED as returning `TemplateExpr`, so the parameter's own default
+expression type-checks against its `TemplateExpr` annotation without the
+self-inconsistent `tag: TemplateExpr = ""` a bare literal default would be.
+
+Caller-side typing is unaffected either way (verified empirically,
+MILESTONES M19 typing investigation): a caller passing a plain literal
+(`dismiss_tagged_notification(tag="guest_reminder")`) is unaffected by
+whatever this signature's own annotations say -- `@shared_script`'s returned
+caller wrapper is `(*args: Any, **kwargs: Any) -> None`, fully decoupled.
 """
 
-from hassle import delay, service, shared_script
-from hassle.compiler.scripts import param_default
+from hassle import automation, field_default, service, shared_script, state, when
+from hassle.compiler.templates import TemplateExpr
 
 
-@shared_script(id="flash_lights_unrolled", alias="Flash lights (unrolled)")
-def flash_lights_unrolled(times: int = 3):
-    for _ in range(param_default("times")):
-        service("light.toggle", entity_id="light.all_downstairs")
-        delay(seconds=1)
+@shared_script(id="dismiss_tagged_notification_typed", alias="Dismiss tagged (typed)")
+def dismiss_tagged_notification_typed(tag: TemplateExpr = field_default("")):
+    # Body-true composition: `tag` is a TemplateExpr marker, so `.eq(...)`
+    # type-checks correctly (a `str`-annotated `tag` would NOT: `str` has no
+    # `.eq()` method, `reportAttributeAccessIssue`).
+    service(
+        "persistent_notification.dismiss",
+        notification_id=tag,
+    )
+
+
+@automation(id="dismiss_tagged_reminder_typed", alias="Dismiss tagged reminder (typed)")
+def dismiss_tagged_reminder_typed():
+    when(state("input_boolean.guest_mode").to("off"))
+    dismiss_tagged_notification_typed(tag="guest_reminder")
 ```
 
 Compiles to (canonical IR / stored HA shape):
 
 ```json
 {
-  "script:flash_lights_unrolled": {
-    "alias": "Flash lights (unrolled)",
+  "automation:dismiss_tagged_reminder_typed": {
+    "actions": [
+      {
+        "action": "script.dismiss_tagged_notification_typed",
+        "data": {
+          "tag": "guest_reminder"
+        }
+      }
+    ],
+    "alias": "Dismiss tagged reminder (typed)",
+    "conditions": [],
+    "id": "dismiss_tagged_reminder_typed",
+    "triggers": [
+      {
+        "entity_id": "input_boolean.guest_mode",
+        "to": "off",
+        "trigger": "state"
+      }
+    ]
+  },
+  "script:dismiss_tagged_notification_typed": {
+    "alias": "Dismiss tagged (typed)",
     "fields": {
-      "times": {
-        "default": 3
+      "tag": {
+        "default": ""
       }
     },
     "sequence": [
       {
-        "action": "light.toggle",
+        "action": "persistent_notification.dismiss",
         "data": {
-          "entity_id": "light.all_downstairs"
-        }
-      },
-      {
-        "delay": {
-          "seconds": 1
-        }
-      },
-      {
-        "action": "light.toggle",
-        "data": {
-          "entity_id": "light.all_downstairs"
-        }
-      },
-      {
-        "delay": {
-          "seconds": 1
-        }
-      },
-      {
-        "action": "light.toggle",
-        "data": {
-          "entity_id": "light.all_downstairs"
-        }
-      },
-      {
-        "delay": {
-          "seconds": 1
+          "notification_id": "{{ tag }}"
         }
       }
     ]
@@ -7276,6 +7289,8 @@ Compiles to (canonical IR / stored HA shape):
 }
 ```
 
+See also: `fixtures/dsl/shared_script_repeat_count_marker/`
+
 ### `repeat_while`
 
 Golden case: `fixtures/dsl/repeat_while/`.
@@ -7813,10 +7828,6 @@ Raised when `template_number`/`template_sensor`/`template_binary_sensor`/`templa
 
 `with else_then():`/`with else_if(...):` used where the immediately preceding action in the same list isn't an `if_then`/`choose`/`else_if` block. Fix: move it directly after the block it belongs to.
 
-### `NoDeclaredDefaultError`
-
-`param_default(name)` named a field with no declared default at all (no signature `=...`, and no `"default"` key in an explicit `fields=` entry) -- there is no compile-time value to return. Fix: give the field a declared default, or use `param(name)` for the runtime reference instead.
-
 ### `NoParamContextError`
 
 `param(name)` called outside an active `@shared_script` body. Fix: only call `param(...)` inside the decorated function; use `var(name)` for a runtime `variables:` reference instead.
@@ -7831,7 +7842,7 @@ Python's stdlib `math.*` (or a bare `float()`/`int()`) called on a runtime `Temp
 
 ### `SharedScriptParamMisuseError`
 
-Python control flow/numeric coercion (`if`/`bool()`/`range()`/`int()`/`float()`/`round()`/`math.trunc()`) used on a `@shared_script` signature parameter (MILESTONES M19: every field-named parameter is bound to its runtime `param(name)` marker when the body runs, regardless of its declared default). Fix: for deliberate compile-time metaprogramming (e.g. unrolling a `for _ in range(...):` loop a fixed number of times), use `param_default(name)` instead -- it returns the field's DECLARED default, a plain Python value, not the runtime marker.
+Python control flow/numeric coercion (`if`/`bool()`/`range()`/`int()`/`float()`/`round()`/`math.trunc()`) used on a `@shared_script` signature parameter (MILESTONES M19: every field-named parameter is bound to its runtime `param(name)` marker when the body runs, regardless of its declared default). Fix: for a runtime count/value, use a runtime construct HA itself supports, e.g. `with repeat_count(times):` (accepts the marker directly, honoring whatever the caller passes); for a genuinely compile-time value, it was never a real HA field -- use a module-level constant or a `@macro` argument instead.
 
 ### `TemplateHelperDecoratorBodyError`
 
@@ -7843,4 +7854,4 @@ A `@shared_script` call-site kwarg is not among the script's declared `fields=` 
 
 ### `UnknownParamError`
 
-`param(name)`/`param_default(name)` named a field absent from the `@shared_script`'s signature. Fix: add `name` as a parameter of the decorated function, or correct the spelling.
+`param(name)` named a field absent from the `@shared_script`'s signature. Fix: add `name` as a parameter of the decorated function, or correct the spelling.

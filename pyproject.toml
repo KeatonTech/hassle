@@ -45,6 +45,21 @@ extend-exclude = ["fixtures/splice/three_automations/new_middle_def.py"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
+[tool.ruff.lint.flake8-bugbear]
+# `field_default(...)` (MILESTONES M19, owner-directed typing resolution) is
+# the identity function AT RUNTIME -- it returns its argument completely
+# unchanged, so reusing the single value computed once at function-definition
+# time (B008's actual concern: a MUTABLE default shared/mutated across calls)
+# is exactly as safe as a plain literal default would be. It exists purely to
+# give a `@shared_script` parameter's default expression a `TemplateExpr`
+# return type for pyright (the def's own body-true annotation), a role B008
+# doesn't have a structural way to recognize (its own "immutable type
+# annotation" exemption doesn't apply -- `TemplateExpr` is `hassle`-internal,
+# unknown to ruff) -- so it is named here explicitly, the documented escape
+# hatch for exactly this shape (flake8-bugbear's own docs cite `Depends()`-
+# style sentinel calls as the canonical use case).
+extend-immutable-calls = ["hassle.field_default", "hassle.compiler.scripts.field_default"]
+
 [tool.pyright]
 # Frozen rule (CLAUDE.md / R7): pyright --strict on hassle-core.
 include = ["packages/hassle-core/src"]

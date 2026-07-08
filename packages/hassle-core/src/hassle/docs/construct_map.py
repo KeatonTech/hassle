@@ -31,7 +31,6 @@ EXEMPT_NAMES: frozenset[str] = frozenset(
     {
         "CompileTimeBranchError",
         "ElseWithoutIfError",
-        "NoDeclaredDefaultError",
         "NoParamContextError",
         "PythonMathMisuseError",
         "SharedScriptParamMisuseError",
@@ -125,7 +124,7 @@ NAME_TO_CASES: dict[str, list[str]] = {
     "expr": ["template_expr_golden"],
     "state_of": ["state_of_string_golden", "beacon_area_composition"],
     "param": ["shared_script_call"],
-    "param_default": ["shared_script_param_default"],
+    "field_default": ["shared_script_field_default_typed"],
     # runtime-math expression surface
     "sin": ["math_expr_reference"],
     "cos": ["shade_tracks_sun"],
@@ -151,7 +150,7 @@ NAME_TO_CASES: dict[str, list[str]] = {
     "else_then": ["if_then_else"],
     "else_if": ["if_elseif_else"],
     "choose": ["choose_action"],
-    "repeat_count": ["repeat_count"],
+    "repeat_count": ["repeat_count", "shared_script_repeat_count_marker"],
     "repeat_while": ["repeat_while"],
     "repeat_until": ["repeat_until"],
     "repeat_for_each": ["repeat_for_each"],

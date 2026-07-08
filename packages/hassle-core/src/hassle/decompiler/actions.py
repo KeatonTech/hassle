@@ -646,7 +646,11 @@ def _repeat(body: dict[str, Any], resolver: CallResolver | None) -> list[str] | 
 
     header: str | None = None
     if "count" in repeat and set(repeat) == {"count", "sequence"}:
-        args = ", ".join([render_literal(repeat["count"]), *step_kwargs])
+        # MILESTONES M19: `count` is the blessed spelling for a shared-script
+        # runtime repeat count (`repeat_count(times)`, the marker HA natively
+        # supports as a template string) -- field-aware so a bare field read
+        # decompiles to the bare parameter, not the raw `"{{ times }}"`.
+        args = ", ".join([_render_data_value(repeat["count"]), *step_kwargs])
         header = f"with repeat_count({args}):"
     elif "while" in repeat and set(repeat) == {"while", "sequence"}:
         raw_conds = repeat["while"]

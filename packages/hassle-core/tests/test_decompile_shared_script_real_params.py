@@ -48,7 +48,10 @@ def test_bare_field_read_decompiles_to_bare_parameter_owner_shape() -> None:
         ],
     }
     source, _ = _recompile_sha(config, kind="script", key_hint="dismiss_notification")
-    assert "def dismiss_notification(tag: str = " in source
+    # M19 owner-directed typing resolution: TemplateExpr-annotated,
+    # field_default(...)-defaulted (body-true typing, see
+    # `_shared_script_signature`'s docstring) -- not `tag: str = ""`.
+    assert 'def dismiss_notification(*, tag: TemplateExpr = field_default("")):' in source
     assert "notification_id=tag" in source
     assert "{{ tag }}" not in source  # not the raw-string fallback
 

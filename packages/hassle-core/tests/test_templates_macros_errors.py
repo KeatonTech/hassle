@@ -96,9 +96,21 @@ def test_shared_script_param_if_misuse_error_message() -> None:
     _check_snapshot("shared_script_param_if_misuse", _normalize(str(excinfo.value)))
 
 
-def test_param_default_no_declared_default_error_message() -> None:
-    from hassle.compiler import NoDeclaredDefaultError
+def test_shared_script_param_iteration_misuse_error_message() -> None:
+    # Reviewer finding (M19 PR review): container dunders (`for`/`in`/`len`/
+    # indexing) get the same specialized error, with the iteration-flavored
+    # fix text (`repeat_for_each`), not the numeric/boolean one.
+    from hassle.compiler import SharedScriptParamMisuseError
+    from hassle.compiler.recording import recording
+    from hassle.compiler.scripts import _ACTIVE_FIELDS, param
 
-    with pytest.raises(NoDeclaredDefaultError) as excinfo:
-        compile_bundle(FIXTURES / "shared_script_param_default_no_default" / "bundle")
-    _check_snapshot("param_default_no_declared_default", _normalize(str(excinfo.value)))
+    with recording(alias="x", id="x"):
+        token = _ACTIVE_FIELDS.set(frozenset({"items"}))
+        try:
+            marker = param("items")
+            with pytest.raises(SharedScriptParamMisuseError) as excinfo:
+                for _ in marker:
+                    pass
+        finally:
+            _ACTIVE_FIELDS.reset(token)
+    _check_snapshot("shared_script_param_iteration_misuse", _normalize(str(excinfo.value)))

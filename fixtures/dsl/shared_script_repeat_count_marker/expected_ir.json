@@ -1,0 +1,30 @@
+{
+  "script:flash_lights_repeat": {
+    "alias": "Flash lights (repeat)",
+    "fields": {
+      "times": {
+        "default": 3
+      }
+    },
+    "sequence": [
+      {
+        "repeat": {
+          "count": "{{ times }}",
+          "sequence": [
+            {
+              "action": "light.toggle",
+              "data": {
+                "entity_id": "light.all_downstairs"
+              }
+            },
+            {
+              "delay": {
+                "seconds": 1
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
