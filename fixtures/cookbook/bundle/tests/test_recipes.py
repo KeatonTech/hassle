@@ -71,13 +71,32 @@ def test_thermostat_schedule_sets_night_setback() -> None:
     sim.assert_called("climate.set_temperature", entity_id="climate.living_room", temperature=18)
 
 
-# 4. notify with title ---------------------------------------------------------
+# 4. actionable notification (task #30) ----------------------------------------
 
 
-def test_notify_with_actions_on_unlock() -> None:
+def test_notify_with_actions_sends_actionable_notification_on_unlock() -> None:
+    # The always-true part of the flow: the front door unlocking sends the
+    # actionable notification itself, with both buttons in `data.actions`.
+    # Branch DISPATCH (tapping a button actually opening/closing the blinds)
+    # is NOT exercised here -- the simulator cannot yet resume a pending
+    # `wait_for_trigger` on an event, nor does it populate the `wait.trigger`
+    # template variable a satisfied wait's later conditions read (STOP,
+    # docs/ha-api-notes.md §36.2; the compiled IR *shape* of the dispatch is
+    # separately proven in
+    # `packages/hassle-core/tests/test_capture_notify_recipe.py`, an I5-
+    # adjacent test that inspects the compiled action list rather than
+    # simulating it).
     sim = _sim()
     sim.state_change("lock.front_door", "locked", "unlocked")
-    sim.assert_called("notify.notify", message="Front door unlocked", title="Security")
+    sim.assert_called(
+        "notify.mobile_app_keaton",
+        message="Adjust the upstairs blinds?",
+        title="Front Door Unlocked",
+        actions=[
+            {"action": "OPEN_BLINDS", "title": "Open Blinds", "icon": "mdi:blinds-open"},
+            {"action": "CLOSE_BLINDS", "title": "Close Blinds"},
+        ],
+    )
 
 
 # 5. washing machine done -----------------------------------------------------

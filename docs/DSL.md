@@ -2444,6 +2444,212 @@ Compiles to (canonical IR / stored HA shape):
 }
 ```
 
+### `capture_actions`
+
+Golden case: `fixtures/dsl/capture_emit_actions/`.
+
+```python
+"""Golden case: `capture_actions()`/`emit_actions(...)` (task #30 public
+capture seam) -- one captured action list spliced into two `choose()`
+branches inside a single automation.
+"""
+
+from shared_actions import porch_off_on_either_door
+
+from hassle import automation, state, when
+
+
+@automation(id="doors_porch_light", alias="Doors: porch light off")
+def doors_porch_light():
+    when(state("binary_sensor.front_door").to("open"))
+    porch_off_on_either_door()
+
+
+"""Shared capture/emit helper library (DESIGN §5.6-style `lib/` pattern).
+
+Demonstrates the public capture seam (task #30, `ux/capture-notify-recipe`):
+a `lib/` builder captures one block of actions once with `capture_actions()`
+and splices the SAME captured bodies into more than one place with
+`emit_actions(...)` -- here, a single "turn off the porch light" action
+reused across two `choose()` branches keyed on which door opened.
+"""
+
+from hassle import capture_actions, choose, emit_actions, service, state
+
+
+def porch_off_on_either_door():
+    with capture_actions() as porch_off:
+        service("light.turn_off", entity_id="light.porch")
+
+    with choose() as c:
+        with c.when_(state("binary_sensor.front_door").is_("open")):
+            emit_actions(porch_off)
+        with c.when_(state("binary_sensor.back_door").is_("open")):
+            emit_actions(porch_off)
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "automation:doors_porch_light": {
+    "actions": [
+      {
+        "choose": [
+          {
+            "conditions": [
+              {
+                "condition": "state",
+                "entity_id": "binary_sensor.front_door",
+                "state": "open"
+              }
+            ],
+            "sequence": [
+              {
+                "action": "light.turn_off",
+                "data": {
+                  "entity_id": "light.porch"
+                }
+              }
+            ]
+          },
+          {
+            "conditions": [
+              {
+                "condition": "state",
+                "entity_id": "binary_sensor.back_door",
+                "state": "open"
+              }
+            ],
+            "sequence": [
+              {
+                "action": "light.turn_off",
+                "data": {
+                  "entity_id": "light.porch"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "alias": "Doors: porch light off",
+    "conditions": [],
+    "id": "doors_porch_light",
+    "triggers": [
+      {
+        "entity_id": "binary_sensor.front_door",
+        "to": "open",
+        "trigger": "state"
+      }
+    ]
+  }
+}
+```
+
+### `emit_actions`
+
+Golden case: `fixtures/dsl/capture_emit_actions/`.
+
+```python
+"""Golden case: `capture_actions()`/`emit_actions(...)` (task #30 public
+capture seam) -- one captured action list spliced into two `choose()`
+branches inside a single automation.
+"""
+
+from shared_actions import porch_off_on_either_door
+
+from hassle import automation, state, when
+
+
+@automation(id="doors_porch_light", alias="Doors: porch light off")
+def doors_porch_light():
+    when(state("binary_sensor.front_door").to("open"))
+    porch_off_on_either_door()
+
+
+"""Shared capture/emit helper library (DESIGN §5.6-style `lib/` pattern).
+
+Demonstrates the public capture seam (task #30, `ux/capture-notify-recipe`):
+a `lib/` builder captures one block of actions once with `capture_actions()`
+and splices the SAME captured bodies into more than one place with
+`emit_actions(...)` -- here, a single "turn off the porch light" action
+reused across two `choose()` branches keyed on which door opened.
+"""
+
+from hassle import capture_actions, choose, emit_actions, service, state
+
+
+def porch_off_on_either_door():
+    with capture_actions() as porch_off:
+        service("light.turn_off", entity_id="light.porch")
+
+    with choose() as c:
+        with c.when_(state("binary_sensor.front_door").is_("open")):
+            emit_actions(porch_off)
+        with c.when_(state("binary_sensor.back_door").is_("open")):
+            emit_actions(porch_off)
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "automation:doors_porch_light": {
+    "actions": [
+      {
+        "choose": [
+          {
+            "conditions": [
+              {
+                "condition": "state",
+                "entity_id": "binary_sensor.front_door",
+                "state": "open"
+              }
+            ],
+            "sequence": [
+              {
+                "action": "light.turn_off",
+                "data": {
+                  "entity_id": "light.porch"
+                }
+              }
+            ]
+          },
+          {
+            "conditions": [
+              {
+                "condition": "state",
+                "entity_id": "binary_sensor.back_door",
+                "state": "open"
+              }
+            ],
+            "sequence": [
+              {
+                "action": "light.turn_off",
+                "data": {
+                  "entity_id": "light.porch"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "alias": "Doors: porch light off",
+    "conditions": [],
+    "id": "doors_porch_light",
+    "triggers": [
+      {
+        "entity_id": "binary_sensor.front_door",
+        "to": "open",
+        "trigger": "state"
+      }
+    ]
+  }
+}
+```
+
 ### `service`
 
 Golden case: `fixtures/dsl/state_delay_service/`.

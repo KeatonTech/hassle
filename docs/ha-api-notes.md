@@ -3161,3 +3161,127 @@ unchanged everywhere (annotations + the one `.pyi` generator addition only);
 the full test suite proves it (`pytest`/`ruff`/`pyright --strict` all green,
 plus the new pyright-gate tests in
 `packages/hassle-dev/tests/test_annotation_truth_pyright_gate.py`).
+
+## 36. Task #30 (`ux/capture-notify-recipe`): actionable-notification cookbook recipe — a validator false positive found (not fixed, out of fence) and a real simulator gap (STOP, sub-item 3)
+
+**Context:** building the public `capture_actions()`/`emit_actions(...)`
+seam (`hassle.compiler.recording`) and a `notify_mobile`/`action` cookbook
+recipe (`fixtures/cookbook/bundle/lib/notify_actions.py`) for actionable
+mobile notifications, per the owner's target syntax:
+
+```python
+with notify_mobile(title="Title", message="Hello World"):
+    with action("Open Blinds", icon="mdi:blinds-open"):
+        cover.open_cover(target=e.cover.all_top)
+    with action("Close Blinds"):
+        cover.close_cover(target=e.cover.all_top)
+```
+
+### 36.1 Validator false positive: `event.data` misread as an entity id (found, NOT fixed — out of this task's file fence)
+
+The recipe conditions each `choose()` branch on the wait-trigger's action id,
+which in real HA (and this simulator, once §36.2 below is addressed) is
+exposed as `wait.trigger.event.data.action` in the post-`wait_for_trigger`
+Jinja context. Compiling `var("wait.trigger.event.data.action").eq("OPEN_BLINDS")`
+and running the cookbook bundle through `hassle.registry.validate.
+validate_bundle` (the same check `hassle-dev docs`'s cookbook gate runs)
+produced a spurious finding:
+
+```
+`event.data` is not a known entity in the registry snapshot.
+```
+
+Root cause: `hassle.registry.extract._extract_entity_ids_from_jinja`'s
+regex fallback (`_ENTITY_ID_RE`, gated by `_KNOWN_ISH_DOMAINS`) scans EVERY
+template string in the compiled IR for `<domain>.<word>`-shaped substrings,
+independent of the AST walk that looks for actual `states(...)`/
+`state_attr(...)`/`is_state(...)` calls. `event` is (correctly) in
+`_KNOWN_ISH_DOMAINS` because `event.*` is a real HA entity domain — but that
+means the substring `event.data` inside `wait.trigger.event.data.action`
+(HA's *variable path*, not an entity reference at all) matches the regex and
+is misreported as an unknown entity.
+
+This is a real bug in `hassle/registry/extract.py`/`hassle/registry/
+validate.py` — both **outside this task's file fence** (task #30 owns
+`hassle/compiler/recording.py` + `hassle/compiler/control_flow.py`
+public-surface additions, `hassle/__init__.py` exports, and docs/cookbook
+generators only; M19 and other concurrent work own the rest of the
+compiler/decompiler surface, and the registry/validator modules belong to
+neither). Per this task's instructions ("if you must [touch scripts.py/
+decompiler], STOP and note it" — the same discipline applied here to
+`extract.py`/`validate.py`, which are equally out of scope): **not fixed
+here**, flagged for a follow-on fix instead.
+
+**Workaround used in the recipe** (`lib/notify_actions.py`,
+`_wait_action_id_var()`): spell the same variable read with bracket
+subscripts, `wait.trigger['event']['data']['action']`, instead of dotted
+attribute access. Semantically identical — Jinja (and this simulator's
+`_AttrDict`) resolves both spellings to the same value — and it does not
+contain a `<known-domain>.<word>` substring, so the extractor's false
+positive never fires. This is a workaround, not a fix: the underlying
+regex-fallback bug remains and could misfire again on some other template
+shape that happens to contain a coincidental `event.`/`cover.`/etc.
+substring. A real fix belongs in `_extract_entity_ids_from_jinja` (e.g.
+requiring the matched domain to actually be followed by something that
+looks like a HA object_id in an entity-reference-shaped context, or scoping
+the regex fallback to skip inside a `wait.`/`trigger.`/`repeat.`-rooted
+attribute chain) — flagged for whoever owns `hassle/registry/` next.
+
+### 36.2 Simulator gap: `wait_for_trigger([event(...)])` can never resume, and `wait.trigger` is never populated (STOP — sub-item 3 of this task)
+
+Per this task's explicit instruction ("if the sim cannot yet evaluate the
+wait-variable condition, STOP on that sub-item and report exactly what's
+missing rather than shipping an untested recipe"): the simulator
+(`hassle.testing.actions`/`hassle.testing.engine`) cannot currently execute
+this recipe end-to-end. Two independent, compounding gaps, read from source
+before writing anything:
+
+1. **`wait_for_trigger` can only ever be resumed by a state change or a
+   timeout.** `AutomationEngine._resume_waits_on_state` (the only place a
+   pending `SuspendWaitForTrigger` run is ever advanced with a non-`None`
+   value) is called exclusively from `on_state_change`
+   (`hassle.testing.__init__.Simulator.state_change`/`set_state`, via
+   `_on_state_change`). `AutomationEngine.on_event` (invoked by
+   `Simulator.fire_event`) only ever calls `_start_or_queue` — i.e. it can
+   START a NEW automation run whose top-level trigger is an `event` trigger,
+   but it never looks at `self._active` runs at all, so a run already
+   suspended inside a `wait_for_trigger([event(...)])` step is never woken
+   by `fire_event`. `_run_wait_for_trigger`
+   (`hassle.testing.actions`) only checks `_matches_wait_trigger`, which
+   dispatches to `is_state_trigger`/`is_numeric_state_trigger`/
+   `is_zone_trigger` — there is no `is_event_trigger` branch there at all
+   (despite `hassle.testing.triggers.is_event_trigger` existing and being
+   used elsewhere), so even a hypothetical event-aware resume path would
+   still never report a match.
+2. **No `wait` template variable is ever populated.** `ActionContext.
+   template_context` builds `{"trigger": ...}` (and, inside a `repeat`,
+   `{"repeat": ...}`) but never a `"wait"` key — grepped the whole
+   `hassle.testing` package for the literal `"wait"` key and found no
+   assignment anywhere. Even if gap 1 were fixed, a `choose()` branch
+   condition reading `wait.trigger.event.data.action` would render against a
+   Jinja context with no `wait` name defined at all (a Jinja `Undefined`,
+   not the intended dict), so a `var(...).eq(...)` condition built on it
+   could never evaluate `True`.
+
+**Consequence:** this task's sub-item 3 (a sim test firing
+`mobile_app_notification_action` and asserting the matching branch's
+service ran) cannot be written as a genuinely passing test against the
+CURRENT simulator — it would either hang (never resumed) or silently always
+take the `default`/no branch (condition never true). Per the STOP
+instruction, that specific test is NOT included; instead
+`test_capture_notify_recipe_ir_shape.py` proves the compiled IR shape
+directly (I5-adjacent: it inspects the compiled action list, not simulated
+execution) and the cookbook's own `tests/test_recipes.py` addition proves
+only the always-true part of the flow (the notification's own service call
+fires on the triggering state change) — NOT the branch dispatch. A follow-on
+task should: (a) add an `is_event_trigger` branch to `_matches_wait_trigger`
+using an event-payload match (there is no `StateChange` shape for an event
+today, so `SuspendWaitForTrigger`/the engine's resume plumbing needs an
+event-carrying resume path, not just a `StateChange`); (b) populate
+`ctx.variables["wait"]` (or a dedicated `ActionContext` field mirroring
+`trigger_ctx`) with the satisfying trigger's data before continuing the
+sequence, so `wait.trigger....` template reads work in later actions,
+mirroring how `trigger_ctx`/`ctx.trigger_ctx` already work for the top-level
+trigger. Both changes are simulator-internal (`hassle/testing/actions.py`,
+`hassle/testing/engine.py`, `hassle/testing/triggers.py`) — outside this
+task's file fence; flagged here rather than worked around silently.
