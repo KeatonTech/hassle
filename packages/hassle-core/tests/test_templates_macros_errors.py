@@ -78,3 +78,27 @@ def test_unknown_field_call_kwarg_error_message() -> None:
     with pytest.raises(UnknownFieldError) as excinfo:
         compile_bundle(FIXTURES / "shared_script_rich_fields_unknown_call_kwarg" / "bundle")
     _check_snapshot("unknown_field_call_kwarg", _normalize(str(excinfo.value)))
+
+
+def test_shared_script_param_range_misuse_error_message() -> None:
+    from hassle.compiler import SharedScriptParamMisuseError
+
+    with pytest.raises(SharedScriptParamMisuseError) as excinfo:
+        compile_bundle(FIXTURES / "shared_script_param_range_misuse" / "bundle")
+    _check_snapshot("shared_script_param_range_misuse", _normalize(str(excinfo.value)))
+
+
+def test_shared_script_param_if_misuse_error_message() -> None:
+    from hassle.compiler import SharedScriptParamMisuseError
+
+    with pytest.raises(SharedScriptParamMisuseError) as excinfo:
+        compile_bundle(FIXTURES / "shared_script_param_if_misuse" / "bundle")
+    _check_snapshot("shared_script_param_if_misuse", _normalize(str(excinfo.value)))
+
+
+def test_param_default_no_declared_default_error_message() -> None:
+    from hassle.compiler import NoDeclaredDefaultError
+
+    with pytest.raises(NoDeclaredDefaultError) as excinfo:
+        compile_bundle(FIXTURES / "shared_script_param_default_no_default" / "bundle")
+    _check_snapshot("param_default_no_declared_default", _normalize(str(excinfo.value)))

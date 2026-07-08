@@ -1,0 +1,45 @@
+{
+  "script:flash_lights_unrolled": {
+    "alias": "Flash lights (unrolled)",
+    "fields": {
+      "times": {
+        "default": 3
+      }
+    },
+    "sequence": [
+      {
+        "action": "light.toggle",
+        "data": {
+          "entity_id": "light.all_downstairs"
+        }
+      },
+      {
+        "delay": {
+          "seconds": 1
+        }
+      },
+      {
+        "action": "light.toggle",
+        "data": {
+          "entity_id": "light.all_downstairs"
+        }
+      },
+      {
+        "delay": {
+          "seconds": 1
+        }
+      },
+      {
+        "action": "light.toggle",
+        "data": {
+          "entity_id": "light.all_downstairs"
+        }
+      },
+      {
+        "delay": {
+          "seconds": 1
+        }
+      }
+    ]
+  }
+}

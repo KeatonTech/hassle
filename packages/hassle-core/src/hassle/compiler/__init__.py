@@ -154,11 +154,14 @@ from hassle.compiler.registry import (
     script,
 )
 from hassle.compiler.scripts import (
+    NoDeclaredDefaultError,
     NoParamContextError,
     ScriptCallAction,
+    SharedScriptParamMisuseError,
     UnknownFieldError,
     UnknownParamError,
     param,
+    param_default,
     shared_script,
 )
 from hassle.compiler.spans import SourceSpan, capture_span
@@ -236,6 +239,7 @@ __all__ = [
     "MissingTemplateHelperWriteTargetError",
     "Mode",
     "MqttTrigger",
+    "NoDeclaredDefaultError",
     "NoParamContextError",
     "NoRecordingContextError",
     "NumericStateExpr",
@@ -254,6 +258,7 @@ __all__ = [
     "Registry",
     "ScriptCallAction",
     "ServiceAction",
+    "SharedScriptParamMisuseError",
     "SourceSpan",
     "StateExpr",
     "SunExpr",
@@ -330,6 +335,7 @@ __all__ = [
     "only_if",
     "parallel",
     "param",
+    "param_default",
     "persistent_notification",
     "raw_action",
     "raw_automation",

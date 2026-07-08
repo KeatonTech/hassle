@@ -184,9 +184,18 @@ class _Parser:
     any case where that assumption doesn't hold and falls back safely).
     """
 
-    def __init__(self, tokens: list[_Token]) -> None:
+    def __init__(self, tokens: list[_Token], *, field_names: frozenset[str] | None = None) -> None:
         self._tokens = tokens
         self._pos = 0
+        # MILESTONES M19: the enclosing `@shared_script`'s own declared field
+        # names, when inverting a template found INSIDE that script's body
+        # (None everywhere else -- ordinary automation/helper template
+        # inversion is unaffected). A bare name matching one of these inverts
+        # to the bare parameter read (`tag`, DESIGN's real case) instead of
+        # `var("tag")` (a runtime `variables:` read -- the wrong construct
+        # for a script's own field, and not what compiling `tag=tag` would
+        # even produce).
+        self._field_names = field_names
 
     def _peek(self) -> _Token:
         return self._tokens[self._pos]
@@ -428,6 +437,14 @@ class _Parser:
         if name in ("true", "false"):
             py_value = name == "true"
             return _Node(py_value, repr(py_value))
+        if self._field_names is not None and name in self._field_names:
+            # MILESTONES M19 test 3: a bare read of the enclosing shared
+            # script's OWN field decompiles to the bare parameter name
+            # (`tag`, not `var("tag")`/`param("tag")`) -- `TemplateExpr(name)`
+            # here is exactly the runtime value `param(name)`/a bound `tag`
+            # parameter would compile to (module docstring: value and source
+            # always come from the same parse, so they can never disagree).
+            return _Node(TemplateExpr(name), name)
         # Bare name: a `var("name")` runtime variables: read.
         return _Node(var_builder(name), f"var({name!r})")
 
@@ -504,9 +521,19 @@ class InvertedTemplate:
     source: str
 
 
-def invert_template(jinja_text: str) -> InvertedTemplate | None:
+def invert_template(
+    jinja_text: str, *, field_names: frozenset[str] | None = None
+) -> InvertedTemplate | None:
     """Attempt to invert one ``{{ ... }}`` (or bare-inner) Jinja template to
     DSL Python source.
+
+    ``field_names`` (MILESTONES M19): the enclosing ``@shared_script``'s own
+    declared field names, when this template was found inside that script's
+    body -- a bare name matching one of these inverts to the bare parameter
+    read instead of ``var(name)`` (M19 test 3). ``None`` (the default) is
+    every other call site (automation conditions/templates, template-helper
+    ``state=``, ...): behavior is completely unchanged, so the M19 threading
+    can never leak into decompilation outside an actual shared-script body.
 
     Returns ``None`` for anything outside the bounded grammar (`_Parser`'s
     docstring), OR when parsing nominally succeeds but the render-and-compare
@@ -521,7 +548,7 @@ def invert_template(jinja_text: str) -> InvertedTemplate | None:
     inner = text[2:-2].strip() if is_wrapped else text
     try:
         tokens = _tokenize(inner)
-        node = _Parser(tokens).parse_full()
+        node = _Parser(tokens, field_names=field_names).parse_full()
     except (_LexError, _ParseError, ZeroDivisionError, TypeError, ValueError):
         return None
 

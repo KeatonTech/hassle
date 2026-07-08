@@ -1,0 +1,4 @@
+{
+  "error_type": "NoDeclaredDefaultError",
+  "contains": ["param_default('tag')", "tag", "no declared default"]
+}

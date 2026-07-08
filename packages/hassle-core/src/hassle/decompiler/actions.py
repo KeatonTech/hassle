@@ -13,7 +13,9 @@ Falls back to ``raw_action({...})`` for any action shape not modeled here
 
 from __future__ import annotations
 
+import contextlib
 import keyword
+from collections.abc import Generator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
@@ -23,6 +25,38 @@ if TYPE_CHECKING:
     from hassle.registry.snapshot import RegistrySnapshot
 
 INDENT = "    "
+
+# The enclosing `@shared_script`'s own declared field names, while
+# decompiling THAT script's own body (MILESTONES M19) -- `None` everywhere
+# else (automation decompilation, a plain `@script`'s body, ...). Module-level
+# rather than threaded as a parameter through every action-decompiling
+# function (`_if_then`/`_choose`/`_repeat`/`_parallel`/...): decompiling one
+# object's action tree is a single synchronous recursive call with no
+# re-entrance (`hassle.decompiler.codegen.decompile_object` fully finishes one
+# object before the next), so a push/pop context var is equivalent to (and far
+# less invasive than) threading a new parameter through the whole recursive
+# family -- same convention `hassle.compiler.scripts._ACTIVE_FIELDS` uses on
+# the compile side, and explicitly scoped so it can never leak into an
+# automation's own decompiled data values.
+_active_shared_script_fields: frozenset[str] | None = None
+
+
+@contextlib.contextmanager
+def shared_script_field_context(field_names: frozenset[str] | None) -> Generator[None]:
+    """Decompile a ``@shared_script``'s own body with ``field_names`` active
+    (MILESTONES M19) -- a bare-name Jinja read matching one of these inverts
+    to the bare parameter form instead of ``var(name)``/a raw string.
+    ``field_names=None`` is a no-op (used for the ``@script`` fallback and
+    every non-script-body decompile), so this context manager is safe to wrap
+    around every :func:`~hassle.decompiler.codegen._script_source` call
+    unconditionally."""
+    global _active_shared_script_fields
+    previous = _active_shared_script_fields
+    _active_shared_script_fields = field_names
+    try:
+        yield
+    finally:
+        _active_shared_script_fields = previous
 
 
 def _reserved_top_level_names() -> frozenset[str]:
@@ -53,6 +87,48 @@ def _indent_lines(lines: list[str], levels: int = 1) -> list[str]:
 
 def _raw_action(body: Any) -> list[str]:
     return [f"raw_action({render_literal(body)})"]
+
+
+def _render_data_value(value: Any) -> str:
+    """Render one action ``data``/``target`` value -- the same
+    ``render_literal(v)`` every call site used before M19, EXCEPT a string
+    that inverts through the bounded Jinja inverter (M13/M16,
+    `hassle.decompiler.template_invert`) using the active shared-script's own
+    field names (MILESTONES M19 test 3): a bare field read (``"{{ tag }}"``)
+    or a larger invertible expression over fields (``concat(tag, "_x")``)
+    decompiles through that composed source instead of the raw string.
+    Recurses into dicts/lists (matching a real corpus shape,
+    ``shared_script_rich_fields``'s ``data={"actions": [{"title": "{{
+    action_button }}", ...}], "tag": "{{ tag }}"}``) so a field read nested
+    inside either still gets the bare-parameter treatment, not just a
+    top-level value. Falls back to ``render_literal`` (the raw string, I3)
+    for anything the inverter doesn't accept -- never partial output, same
+    acceptance rule `invert_template` already enforces for template-helper
+    ``state=``. ``_active_shared_script_fields`` is ``None`` outside a
+    shared-script body's own decompile (the common case, and every
+    non-script-body call site), so this is a pure passthrough to
+    ``render_literal`` there -- the M19 threading can never affect
+    automation/plain-``@script`` decompilation.
+    """
+    if _active_shared_script_fields is None:
+        return render_literal(value)
+    if isinstance(value, str):
+        from hassle.decompiler.template_invert import invert_template
+
+        inverted = invert_template(value, field_names=_active_shared_script_fields)
+        if inverted is not None:
+            return inverted.source
+        return render_literal(value)
+    if isinstance(value, dict):
+        as_dict = cast("dict[Any, Any]", value)
+        items = ", ".join(
+            f"{render_literal(k)}: {_render_data_value(v)}" for k, v in as_dict.items()
+        )
+        return "{" + items + "}"
+    if isinstance(value, list):
+        as_list = cast("list[Any]", value)
+        return "[" + ", ".join(_render_data_value(v) for v in as_list) + "]"
+    return render_literal(value)
 
 
 # Per-step `alias`/`enabled` (residue-coverage round 2, docs/ha-api-notes.md
@@ -400,7 +476,7 @@ def _namespace_service_call(
     if "target" in body:
         parts.append(f"target={_target_src(body['target'])}")
     for k, v in data_dict.items():
-        parts.append(f"{k}={render_literal(v)}")
+        parts.append(f"{k}={_render_data_value(v)}")
     if "response_variable" in body:
         parts.append(f"response_variable={render_literal(body['response_variable'])}")
     if "continue_on_error" in body:
@@ -421,7 +497,7 @@ def _service_call(body: dict[str, Any]) -> list[str]:
     if isinstance(data, dict):
         data_dict = cast("dict[str, Any]", data)
         for k, v in data_dict.items():
-            parts.append(f"{k}={render_literal(v)}")
+            parts.append(f"{k}={_render_data_value(v)}")
     elif data is not None:
         parts.append(f"data={render_literal(data)}")
     if "data_template" in body:

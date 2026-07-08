@@ -47,9 +47,27 @@ _ERROR_DOCS: dict[str, str] = {
         "for a runtime `variables:` reference instead."
     ),
     "UnknownParamError": (
-        "`param(name)` named a field absent from the `@shared_script`'s "
-        "signature. Fix: add `name` as a parameter of the decorated function, "
-        "or correct the spelling."
+        "`param(name)`/`param_default(name)` named a field absent from the "
+        "`@shared_script`'s signature. Fix: add `name` as a parameter of the "
+        "decorated function, or correct the spelling."
+    ),
+    "SharedScriptParamMisuseError": (
+        "Python control flow/numeric coercion (`if`/`bool()`/`range()`/"
+        "`int()`/`float()`/`round()`/`math.trunc()`) used on a "
+        "`@shared_script` signature parameter (MILESTONES M19: every field-"
+        "named parameter is bound to its runtime `param(name)` marker when "
+        "the body runs, regardless of its declared default). Fix: for "
+        "deliberate compile-time metaprogramming (e.g. unrolling a "
+        "`for _ in range(...):` loop a fixed number of times), use "
+        "`param_default(name)` instead -- it returns the field's DECLARED "
+        "default, a plain Python value, not the runtime marker."
+    ),
+    "NoDeclaredDefaultError": (
+        "`param_default(name)` named a field with no declared default at "
+        'all (no signature `=...`, and no `"default"` key in an explicit '
+        "`fields=` entry) -- there is no compile-time value to return. Fix: "
+        "give the field a declared default, or use `param(name)` for the "
+        "runtime reference instead."
     ),
     "UnknownFieldError": (
         "A `@shared_script` call-site kwarg is not among the script's "

@@ -31,8 +31,10 @@ EXEMPT_NAMES: frozenset[str] = frozenset(
     {
         "CompileTimeBranchError",
         "ElseWithoutIfError",
+        "NoDeclaredDefaultError",
         "NoParamContextError",
         "PythonMathMisuseError",
+        "SharedScriptParamMisuseError",
         "UnknownFieldError",
         "UnknownParamError",
         # Compile-time guard, not a construct (ux/dsl-ergonomics round):
@@ -123,6 +125,7 @@ NAME_TO_CASES: dict[str, list[str]] = {
     "expr": ["template_expr_golden"],
     "state_of": ["state_of_string_golden", "beacon_area_composition"],
     "param": ["shared_script_call"],
+    "param_default": ["shared_script_param_default"],
     # runtime-math expression surface
     "sin": ["math_expr_reference"],
     "cos": ["shade_tracks_sun"],

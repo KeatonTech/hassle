@@ -145,6 +145,40 @@
 > silently dropped a leading/trailing newline around a `{{ ... }}` block on
 > inversion, violating I3; now compares against the original text.
 
+> **Widened 2026-07-07 (M19, owner-commissioned, F3-additive, surface count
+> 106 → 109):** three new names. `param_default(name)` — inside a
+> `@shared_script` body, returns the field's DECLARED default (a plain Python
+> value, never a `TemplateExpr`), for deliberate compile-time metaprogramming
+> (the `for _ in range(param_default("times")):` unroll pattern) that a bound
+> runtime marker can no longer support. `SharedScriptParamMisuseError` —
+> `range()`/`bool()`/`int()`/`float()`/`round()`/`math.trunc()` misuse on a
+> bound shared-script parameter, naming the `param_default()` escape hatch.
+> `NoDeclaredDefaultError` — `param_default(name)` naming a field with no
+> declared default at all. Companion behavior change (not a new name —
+> `param()`'s existing frozen entry, and the meaning of a `@shared_script`
+> body's own signature parameters, both widen): compiling a `@shared_script`
+> body now binds EVERY signature parameter whose name is a declared field to
+> its `param(name)` marker BEFORE the body runs, regardless of its declared
+> Python default — so `tag=tag` inside the body is now exactly equivalent to
+> `tag=param("tag")` (previously, an unbound bare parameter held its literal
+> Python default — `None` if undeclared — a footgun the owner commissioned
+> this milestone to close). `param(name)` itself is unchanged in spelling and
+> stays valid (back-compat); its return value is now a `_BoundParamMarker`
+> (module-internal `hassle.compiler.scripts` class, NOT added to
+> `hassle.__all__` — a `TemplateExpr` subclass, so nothing about the DSL
+> surface changes beyond the three names above). Decompiler widening
+> (`hassle.decompiler.template_invert`/
+> `hassle.decompiler.codegen`, non-public tooling): inside a `@shared_script`
+> body's own decompile, a `"{{ <field> }}"` data value whose name is exactly
+> one of the script's own fields now inverts to the bare parameter read
+> (`tag`) instead of the raw string; a larger invertible expression
+> containing a field read decompiles through the same bounded inverter with
+> fields bound as parameters. Scoped strictly to an actual shared-script
+> body's decompile (a module-level context, reset immediately after) — never
+> affects automation/plain-`@script` decompilation, and the byte-exact
+> re-render acceptance gate (MILESTONES M13) still governs: anything the
+> inverter can't accept keeps the unchanged raw-string fallback (I3).
+
 The public surface is exactly `hassle.__all__` (module
 `packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.

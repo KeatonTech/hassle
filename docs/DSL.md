@@ -4774,6 +4774,80 @@ Compiles to (canonical IR / stored HA shape):
 }
 ```
 
+### `param_default`
+
+Golden case: `fixtures/dsl/shared_script_param_default/`.
+
+```python
+"""Golden case (M19 test 2): `param_default(name)` is the escape hatch for
+deliberate compile-time metaprogramming on a shared-script parameter -- the
+declared default (from the signature), a plain Python value, NOT a
+TemplateExpr. Unrolls `for _ in range(param_default("times")):` into that
+many literal actions at compile time (the classic pattern `param()`'s
+runtime-marker binding can no longer support, MILESTONES M19).
+"""
+
+from hassle import delay, service, shared_script
+from hassle.compiler.scripts import param_default
+
+
+@shared_script(id="flash_lights_unrolled", alias="Flash lights (unrolled)")
+def flash_lights_unrolled(times: int = 3):
+    for _ in range(param_default("times")):
+        service("light.toggle", entity_id="light.all_downstairs")
+        delay(seconds=1)
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "script:flash_lights_unrolled": {
+    "alias": "Flash lights (unrolled)",
+    "fields": {
+      "times": {
+        "default": 3
+      }
+    },
+    "sequence": [
+      {
+        "action": "light.toggle",
+        "data": {
+          "entity_id": "light.all_downstairs"
+        }
+      },
+      {
+        "delay": {
+          "seconds": 1
+        }
+      },
+      {
+        "action": "light.toggle",
+        "data": {
+          "entity_id": "light.all_downstairs"
+        }
+      },
+      {
+        "delay": {
+          "seconds": 1
+        }
+      },
+      {
+        "action": "light.toggle",
+        "data": {
+          "entity_id": "light.all_downstairs"
+        }
+      },
+      {
+        "delay": {
+          "seconds": 1
+        }
+      }
+    ]
+  }
+}
+```
+
 ### `sin`
 
 Golden case: `fixtures/dsl/math_expr_reference/`.
@@ -7739,6 +7813,10 @@ Raised when `template_number`/`template_sensor`/`template_binary_sensor`/`templa
 
 `with else_then():`/`with else_if(...):` used where the immediately preceding action in the same list isn't an `if_then`/`choose`/`else_if` block. Fix: move it directly after the block it belongs to.
 
+### `NoDeclaredDefaultError`
+
+`param_default(name)` named a field with no declared default at all (no signature `=...`, and no `"default"` key in an explicit `fields=` entry) -- there is no compile-time value to return. Fix: give the field a declared default, or use `param(name)` for the runtime reference instead.
+
 ### `NoParamContextError`
 
 `param(name)` called outside an active `@shared_script` body. Fix: only call `param(...)` inside the decorated function; use `var(name)` for a runtime `variables:` reference instead.
@@ -7751,6 +7829,10 @@ Raised when `with only_if(...):` is used but an action is recorded outside the b
 
 Python's stdlib `math.*` (or a bare `float()`/`int()`) called on a runtime `TemplateExpr`. Fix: use the matching `hassle` math builder (`sin`/`cos`/`sqrt`/... ) instead of `math.sin`/etc. -- `math.pi` as a *plain* Python constant is not a trap, it just folds into a literal.
 
+### `SharedScriptParamMisuseError`
+
+Python control flow/numeric coercion (`if`/`bool()`/`range()`/`int()`/`float()`/`round()`/`math.trunc()`) used on a `@shared_script` signature parameter (MILESTONES M19: every field-named parameter is bound to its runtime `param(name)` marker when the body runs, regardless of its declared default). Fix: for deliberate compile-time metaprogramming (e.g. unrolling a `for _ in range(...):` loop a fixed number of times), use `param_default(name)` instead -- it returns the field's DECLARED default, a plain Python value, not the runtime marker.
+
 ### `TemplateHelperDecoratorBodyError`
 
 Raised when a `@template_number`/`@template_sensor`/`@template_binary_sensor`/`@template_select` decorator (M13) is applied to a function that doesn't fit the decorator-form contract: it must take zero parameters and `return` a `TemplateExpr`/`str` -- no declared parameters, no recording-verb calls (`service`/`when`/`only_if`/...), no other return type. Fix: remove the parameters, return a template expression built from the `hassle.compiler.templates`/`hassle.compiler.math_expr` surface (or a plain Jinja string), and do nothing else in the function body.
@@ -7761,4 +7843,4 @@ A `@shared_script` call-site kwarg is not among the script's declared `fields=` 
 
 ### `UnknownParamError`
 
-`param(name)` named a field absent from the `@shared_script`'s signature. Fix: add `name` as a parameter of the decorated function, or correct the spelling.
+`param(name)`/`param_default(name)` named a field absent from the `@shared_script`'s signature. Fix: add `name` as a parameter of the decorated function, or correct the spelling.

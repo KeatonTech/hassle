@@ -19,7 +19,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from hassle.compiler.enums import MaxExceeded, Mode
-from hassle.decompiler.actions import INDENT, CallResolver, CallTarget, decompile_action
+from hassle.decompiler.actions import (
+    INDENT,
+    CallResolver,
+    CallTarget,
+    decompile_action,
+    shared_script_field_context,
+)
 from hassle.decompiler.exprs import decompile_condition, decompile_trigger, render_literal
 from hassle.ir.keys import HELPER_DOMAINS, TEMPLATE_DOMAINS, slugify
 from hassle.ir.models import (
@@ -588,14 +594,27 @@ def _script_source(obj: ScriptConfig, ident: str, resolver: CallResolver | None)
     signature = _shared_script_signature(fields) if as_shared_script else ""
     lines = [f"@{decorator_name}({', '.join(decorator_kwargs)})", f"def {ident}({signature}):"]
     body_lines: list[str] = []
+    # M19: a `@shared_script`'s own field names are active while decompiling
+    # ITS sequence -- a data value that's exactly a field read (or a larger
+    # invertible expression over fields) decompiles to the bare parameter
+    # form instead of the raw `"{{ ... }}"` string (test 3). `None` for the
+    # `@script` fallback (no signature-bound fields to speak of) -- the
+    # bare-parameter rewrite only ever makes sense for an actual
+    # `@shared_script`.
+    field_names: frozenset[str] | None = (
+        frozenset(cast("dict[str, Any]", fields))
+        if as_shared_script and isinstance(fields, dict)
+        else None
+    )
     # No `# --- sequence ---` header (owner amendment, ``ux/dsl-ergonomics`` --
     # see `_automation_source`'s matching note): a script's body is just its
     # sequence, nothing else, so the comment never disambiguated anything.
-    for action in sequence:
-        if isinstance(action, dict):
-            body_lines.extend(decompile_action(action, resolver=resolver))
-        else:
-            body_lines.append(f"raw_action({render_literal(action)})")
+    with shared_script_field_context(field_names):
+        for action in sequence:
+            if isinstance(action, dict):
+                body_lines.extend(decompile_action(action, resolver=resolver))
+            else:
+                body_lines.append(f"raw_action({render_literal(action)})")
     if not body_lines:
         body_lines = ["pass"]
     for line in body_lines:

@@ -9,13 +9,33 @@ not list ``registry.py`` as off-limits and ``script()`` is exactly the seam:
 - **fields from the signature**: a shared script's Python parameters become the
   script's ``fields`` block (HA's typed-input UI), with Python defaults mapped
   to field ``default``.
-- **``param(name)``**: inside the function body (which the compiler runs once,
-  exactly like a plain ``@script``, to *build* the sequence), ``param("times")``
-  is not the compile-time Python default -- it is a runtime reference to the
-  script's own field, i.e. the Jinja read ``{{ times }}`` (a ``TemplateExpr``,
-  so it composes with the template builder's operators). ``param()`` outside an
-  active shared-script body, or naming a parameter absent from the signature,
-  raises a what/where/fix error (R6).
+- **the function's own parameters ARE real runtime field references**
+  (MILESTONES M19): compiling a shared-script body binds EACH signature
+  parameter whose name is a declared field to its ``param(name)`` marker (a
+  ``TemplateExpr``) -- regardless of its declared Python default -- so
+  ``tag=tag`` inside the body means exactly the same thing as
+  ``tag=param("tag")`` (M19 test 1/4: byte-identical IR, both forms stay
+  valid). ``param(name)`` remains the explicit spelling (back-compat, F3) and
+  is what the bound parameter is *set to*; the bound marker is a
+  :class:`_BoundParamMarker` (a ``TemplateExpr`` subclass) so
+  ``range()``/``bool()``/``int()`` misuse on it raises the specialized
+  :class:`SharedScriptParamMisuseError` (M19 test 2) naming the
+  :func:`param_default` escape hatch, rather than the generic
+  ``PythonMathMisuseError``/``CompileTimeBranchError``/bare ``TypeError`` a
+  plain ``TemplateExpr`` would raise for the same misuse anywhere else.
+  ``param()`` outside an active shared-script body, or naming a parameter
+  absent from the signature, raises a what/where/fix error (R6, unchanged).
+  A signature parameter that is NOT one of the declared fields (e.g. a body
+  helper arg, only possible when ``fields=`` was given explicitly and is a
+  strict subset of the signature) is left to its ordinary Python default --
+  only field-named parameters are bound.
+- **``param_default(name)``** (MILESTONES M19): the escape hatch for
+  deliberate compile-time metaprogramming on a shared-script parameter (the
+  ``for _ in range(...)`` unroll pattern) -- returns the field's DECLARED
+  default (from the signature, or ``fields=``'s own ``"default"`` key when
+  given explicitly), a plain Python value, never a ``TemplateExpr``. Valid
+  only inside an active shared-script body; naming an absent field gets the
+  same :class:`UnknownParamError` treatment as :func:`param`.
 - **the caller side**: the name bound to ``flash_lights`` after decoration is
   *not* the original function (which the compiler already invokes once via the
   ``script()`` registration to build the ``ScriptConfig``) -- it is a wrapper
@@ -51,32 +71,145 @@ _ACTIVE_FIELDS: ContextVar[frozenset[str] | None] = ContextVar(
     "hassle_shared_script_fields", default=None
 )
 
+# Each active field's DECLARED default (from the signature, or fields=''s own
+# "default" key when given explicitly) -- the source `param_default()` reads
+# from (MILESTONES M19). A field with no declared default at all is simply
+# absent from this dict; `param_default()` on it is a hard R6 error (there is
+# no compile-time value to hand back, unlike param()'s runtime marker, which
+# never needs one).
+_ACTIVE_DEFAULTS: ContextVar[dict[str, Any] | None] = ContextVar(
+    "hassle_shared_script_defaults", default=None
+)
 
-class NoParamContextError(CompileError):
-    """``param()`` was called outside any ``@shared_script`` body."""
 
-    def __init__(self, name: str, span: SourceSpan | None) -> None:
+class SharedScriptParamMisuseError(CompileError):
+    """Python control flow / numeric coercion was used on a bound
+    shared-script parameter (MILESTONES M19 test 2).
+
+    Since M19, EVERY signature parameter that names a declared field is
+    bound to its ``param(name)`` marker when the compiler invokes a
+    ``@shared_script`` body -- not the Python default -- so ``range(times)``,
+    ``if tag:``, ``int(times)``, etc. on a bound parameter can't honestly
+    work at compile time (the marker has no runtime value until it renders
+    inside Home Assistant). This is the SAME class of trap
+    ``CompileTimeBranchError``/``PythonMathMisuseError`` set for a raw
+    ``TemplateExpr`` elsewhere in the DSL (DESIGN §5.5), specialized here
+    because the fix is different: a shared-script body has an actual declared
+    default to fall back on, so the escape hatch is ``param_default(name)``,
+    not a ``with if_then(...):`` rewrite or `hassle.compiler.math_expr`.
+    """
+
+    def __init__(self, name: str, python_op: str, span: SourceSpan | None) -> None:
+        self.name = name
         where = f" at {span.file}:{span.line}" if span is not None else ""
         super().__init__(
-            f"`param({name!r})` was called outside any `@shared_script` body{where}. "
-            f"`param()` reads one of the enclosing shared script's own fields at "
-            f"runtime, so it only makes sense inside a function decorated with "
-            f"`@shared_script`. Fix: call `param(...)` only from within a "
-            f"`@shared_script`-decorated function, or use a plain Python value here."
+            f"You used Python's `{python_op}` on the shared-script parameter `{name}`"
+            f"{where}. Since M19, `{name}` inside this body is bound to its runtime "
+            f"`param({name!r})` marker (regardless of its declared default), so it has "
+            f"no compile-time value to give `{python_op}` -- it is Jinja text under "
+            f"construction, not a number or a boolean, until it renders inside Home "
+            f"Assistant. Fix: for deliberate compile-time metaprogramming (e.g. "
+            f"unrolling a `for _ in range(...):` loop a fixed number of times), use "
+            f"`param_default({name!r})` instead -- it returns `{name}`'s DECLARED "
+            f"default, a plain Python value, not the runtime marker."
+        )
+
+
+class _BoundParamMarker(TemplateExpr):
+    """A ``param(name)`` marker bound to a shared-script body's OWN signature
+    parameter (MILESTONES M19) -- a ``TemplateExpr`` subclass so it composes
+    with the whole expression surface exactly like :func:`param`'s return
+    value, but with ``range()``/``bool()``/``int()`` misuse raising the
+    specialized :class:`SharedScriptParamMisuseError` (naming the
+    ``param_default()`` escape hatch) instead of the generic
+    ``CompileTimeBranchError``/``PythonMathMisuseError`` a plain
+    :class:`TemplateExpr` raises for the same misuse everywhere else in the
+    DSL. Never constructed directly by DSL authors -- :func:`param` returns a
+    plain :class:`TemplateExpr`; only :func:`shared_script`'s own
+    ``compiled_body`` wrapper creates one, when binding the signature.
+    """
+
+    _param_name: str
+
+    def __new__(cls, name: str) -> _BoundParamMarker:
+        obj = cast("_BoundParamMarker", super().__new__(cls, name))
+        obj._param_name = name
+        return obj
+
+    def __bool__(self) -> bool:
+        raise SharedScriptParamMisuseError(self._param_name, "if/bool()", capture_span(depth=0))
+
+    def __index__(self) -> int:
+        # `range(x)`/`list[x]`/... call `__index__`, not `__int__` -- Python's
+        # own error for a plain TemplateExpr here ("cannot be interpreted as
+        # an integer") never names file:line or a fix (see the module-level
+        # deviation note in the class docstring); this is the shared-script
+        # boundary specialization the R6 error hooks.
+        raise SharedScriptParamMisuseError(self._param_name, "range()/int()", capture_span(depth=0))
+
+    def __int__(self) -> int:
+        raise SharedScriptParamMisuseError(self._param_name, "int()", capture_span(depth=0))
+
+    def __float__(self) -> float:
+        raise SharedScriptParamMisuseError(self._param_name, "float()", capture_span(depth=0))
+
+    def __round__(self, ndigits: int | None = None) -> float:
+        raise SharedScriptParamMisuseError(self._param_name, "round()", capture_span(depth=0))
+
+    def __trunc__(self) -> int:
+        raise SharedScriptParamMisuseError(self._param_name, "math.trunc()", capture_span(depth=0))
+
+
+class NoParamContextError(CompileError):
+    """``param()``/``param_default()`` was called outside any ``@shared_script`` body."""
+
+    def __init__(self, name: str, span: SourceSpan | None, *, fn: str = "param") -> None:
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        super().__init__(
+            f"`{fn}({name!r})` was called outside any `@shared_script` body{where}. "
+            f"`{fn}()` reads one of the enclosing shared script's own fields, so it "
+            f"only makes sense inside a function decorated with `@shared_script`. "
+            f"Fix: call `{fn}(...)` only from within a `@shared_script`-decorated "
+            f"function, or use a plain Python value here."
         )
 
 
 class UnknownParamError(CompileError):
-    """``param(name)`` named a parameter absent from the shared script's signature."""
+    """``param(name)``/``param_default(name)`` named a parameter absent from
+    the shared script's signature."""
 
-    def __init__(self, name: str, known: list[str], span: SourceSpan | None) -> None:
+    def __init__(
+        self, name: str, known: list[str], span: SourceSpan | None, *, fn: str = "param"
+    ) -> None:
         where = f" at {span.file}:{span.line}" if span is not None else ""
         known_str = ", ".join(known) if known else "(none)"
         super().__init__(
-            f"`param({name!r})`{where} does not match any parameter of this "
+            f"`{fn}({name!r})`{where} does not match any parameter of this "
             f"`@shared_script` function. Its fields are: {known_str}. Fix: correct "
             f"the spelling, or add `{name}` as a parameter of the decorated function "
             f"so it becomes a script field."
+        )
+
+
+class NoDeclaredDefaultError(CompileError):
+    """``param_default(name)`` named a field with no declared default at all
+    (MILESTONES M19): there is no compile-time value to hand back -- unlike
+    :func:`param`, which always has something to reference at runtime (the
+    field itself), :func:`param_default` needs an actual Python value, and a
+    field declared with no ``"default"`` key (an explicit ``fields=`` entry,
+    or a bare ``name`` positional with no ``=...``) never had one.
+    """
+
+    def __init__(self, name: str, span: SourceSpan | None) -> None:
+        self.name = name
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        super().__init__(
+            f"`param_default({name!r})`{where}: `{name}` has no declared default -- "
+            f'its `@shared_script` field spec has no `"default"` key (or its '
+            f"signature parameter has no `=...`), so there is no compile-time value "
+            f"for `param_default()` to return. Fix: give `{name}` a declared default "
+            f'(a signature default, or a `"default"` key in `fields=`), or use '
+            f"`param({name!r})` for the runtime reference instead."
         )
 
 
@@ -87,6 +220,13 @@ def param(name: str) -> TemplateExpr:
     compiler is building its sequence); the name must be one of the function's
     parameters (M1 test 5: `param()` referencing an unknown name is a snapshot-
     tested error).
+
+    Returns a :class:`_BoundParamMarker` (MILESTONES M19 test 4: back-compat
+    -- ``param(name)`` stays valid and is exactly equivalent to the bound
+    signature parameter of the same name), so ``range()``/``bool()``/``int()``
+    misuse on the RESULT of an explicit ``param(...)`` call gets the same
+    specialized :class:`SharedScriptParamMisuseError` a bound bare parameter
+    would, naming the same ``param_default()`` escape hatch.
     """
     span = capture_span(depth=0)
     fields = _ACTIVE_FIELDS.get()
@@ -94,7 +234,37 @@ def param(name: str) -> TemplateExpr:
         raise NoParamContextError(name, span)
     if name not in fields:
         raise UnknownParamError(name, sorted(fields), span)
-    return TemplateExpr(name)
+    return _BoundParamMarker(name)
+
+
+def param_default(name: str) -> Any:
+    """The escape hatch for deliberate compile-time metaprogramming on a
+    shared-script parameter (MILESTONES M19): returns ``name``'s DECLARED
+    default -- from the signature's own default, or ``fields=``'s
+    ``"default"`` key when given explicitly -- a plain Python value, NEVER a
+    ``TemplateExpr``. This is what makes the classic ``for _ in range(...):``
+    unroll pattern still expressible after M19 bound every signature
+    parameter to its runtime marker: ``param_default("times")`` sidesteps the
+    binding entirely and hands back the actual compile-time default.
+
+    Valid only inside an active ``@shared_script`` body; naming a field
+    absent from the signature is the same :class:`UnknownParamError`
+    :func:`param` raises for the same mistake (R6). Naming a field that IS
+    declared but has no default at all (bare ``name=None`` with no
+    ``"default"`` key in an explicit ``fields=`` entry) is a
+    :class:`NoDeclaredDefaultError` instead -- a distinct mistake (nothing to
+    correct the spelling of; the field just never had a compile-time value).
+    """
+    span = capture_span(depth=0)
+    fields = _ACTIVE_FIELDS.get()
+    if fields is None:
+        raise NoParamContextError(name, span, fn="param_default")
+    if name not in fields:
+        raise UnknownParamError(name, sorted(fields), span, fn="param_default")
+    defaults = _ACTIVE_DEFAULTS.get()
+    if defaults is None or name not in defaults:
+        raise NoDeclaredDefaultError(name, span)
+    return defaults[name]
 
 
 # ---------------------------------------------------------------------------
@@ -250,24 +420,54 @@ def shared_script(**options: Any) -> Callable[[Callable[..., Any]], Callable[...
         signature_fields = _fields_from_signature(func)
         script_options = dict(options)
         active_field_names: frozenset[str]
+        active_defaults: dict[str, Any]
         if isinstance(explicit_fields, dict):
             # Verbatim wins (byte-stability by construction) -- never merged
             # with the signature-derived shape, so decompile -> recompile
             # reproduces the exact same fields= literal.
-            active_field_names = frozenset(cast("dict[str, Any]", explicit_fields))
+            explicit_fields_dict = cast("dict[str, Any]", explicit_fields)
+            active_field_names = frozenset(explicit_fields_dict)
+            active_defaults = {
+                name: spec["default"]
+                for name, spec in explicit_fields_dict.items()
+                if isinstance(spec, dict) and "default" in spec
+            }
         elif signature_fields:
             script_options["fields"] = signature_fields
             active_field_names = frozenset(signature_fields)
+            active_defaults = {
+                name: spec["default"]
+                for name, spec in signature_fields.items()
+                if "default" in spec
+            }
         else:
             active_field_names = frozenset()
+            active_defaults = {}
+
+        # M19: every signature parameter whose name is a declared field is
+        # bound to its `param(name)` marker BEFORE the body runs, regardless
+        # of its declared Python default -- `tag=tag` inside the body means
+        # exactly `tag=param("tag")` (test 1/4). A signature parameter that
+        # is NOT a declared field (only possible when `fields=` was given
+        # explicitly and doesn't cover every Python parameter) is left
+        # unbound -- ordinary `bind_partial`/`apply_defaults` fills it from
+        # its own Python default, same as before M19.
+        bound_param_names = tuple(
+            name for name in inspect.signature(func).parameters if name in active_field_names
+        )
 
         @functools.wraps(func)
         def compiled_body(*args: Any, **kwargs: Any) -> Any:
-            token = _ACTIVE_FIELDS.set(active_field_names)
+            fields_token = _ACTIVE_FIELDS.set(active_field_names)
+            defaults_token = _ACTIVE_DEFAULTS.set(active_defaults)
             try:
-                return func(*args, **kwargs)
+                bound_kwargs = dict(kwargs)
+                for name in bound_param_names:
+                    bound_kwargs.setdefault(name, param(name))
+                return func(*args, **bound_kwargs)
             finally:
-                _ACTIVE_FIELDS.reset(token)
+                _ACTIVE_DEFAULTS.reset(defaults_token)
+                _ACTIVE_FIELDS.reset(fields_token)
 
         _register_script(**script_options)(compiled_body)
 
