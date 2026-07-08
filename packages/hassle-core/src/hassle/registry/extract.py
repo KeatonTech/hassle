@@ -121,7 +121,28 @@ _KNOWN_ISH_DOMAINS = {
     "group",
 }
 
-_ENTITY_ID_RE = re.compile(r"\b([a-z_]+)\.([a-z0-9_]+)\b")
+# §36.1 fix (docs/ha-api-notes.md): matches the WHOLE dotted identifier chain
+# a candidate `domain.object_id` pair sits in (`[ident.]*domain.object_id`,
+# greedy on the leading part), so the code can reject a candidate that is
+# merely the last two segments of a LONGER chain -- a Jinja *variable path*
+# like `wait.trigger.event.data.action` or `trigger.event.data.action`, never
+# a literal entity id -- rather than a standalone `domain.object_id` token
+# with nothing dotted in front of it. Matching greedily (not just one
+# preceding hop) matters: non-overlapping regex scanning would otherwise
+# consume `wait.trigger.event` as one match and restart from `data.action`,
+# which -- with only a single-hop lookback -- would slip through unflagged
+# as if it had no preceding identifier at all. A genuine entity id is never
+# itself an attribute of some other name in these templates (it appears bare,
+# as a string literal argument or a whole identifier), so this exclusion only
+# ever screens out the false-positive shape: `event.data` inside
+# `wait.trigger.event.data.action` is excluded (a longer chain), but a real
+# domain reference like `event.doorbell` in
+# `is_state('event.doorbell', 'pressed')` (no dotted identifier before it)
+# still matches.
+_ENTITY_ID_RE = re.compile(
+    r"\b(?:(?P<prefix>[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\.)?"
+    r"(?P<domain>[a-z_]+)\.(?P<object_id>[a-z0-9_]+)\b"
+)
 
 # Position kinds this module distinguishes (used only for readability at call
 # sites / debugging; validation keys off the individual id fields).
@@ -179,10 +200,16 @@ def _extract_entity_ids_from_jinja(text: str) -> set[str]:
                     found.add(first.value)
     # Regex fallback: catches anything the AST walk didn't resolve (e.g. a
     # dynamic/non-literal first arg elsewhere in the string, or a syntax the
-    # parser choked on) — restricted to known-ish domains to avoid noise.
+    # parser choked on) — restricted to known-ish domains to avoid noise, and
+    # (§36.1) skipped when the candidate is itself preceded by another dotted
+    # identifier (a `wait.`/`trigger.`-rooted variable path, not a literal
+    # entity id — see `_ENTITY_ID_RE`'s docstring comment above).
     for m in _ENTITY_ID_RE.finditer(text):
-        candidate = f"{m.group(1)}.{m.group(2)}"
-        if m.group(1) in _KNOWN_ISH_DOMAINS:
+        if m.group("prefix") is not None:
+            continue
+        domain, object_id = m.group("domain"), m.group("object_id")
+        candidate = f"{domain}.{object_id}"
+        if domain in _KNOWN_ISH_DOMAINS:
             found.add(candidate)
     return found
 

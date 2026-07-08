@@ -77,15 +77,6 @@ def test_thermostat_schedule_sets_night_setback() -> None:
 def test_notify_with_actions_sends_actionable_notification_on_unlock() -> None:
     # The always-true part of the flow: the front door unlocking sends the
     # actionable notification itself, with both buttons in `data.actions`.
-    # Branch DISPATCH (tapping a button actually opening/closing the blinds)
-    # is NOT exercised here -- the simulator cannot yet resume a pending
-    # `wait_for_trigger` on an event, nor does it populate the `wait.trigger`
-    # template variable a satisfied wait's later conditions read (STOP,
-    # docs/ha-api-notes.md §36.2; the compiled IR *shape* of the dispatch is
-    # separately proven in
-    # `packages/hassle-core/tests/test_capture_notify_recipe.py`, an I5-
-    # adjacent test that inspects the compiled action list rather than
-    # simulating it).
     sim = _sim()
     sim.state_change("lock.front_door", "locked", "unlocked")
     sim.assert_called(
@@ -97,6 +88,56 @@ def test_notify_with_actions_sends_actionable_notification_on_unlock() -> None:
             {"action": "CLOSE_BLINDS", "title": "Close Blinds"},
         ],
     )
+
+
+def test_notify_with_actions_open_blinds_branch_dispatches_on_matching_action() -> None:
+    """Full branch dispatch (task #32, closing docs/ha-api-notes.md §36.2's
+    STOP): tapping the "Open Blinds" notification action fires
+    `mobile_app_notification_action` with `action: OPEN_BLINDS`, which must
+    resume the recipe's pending `wait_for(event(...))` and run ONLY the
+    matching `choose()` branch."""
+    sim = _sim()
+    sim.state_change("lock.front_door", "locked", "unlocked")
+    sim.fire_event("mobile_app_notification_action", action="OPEN_BLINDS")
+    sim.assert_called(
+        "cover.open_cover",
+        entity_id=["cover.bedroom_blinds", "cover.office_blinds"],
+    )
+    sim.assert_not_called("cover.close_cover")
+
+
+def test_notify_with_actions_close_blinds_branch_dispatches_on_matching_action() -> None:
+    sim = _sim()
+    sim.state_change("lock.front_door", "locked", "unlocked")
+    sim.fire_event("mobile_app_notification_action", action="CLOSE_BLINDS")
+    sim.assert_called(
+        "cover.close_cover",
+        entity_id=["cover.bedroom_blinds", "cover.office_blinds"],
+    )
+    sim.assert_not_called("cover.open_cover")
+
+
+def test_notify_with_actions_non_matching_action_id_takes_no_branch() -> None:
+    """A tapped action id that doesn't match either button (e.g. a stale/
+    unrelated notification action) resumes the wait but takes neither
+    `choose()` branch (no default is defined)."""
+    sim = _sim()
+    sim.state_change("lock.front_door", "locked", "unlocked")
+    sim.fire_event("mobile_app_notification_action", action="SOME_OTHER_ACTION")
+    sim.assert_not_called("cover.open_cover")
+    sim.assert_not_called("cover.close_cover")
+
+
+def test_notify_with_actions_timeout_takes_no_branch() -> None:
+    """No button tapped within the wait's timeout: the wait times out
+    (`continue_on_timeout` defaults true, per `wait_for`'s own default) and
+    the sequence continues past it, but since `wait.trigger` is none no
+    `choose()` branch's condition can be true."""
+    sim = _sim()
+    sim.state_change("lock.front_door", "locked", "unlocked")
+    sim.advance(minutes=5)
+    sim.assert_not_called("cover.open_cover")
+    sim.assert_not_called("cover.close_cover")
 
 
 # 5. washing machine done -----------------------------------------------------

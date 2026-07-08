@@ -18,7 +18,10 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from hassle.testing.calls import ServiceCall
+from hassle.testing.errors import UnsupportedTemplateError
+from hassle.testing.state import StateChange
 from hassle.testing.triggers import (
+    is_event_trigger,
     is_numeric_state_trigger,
     is_state_trigger,
     is_zone_trigger,
@@ -29,7 +32,7 @@ from hassle.testing.triggers import (
 )
 
 if TYPE_CHECKING:
-    from hassle.testing.state import StateChange, StateStore
+    from hassle.testing.state import StateStore
     from hassle.testing.templates import TemplateEngine
 
 # Returns today's configured sun times ({"sunrise": dt, "sunset": dt}), or
@@ -62,6 +65,26 @@ class SuspendWaitTemplate:
 
 
 Suspend = SuspendDelay | SuspendWaitForTrigger | SuspendWaitTemplate
+
+
+@dataclass(frozen=True)
+class EventOccurrence:
+    """One fired event (``Simulator.fire_event``), the event-carrying
+    counterpart of :class:`~hassle.testing.state.StateChange` -- the other
+    shape a pending ``SuspendWaitForTrigger`` can be resumed with (task #32,
+    docs/ha-api-notes.md §36.2 gap 1: a `wait_for_trigger([event(...)])` step
+    previously could only ever be resumed by a state change or a timeout).
+    """
+
+    event_type: str
+    data: dict[str, Any]
+
+
+# What a suspended run can be resumed with: a state change, a fired event, or
+# `None` (timeout). `wait_template` only ever cares that *something* changed
+# (it re-renders its own template regardless), so it accepts either shape;
+# `wait_for_trigger` dispatches by shape in `_matches_wait_trigger`.
+WaitResumeValue = StateChange | EventOccurrence | None
 
 
 def _empty_str_any_dict() -> dict[str, Any]:
@@ -130,8 +153,7 @@ def evaluate_condition(condition: dict[str, Any], ctx: ActionContext) -> bool:
         below_ok = below is None or value < float(below)
         return above_ok and below_ok
     if kind == "template":
-        rendered = ctx.render(condition["value_template"])
-        return str(rendered).strip().lower() in ("true", "1", "yes", "on")
+        return _evaluate_template_condition(condition["value_template"], ctx)
     if kind == "and":
         return all(evaluate_condition(c, ctx) for c in condition.get("conditions", []))
     if kind == "or":
@@ -151,6 +173,45 @@ def evaluate_condition(condition: dict[str, Any], ctx: ActionContext) -> bool:
     # trigger-evaluation path means an unknown classic-condition kind, which
     # we conservatively treat as not blocking (v1 scope, documented).
     return True
+
+
+def _evaluate_template_condition(value_template: str, ctx: ActionContext) -> bool:
+    """A ``condition: template``'s ``value_template`` -- rendered like any
+    other template, EXCEPT an undefined-name/attribute render failure here is
+    swallowed to ``False`` rather than propagated as
+    :class:`UnsupportedTemplateError` (task #32).
+
+    Mirrors real HA's script engine: `async_condition_from_config`'s template
+    condition logs a render error and treats the condition as not satisfied,
+    it does not abort the automation run. This specifically matters for a
+    `choose()` branch reading `wait.trigger.*` after a *timed-out*
+    `wait_for_trigger` (`wait.trigger` is `None` there, per DESIGN's `wait`
+    variable semantics) -- subscripting/attribute-accessing through that
+    `None` is a legitimate, expected shape for an unmatched branch, not a
+    genuinely-unsupported template construct, so it must not surface as a
+    hard simulator error the way a real unknown Jinja global/filter should.
+    Every OTHER template-rendering call site in this module (service-call
+    `data=` values, `wait_template`'s own condition, `variables:` values)
+    deliberately does NOT catch this -- only a *condition*'s truth value has
+    this "render failure means not satisfied" semantics in real HA.
+    """
+    try:
+        rendered = ctx.render(value_template)
+    except UnsupportedTemplateError as exc:
+        if _is_undefined_render_error(exc):
+            return False
+        raise
+    return str(rendered).strip().lower() in ("true", "1", "yes", "on")
+
+
+def _is_undefined_render_error(exc: UnsupportedTemplateError) -> bool:
+    """Narrow ``UnsupportedTemplateError`` to the "undefined name/attribute"
+    subset (jinja2's ``UndefinedError``, per ``TemplateEngine.render``'s own
+    exception mapping) as opposed to a genuinely unsupported construct
+    (invalid syntax, an unregistered filter/test) -- only the former is safe
+    to treat as "condition not satisfied" rather than a real simulator gap.
+    """
+    return "is undefined" in exc.args[0] or "has no attribute" in exc.args[0]
 
 
 def _evaluate_sun_condition(condition: dict[str, Any], ctx: ActionContext) -> bool:
@@ -183,19 +244,39 @@ def _evaluate_sun_condition(condition: dict[str, Any], ctx: ActionContext) -> bo
     return True
 
 
-def _matches_wait_trigger(trigger: dict[str, Any], change: StateChange) -> bool:
+def _matches_wait_trigger(
+    trigger: dict[str, Any], occurrence: StateChange | EventOccurrence
+) -> bool:
+    if isinstance(occurrence, EventOccurrence):
+        return is_event_trigger(trigger) and _event_trigger_matches(trigger, occurrence)
     if is_state_trigger(trigger):
-        return state_trigger_matches(trigger, change)
+        return state_trigger_matches(trigger, occurrence)
     if is_numeric_state_trigger(trigger):
-        return numeric_state_crosses(trigger, change)
+        return numeric_state_crosses(trigger, occurrence)
     if is_zone_trigger(trigger):
-        return zone_trigger_matches(trigger, change)
+        return zone_trigger_matches(trigger, occurrence)
     return False
+
+
+def _event_trigger_matches(trigger: dict[str, Any], occurrence: EventOccurrence) -> bool:
+    """Mirrors ``AutomationEngine.on_event``'s top-level event-trigger match
+    (``event_type`` equality) plus the trigger's own optional ``event_data``
+    filter -- a subset match against the fired event's data, the same
+    semantics a real HA ``event`` trigger's ``event_data:`` gives (only the
+    keys named in the filter must match; extra data keys on the occurrence
+    are ignored).
+    """
+    if trigger.get("event_type") != occurrence.event_type:
+        return False
+    event_data_filter = trigger.get("event_data")
+    if not event_data_filter:
+        return True
+    return all(occurrence.data.get(key) == value for key, value in event_data_filter.items())
 
 
 def run_actions(
     actions: list[dict[str, Any]], ctx: ActionContext
-) -> Generator[Suspend, StateChange | None, bool]:
+) -> Generator[Suspend, WaitResumeValue, bool]:
     """Execute ``actions`` in order; ``yield`` suspends the run for the engine.
 
     Returns ``True`` if the sequence ran to completion, ``False`` if a `stop`
@@ -211,7 +292,7 @@ def run_actions(
 
 def _run_one(
     action: dict[str, Any], ctx: ActionContext
-) -> Generator[Suspend, StateChange | None, bool]:
+) -> Generator[Suspend, WaitResumeValue, bool]:
     if "action" in action:
         _record_service_call(action, ctx)
         return True
@@ -303,7 +384,7 @@ def _duration(value: dict[str, Any] | str) -> timedelta:
 
 def _run_repeat(
     repeat: dict[str, Any], ctx: ActionContext
-) -> Generator[Suspend, StateChange | None, bool]:
+) -> Generator[Suspend, WaitResumeValue, bool]:
     sequence = repeat.get("sequence", [])
     _MAX_ITERATIONS = 10_000  # safety net against runaway while/until conditions
     if "count" in repeat:
@@ -368,32 +449,68 @@ def _evaluate_condition_with_repeat(
     return evaluate_condition(condition, ctx)
 
 
+def _wait_trigger_namespace(occurrence: StateChange | EventOccurrence) -> dict[str, Any]:
+    """The satisfying trigger's data, shaped like HA's real post-`wait_for_trigger`
+    `wait.trigger` variable for the occurrence kind that satisfied the wait
+    (task #32, docs/ha-api-notes.md §36.2 gap 2). Only the `event` shape is
+    modeled today (`{"event": {"event_type": ..., "data": {...}}}`, mirroring
+    `AutomationEngine.on_event`'s own top-level `trigger.event.data` shape) --
+    a state-satisfied wait gets an empty namespace rather than a fabricated
+    `state`-trigger shape this module doesn't otherwise model for `trigger.*`.
+    """
+    if isinstance(occurrence, EventOccurrence):
+        return {"event": {"event_type": occurrence.event_type, "data": dict(occurrence.data)}}
+    return {}
+
+
+def _set_wait_satisfied(ctx: ActionContext, occurrence: StateChange | EventOccurrence) -> None:
+    """Populate ``ctx.variables["wait"]`` after a `wait_for_trigger` step is
+    SATISFIED, so later actions' templates can read ``wait.completed`` /
+    ``wait.trigger.*`` (task #32, docs/ha-api-notes.md §36.2 gap 2 --
+    previously never populated at all, so any such template hit an
+    `UnsupportedTemplateError` for the undefined `wait` name). `wait.trigger`
+    carries the satisfying occurrence's data and `wait.completed` is true.
+    """
+    trigger_ns = _TriggerNamespace(_wait_trigger_namespace(occurrence))
+    ctx.variables["wait"] = _AttrDict({"completed": True, "trigger": trigger_ns})
+
+
+def _set_wait_timed_out(ctx: ActionContext) -> None:
+    """The timeout counterpart of :func:`_set_wait_satisfied`: `wait.trigger`
+    is `None` (renders as Jinja's `none`) and `wait.completed` is false --
+    matching real HA's `wait` variable shape for the timeout path.
+    """
+    ctx.variables["wait"] = _AttrDict({"completed": False, "trigger": None})
+
+
 def _run_wait_for_trigger(
     action: dict[str, Any], ctx: ActionContext
-) -> Generator[Suspend, StateChange | None, bool]:
+) -> Generator[Suspend, WaitResumeValue, bool]:
     triggers = action["wait_for_trigger"]
     timeout = _duration(action["timeout"]) if "timeout" in action else None
     continue_on_timeout = action.get("continue_on_timeout", True)
     while True:
-        change = yield SuspendWaitForTrigger(triggers, timeout, continue_on_timeout)
-        if change is None:
+        occurrence = yield SuspendWaitForTrigger(triggers, timeout, continue_on_timeout)
+        if occurrence is None:
             # Timed out.
+            _set_wait_timed_out(ctx)
             return continue_on_timeout
-        if any(_matches_wait_trigger(t, change) for t in triggers):
+        if any(_matches_wait_trigger(t, occurrence) for t in triggers):
+            _set_wait_satisfied(ctx, occurrence)
             return True
 
 
 def _run_wait_template(
     action: dict[str, Any], ctx: ActionContext
-) -> Generator[Suspend, StateChange | None, bool]:
+) -> Generator[Suspend, WaitResumeValue, bool]:
     template_text = action["wait_template"]
     timeout = _duration(action["timeout"]) if "timeout" in action else None
     continue_on_timeout = action.get("continue_on_timeout", True)
     if ctx.render(template_text).strip().lower() in ("true", "1", "yes", "on"):
         return True
     while True:
-        change = yield SuspendWaitTemplate(template_text, timeout, continue_on_timeout)
-        if change is None:
+        occurrence = yield SuspendWaitTemplate(template_text, timeout, continue_on_timeout)
+        if occurrence is None:
             return continue_on_timeout
         if ctx.render(template_text).strip().lower() in ("true", "1", "yes", "on"):
             return True
