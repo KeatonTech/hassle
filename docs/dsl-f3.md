@@ -145,6 +145,33 @@
 > silently dropped a leading/trailing newline around a `{{ ... }}` block on
 > inversion, violating I3; now compares against the original text.
 
+> **Widened 2026-07-07 (`ux/capture-notify-recipe`, task #30, F3-additive,
+> surface count 106 → 108):** two new names, `capture_actions()` /
+> `emit_actions(bodies, *, alias=)` — the public capture seam a `lib/`
+> recipe builder uses to record a block's actions once and splice the SAME
+> bodies into more than one container it assembles itself (e.g. one shared
+> notification action list reused across several `choose()` branches).
+> `with capture_actions() as bodies:` records exactly like any other action
+> context (`if_then`, a `choose()` branch, …) but does NOT append into the
+> enclosing sequence — `bodies` is a plain `list[dict[str, Any]]` of action
+> bodies (the same shape every builder's `to_action()` produces), with no
+> `RecordedNode`/span wrapper (those stay compiler-internal, per "Internal
+> extension seams that remain NON-public" below). `emit_actions(bodies)`
+> appends each captured body, in declaration order, into whatever container
+> is active at the CALL site (respecting `push_actions` nesting exactly like
+> a direct builder call would), each re-wrapped with a fresh span captured
+> at the `emit_actions(...)` line — so an error later raised against an
+> emitted action points at the splice site, never some unrelated earlier
+> line. `bodies` is read-only to `emit_actions`: emitting the same captured
+> list more than once (e.g. into two different branches, see
+> `fixtures/dsl/capture_emit_actions/`) is supported and produces
+> independent, equal-but-distinct entries. Both raise
+> `NoRecordingContextError` outside an active recording context, same
+> message shape as `when`/`only_if`/every other recording verb (R6). This is
+> the seam the cookbook's actionable-mobile-notification recipe
+> (`notify_mobile`/`action`, `fixtures/cookbook/bundle/lib/notify_actions.py`)
+> is built on; neither name changes the meaning of any existing construct.
+
 The public surface is exactly `hassle.__all__` (module
 `packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.
@@ -285,6 +312,14 @@ output form, independent of how the DSL source happened to be written).
   decompiler's canonical output form (`ux/triggers-in-decorator`), but never
   removed (F3).
 - `only_if(*conditions)` — append conditions.
+- `capture_actions()` (task #30 ADDITION) → `with capture_actions() as
+  bodies:` — capture a block's actions as plain action-body dicts WITHOUT
+  appending them to the enclosing sequence. `emit_actions(bodies, *,
+  alias=)` — splice previously captured bodies into the CURRENT recording
+  context (respecting nested containers), each re-wrapped with a span
+  captured at the `emit_actions(...)` call site. The public seam a `lib/`
+  recipe builder uses in place of the internal `push_actions`/`RecordedNode`
+  machinery `if_then`/`choose` are built on.
 
 ### Core action verbs
 - `service(action, *, target=, data=, data_template=, response_variable=,
