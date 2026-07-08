@@ -1,0 +1,4 @@
+{
+  "error_type": "SharedScriptParamMisuseError",
+  "contains": ["tag", "repeat_count(tag)", "@macro", "scripts.py"]
+}

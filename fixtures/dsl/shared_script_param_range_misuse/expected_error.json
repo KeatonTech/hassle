@@ -1,0 +1,4 @@
+{
+  "error_type": "SharedScriptParamMisuseError",
+  "contains": ["times", "repeat_count(times)", "@macro", "scripts.py"]
+}

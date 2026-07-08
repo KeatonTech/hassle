@@ -161,8 +161,10 @@ from hassle.compiler.registry import (
 from hassle.compiler.scripts import (
     NoParamContextError,
     ScriptCallAction,
+    SharedScriptParamMisuseError,
     UnknownFieldError,
     UnknownParamError,
+    field_default,
     param,
     shared_script,
 )
@@ -262,6 +264,7 @@ __all__ = [
     "Registry",
     "ScriptCallAction",
     "ServiceAction",
+    "SharedScriptParamMisuseError",
     "SourceSpan",
     "StateExpr",
     "SunExpr",
@@ -311,6 +314,7 @@ __all__ = [
     "emit_actions",
     "event",
     "expr",
+    "field_default",
     "fire_event",
     "floor",
     "fresh",

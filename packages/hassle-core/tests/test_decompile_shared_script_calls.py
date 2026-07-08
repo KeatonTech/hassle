@@ -88,7 +88,11 @@ def test_script_with_rich_field_metadata_decompiles_as_shared_script() -> None:
     # Widened (`ux/shared-script-rich-fields`, owner feedback): a field
     # carrying name/description/example (not just default) now ALSO
     # decompiles to @shared_script -- fields= is emitted verbatim (byte-
-    # stability by construction) and the parameter is None-defaulted.
+    # stability by construction) and the parameter is `TemplateExpr`-annotated,
+    # required (no default -- M19, owner-directed typing resolution: every
+    # field-named parameter is a runtime template marker in the body, never
+    # its Python default's type, and the compiler always binds it regardless
+    # of whether the signature declares a default at all).
     config = {
         "alias": "Script With Fields",
         "fields": {
@@ -108,7 +112,7 @@ def test_script_with_rich_field_metadata_decompiles_as_shared_script() -> None:
     assert "fields={" in source
     assert '"light_entity"' in source
     assert '"example": "light.bedroom"' in source
-    assert "def script_with_fields(light_entity=None):" in source
+    assert "def script_with_fields(*, light_entity: TemplateExpr):" in source
 
 
 def test_script_with_non_identifier_field_name_falls_back_to_plain_script() -> None:

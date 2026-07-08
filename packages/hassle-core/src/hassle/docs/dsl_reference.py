@@ -51,6 +51,18 @@ _ERROR_DOCS: dict[str, str] = {
         "signature. Fix: add `name` as a parameter of the decorated function, "
         "or correct the spelling."
     ),
+    "SharedScriptParamMisuseError": (
+        "Python control flow/numeric coercion (`if`/`bool()`/`range()`/"
+        "`int()`/`float()`/`round()`/`math.trunc()`) used on a "
+        "`@shared_script` signature parameter (MILESTONES M19: every field-"
+        "named parameter is bound to its runtime `param(name)` marker when "
+        "the body runs, regardless of its declared default). Fix: for a "
+        "runtime count/value, use a runtime construct HA itself supports, "
+        "e.g. `with repeat_count(times):` (accepts the marker directly, "
+        "honoring whatever the caller passes); for a genuinely compile-time "
+        "value, it was never a real HA field -- use a module-level constant "
+        "or a `@macro` argument instead."
+    ),
     "UnknownFieldError": (
         "A `@shared_script` call-site kwarg is not among the script's "
         "declared `fields=` keys (when `fields=` is given explicitly, it is "

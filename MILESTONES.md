@@ -898,16 +898,19 @@ emit that form. Today the compiler invokes the body with the Python DEFAULTS (ve
 `tag` is literally `None` inside), `param("tag")` is the only marker surface, and
 decompiled bodies carry raw `"{{ tag }}"` strings.
 
-**Binding semantics:**
+**Binding semantics, ORIGINAL (pre-merge draft) — the `param_default()` escape hatch below
+was REJECTED by the owner before merge, see the amendment note further down; struck lines
+kept visible per the M10 identity re-freeze convention (R5: don't erase superseded spec
+text, show what changed and why):**
 - Compiling a shared-script body binds EACH signature parameter to its `param(name)`
   marker (a `TemplateExpr`), regardless of declared defaults. Defaults remain
   metadata for the generated `fields` block only.
-- Python operations a marker cannot honestly support (`bool()`/`range()`/`int()`-style
+- ~~Python operations a marker cannot honestly support (`bool()`/`range()`/`int()`-style
   compile-time use) fail LOUDLY with an R6 what/where/fix error naming the escape
   hatch — new `param_default("times")` returns the declared compile-time default for
   deliberate metaprogramming (the `for _ in range(...)` unroll pattern). Audit the
   fixture corpus + docs (LIB_README's `flash_lights`, COOKBOOK recipes) and migrate any
-  defaults-bound bodies via the escape hatch in the same PR.
+  defaults-bound bodies via the escape hatch in the same PR.~~
 - Caller side unchanged: literals and expressions both remain valid call-site data.
 - Decompiler: inside a shared-script body, a `"{{ <field> }}"` data value whose name is
   exactly one of the script's own fields decompiles to the bare parameter name (and
@@ -915,13 +918,71 @@ decompiled bodies carry raw `"{{ tag }}"` strings.
   inverter with fields bound as parameters); byte-exact re-render gate as always,
   raw-string fallback otherwise. I3 both branches.
 
+**Binding semantics, AMENDED (owner pre-merge design feedback on PR #19, `m19/real-params`
+head `a251013`) — supersedes the struck lines above:** `param_default()` is REJECTED
+outright, not shipped. Owner's reasoning: it bakes the field's DECLARED compile-time
+default into the compiled sequence while the HA field still exists and still invites
+callers to pass other values at the call site — the field becomes a lie (a
+`range(param_default("times"))` unroll would silently ignore whatever a caller's
+`times=5` actually was, forever, since the unrolled action count is fixed at compile time
+against the DEFAULT, never the call). The escape hatch would have preserved exactly the
+anti-pattern this milestone exists to eliminate, instead of eliminating it. Python
+operations a marker cannot honestly support (`bool()`/`range()`/`int()`-style compile-time
+use, AND — PR review finding — `for`/`in`/`len`/indexing container use, since a marker is a
+`str` subclass that would otherwise silently iterate/index/measure the literal Jinja text)
+still fail LOUDLY with an R6 what/where/fix error, but the fix TEACHES the two honest
+alternatives instead of naming an escape hatch: a genuinely RUNTIME value belongs in a
+runtime construct HA itself supports (`with repeat_count(times):`/`with
+repeat_for_each(items):`, which accept the marker directly and render it as HA's own
+template spelling, honoring whatever the caller passes) or a runtime condition/template
+for a membership/length check; a genuinely COMPILE-TIME value was never an honest HA field
+to begin with — use a module-level constant or a `@macro` argument instead. Verified
+`repeat_count`/`repeat_for_each` already accept the marker with no changes needed (neither
+coerces its argument; a `TemplateExpr`/`str` subclass passes through verbatim and HA
+resolves it at execution time) — the blessed alternative was load-bearing-checked, not just
+asserted. No fixture/docs migration was needed for the corpus audit (`param_default()`
+never shipped, so nothing could have adopted it); the decompiler-round-trip widening
+(test 3) additionally now applies to `repeat.count`/`repeat.for_each`, so the blessed
+pattern round-trips with the bare parameter too.
+
+**Typing resolution, AMENDED (owner pre-merge design feedback, same round):** a shared-
+script's decompiled signature previously left every parameter untyped/`None`-defaulted or
+builtin-typed (`times: int = 3`) — misleading post-M19, since the parameter is ALWAYS a
+runtime `TemplateExpr` marker inside the body, never its declared Python default's type.
+Resolved EMPIRICALLY (a pyright `--outputjson` probe, matching
+`test_annotation_truth_pyright_gate.py`'s convention — see
+`packages/hassle-core/tests/test_shared_script_real_params.py`'s typing-investigation
+section for the committed structural proof): `@shared_script`'s returned CALLER wrapper's
+own signature is, and always has been, `(*args: Any, **kwargs: Any) -> None` — no
+`ParamSpec`/`functools.wraps` type-level propagation happens, so a call site's typing is
+COMPLETELY DECOUPLED from the decorated function's own annotations (a caller passing a
+plain literal, a wrong kwarg name, or a wrong kwarg value type all produce ZERO pyright
+diagnostics either way; the real net is `UnknownFieldError`/Python's own `TypeError` from
+`bind_partial`, at compile time). This decoupling means the BODY-TRUE annotation
+(`TemplateExpr`) is free — no caller-side typing is lost by choosing it, because callers
+never saw either. New export `field_default(value)`: the identity function AT RUNTIME
+(the compiler's `inspect.signature` introspection still sees the real declared default
+value unchanged) but TYPED as returning `TemplateExpr`, so a field's own default
+expression (`tag: TemplateExpr = field_default("")`) type-checks against its annotation
+instead of being self-inconsistent. Decompiler emission: every parameter keyword-only (a
+leading `*,` — a required field with no default, bare `TemplateExpr`, can otherwise follow
+a defaulted one in the STORED `fields` dict's own order, a real `SyntaxError` regression
+`fixtures/configs/script_with_fields.json`'s field ordering caught); `name: TemplateExpr`
+for a required field, `name: TemplateExpr = field_default(<default>)` for a defaulted one.
+Acceptance bar: the M28 pyright gate, extended to also cover a decompiled `@shared_script`
+body-composition file AND a separate caller file calling it with plain literals — both
+zero policed diagnostics under standard mode.
+
 **Write these tests first**
 1. Golden: body written with `tag=tag` and a composed `concat(tag, ...)` compiles to the
    exact `"{{ tag }}"` / `"{{ tag ~ '...' }}"` IR the string form produces (byte-identical
    to the `param()` form).
-2. Marker misuse: `range(times)` / `if tag:` in a body → R6 error naming
+2. Marker misuse: `range(times)` / `if tag:` in a body → R6 error ~~naming
    `param_default()`; `param_default` itself returns the declared default and its
-   result is NOT a TemplateExpr.
+   result is NOT a TemplateExpr~~ **(AMENDED) teaching the honest `repeat_count`/
+   `repeat_for_each`/module-constant/`@macro` alternatives; no escape hatch exists.**
+   Container dunders (`for`/`in`/`len`/`[...]`) get the same treatment (PR review
+   finding).
 3. Decompile: the owner's dismiss_notification shape round-trips as `tag=tag` (fixture);
    a field read inside a bigger invertible expression round-trips composed; a
    non-invertible template keeps the raw string (I3 fallback).

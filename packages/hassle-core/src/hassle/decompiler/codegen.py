@@ -19,7 +19,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from hassle.compiler.enums import MaxExceeded, Mode
-from hassle.decompiler.actions import INDENT, CallResolver, CallTarget, decompile_action
+from hassle.decompiler.actions import (
+    INDENT,
+    CallResolver,
+    CallTarget,
+    decompile_action,
+    shared_script_field_context,
+)
 from hassle.decompiler.exprs import decompile_condition, decompile_trigger, render_literal
 from hassle.ir.keys import HELPER_DOMAINS, TEMPLATE_DOMAINS, slugify
 from hassle.ir.models import (
@@ -501,50 +507,68 @@ def script_is_shared_script(obj: ScriptConfig) -> bool:
     return fields_signature_expressible(fields)
 
 
-def _python_type_name(value: Any) -> str | None:
-    """A builtin type name to annotate a shared-script parameter with, when
-    inferable from its default's Python type (``bool`` before ``int``:
-    ``isinstance(True, int)`` is true in Python, so bool must be checked
-    first or every boolean default would be mis-annotated ``int``)."""
-    if isinstance(value, bool):
-        return "bool"
-    if isinstance(value, int):
-        return "int"
-    if isinstance(value, float):
-        return "float"
-    if isinstance(value, str):
-        return "str"
-    return None
-
-
 def _shared_script_signature(fields: Any) -> str:
     """Build the parameter list for a ``@shared_script`` function definition
-    from its ``fields`` block: ``name: <Type> = default`` when a builtin type
-    is inferable from a present ``"default"`` metadata key, else a bare
-    ``name=None`` (``ux/shared-script-rich-fields``: a field with no
-    ``default`` at all is no longer a fallback cause -- its parameter is
-    ``None``-defaulted; HA-side requiredness lives in the metadata dict, not
-    in whether the compiler can invoke the body with zero arguments to build
-    its sequence).
+    from its ``fields`` block: ``name: TemplateExpr`` (MILESTONES M19, owner-
+    directed typing resolution) for a field with no declared default (a
+    required field -- no ``=...`` at all, since the compiler always binds it
+    to its ``param(name)`` marker before the body runs regardless), else
+    ``name: TemplateExpr = field_default(<default>)``.
+
+    ``TemplateExpr`` -- not a builtin type inferred from the default's Python
+    type -- is the BODY-TRUE annotation: every field-named parameter is
+    ALWAYS a runtime template marker inside the body (M19's whole point),
+    never its declared Python default's type, so annotating e.g. ``times:
+    int`` would let `sun_angle / 2`-style body composition type-check as
+    real arithmetic when it's actually building Jinja text (verified
+    empirically: pyright raises no error for this "int-field lie" under a
+    plain-type annotation, since it trusts the annotation over the actual
+    runtime type). ``field_default(...)`` (F3-additive) is the identity
+    function AT RUNTIME -- ``inspect.signature(...)``'s introspected default
+    (what ``_fields_from_signature``/the generated HA ``fields`` block
+    actually read) sees the real declared value unchanged -- but is TYPED as
+    returning ``TemplateExpr``, so a field's own default expression
+    type-checks against its ``TemplateExpr`` annotation without the
+    self-inconsistent ``tag: TemplateExpr = ""`` a bare literal default would
+    be. Caller-side typing is UNAFFECTED by any of this (verified
+    empirically, MILESTONES M19 typing investigation): ``@shared_script``'s
+    returned caller wrapper's signature is ``(*args: Any, **kwargs: Any) ->
+    None``, completely decoupled from the decorated function's own
+    annotations.
+
+    Every parameter is emitted KEYWORD-ONLY (a leading ``*,``): a required
+    field (no default, bare ``TemplateExpr``) can legally follow a defaulted
+    one in the STORED ``fields`` dict's own order (HA imposes no ordering
+    constraint there, e.g. `fixtures/configs/script_with_fields.json`'s
+    `light_entity` (no default) / `brightness` (has one) / `delay_seconds`
+    (no default) again) -- but plain positional-or-keyword Python parameters
+    do (``SyntaxError: parameter without a default follows parameter with a
+    default``), a regression this fixture caught (M19: previously EVERY
+    field was ``None``-defaulted regardless, so order never mattered; the
+    body-true bare-``TemplateExpr``-for-no-default form reintroduced the
+    ordering constraint unless keyword-only). Harmless for callers: the
+    compiler always invokes a shared-script body with zero positional
+    arguments to build its sequence (DESIGN §5.6) -- nothing ever called
+    these parameters positionally to begin with.
 
     Only ever called when :func:`fields_signature_expressible` accepted
     ``fields``.
     """
-    if not isinstance(fields, dict):
+    if not isinstance(fields, dict) or not fields:
+        # No fields at all (``None``, or an explicit empty ``{}``) -- an
+        # empty signature; a bare leading ``*,`` with nothing after it would
+        # itself be a `SyntaxError` (keyword-only marker needs >= 1 param
+        # following it), so this case must return an empty string, not `"*"`.
         return ""
     fields_dict = cast("dict[str, Any]", fields)
-    params: list[str] = []
+    params: list[str] = ["*"]
     for name, spec in fields_dict.items():
         spec_dict = cast("dict[str, Any]", spec) if isinstance(spec, dict) else {}
         if "default" not in spec_dict:
-            params.append(f"{name}=None")
+            params.append(f"{name}: TemplateExpr")
             continue
         default = spec_dict["default"]
-        type_name = _python_type_name(default)
-        if type_name is not None:
-            params.append(f"{name}: {type_name} = {default!r}")
-        else:
-            params.append(f"{name}={default!r}")
+        params.append(f"{name}: TemplateExpr = field_default({default!r})")
     return ", ".join(params)
 
 
@@ -588,14 +612,27 @@ def _script_source(obj: ScriptConfig, ident: str, resolver: CallResolver | None)
     signature = _shared_script_signature(fields) if as_shared_script else ""
     lines = [f"@{decorator_name}({', '.join(decorator_kwargs)})", f"def {ident}({signature}):"]
     body_lines: list[str] = []
+    # M19: a `@shared_script`'s own field names are active while decompiling
+    # ITS sequence -- a data value that's exactly a field read (or a larger
+    # invertible expression over fields) decompiles to the bare parameter
+    # form instead of the raw `"{{ ... }}"` string (test 3). `None` for the
+    # `@script` fallback (no signature-bound fields to speak of) -- the
+    # bare-parameter rewrite only ever makes sense for an actual
+    # `@shared_script`.
+    field_names: frozenset[str] | None = (
+        frozenset(cast("dict[str, Any]", fields))
+        if as_shared_script and isinstance(fields, dict)
+        else None
+    )
     # No `# --- sequence ---` header (owner amendment, ``ux/dsl-ergonomics`` --
     # see `_automation_source`'s matching note): a script's body is just its
     # sequence, nothing else, so the comment never disambiguated anything.
-    for action in sequence:
-        if isinstance(action, dict):
-            body_lines.extend(decompile_action(action, resolver=resolver))
-        else:
-            body_lines.append(f"raw_action({render_literal(action)})")
+    with shared_script_field_context(field_names):
+        for action in sequence:
+            if isinstance(action, dict):
+                body_lines.extend(decompile_action(action, resolver=resolver))
+            else:
+                body_lines.append(f"raw_action({render_literal(action)})")
     if not body_lines:
         body_lines = ["pass"]
     for line in body_lines:
@@ -1018,6 +1055,19 @@ def decompile_bundle(
     ]
 
     parts = [_STAR_IMPORT_LINE, _ENTITIES_IMPORT_LINE]
+    # MILESTONES M19: a decompiled `@shared_script` signature annotates every
+    # field parameter `TemplateExpr` (body-true typing, `_shared_script_
+    # signature`'s own docstring) -- `TemplateExpr` is not on the `hassle`
+    # star-import surface (it's compiler-internal, exposed only via
+    # `hassle.compiler`/`hassle.compiler.templates`), so an explicit import is
+    # needed whenever at least one signature actually used it. `field_default`
+    # itself needs no separate import -- it IS on the star-import surface
+    # (`hassle.__all__`, F3-additive). A plain string check on the already-
+    # assembled object sources is simpler and just as deterministic as
+    # threading a "did I emit a signature" flag back out of `_script_source`
+    # through `decompile_object`.
+    if any(": TemplateExpr" in source for source in object_sources):
+        parts.append("from hassle.compiler.templates import TemplateExpr\n")
     if resolver.used_service_domains:
         # Each entry renders as `domain` (the common case) or `domain as
         # svc_domain` when `service_domain_name` aliased it to avoid

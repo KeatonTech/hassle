@@ -1,0 +1,38 @@
+{
+  "script:dismiss_tagged_notification_typed": {
+    "alias": "Dismiss tagged (typed)",
+    "fields": {
+      "tag": {
+        "default": ""
+      }
+    },
+    "sequence": [
+      {
+        "action": "persistent_notification.dismiss",
+        "data": {
+          "notification_id": "{{ tag }}"
+        }
+      }
+    ]
+  },
+  "automation:dismiss_tagged_reminder_typed": {
+    "id": "dismiss_tagged_reminder_typed",
+    "alias": "Dismiss tagged reminder (typed)",
+    "triggers": [
+      {
+        "trigger": "state",
+        "entity_id": "input_boolean.guest_mode",
+        "to": "off"
+      }
+    ],
+    "conditions": [],
+    "actions": [
+      {
+        "action": "script.dismiss_tagged_notification_typed",
+        "data": {
+          "tag": "guest_reminder"
+        }
+      }
+    ]
+  }
+}

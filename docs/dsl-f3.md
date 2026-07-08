@@ -145,8 +145,110 @@
 > silently dropped a leading/trailing newline around a `{{ ... }}` block on
 > inversion, violating I3; now compares against the original text.
 
+> **Widened 2026-07-07 (M19, owner-commissioned, F3-additive, surface count
+> 106 → 108 relative to the pre-M19/pre-M20-PRs baseline this note and the
+> `ux/capture-notify-recipe` note below were both independently written
+> against — see the reconciliation note after both for the actual combined
+> total now that both have merged; AMENDED 2026-07-07, owner pre-merge design
+> feedback on the M19 PR — rewritten in place since the amended names were
+> never merged, no deprecation dance needed):** two new names.
+> `SharedScriptParamMisuseError` —
+> `range()`/`bool()`/`int()`/`float()`/`round()`/`math.trunc()` misuse, AND
+> (PR review finding) `for`/`in`/`len`/indexing container misuse, on a bound
+> shared-script parameter. Its message teaches the HONEST runtime/compile-time
+> alternatives directly (`with repeat_count(name):`/`with
+> repeat_for_each(name):`/a runtime condition-template for a genuinely
+> runtime value; a module constant or `@macro` argument for a genuinely
+> compile-time one) rather than naming an escape hatch. `field_default(value)`
+> — the typed-default helper for a `@shared_script` parameter annotated
+> `TemplateExpr` (owner-directed typing resolution, below): the identity
+> function AT RUNTIME (returns ``value`` unchanged, so the compiler's
+> `inspect.signature` introspection sees the real declared default), typed as
+> returning `TemplateExpr` so a field's default expression (`tag: TemplateExpr
+> = field_default("")`) type-checks against its own annotation instead of
+> being self-inconsistent (`tag: TemplateExpr = ""` would itself be a
+> `reportArgumentType` error). Named in `pyproject.toml`'s
+> `[tool.ruff.lint.flake8-bugbear] extend-immutable-calls` (ruff's own B008
+> would otherwise flag `field_default(...)` as a mutable-default-style
+> anti-pattern, since it can't know the call is a pure identity function).
+> An originally-planned third name, `param_default(name)` (plus its own
+> `NoDeclaredDefaultError`), was REJECTED by the owner before merge: it would
+> have returned the field's DECLARED default to sidestep the binding for
+> deliberate compile-time metaprogramming (the `for _ in
+> range(param_default("times")):` unroll pattern) — but that bakes a stale
+> compile-time value into the compiled sequence while the HA field still
+> exists and still invites callers to pass other values, making the field a
+> lie (a caller's actual `times=5` would be silently ignored forever by an
+> unroll that only ever saw the declared default). Neither name shipped.
+>
+> **Typing resolution (owner pre-merge design feedback, same round):** every
+> `@shared_script` signature parameter is now annotated `TemplateExpr` (body-
+> true — inside the body it's ALWAYS a runtime template marker, never its
+> declared Python default's type; a plain-type annotation like `times: int`
+> would let `sun_angle / 2`-style body composition type-check as real
+> arithmetic when it's actually building Jinja text, an "int-field lie"
+> pyright doesn't catch since it trusts the annotation over the runtime type).
+> Resolved EMPIRICALLY via a pyright `--outputjson` probe (session
+> investigation, matching `test_annotation_truth_pyright_gate.py`'s
+> convention): `@shared_script`'s returned CALLER wrapper's own signature is,
+> and always has been, `(*args: Any, **kwargs: Any) -> None` — no
+> `ParamSpec`/`functools.wraps` type-level propagation happens, so a call
+> site's typing is COMPLETELY DECOUPLED from the decorated function's own
+> annotations (verified: a caller passing a plain literal, a wrong kwarg NAME,
+> or a wrong kwarg VALUE TYPE all produce ZERO pyright diagnostics either way
+> — the real validation net is `UnknownFieldError`/Python's own `TypeError`
+> from `bind_partial`, at COMPILE time, unaffected by any typing change here).
+> This decoupling is what makes body-true `TemplateExpr` annotations free: no
+> caller-side typing is lost by choosing the body-true annotation over a
+> caller-friendly one, because callers never saw either. `param(name)`'s
+> return type is also `TemplateExpr` (a `_BoundParamMarker` subclass, module-
+> internal, not itself an export). Decompiler emission
+> (`hassle.decompiler.codegen._shared_script_signature`): every parameter
+> keyword-only (a leading `*,` — a required field with no declared default,
+> bare `TemplateExpr` with no `=...`, can otherwise follow a defaulted one in
+> the STORED `fields` dict's own order, e.g.
+> `fixtures/configs/script_with_fields.json`'s `light_entity`/`brightness`/
+> `delay_seconds`, which is a plain-Python-parameter-ordering `SyntaxError`
+> unless keyword-only — a regression this exact fixture caught); a required
+> field gets bare `name: TemplateExpr`, a defaulted one gets `name:
+> TemplateExpr = field_default(<default>)`. The M28 pyright gate
+> (`test_annotation_truth_pyright_gate.py`'s convention) is the acceptance
+> bar: both a decompiled `@shared_script` body-composition file AND a
+> separate caller file calling it with plain literals are zero policed
+> diagnostics under standard mode. Companion behavior change (not a new name —
+> `param()`'s existing frozen entry, and the meaning of a `@shared_script`
+> body's own signature parameters, both widen): compiling a `@shared_script`
+> body now binds EVERY signature parameter whose name is a declared field to
+> its `param(name)` marker BEFORE the body runs, regardless of its declared
+> Python default — so `tag=tag` inside the body is now exactly equivalent to
+> `tag=param("tag")` (previously, an unbound bare parameter held its literal
+> Python default — `None` if undeclared — a footgun the owner commissioned
+> this milestone to close). `param(name)` itself is unchanged in spelling and
+> stays valid (back-compat); its return value is now a `_BoundParamMarker`
+> (module-internal `hassle.compiler.scripts` class, NOT added to
+> `hassle.__all__` — a `TemplateExpr` subclass, so nothing about the DSL
+> surface changes beyond the one name above). Decompiler widening
+> (`hassle.decompiler.template_invert`/
+> `hassle.decompiler.codegen`, non-public tooling): inside a `@shared_script`
+> body's own decompile, a `"{{ <field> }}"` data value whose name is exactly
+> one of the script's own fields now inverts to the bare parameter read
+> (`tag`) instead of the raw string; a larger invertible expression
+> containing a field read decompiles through the same bounded inverter with
+> fields bound as parameters; the same field-aware rewrite also applies to
+> `repeat.count`/`repeat.for_each`, so `repeat_count(times)`/
+> `repeat_for_each(items)` round-trip with the bare parameter too (the
+> blessed alternative to the rejected `param_default()`). Scoped strictly to
+> an actual shared-script body's decompile (a module-level context, reset
+> immediately after) — never affects automation/plain-`@script`
+> decompilation, and the byte-exact re-render acceptance gate (MILESTONES
+> M13) still governs: anything the inverter can't accept keeps the unchanged
+> raw-string fallback (I3).
+
 > **Widened 2026-07-07 (`ux/capture-notify-recipe`, task #30, F3-additive,
-> surface count 106 → 108):** two new names, `capture_actions()` /
+> surface count 106 → 108 — independently of the M19 note above; both were
+> written against the same pre-both-merge 106 baseline, see the
+> reconciliation note below for the combined total):** two new names,
+> `capture_actions()` /
 > `emit_actions(bodies, *, span=)` — the public capture seam a `lib/`
 > recipe builder uses to record a block's actions once and splice the SAME
 > bodies into more than one container it assembles itself (e.g. one shared
@@ -211,11 +313,16 @@
 > its list-valued `entity_id`/`value` handling) compiles to
 > `{"condition": "not", "conditions": [<state-condition>]}`, byte-identical to
 > `not_(state(x).is_(v))`. The `.state` accessor's `==`/`!=` are REAL `__eq__`/
-> `__ne__` overloads — unlike `StateExpr`/`TemplateExpr` (both `str`
-> subclasses that must keep ordinary string equality, see
-> `hassle.compiler.templates`'s "Note on ==/!="), the accessor is a bespoke,
-> non-`str` object that exists only to be compared, so overloading can never
-> collide with string-equality semantics. (Typing-dance note: a class
+> `__ne__` overloads. `TemplateExpr` is a `str` subclass and must keep
+> ordinary string equality (see `hassle.compiler.templates`'s "Note on
+> ==/!="); `StateExpr` is NOT a `str` subclass (merge-time correction — the
+> original note here misstated this), but it deliberately keeps plain object
+> equality anyway: ONE blessed operator surface (the accessor) beats two
+> parallel spellings, and the `ConditionArgumentTypeError` bool-guard catches
+> a `state(x) != ...` mistake loudly, naming both `.is_not()` and the
+> `.state` accessor. The accessor is a bespoke, non-`str` object that exists
+> only to be compared, so overloading it can never collide with
+> string-equality semantics. (Typing-dance note: a class
 > overloading `__eq__` for a non-`bool` return needs an explicit
 > `# type: ignore[override]` on each of `__eq__`/`__ne__` — `object.__eq__`'s
 > signature returns `bool`, and pyright strict enforces that; the class also
@@ -248,8 +355,15 @@
 > 108 → 111 (`InclusiveNumericBoundError`, `InOperatorTrapError`,
 > `ConditionArgumentTypeError`).
 
-The public surface is exactly `hassle.__all__` (module
-`packages/hassle-core/src/hassle/__init__.py`). Bundle files write
+> **Reconciliation (merge of `m19/real-params` and `main` after both the M19
+> and `ux/capture-notify-recipe` PRs landed):** the two notes above were each
+> written independently against the same pre-merge 106-name baseline, each
+> claiming "106 → 108" for their own two additions. The actual combined
+> surface after M19 + capture/emit is 110 names; with `m20/entity-conditions`'s
+> three error additions the final total is **113 names** (verified at merge
+> time: `len(hassle.__all__) == 113`). No name collisions anywhere.
+
+The public surface is exactly `hassle.__all__` (module`packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.
 
 Current surface: **72 names**, plus TWO dedicated entry points that are
