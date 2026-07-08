@@ -10,12 +10,20 @@ HA dicts so compiler output is byte-stable (R8).
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from hassle.compiler.durations import normalize_duration
 from hassle.compiler.errors import CompileTimeBranchError
 from hassle.compiler.purpose import normalize_target
 from hassle.compiler.spans import capture_span
+
+if TYPE_CHECKING:
+    # Type-only (no runtime import -- avoids a builders<->triggers module-load
+    # cycle even though none currently exists; `_StateAccessor`'s `>`/`<`
+    # methods import `hassle.compiler.triggers.numeric_state` lazily at call
+    # time instead, same convention as every other cross-module reference in
+    # this file (`hassle.compiler.errors.InclusiveNumericBoundError`, etc.)).
+    from hassle.compiler.triggers import NumericStateExpr
 
 
 class _NoBool:
@@ -118,6 +126,19 @@ class StateExpr(_NoBool):
         self._state = value
         return self.with_options(id=id, enabled=enabled, variables=variables, for_=for_)
 
+    def is_not(self, value: Any) -> _NotStateExpr:
+        """``state(x).is_not(v)`` -- condition-only negation (M20, entity-first
+        conditions milestone). Mirrors ``.is_()`` exactly (same argument shape,
+        including a list ``value``) but wraps the resulting ``state`` condition
+        in HA's ``not`` combinator, compiling byte-identical to
+        ``not_(state(x).is_(v))`` (``hassle.compiler.conditions.not_``).
+
+        Condition-only (like ``not_`` itself): there is no ``not``-shaped HA
+        *trigger*, so this returns a condition-only object rather than
+        widening ``StateExpr``'s own dual trigger/condition ``to_trigger``.
+        """
+        return _NotStateExpr(self.is_(value))
+
     def to_trigger(self) -> dict[str, Any]:
         body: dict[str, Any] = {"trigger": "state", "entity_id": self._entity_id}
         if self._from is not _UNSET:
@@ -135,6 +156,24 @@ class StateExpr(_NoBool):
 
     def _branch_repr(self) -> str:
         return f"state({self._entity_id!r})"
+
+
+class _NotStateExpr(_NoBool):
+    """The ``condition: not`` wrapper :meth:`StateExpr.is_not` returns.
+
+    Condition-only (mirrors :class:`~hassle.compiler.conditions._CombinatorExpr`'s
+    own ``not_`` shape exactly): ``to_condition()`` is the only serialization
+    method, since there is no HA ``not``-shaped trigger to build.
+    """
+
+    def __init__(self, inner: StateExpr) -> None:
+        self._inner = inner
+
+    def to_condition(self) -> dict[str, Any]:
+        return {"condition": "not", "conditions": [self._inner.to_condition()]}
+
+    def _branch_repr(self) -> str:
+        return f"{self._inner._branch_repr()}.is_not(...)"  # pyright: ignore[reportPrivateUsage]
 
 
 class _Unset:
@@ -156,6 +195,144 @@ def state(entity_id: str | Sequence[str]) -> StateExpr:
     pass -- see :class:`StateExpr`'s docstring).
     """
     return StateExpr(entity_id)
+
+
+class _StateAccessor(_NoBool):  # pyright: ignore[reportUnusedClass]
+    # Constructed only from `hassle.compiler.helpers.EntityRef.state` (a
+    # cross-module, lazily-imported reference -- same avoidance convention as
+    # every other helpers<->builders seam in this file) and referenced
+    # directly by this milestone's tests -- never instantiated from within
+    # `builders.py` itself, which is the one thing pyright's strict
+    # `reportUnusedClass` actually checks for an underscore-prefixed class.
+    """``entity.state`` (MILESTONES M20, entity-first conditions) — a
+    comparison accessor bound to one entity id, returned by
+    :attr:`~hassle.compiler.helpers.EntityRef.state` (a defined property,
+    so it wins over M18's service-method ``__getattr__`` — no HA domain has
+    a service literally named ``state``).
+
+    Every comparison compiles to the exact same IR the corresponding classic
+    builder call would (golden-equivalence, this milestone's test 1):
+
+    - ``==``/``!=``   -> ``state(...).is_(v)`` / ``state(...).is_not(v)``
+    - ``>``/``<``     -> ``numeric_state(..., above=v)`` / ``(..., below=v)``
+    - ``>=``/``<=``   -> :class:`~hassle.compiler.errors.InclusiveNumericBoundError`
+      (HA's ``numeric_state`` has no inclusive bound — see that error's
+      docstring for the honest-mapping rationale)
+    - ``.in_([...])`` -> ``state(...).is_(["a", "b"])`` (HA's own ``state``
+      condition already accepts a list value as OR-membership, verified
+      against ``fixtures/configs/automation_condition_state_list_valued_fields.json``)
+
+    ``__eq__``/``__ne__`` are REAL overloads here (unlike ``StateExpr``/
+    ``TemplateExpr``, which are ``str`` subclasses that must keep ordinary
+    string equality — see ``hassle.compiler.templates``'s "Note on ==/!="):
+    this accessor is a bespoke, non-``str`` object that exists ONLY to be
+    compared, so overloading ``==``/``!=`` to build a condition cannot
+    collide with any pre-existing string-equality use.
+
+    The **``in``-operator trap** (Python semantics, non-negotiable): ``x.state
+    in [...]`` dispatches to ``list.__contains__``, which calls ``bool()`` on
+    each ``x.state == element`` comparison RESULT to decide membership — no
+    ``__eq__`` override can intercept this, since ``__contains__`` always
+    coerces via ``__bool__``. The comparison-result object
+    (:class:`_StateComparisonExpr`, what ``==``/``!=`` return) refuses
+    ``__bool__`` with :class:`~hassle.compiler.errors.InOperatorTrapError`,
+    naming ``.in_([...])`` as the fix, so the natural-but-impossible ``in``
+    spelling fails loudly rather than silently testing membership against
+    whatever ``bool()`` returned. The bare accessor (before any comparison)
+    still traps as an ordinary :class:`CompileTimeBranchError` (inherited
+    from ``_NoBool``), so ``if entity.state:`` fails loudly too.
+    """
+
+    def __init__(self, entity_id: str) -> None:
+        self._entity_id = entity_id
+
+    def __eq__(self, other: object) -> _StateComparisonExpr:  # type: ignore[override]
+        return _StateComparisonExpr(state(self._entity_id).is_(other), self._entity_id)
+
+    def __ne__(self, other: object) -> _StateComparisonExpr:  # type: ignore[override]
+        return _StateComparisonExpr(state(self._entity_id).is_not(other), self._entity_id)
+
+    # A class defining `__eq__` loses the default identity-based `__hash__`
+    # (Python sets it to `None` automatically, making instances unhashable).
+    # Nothing in this codebase hashes/dict-keys a `_StateAccessor`, but there
+    # is no reason to make it a landmine for a future caller either (e.g. a
+    # test helper deduplicating accessors in a set) -- explicit opt-back-in to
+    # plain identity hashing/equality-by-identity-for-hash-bucketing (the
+    # `object.__hash__` default), matching the "hash-story finding" this
+    # milestone's spec asked to be documented.
+    __hash__ = object.__hash__
+
+    def __gt__(self, other: float) -> NumericStateExpr:
+        from hassle.compiler.triggers import numeric_state
+
+        return numeric_state(self._entity_id, above=other)
+
+    def __lt__(self, other: float) -> NumericStateExpr:
+        from hassle.compiler.triggers import numeric_state
+
+        return numeric_state(self._entity_id, below=other)
+
+    def __ge__(self, other: float) -> NumericStateExpr:
+        from hassle.compiler.errors import InclusiveNumericBoundError
+
+        raise InclusiveNumericBoundError(">=", self._entity_repr(), other, capture_span(depth=0))
+
+    def __le__(self, other: float) -> NumericStateExpr:
+        from hassle.compiler.errors import InclusiveNumericBoundError
+
+        raise InclusiveNumericBoundError("<=", self._entity_repr(), other, capture_span(depth=0))
+
+    def in_(self, values: Sequence[Any]) -> StateExpr:
+        """``entity.state.in_(["a", "b"])`` -> a ``state`` condition with a
+        list value (HA's own OR-membership shape) — the honest, working
+        spelling for what ``entity.state in [...]`` cannot be (the
+        ``in``-operator trap documented on the class)."""
+        return state(self._entity_id).is_(list(values))
+
+    def _entity_repr(self) -> str:
+        return self._entity_id
+
+    def _branch_repr(self) -> str:
+        return f"{self._entity_id}.state"
+
+
+class _StateComparisonExpr(_NoBool):
+    """The condition-builder object ``entity.state == v`` / ``!= v`` returns
+    (MILESTONES M20). Wraps a real ``StateExpr``/``_NotStateExpr`` — its
+    ``to_condition()`` delegates directly, so it compiles byte-identical to
+    the equivalent classic builder form (this milestone's test 1).
+
+    A dedicated wrapper (rather than returning the inner ``StateExpr``/
+    ``_NotStateExpr`` directly) so the ``in``-operator trap and the
+    trigger/condition non-confusion story (test 3) both have one exact type
+    to reason about: this object is CONDITION-ONLY (no ``to_trigger``), so
+    passing it to ``when(...)`` fails with a plain, honest
+    ``AttributeError`` on the missing method rather than silently compiling
+    as some unrelated trigger shape.
+    """
+
+    def __init__(self, inner: StateExpr | _NotStateExpr, entity_id: str) -> None:
+        self._inner = inner
+        self._entity_id = entity_id
+
+    def __bool__(self) -> bool:
+        # The in-operator trap (see class + _StateAccessor docstrings): this
+        # is the object `list.__contains__` actually calls `bool()` on for
+        # `x.state in [...]`, so THIS `__bool__` is where the dedicated
+        # `.in_([...])`-naming message belongs -- not the generic
+        # `CompileTimeBranchError` a bare `if_then(...)` rewrite hint would
+        # give (misleading here: this specific value came from `==`/`!=`, but
+        # the exact same trap fires for `in`, which is the far more likely
+        # cause of an accidental `bool()` call on a comparison result).
+        from hassle.compiler.errors import InOperatorTrapError
+
+        raise InOperatorTrapError(self._branch_repr(), capture_span(depth=0))
+
+    def to_condition(self) -> dict[str, Any]:
+        return self._inner.to_condition()
+
+    def _branch_repr(self) -> str:
+        return f"{self._entity_id}.state"
 
 
 class ServiceAction:

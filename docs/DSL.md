@@ -7937,6 +7937,10 @@ Compiles to (canonical IR / stored HA shape):
 
 Raised when a Python `if`/`bool()` is used on a runtime state expression (DESIGN §5.5) -- Python control flow runs at *compile* time, so a native branch on a live entity state would be baked in wrong. Fix: use `with if_then(expr):` / `with else_then():` instead, which compile to HA's `if`/`choose` action.
 
+### `ConditionArgumentTypeError`
+
+Raised when a condition-accepting entry point (`only_if`, `if_then`, `else_if`, `choose().when_`, `repeat_while`, `repeat_until`, `any_of`/`all_of`/`not_`) receives a plain Python `bool` instead of a condition-builder object (M20) -- almost always the classic `==`/`!=`-on-a-plain-value mistake. Fix: build a real condition, e.g. `entity.state == "on"` or `state(entity_id).is_("on")`, and pass that instead.
+
 ### `DanglingTemplateHelperDeclarationError`
 
 Raised when `template_number`/`template_sensor`/`template_binary_sensor`/`template_select` is called with no `state=` (the M13 decorator-form signal) but is never applied as a decorator over a function -- the call builds and registers nothing, so without this check it would compile clean with the object silently absent. Fix: either add `state=...` to make it a direct call-form declaration, or apply the call as `@template_number(...)` (etc.) over a zero-arg function that `return`s the state expression.
@@ -7944,6 +7948,14 @@ Raised when `template_number`/`template_sensor`/`template_binary_sensor`/`templa
 ### `ElseWithoutIfError`
 
 `with else_then():`/`with else_if(...):` used where the immediately preceding action in the same list isn't an `if_then`/`choose`/`else_if` block. Fix: move it directly after the block it belongs to.
+
+### `InOperatorTrapError`
+
+Raised by `entity.state in [...]` (M20, entity-first conditions). Python's `in` always calls `bool()` on each element comparison to decide membership -- no overload can intercept this, so the natural `in` spelling can never build a real condition. Fix: use `entity.state.in_([...])` instead, which builds a real `state` condition with list (OR) membership.
+
+### `InclusiveNumericBoundError`
+
+Raised by `entity.state >= v` / `entity.state <= v` (M20, entity-first conditions). Home Assistant's `numeric_state` condition only supports EXCLUSIVE bounds (`above`/`below`) -- there is no inclusive form to map `>=`/`<=` onto, so compiling one would silently produce a condition that is wrong right at the boundary value. Fix: use the exclusive `>`/`<` operator instead (the exact boundary value is excluded), or pick a value safely past it.
 
 ### `NoParamContextError`
 

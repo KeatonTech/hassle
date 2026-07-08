@@ -37,6 +37,36 @@ class CompileTimeBranchError(CompileError):
         )
 
 
+class InOperatorTrapError(CompileError):
+    """``entity.state in [...]`` (M20, entity-first conditions milestone).
+
+    Python semantics, non-negotiable: ``x in [...]`` dispatches to
+    ``list.__contains__``, which calls ``bool()`` on each ``x == element``
+    comparison result to decide membership -- no ``__eq__``/``__contains__``
+    override on ``x`` can intercept this (`__contains__` is resolved on the
+    LIST, not on ``x``). So this natural-reading spelling can never build a
+    real condition; it can only ever silently evaluate to a `bool` at compile
+    time via the very same `__bool__` trap DESIGN §5.5 already uses elsewhere
+    (`CompileTimeBranchError`) -- but a bare "you used `if`/`bool()`" message
+    would leave the reader with no working alternative, since the natural
+    fix (wrap it in `with if_then(...):`) does not exist for a value that was
+    never a real condition to begin with. This dedicated message instead
+    names the ONE spelling that does work: `.in_([...])`.
+    """
+
+    def __init__(self, expr_repr: str, span: SourceSpan | None) -> None:
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        self.span = span
+        super().__init__(
+            f"You used Python's `in` operator on `{expr_repr}`{where}. Python's `in` always "
+            f"calls `bool()` on each element comparison to decide membership -- no overload on "
+            f"`{expr_repr}` can intercept that, so `x in [...]` can never build a real Home "
+            f"Assistant condition, only silently evaluate to `True`/`False` once, at compile "
+            f"time. Fix: use `.in_([...])` instead, e.g. `{expr_repr}.in_([...])`, which builds "
+            f"a real `state` condition with list (OR) membership."
+        )
+
+
 # The exact marker comment `hassle.decompiler.splice`/`hassle.sync.source_writer`
 # stamp onto a UI-edit appended by `SplicingSourceWriter.splice_object`'s
 # stale-manifest/metaprogrammed-object fallback (that module's docstring: a
@@ -334,4 +364,75 @@ class OnlyIfBlockCoverageError(CompileError):
             f"contain *all* of the automation's actions. Fix: move every action inside the "
             f"`with only_if(...):` block, or switch back to the bare `only_if(...)` call (no "
             f"`with`), which has no such restriction."
+        )
+
+
+class InclusiveNumericBoundError(CompileError):
+    """``entity.state >= v`` / ``entity.state <= v`` (M20, entity-first
+    conditions milestone).
+
+    HA's ``numeric_state`` condition/trigger only has EXCLUSIVE bounds
+    (``above``/``below`` -- verified against
+    ``hassle.compiler.triggers.NumericStateExpr``, docs/ha-api-notes.md): there
+    is no inclusive ``above_or_equal``/``below_or_equal`` field to map `>=`/`<=`
+    onto. Silently emitting the exclusive field for an inclusive operator would
+    compile a condition that is subtly WRONG right at the boundary value (e.g.
+    `entity.state >= 21.5` compiling to `above: 21.5` would falsely exclude
+    exactly `21.5`) -- exactly the kind of silent-miscompile DESIGN §5.5 exists
+    to prevent. Raised instead of a wrong compile; the fix is the honest
+    exclusive-bound rewrite (widen the boundary by the smallest meaningful
+    step for the entity, or use `>`/`<` if the exact boundary value need not
+    be included).
+    """
+
+    def __init__(
+        self, operator: str, entity_repr: str, value: object, span: SourceSpan | None
+    ) -> None:
+        self.operator = operator
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        exclusive_operator = ">" if operator == ">=" else "<"
+        exclusive_field = "above" if operator == ">=" else "below"
+        super().__init__(
+            f"`{entity_repr}.state {operator} {value!r}`{where} has no honest native-condition "
+            f"mapping. Home Assistant's `numeric_state` condition only supports EXCLUSIVE bounds "
+            f"(`above`/`below`), not an inclusive `{exclusive_field}_or_equal` -- so `{operator}` "
+            f"cannot be compiled without silently changing behavior right at the boundary value. "
+            f"Fix: use the exclusive `{exclusive_operator}` operator instead (accepting that the "
+            f"exact boundary value `{value!r}` is excluded), e.g. "
+            f"`{entity_repr}.state {exclusive_operator} {value!r}`, or, if the boundary value "
+            f"itself must be included, pick a value on the correct side of it that is safely "
+            f"outside the entity's real precision (e.g. `{exclusive_operator} {value!r} - 0.001` "
+            f"for a `<` rewrite of `<=`)."
+        )
+
+
+class ConditionArgumentTypeError(CompileError):
+    """A condition-accepting entry point (`only_if`, `if_then`, `else_if`,
+    `choose().when_`, `repeat_while`, `repeat_until`, `any_of`/`all_of`/`not_`)
+    got a plain Python `bool` instead of a condition-builder object (M20,
+    entity-first conditions milestone, absorbed scope item (c)).
+
+    This is almost always the classic `==`/`!=` typo: `only_if(x.state ==
+    "on")` reads naturally but, without this guard, a caller who instead wrote
+    something that evaluates to a bare `bool` at compile time (e.g. Python's
+    own `bool.__eq__` on two non-Hassle values, or an accidental `and`/`or`
+    chain) gets a raw `AttributeError: 'bool' object has no attribute
+    'to_condition'` deep inside the compiler -- correct in outcome, useless as
+    a diagnostic. This raises a teaching error instead, at the call site,
+    naming the accessor methods (`.is_()`/`.is_not()`/`==`/`!=`) that build a
+    REAL condition object.
+    """
+
+    def __init__(self, call: str, value: bool, span: SourceSpan | None) -> None:
+        self.call = call
+        self.value = value
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        super().__init__(
+            f"`{call}(...)`{where} got the plain Python bool `{value!r}` where a condition "
+            f"object was expected. A bare `bool` can never be a real Home Assistant condition -- "
+            f"this is almost always the `==`/`!=`-on-a-plain-value mistake (comparing two "
+            f"ordinary Python values instead of building a condition). Fix: build an actual "
+            f'condition, e.g. `entity.state == "on"` / `entity.state.is_not("on")` (M20\'s '
+            f'entity-first accessor) or `state(entity_id).is_("on")` (the classic builder), '
+            f"and pass THAT to `{call}(...)` -- never a bare `bool`."
         )

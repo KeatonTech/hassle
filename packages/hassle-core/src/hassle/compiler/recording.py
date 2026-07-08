@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from hassle.compiler.errors import (
+    ConditionArgumentTypeError,
     NoRecordingContextError,
     OnlyIfBlockCoverageError,
     UnknownAutomationOptionError,
@@ -182,7 +183,21 @@ def record_trigger(builder: TriggerBuilder, *, span: SourceSpan | None = None) -
 
 def record_condition(builder: ConditionBuilder, *, span: SourceSpan | None = None) -> None:
     rec = _require_active("only_if")
-    rec.conditions.append(RecordedNode(builder.to_condition(), span or capture_span(depth=1)))
+    resolved_span = span or capture_span(depth=1)
+    # R6 bool-guard (M20, entity-first conditions milestone, absorbed scope
+    # item (c)): a plain `bool` here is always the classic `==`/`!=` mistake
+    # (`only_if(x.state == "on" and other_thing)` collapsing to a bare bool,
+    # or simply passing a Python comparison of two ordinary values) -- catch
+    # it before it reaches `builder.to_condition()`, which would otherwise
+    # raise a bare, unhelpful `AttributeError`.
+    #
+    # pyright statically sees `bool` can never satisfy `ConditionBuilder`
+    # (`to_condition()`), so this looks "unnecessary" against the declared
+    # type -- it defends a caller who ignored/couldn't satisfy that
+    # annotation at runtime (the documented typing dance, M20 spec).
+    if isinstance(builder, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
+        raise ConditionArgumentTypeError("only_if", builder, resolved_span)
+    rec.conditions.append(RecordedNode(builder.to_condition(), resolved_span))
 
 
 def record_action(builder: ActionBuilder, *, span: SourceSpan | None = None) -> None:
