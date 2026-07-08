@@ -3317,7 +3317,7 @@ Both compounding gaps from §36.2 are fixed:
   existing top-level event-trigger match already gives a fresh-start
   automation (no new filter semantics invented; genuinely reused).
 - **The `wait` variable** is now populated on `ctx.variables["wait"]` after
-  every `wait_for_trigger` step (`_set_wait_variable`, `actions.py`), shaped
+  every `wait_for_trigger` step (`_set_wait_satisfied`/`_set_wait_timed_out`, `actions.py`), shaped
   to match HA's real `wait` variable for the event-trigger case (the shape
   §36.2 named as the minimum bar): satisfied →
   `{"completed": true, "trigger": {"event": {"event_type": ..., "data": {...}}}}`;
@@ -3330,7 +3330,7 @@ Both compounding gaps from §36.2 are fixed:
   mechanism — `AutomationEngine.check_due`'s deterministic fake-clock deadline
   (`run.wake_at`) still drives the timeout path (R8: no wall-clock); this
   task only added the `wait` variable's population on that already-existing
-  path, per the same `_set_wait_variable` call.
+  path, per the same `_set_wait_satisfied`/`_set_wait_timed_out` call.
 - **A necessary companion fix, found while writing the cookbook branch-dispatch
   test (not a scope-creep — required for that test to pass without hanging
   on a design dead-end):** a `choose()` branch's `condition: template` reading
