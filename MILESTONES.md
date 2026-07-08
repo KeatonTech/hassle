@@ -889,6 +889,50 @@ canonical form; no placement-dependent output).
 
 ---
 
+## M19 — Shared-script parameters are real template values (owner-commissioned)
+
+**Goal:** inside a `@shared_script` body, the function's own parameters should BE the
+runtime field references — `tag=tag` instead of `tag="{{ tag }}"`, composable with the
+whole expression surface (`concat(tag, "_x")`, `tag.eq(...)`) — and the decompiler should
+emit that form. Today the compiler invokes the body with the Python DEFAULTS (verified:
+`tag` is literally `None` inside), `param("tag")` is the only marker surface, and
+decompiled bodies carry raw `"{{ tag }}"` strings.
+
+**Binding semantics:**
+- Compiling a shared-script body binds EACH signature parameter to its `param(name)`
+  marker (a `TemplateExpr`), regardless of declared defaults. Defaults remain
+  metadata for the generated `fields` block only.
+- Python operations a marker cannot honestly support (`bool()`/`range()`/`int()`-style
+  compile-time use) fail LOUDLY with an R6 what/where/fix error naming the escape
+  hatch — new `param_default("times")` returns the declared compile-time default for
+  deliberate metaprogramming (the `for _ in range(...)` unroll pattern). Audit the
+  fixture corpus + docs (LIB_README's `flash_lights`, COOKBOOK recipes) and migrate any
+  defaults-bound bodies via the escape hatch in the same PR.
+- Caller side unchanged: literals and expressions both remain valid call-site data.
+- Decompiler: inside a shared-script body, a `"{{ <field> }}"` data value whose name is
+  exactly one of the script's own fields decompiles to the bare parameter name (and
+  larger invertible expressions containing field reads decompile through the M13/M16
+  inverter with fields bound as parameters); byte-exact re-render gate as always,
+  raw-string fallback otherwise. I3 both branches.
+
+**Write these tests first**
+1. Golden: body written with `tag=tag` and a composed `concat(tag, ...)` compiles to the
+   exact `"{{ tag }}"` / `"{{ tag ~ '...' }}"` IR the string form produces (byte-identical
+   to the `param()` form).
+2. Marker misuse: `range(times)` / `if tag:` in a body → R6 error naming
+   `param_default()`; `param_default` itself returns the declared default and its
+   result is NOT a TemplateExpr.
+3. Decompile: the owner's dismiss_notification shape round-trips as `tag=tag` (fixture);
+   a field read inside a bigger invertible expression round-trips composed; a
+   non-invertible template keeps the raw string (I3 fallback).
+4. `param()` remains valid and equivalent (back-compat, F3).
+5. Corpus/docs migration: every existing shared-script fixture still compiles
+   byte-identically (or its golden is regenerated via the mechanism with the diff
+   shown and a stated reason).
+6. Simulator parity (I5) for marker-bound bodies.
+
+---
+
 ## Milestone sizing (rough, for planning the swarm)
 
 | Milestone | Size | Parallel workstreams inside |
