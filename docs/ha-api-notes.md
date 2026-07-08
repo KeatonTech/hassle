@@ -3285,3 +3285,135 @@ mirroring how `trigger_ctx`/`ctx.trigger_ctx` already work for the top-level
 trigger. Both changes are simulator-internal (`hassle/testing/actions.py`,
 `hassle/testing/engine.py`, `hassle/testing/triggers.py`) — outside this
 task's file fence; flagged here rather than worked around silently.
+
+## 37. Task #32 (`fix/sim-wait-resumption`): §36.2 simulator gap closed; §36.1 validator false positive fixed (narrowly)
+
+**Context:** closing the two gaps §36 flagged as out-of-fence/STOP for task
+#30, now squarely in this task's fence (`hassle/testing/`,
+`hassle/registry/extract.py`, and the cookbook recipe's sim test).
+
+### 37.1 §36.2 resolved: event-driven `wait_for_trigger` resumption + the `wait` variable
+
+Both compounding gaps from §36.2 are fixed:
+
+- **`AutomationEngine.on_event`** (`hassle/testing/engine.py`) now resumes any
+  active run suspended in a `wait_for_trigger` on a matching event BEFORE
+  evaluating the automation's own top-level triggers for a fresh start —
+  mirroring `on_state_change`'s existing `_resume_waits_on_state`-then-
+  `evaluate-triggers` order exactly. A new `_resume_waits_on_event` walks
+  `self._active` and re-sends the generator with an `EventOccurrence`
+  (new dataclass, `hassle/testing/actions.py`: `event_type` + `data`, the
+  event-carrying counterpart of `StateChange` — together they form the new
+  `WaitResumeValue = StateChange | EventOccurrence | None` alias threaded
+  through `run_actions`/`_run_one`/`_run_wait_for_trigger`/`_run_wait_template`).
+- **`_matches_wait_trigger`** (`hassle/testing/actions.py`) gains an event
+  branch, dispatching on the resume value's *type* (`EventOccurrence` vs.
+  `StateChange`) rather than the trigger's own kind, since a suspended wait's
+  triggers list can mix shapes. The event branch reuses `is_event_trigger`
+  (already existed, was simply never called from here) and adds
+  `_event_trigger_matches`: `event_type` equality plus the trigger's own
+  optional `event_data` filter, evaluated as a **subset match** against the
+  fired event's data — the same semantics `AutomationEngine.on_event`'s
+  existing top-level event-trigger match already gives a fresh-start
+  automation (no new filter semantics invented; genuinely reused).
+- **The `wait` variable** is now populated on `ctx.variables["wait"]` after
+  every `wait_for_trigger` step (`_set_wait_variable`, `actions.py`), shaped
+  to match HA's real `wait` variable for the event-trigger case (the shape
+  §36.2 named as the minimum bar): satisfied →
+  `{"completed": true, "trigger": {"event": {"event_type": ..., "data": {...}}}}`;
+  timed out → `{"completed": false, "trigger": None}` (renders as Jinja
+  `none`, honoring whichever of `continue_on_timeout`'s two values the
+  generator already returns). A state-satisfied wait gets `wait.completed:
+  true` with an empty `wait.trigger` namespace (no fabricated `state`-trigger
+  shape invented, since DESIGN/§36.2 only asked for the event shape).
+- **Timeout semantics (item 3):** unchanged from the existing, already-correct
+  mechanism — `AutomationEngine.check_due`'s deterministic fake-clock deadline
+  (`run.wake_at`) still drives the timeout path (R8: no wall-clock); this
+  task only added the `wait` variable's population on that already-existing
+  path, per the same `_set_wait_variable` call.
+- **A necessary companion fix, found while writing the cookbook branch-dispatch
+  test (not a scope-creep — required for that test to pass without hanging
+  on a design dead-end):** a `choose()` branch's `condition: template` reading
+  `wait.trigger.event.data.action` (or any dotted/bracket path through it)
+  after a **timed-out** wait must not crash the whole automation run merely
+  because `wait.trigger` legitimately renders as `None` there. Real Jinja
+  (verified locally, `jinja2.Environment().from_string(...)` against
+  `wait={"trigger": None}`) raises `UndefinedError: 'None' has no attribute
+  'event'` on that subscript/attribute access — genuinely matching what real
+  HA's own Jinja evaluation would do. HA's script engine does not abort the
+  automation over this: `evaluate_condition`'s `template` branch
+  (`_evaluate_template_condition`, `actions.py`) now catches
+  `UnsupportedTemplateError` **narrowly** (only the "undefined name/attribute"
+  shape — `_is_undefined_render_error`, matched off the two message shapes
+  `TemplateEngine.render`'s own `UndefinedError` handler already produces,
+  `'x' is undefined` / `'None' has no attribute 'y'`) and treats it as
+  "condition not satisfied," never masking a genuinely-unsupported construct
+  (unknown filter/test, invalid syntax — those still raise). This is scoped
+  to *condition* evaluation only; every other template render call site
+  (service-call `data=` values, `variables:`, `wait_template`'s own predicate)
+  is untouched and still raises on an undefined name, per DESIGN §10.1's
+  "never silently wrong."
+
+New tests: `packages/hassle-core/tests/test_sim_wait_for_trigger.py`
+(`test_wait_for_trigger_resumes_on_matching_event`,
+`test_wait_for_trigger_non_matching_event_does_not_resume`,
+`test_wait_for_trigger_event_data_filter_must_match`,
+`test_wait_variable_populated_on_event_resumption`,
+`test_wait_variable_reflects_timeout`); the cookbook's own
+`fixtures/cookbook/bundle/tests/test_recipes.py` now has the full branch-
+dispatch coverage §36.2 said couldn't be written yet
+(`test_notify_with_actions_open_blinds_branch_dispatches_on_matching_action`,
+`..._close_blinds_branch...`, `..._non_matching_action_id_takes_no_branch`,
+`..._timeout_takes_no_branch`).
+
+### 37.2 §36.1 resolved: narrowed the regex fallback, not the known-domain list
+
+Fixed in `hassle/registry/extract.py`'s `_ENTITY_ID_RE` per the approach §36.1
+itself suggested: exclude a `domain.object_id` candidate when it is merely
+the tail of a LONGER dotted identifier chain, rather than removing `event`
+from `_KNOWN_ISH_DOMAINS` (which would just under-match real `event.*`
+entity references elsewhere) or hand-listing `wait`/`trigger`/`repeat` as
+special-cased roots (which would be a narrower, more brittle fix than the
+general shape of the bug: ANY sufficiently-long dotted variable path through
+a known domain word could false-positive, not just those three roots).
+
+The regex now matches the **whole** leading dotted-identifier run before the
+final two segments (`(?:prefix\.)?domain\.object_id`, `prefix` itself allowed
+to contain further dots) and the caller skips any match where `prefix`
+matched at all. Non-overlapping regex scanning matters here: a single-hop
+lookbehind would have let `wait.trigger.event.data.action` be consumed as
+`wait.trigger.event` (correctly excluded, prefix=`wait.trigger`) followed by
+a *second*, independently-scanned match `data.action` with no preceding dot
+of its own — which a naive one-hop check would then wrongly treat as a
+standalone reference. Matching the whole prefix greedily avoids this: the
+entire chain is consumed in one match, so there is no second match to
+mis-classify. (`data` is not itself in `_KNOWN_ISH_DOMAINS` so this
+particular case was harmless by accident either way, but the general shape of
+the bug is not accidental-safe, so the fix does not rely on that.)
+
+Verified narrow (both directions): `wait.trigger.event.data.action`,
+`trigger.event.data.action` (a bare `trigger.`-rooted read, not just the
+`wait.trigger...` spelling, per this task's instructions) no longer
+false-positive; `states('light.hallway')` and
+`is_state('event.doorbell', 'pressed')` (a genuine `event.*` domain entity in
+real entity position) still extract correctly. Tests:
+`packages/hassle-core/tests/test_registry_extract.py::
+test_extract_does_not_false_positive_on_wait_trigger_event_data_dotted`,
+`..._still_finds_real_entity_id_looking_strings_in_entity_position`,
+`..._does_not_false_positive_on_trigger_rooted_dotted_paths`.
+
+**Not done (left for the recipe's/M19's own owner, deliberately, per this
+task's file fence):** now that the dotted spelling (`wait.trigger.event.data.
+action`) passes `validate_bundle` cleanly, `fixtures/cookbook/bundle/lib/
+notify_actions.py`'s `_wait_action_id_var()` bracket-subscript workaround
+COULD be simplified back to dotted attribute access. Not done here: that
+function lives outside this task's fence (`lib/notify_actions.py` is the
+notify-recipe's own authoring surface, and the exact compiled `value_template`
+string it produces is asserted byte-for-byte by
+`packages/hassle-core/tests/test_capture_notify_recipe.py`, a task-#30-owned
+golden-shape test this task was not asked to touch). Flagged for a follow-on:
+switching the spelling back to dotted form is now purely cosmetic (both
+spellings render identically, and both now validate cleanly) and would need
+`test_capture_notify_recipe.py`'s asserted `value_template` strings updated
+to match, plus (if the compiled JSON fixture corpus embeds this recipe's
+output anywhere) a `hassle-dev goldens --update` regen.

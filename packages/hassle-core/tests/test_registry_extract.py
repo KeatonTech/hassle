@@ -310,6 +310,92 @@ def a():
     assert "binary_sensor.wait_for_inner_entity" in entity_ids
 
 
+# --- §36.1: `event.data` misread as an entity id inside `wait.trigger.*` ---
+
+
+def test_extract_does_not_false_positive_on_wait_trigger_event_data_dotted(tmp_path: Path) -> None:
+    """docs/ha-api-notes.md §36.1: the regex fallback previously matched the
+    substring `event.data` inside `wait.trigger.event.data.action` (a Jinja
+    *variable path*, not an entity reference) because `event` is itself a
+    real HA entity domain in `_KNOWN_ISH_DOMAINS`. The dotted spelling (not
+    the cookbook recipe's bracket-subscript workaround) must not extract a
+    spurious `event.data` entity reference."""
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, event, service, state, var, wait_for, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.trigger").to("on"))
+    wait_for(event("mobile_app_notification_action"), timeout="00:05:00")
+    service(
+        "notify.mobile_app",
+        message=var("wait.trigger.event.data.action"),
+    )
+""",
+    )
+    result = compile_bundle(bundle)
+    refs = extract_references(result)
+    entity_ids = {r.entity_id for r in refs if r.entity_id is not None}
+    assert "event.data" not in entity_ids
+
+
+def test_extract_still_finds_real_entity_id_looking_strings_in_entity_position(
+    tmp_path: Path,
+) -> None:
+    """The narrowed regex must not regress genuine entity-id-shaped
+    references in real entity positions (including a real `event.*` domain
+    entity, and other known-ish domains) elsewhere in a template string."""
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, service, state, template, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("binary_sensor.trigger").to("on"))
+    service(
+        "notify.mobile_app",
+        message=template(
+            "{{ states('light.hallway') }} and {{ is_state('event.doorbell', 'pressed') }}"
+        ),
+    )
+""",
+    )
+    result = compile_bundle(bundle)
+    refs = extract_references(result)
+    entity_ids = {r.entity_id for r in refs if r.entity_id is not None}
+    assert "light.hallway" in entity_ids
+    assert "event.doorbell" in entity_ids
+
+
+def test_extract_does_not_false_positive_on_trigger_rooted_dotted_paths(tmp_path: Path) -> None:
+    """Broader than just `wait.trigger.event.data.*`: a bare `trigger.event.data.*`
+    read (e.g. inside a `choose` condition evaluated against the top-level
+    trigger context, not a `wait`) must not false-positive either -- the
+    exclusion is scoped to any `wait.`/`trigger.`-rooted attribute chain, not
+    just the `wait.trigger...` spelling specifically."""
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, event, service, var, when
+
+@automation(id="a", alias="A")
+def a():
+    when(event("mobile_app_notification_action"))
+    service(
+        "notify.mobile_app",
+        message=var("trigger.event.data.action"),
+    )
+""",
+    )
+    result = compile_bundle(bundle)
+    refs = extract_references(result)
+    entity_ids = {r.entity_id for r in refs if r.entity_id is not None}
+    assert "event.data" not in entity_ids
+
+
 def test_device_block_registry_uuid_entity_id_not_validated_as_entity_name(tmp_path) -> None:
     # Modern HA device triggers/actions store ENTITY REGISTRY UUIDs (32-hex) in
     # their entity_id field, not domain.object_id names (owner field evidence:
