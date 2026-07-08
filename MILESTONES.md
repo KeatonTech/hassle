@@ -933,6 +933,50 @@ decompiled bodies carry raw `"{{ tag }}"` strings.
 
 ---
 
+## M20 — Entity-first conditions: `entity.state != ""` (owner-commissioned)
+
+**Goal:** conditions read entity-first with natural operators, building NATIVE HA
+conditions (structured state/numeric_state — UI-editable, never template strings):
+`last_shown_notification.state != ""`, `e.input_select.day_phase.state == "Sleeping"`,
+`e.sensor.temp.state > 21.5` (numeric_state above), `.state.in_(["a","b"])` for
+membership. Layers on M18's EntityRef and the StateExpr `==`/`!=`/`is_not` layer landed
+via the capture-recipe work item.
+
+**Binding semantics:**
+- `EntityRef.state` is a defined property (wins over the M18 service-method
+  `__getattr__`; no HA domain has a service named `state`) returning a comparison
+  accessor. Overloads: `==`/`!=` → state condition (`is_`/`is_not` equivalents);
+  `>`/`>=`/`<`/`<=` → numeric_state above/below (inclusive/exclusive mapped honestly to
+  what HA's numeric_state supports — verify against the IR model and document);
+  `.in_(list)` → state condition with list.
+- **The `in`-operator carve-out (Python semantics, non-negotiable):** `x.state in [...]`
+  dispatches to `list.__contains__`, which bool-coerces the element comparisons — no
+  overload can intercept it. The `__eq__`-result's bool-coercion guard must raise the R6
+  error NAMING `.in_([...])` as the fix, so the natural-but-impossible spelling fails
+  loudly, never silently.
+- Compiles to byte-identical IR as the state()/numeric_state() builder forms (golden
+  equivalence tests). Decompiler canonical output UNCHANGED this milestone (authoring
+  sugar only; a canonical flip is a separate owner decision).
+- Stubs: generated entity classes type the `.state` accessor (autocomplete + the
+  decompiled-bundle pyright gate stays clean).
+- Also applies to helper-declaration refs (module-level `input_text(...)`-style handles),
+  not just `e.`-registry refs — one accessor implementation, wherever EntityRef appears.
+
+**Write these tests first**
+1. IR equivalence goldens: each operator form vs its builder-form twin, byte-identical
+   (state ==/!=, numeric > >= < <=, .in_ list).
+2. The `in`-operator trap: `x.state in ["a"]` inside a condition context raises the R6
+   error naming `.in_()`; snapshot-tested.
+3. Trigger/expression non-confusion: `.state` accessor used where a TRIGGER is expected
+   → clear error (or explicit support via .to() parity — decide, spec the choice in the
+   PR; no silent weirdness); interaction with M16's template surface documented
+   (state_of() remains the template-string read; .state is the native-condition read).
+4. Stubs: accessor typed; pyright gate (M28's decompiled-bundle test) still zero.
+5. pyright strict clean despite __eq__ overloads (the documented typing dance).
+6. Docs gate: constructs documented, DSL.md regenerated via --update.
+
+---
+
 ## Milestone sizing (rough, for planning the swarm)
 
 | Milestone | Size | Parallel workstreams inside |
