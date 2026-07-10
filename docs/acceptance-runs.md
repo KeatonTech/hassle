@@ -33,3 +33,23 @@ Re-run this whenever AGENTS.md / docs generation changes — the premise is
   `.hassle/registry.json` before using them, and followed the
   edit → validate → test loop from AGENTS.md without prompting.
 - Zero documentation-gap failures; no docs iteration needed this run.
+
+## Run 2 — 2026-07-09 — **10/10 PASS**
+
+- Toolchain: main @ `184f564` (post M13–M20: decorator-form template helpers,
+  category-first layout, string-state expressions, typed service namespaces,
+  marker-bound shared-script params, entity-first conditions; docs/DSL.md and
+  AGENTS.md regenerated many times since run 1 — this run validates the docs
+  kept pace).
+- Sample bundle: regenerated in the NEW canonical forms (root-level `misc.py`
+  layout, `from hassle.services import ...` namespace calls, typed shared-script
+  signatures) — sessions faced materially different code than run 1.
+- Mechanical score: 10/10 validate+test green (bar ≥ 8).
+- Intent spot-check: 10/10. Consistent with run 1's quality bar: `id=` never
+  touched, seeded xfail respected via its docstring, entities verified against
+  the registry snapshot, edit → validate → test loop followed unprompted, and
+  one session explicitly avoided piping gate commands (the AGENTS.md exit-code
+  guidance landing). `explain_plan_diff` correctly reasoned the three-way
+  manifest-base semantics and even flagged that it could not quote DESIGN §8.2's
+  exact row label without leaving its bundle fence — honest boundary-keeping.
+- Zero documentation-gap failures; no docs iteration needed this run.
