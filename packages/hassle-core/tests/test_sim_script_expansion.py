@@ -204,3 +204,38 @@ def test_runaway_script_recursion_raises_clear_error(tmp_path: Path) -> None:
     )
     with pytest.raises(Exception, match="recursion"):
         sim.state_change("button.go", "off", "on")
+
+
+def test_field_defaults_seed_callee_variables_when_omitted(tmp_path: Path) -> None:
+    """HA seeds a script's field `default:`s as run variables when the caller
+    omits them -- `adjust_tdbu_blind(position=...)` relying on
+    `peek_distance`'s default 30 must render 30, not crash on an undefined
+    name. An explicitly-passed value still wins over the default."""
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, service, shared_script, state, when
+
+        @shared_script(
+            id="mover",
+            alias="Mover",
+            fields={"position": {"selector": {"number": {}}, "default": 30}},
+        )
+        def mover():
+            service("cover.set_cover_position", position="{{ position }}")
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("button.default").to("on"))
+            service("script.mover")
+
+        @automation(id="b", alias="b")
+        def b():
+            when(state("button.explicit").to("on"))
+            service("script.mover", position=75)
+        """,
+    )
+    sim.state_change("button.default", "off", "on")
+    sim.assert_called("cover.set_cover_position", position="30")
+    sim.state_change("button.explicit", "off", "on")
+    sim.assert_called("cover.set_cover_position", position="75")
