@@ -62,7 +62,10 @@ def test_services_stub_service_functions_accept_target(snapshot: RegistrySnapsho
     ``hassle.compiler.actions.service`` call this delegates to always accepts
     ``target=``."""
     stub = generate_services_stub(snapshot)
-    assert "target: str | Sequence[str] | dict[str, Any] = ..." in stub
+    # Round 2 widened the annotation to the _TargetArg alias (purpose-target
+    # helpers) -- the contract here is only that target= exists on every
+    # generated function.
+    assert "target: _TargetArg = ..." in stub
     assert "from collections.abc import Sequence" in stub
 
 
@@ -140,3 +143,53 @@ def test_envelope_kwarg_skipped_when_field_claims_the_name() -> None:
     rendered = "\n".join(_service_function("exotic", service))
     assert rendered.count("enabled:") == 1
     assert "metadata: dict[str, Any] = ..." in rendered
+
+
+def test_keyword_field_names_are_skipped() -> None:
+    """HA really ships a `calendar.create_event` field literally named `in`
+    (owner field report, round 2): a Python keyword can never be passed as a
+    kwarg, and emitting it makes the whole generated .pyi a syntax error."""
+    import ast
+
+    from hassle.registry.snapshot import ServiceDef, ServiceField
+    from hassle.registry.stubs import _service_function, _service_method
+
+    service = ServiceDef(
+        name="Create event",
+        description="",
+        fields={
+            "in": ServiceField(type="string", selector={"text": {}}),
+            "summary": ServiceField(type="string", selector={"text": {}}),
+        },
+    )
+    for rendered in (
+        "\n".join(_service_function("create_event", service)),
+        "\n".join(_service_method("create_event", service)),
+    ):
+        assert "in:" not in rendered
+        assert "summary: str" in rendered
+        ast.parse(rendered.replace("@staticmethod\n", "").strip())
+
+
+def test_entity_classes_expose_attr(snapshot: RegistrySnapshot) -> None:
+    """`e.cover.x.attr("current_position")` is real DSL surface
+    (EntityRef.attr, M16) -- the stub classes must declare it or every use
+    is a reportAttributeAccessIssue (owner field report, round 2)."""
+    from hassle.registry.stubs import generate_entities_stub
+
+    assert "def attr(self, attribute: str) -> Any: ..." in generate_entities_stub(snapshot)
+
+
+def test_namespace_target_accepts_purpose_targets(snapshot: RegistrySnapshot) -> None:
+    """`light.turn_on(target=area("kitchen"))` is canonical decompiler output
+    -- the namespace stubs' target= must accept the public target helpers'
+    return types (AreaTarget/FloorTarget/LabelTarget/DeviceIdTarget), not
+    just str/sequence/dict (owner field report, round 2)."""
+    stub = generate_services_stub(snapshot)
+    assert "from hassle.compiler.purpose import" in stub
+    assert (
+        "type _SingleTarget = str | AreaTarget | DeviceIdTarget | FloorTarget | LabelTarget" in stub
+    )
+    assert "type _TargetArg = _SingleTarget | Sequence[_SingleTarget] | dict[str, Any]" in stub
+    assert "target: _TargetArg = ..." in stub
+    assert "target: str | Sequence[str]" not in stub

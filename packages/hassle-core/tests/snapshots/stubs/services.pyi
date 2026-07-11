@@ -5,10 +5,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+from hassle.compiler.purpose import AreaTarget, DeviceIdTarget, FloorTarget, LabelTarget
+
+type _SingleTarget = str | AreaTarget | DeviceIdTarget | FloorTarget | LabelTarget
+type _TargetArg = _SingleTarget | Sequence[_SingleTarget] | dict[str, Any]
+
 class _AutomationServices:
     @staticmethod
     def trigger(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         skip_condition: bool | str = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
@@ -20,7 +25,7 @@ class _AutomationServices:
 class _ClimateServices:
     @staticmethod
     def set_temperature(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         temperature: float | str = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
@@ -32,7 +37,7 @@ class _ClimateServices:
 class _FanServices:
     @staticmethod
     def turn_off(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -41,7 +46,7 @@ class _FanServices:
     ) -> None: ...
     @staticmethod
     def turn_on(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         percentage: int | str = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
@@ -53,7 +58,7 @@ class _FanServices:
 class _HomeassistantServices:
     @staticmethod
     def turn_on(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -62,7 +67,7 @@ class _HomeassistantServices:
     ) -> None: ...
     @staticmethod
     def update_entity(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -73,7 +78,7 @@ class _HomeassistantServices:
 class _InputBooleanServices:
     @staticmethod
     def toggle(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -82,7 +87,7 @@ class _InputBooleanServices:
     ) -> None: ...
     @staticmethod
     def turn_off(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -91,7 +96,7 @@ class _InputBooleanServices:
     ) -> None: ...
     @staticmethod
     def turn_on(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -102,7 +107,7 @@ class _InputBooleanServices:
 class _LightServices:
     @staticmethod
     def toggle(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -111,7 +116,7 @@ class _LightServices:
     ) -> None: ...
     @staticmethod
     def turn_off(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         transition: float | str = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
@@ -121,7 +126,7 @@ class _LightServices:
     ) -> None: ...
     @staticmethod
     def turn_on(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         brightness: int | str = ...,
         brightness_pct: int | str = ...,
         color_temp: int | str = ...,
@@ -136,7 +141,7 @@ class _LightServices:
 class _NotifyServices:
     @staticmethod
     def notify(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         message: str = ...,
         title: str = ...,
         metadata: dict[str, Any] = ...,
@@ -149,7 +154,7 @@ class _NotifyServices:
 class _ScheduleServices:
     @staticmethod
     def reload(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -160,7 +165,7 @@ class _ScheduleServices:
 class _ScriptServices:
     @staticmethod
     def turn_on(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -171,7 +176,7 @@ class _ScriptServices:
 class _SwitchServices:
     @staticmethod
     def toggle(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -180,7 +185,7 @@ class _SwitchServices:
     ) -> None: ...
     @staticmethod
     def turn_off(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -189,7 +194,7 @@ class _SwitchServices:
     ) -> None: ...
     @staticmethod
     def turn_on(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -200,7 +205,7 @@ class _SwitchServices:
 class _TimerServices:
     @staticmethod
     def cancel(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -209,7 +214,7 @@ class _TimerServices:
     ) -> None: ...
     @staticmethod
     def start(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         duration: str = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
@@ -221,7 +226,7 @@ class _TimerServices:
 class _VacuumServices:
     @staticmethod
     def return_to_base(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
@@ -230,7 +235,7 @@ class _VacuumServices:
     ) -> None: ...
     @staticmethod
     def start(
-        target: str | Sequence[str] | dict[str, Any] = ...,
+        target: _TargetArg = ...,
         metadata: dict[str, Any] = ...,
         response_variable: str = ...,
         alias: str = ...,
