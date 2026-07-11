@@ -193,3 +193,21 @@ def test_namespace_target_accepts_purpose_targets(snapshot: RegistrySnapshot) ->
     assert "type _TargetArg = _SingleTarget | Sequence[_SingleTarget] | dict[str, Any]" in stub
     assert "target: _TargetArg = ..." in stub
     assert "target: str | Sequence[str]" not in stub
+
+
+def test_entity_method_shadowing_str_gets_targeted_ignore() -> None:
+    """Entity classes subclass str (task #28 annotation-truth), so a service
+    named after a str method (media_player.join, owner field report round 3)
+    is an incompatible override -- suppressed per-method, never file-wide."""
+    from hassle.registry.snapshot import ServiceDef, ServiceField
+    from hassle.registry.stubs import _service_method
+
+    join = ServiceDef(
+        name="Join",
+        description="",
+        fields={"group_members": ServiceField(type="string", selector={"text": {}})},
+    )
+    rendered = "\n".join(_service_method("join", join))
+    assert "# pyright: ignore[reportIncompatibleMethodOverride]" in rendered
+    plain = "\n".join(_service_method("turn_on", join))
+    assert "pyright: ignore" not in plain
