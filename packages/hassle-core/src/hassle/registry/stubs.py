@@ -369,12 +369,16 @@ def _service_function(service_name: str, service_def: ServiceDef) -> list[str]:
     call -- the decompiler's own canonical namespace-form output, MILESTONES
     M18 -- was a hard pyright ``reportCallIssue`` ("No parameter named
     'target'") in a real bundle. Typed the same permissive way
-    ``normalize_target`` actually accepts (a bare entity ref/string, a
-    sequence of them, or an already-built target dict) -- never the
-    non-public ``AreaTarget``/``FloorTarget``/``LabelTarget``/``DeviceIdTarget``
-    helper-return types, which are internal (not part of ``hassle.__all__``,
-    docs/dsl-f3.md) and would make the generated stub reference an
-    unimportable name."""
+    ``normalize_target`` actually accepts, via the ``_TargetArg`` alias
+    emitted at the top of the generated module (round 2): a bare entity
+    ref/string, one of the public target helpers' return types
+    (``area()``/``floor()``/``label()``/``device_id()`` --
+    ``AreaTarget``/``FloorTarget``/``LabelTarget``/``DeviceIdTarget``,
+    imported in the stub's header from their defining module,
+    ``hassle.compiler.purpose``; the classes are internal names but the
+    helpers returning them are public, so canonical decompiler output like
+    ``light.turn_on(target=area("kitchen"))`` must type-check), a sequence
+    of those, or an already-built target dict."""
     params: list[str] = ["target: _TargetArg = ..."]
     for field_name in _emittable_fields(service_def, reserved=frozenset({"target"})):
         field = service_def.fields[field_name]
