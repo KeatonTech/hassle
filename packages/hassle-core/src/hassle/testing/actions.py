@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from hassle.testing.calls import ServiceCall
-from hassle.testing.errors import UnsupportedTemplateError
+from hassle.testing.errors import ScriptRecursionError, UnsupportedTemplateError
 from hassle.testing.state import StateChange
 from hassle.testing.triggers import (
     is_event_trigger,
@@ -91,6 +91,22 @@ def _empty_str_any_dict() -> dict[str, Any]:
     return {}
 
 
+def _empty_scripts() -> dict[str, dict[str, Any]]:
+    return {}
+
+
+#: Callee-nesting cap for script-call expansion (task #35) -- far above any
+#: real bundle's call chain, low enough that mutual script->script recursion
+#: fails fast with a clear error instead of exhausting the stack.
+_MAX_SCRIPT_CALL_DEPTH = 10
+
+#: `script.<entity_management>` service names that are NOT bundle-script
+#: invocations: `script.turn_on` is fire-and-forget in HA (never blocks the
+#: caller), the rest manage script entities rather than run one. All stay
+#: opaque recorded calls (documented v1.1 scope).
+_OPAQUE_SCRIPT_SERVICES = frozenset({"turn_on", "turn_off", "toggle", "reload"})
+
+
 @dataclass
 class ActionContext:
     """Mutable execution context threaded through one automation run."""
@@ -101,6 +117,18 @@ class ActionContext:
     variables: dict[str, Any] = field(default_factory=_empty_str_any_dict)
     trigger_ctx: dict[str, Any] = field(default_factory=_empty_str_any_dict)
     sun_times: SunTimesProvider = no_sun_times
+    #: Bundle scripts by slug (`script:<slug>` object key minus the prefix),
+    #: each the script's full HA config -- a direct `script.<slug>` service
+    #: call expands into its `sequence`, blocking, exactly like real HA
+    #: (task #35). Empty map = no expansion (the pre-#35 opaque behavior).
+    scripts: dict[str, dict[str, Any]] = field(default_factory=_empty_scripts)
+    #: Current script-call nesting depth (recursion guard).
+    script_call_depth: int = 0
+    #: Set when this sequence was halted by a `stop` with `error: true` --
+    #: the one halt kind that must also abort a CALLING sequence (HA: a
+    #: script error fails the caller's service call), unlike a plain `stop`
+    #: (normal completion from the caller's point of view).
+    halted_by_error: bool = False
 
     def template_context(self, *, repeat: dict[str, Any] | None = None) -> dict[str, Any]:
         ctx = dict(self.variables)
@@ -138,7 +166,14 @@ def evaluate_condition(condition: dict[str, Any], ctx: ActionContext) -> bool:
     if kind == "state":
         state = ctx.states.get(condition["entity_id"])
         current = state.state if state is not None else None
-        return current == condition.get("state")
+        expected = condition.get("state")
+        if isinstance(expected, list):
+            # HA: `state: [a, b]` matches ANY of the listed states -- the
+            # shape `.state.in_([...])`/`state(x).is_([...])` compiles to
+            # (task #35; previously compared the current state to the list
+            # itself, silently false forever).
+            return current in expected
+        return current == expected
     if kind == "numeric_state":
         state = ctx.states.get(condition["entity_id"])
         if state is None:
@@ -295,7 +330,7 @@ def _run_one(
 ) -> Generator[Suspend, WaitResumeValue, bool]:
     if "action" in action:
         _record_service_call(action, ctx)
-        return True
+        return (yield from _maybe_expand_script_call(action, ctx))
     if "delay" in action:
         duration = _duration(action["delay"])
         yield SuspendDelay(duration)
@@ -305,6 +340,8 @@ def _run_one(
             ctx.variables[key] = ctx.render(value)
         return True
     if "stop" in action:
+        if action.get("error"):
+            ctx.halted_by_error = True
         return False
     if "event" in action:
         # fire_event action: recorded like a service call under a synthetic
@@ -331,17 +368,78 @@ def _run_one(
     if "parallel" in action:
         # The simulator executes parallel branches sequentially (deterministic,
         # single-threaded) but treats each branch as logically concurrent: no
-        # branch's `stop`/early-exit affects another (unlike `then`/`sequence`),
-        # matching HA's isolation semantics for `parallel`.
+        # branch's plain `stop`/early-exit affects another (unlike
+        # `then`/`sequence`), matching HA's isolation semantics for
+        # `parallel`. An ERROR stop is different: real HA fails the whole
+        # parallel step when any branch errors, so it must halt this sequence
+        # too (PR #27 review) -- and the flag is scoped per branch so a
+        # branch's error is never misattributed to a later unrelated halt.
+        prior_error = ctx.halted_by_error
+        any_branch_error = False
         for branch in action["parallel"]:
+            ctx.halted_by_error = False
             yield from run_actions(branch.get("sequence", []), ctx)
-        return True
+            any_branch_error = any_branch_error or ctx.halted_by_error
+        ctx.halted_by_error = prior_error or any_branch_error
+        return not any_branch_error
     if "wait_for_trigger" in action:
         return (yield from _run_wait_for_trigger(action, ctx))
     if "wait_template" in action:
         return (yield from _run_wait_template(action, ctx))
     # Unknown/unmodeled action shape: no-op (forward-compatible; validation
     # tier catches genuinely malformed bundles, out of M4 scope).
+    return True
+
+
+def _maybe_expand_script_call(
+    action: dict[str, Any], ctx: ActionContext
+) -> Generator[Suspend, WaitResumeValue, bool]:
+    """Expand a direct ``script.<slug>`` call into the callee's sequence,
+    blocking, matching real HA (task #35): the caller resumes only when the
+    callee finishes, the call's rendered ``data`` becomes the callee's
+    variables (HA: script fields are run variables), a plain ``stop`` in the
+    callee is a normal completion for the caller, and a ``stop`` with
+    ``error: true`` fails the caller's sequence too. `script.turn_on` (fire-
+    and-forget in HA) and the other entity-management services stay opaque,
+    as does any script not in this bundle.
+    """
+    name = str(action["action"])
+    if not name.startswith("script."):
+        return True
+    slug = name.removeprefix("script.")
+    if slug in _OPAQUE_SCRIPT_SERVICES:
+        return True
+    script_config = ctx.scripts.get(slug)
+    if script_config is None:
+        return True
+    if ctx.script_call_depth >= _MAX_SCRIPT_CALL_DEPTH:
+        raise ScriptRecursionError(slug, _MAX_SCRIPT_CALL_DEPTH)
+    sequence: list[dict[str, Any]] = script_config.get("sequence", [])
+    # HA seeds omitted fields' `default:`s as run variables; an explicitly
+    # passed value wins.
+    fields: dict[str, Any] = script_config.get("fields") or {}
+    data: dict[str, Any] = {
+        name: spec["default"]
+        for name, spec in fields.items()
+        if isinstance(spec, dict) and "default" in spec
+    }
+    call_data: dict[str, Any] = action.get("data", {})
+    data.update({key: ctx.render(value) for key, value in call_data.items()})
+    callee_ctx = ActionContext(
+        states=ctx.states,
+        templates=ctx.templates,
+        calls=ctx.calls,
+        variables=data,
+        # Scripts have no `trigger` namespace of their own in HA.
+        trigger_ctx={},
+        sun_times=ctx.sun_times,
+        scripts=ctx.scripts,
+        script_call_depth=ctx.script_call_depth + 1,
+    )
+    completed = yield from run_actions(sequence, callee_ctx)
+    if not completed and callee_ctx.halted_by_error:
+        ctx.halted_by_error = True
+        return False
     return True
 
 
@@ -486,7 +584,11 @@ def _set_wait_timed_out(ctx: ActionContext) -> None:
 def _run_wait_for_trigger(
     action: dict[str, Any], ctx: ActionContext
 ) -> Generator[Suspend, WaitResumeValue, bool]:
-    triggers = action["wait_for_trigger"]
+    # HA renders a wait_for_trigger's config (limited templates) when the
+    # step executes -- a templated `event_data` filter like
+    # `{{ tag ~ '_ACTION' }}` must match fired events by its RENDERED value
+    # (task #35; previously compared literally and never matched).
+    triggers = ctx.render(action["wait_for_trigger"])
     timeout = _duration(action["timeout"]) if "timeout" in action else None
     continue_on_timeout = action.get("continue_on_timeout", True)
     while True:

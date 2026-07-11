@@ -25,3 +25,23 @@ class UnsupportedTemplateError(Exception):
             f"it against the real instance with `hassle render --live` instead of the "
             f"simulator."
         )
+
+
+class ScriptRecursionError(Exception):
+    """Script-call expansion exceeded the nesting cap (task #35).
+
+    A direct ``script.<slug>`` call runs the callee inline (blocking, like
+    real HA); scripts calling each other in a cycle would otherwise expand
+    forever.
+    """
+
+    def __init__(self, slug: str, max_depth: int) -> None:
+        self.slug = slug
+        self.max_depth = max_depth
+        super().__init__(
+            f"Simulating this run expanded nested script calls more than {max_depth} "
+            f"levels deep (last callee: `script.{slug}`) -- almost certainly scripts "
+            f"calling each other in a cycle (recursion), which would never terminate in "
+            f"real HA either. Fix: break the cycle so no script (transitively) calls "
+            f"itself, or restructure the shared logic into one script both callers use."
+        )

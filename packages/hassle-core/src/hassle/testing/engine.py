@@ -99,6 +99,7 @@ class AutomationEngine:
         calls: list[ServiceCall],
         clock_now: Any,
         sun_times: SunTimesProvider = no_sun_times,
+        scripts: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.object_key = object_key
         self.config = config
@@ -107,6 +108,9 @@ class AutomationEngine:
         self._calls = calls
         self._clock_now = clock_now
         self._sun_times = sun_times
+        # Bundle scripts by slug, threaded into every run's ActionContext so
+        # direct `script.<slug>` calls expand inline (task #35).
+        self._scripts = scripts if scripts is not None else {}
         self.mode = config.get("mode", "single")
         self.max = int(config.get("max", _DEFAULT_MAX))
         default_max_exceeded = "single" if self.mode != "parallel" else "silent"
@@ -119,6 +123,11 @@ class AutomationEngine:
         self._template_truth: dict[int, bool] = {}
         # Sun-trigger previous-past cache (offset-adjusted), by trigger index.
         self._sun_past: dict[int, bool] = {}
+
+    def _entity_state(self, entity_id: str) -> str | None:
+        """Entity-state lookup for `at: <entity>` time triggers (task #35)."""
+        state = self._states.get(entity_id)
+        return state.state if state is not None else None
 
     # -- stimulus entry points -------------------------------------------------
 
@@ -200,7 +209,9 @@ class AutomationEngine:
 
     def on_time(self, moment: datetime, *, patterns: bool = True) -> None:
         for trigger in self.config.get("triggers", []):
-            is_due_time = is_time_trigger(trigger) and time_matches(trigger, moment)
+            is_due_time = is_time_trigger(trigger) and time_matches(
+                trigger, moment, resolve_entity=self._entity_state
+            )
             is_pattern_trigger = patterns and is_time_pattern_trigger(trigger)
             is_due_pattern = is_pattern_trigger and time_pattern_matches(trigger, moment)
             if is_due_time or is_due_pattern:
@@ -294,6 +305,7 @@ class AutomationEngine:
             calls=self._calls,
             trigger_ctx=trigger_ctx,
             sun_times=self._sun_times,
+            scripts=self._scripts,
         )
         gen = None if queued else run_actions(self.config.get("actions", []), ctx)
         return _Run(generator=gen, ctx=ctx, started_at=self._clock_now(), trigger_ctx=trigger_ctx)

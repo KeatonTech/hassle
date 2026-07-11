@@ -13,6 +13,7 @@ vocabulary) is simply never matched by :func:`matches_state_change` /
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, cast
@@ -114,6 +115,15 @@ def _entity_ids(trigger: dict[str, Any]) -> list[Any]:
     return [entity_id]
 
 
+def _state_filter_matches(state_filter: Any, state: str | None) -> bool:
+    """HA state triggers accept a scalar or a LIST for `from:`/`to:` (match
+    any) -- decompiled triggers routinely carry the list form
+    (`state([x]).is_(["off"]).to(["on"])`, task #35)."""
+    if isinstance(state_filter, list):
+        return state in state_filter
+    return state == state_filter
+
+
 def state_trigger_matches(trigger: dict[str, Any], change: StateChange) -> bool:
     """v1 state trigger: entity_id + optional from/to filters, no `for:` here.
 
@@ -125,11 +135,11 @@ def state_trigger_matches(trigger: dict[str, Any], change: StateChange) -> bool:
         return False
     to_filter = trigger.get("to")
     from_filter = trigger.get("from")
-    if to_filter is not None and change.new.state != to_filter:
+    if to_filter is not None and not _state_filter_matches(to_filter, change.new.state):
         return False
     if from_filter is not None:
         old_state = change.old.state if change.old is not None else None
-        if old_state != from_filter:
+        if not _state_filter_matches(from_filter, old_state):
             return False
     if to_filter is None and from_filter is None:
         # No filters at all: HA fires on any actual state-string change.
@@ -190,13 +200,33 @@ def template_trigger_edge(trigger: dict[str, Any], was_true: bool, is_true: bool
     return is_true and not was_true
 
 
-def time_matches(trigger: dict[str, Any], moment: datetime) -> bool:
+#: Optional entity-state lookup for `time` triggers whose `at:` is an entity
+#: id (task #35): returns the entity's state string, or None when unset.
+EntityStateResolver = Callable[[str], str | None] | None
+
+
+def time_matches(
+    trigger: dict[str, Any], moment: datetime, *, resolve_entity: EntityStateResolver = None
+) -> bool:
     at = trigger.get("at")
     if not isinstance(at, str):
         return False
-    parts = at.split(":")
-    hour, minute = int(parts[0]), int(parts[1])
-    second = int(parts[2]) if len(parts) > 2 else 0
+    if "." in at and not at.replace(".", "").replace(":", "").isdigit():
+        # HA also accepts `at: <input_datetime/sensor entity>`: the trigger
+        # time is that entity's current state. Unset/unresolvable state (or
+        # no resolver wired in) = the trigger simply never fires -- never a
+        # parse crash on the entity id (owner field report, task #35).
+        if resolve_entity is None:
+            return False
+        at = resolve_entity(at)
+        if at is None:
+            return False
+    try:
+        parts = at.split(":")
+        hour, minute = int(parts[0]), int(parts[1])
+        second = int(parts[2]) if len(parts) > 2 else 0
+    except ValueError:
+        return False
     return (moment.hour, moment.minute, moment.second) == (hour, minute, second)
 
 
