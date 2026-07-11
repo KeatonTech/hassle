@@ -239,3 +239,32 @@ def test_field_defaults_seed_callee_variables_when_omitted(tmp_path: Path) -> No
     sim.assert_called("cover.set_cover_position", position="30")
     sim.state_change("button.explicit", "off", "on")
     sim.assert_called("cover.set_cover_position", position="75")
+
+
+def test_time_trigger_at_entity_resolves_the_entitys_state(tmp_path: Path) -> None:
+    """HA `time` triggers accept `at: <input_datetime/sensor entity>` (the
+    owner's guest-room wakeup automation). The simulator crashed trying to
+    parse the entity id as HH:MM; it must resolve the entity's state as the
+    trigger time instead, and treat an unset/unparseable state as
+    never-firing rather than erroring."""
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, service, when
+        from hassle.compiler.triggers import time
+
+        @automation(id="a", alias="a")
+        def a():
+            when(time(at="input_datetime.wakeup"))
+            service("light.turn_on", entity_id="light.bedroom")
+        """,
+    )
+    # Unset entity: advancing must neither crash nor fire.
+    sim.at("2026-07-11 06:00:00")
+    sim.advance(minutes=1)
+    sim.assert_not_called("light.turn_on")
+    sim.set_state("input_datetime.wakeup", "06:30:00")
+    sim.advance(minutes=29)
+    sim.assert_not_called("light.turn_on")
+    sim.advance(minutes=1)
+    sim.assert_called("light.turn_on", entity_id="light.bedroom")
