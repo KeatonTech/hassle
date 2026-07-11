@@ -63,6 +63,8 @@ itself ``str``-compatible).
 
 from __future__ import annotations
 
+import keyword
+
 from hassle.registry.snapshot import DeviceInfo, EntityInfo, RegistrySnapshot, ServiceDef
 
 _PY_TYPE = {
@@ -304,6 +306,18 @@ _ENVELOPE_PARAMS = [
 ]
 
 
+def _emittable_fields(service_def: ServiceDef, reserved: frozenset[str]) -> list[str]:
+    """Field names that can actually appear as parameters: a Python keyword
+    (HA really ships `calendar.create_event`'s `in`) or non-identifier can
+    never be passed as a kwarg and would make the .pyi a syntax error; a
+    name shadowing `self`/`target` would be a duplicate parameter."""
+    return sorted(
+        name
+        for name in service_def.fields
+        if name.isidentifier() and not keyword.iskeyword(name) and name not in reserved
+    )
+
+
 def _envelope_params(service_def: ServiceDef) -> list[str]:
     """Envelope params minus any name a per-service field already claims --
     a duplicate parameter would make the generated ``.pyi`` a syntax error
@@ -314,7 +328,8 @@ def _envelope_params(service_def: ServiceDef) -> list[str]:
 
 def _service_method(service_name: str, service_def: ServiceDef) -> list[str]:
     params = ["self"]
-    for field_name, field in sorted(service_def.fields.items()):
+    for field_name in _emittable_fields(service_def, reserved=frozenset({"self"})):
+        field = service_def.fields[field_name]
         py_type = _field_type(field.type, selector=field.selector)
         params.append(f"{field_name}: {py_type} = ...")
     params.extend(_envelope_params(service_def))
@@ -360,8 +375,9 @@ def _service_function(service_name: str, service_def: ServiceDef) -> list[str]:
     helper-return types, which are internal (not part of ``hassle.__all__``,
     docs/dsl-f3.md) and would make the generated stub reference an
     unimportable name."""
-    params: list[str] = ["target: str | Sequence[str] | dict[str, Any] = ..."]
-    for field_name, field in sorted(service_def.fields.items()):
+    params: list[str] = ["target: _TargetArg = ..."]
+    for field_name in _emittable_fields(service_def, reserved=frozenset({"target"})):
+        field = service_def.fields[field_name]
         py_type = _field_type(field.type, selector=field.selector)
         params.append(f"{field_name}: {py_type} = ...")
     params.extend(_envelope_params(service_def))
@@ -416,6 +432,16 @@ def generate_services_stub(snapshot: RegistrySnapshot) -> str:
         )
         body.append("")
     else:
+        # The target= helpers' return types (public functions `area()` etc.,
+        # DESIGN §5.4) -- without them in the union, canonical decompiler
+        # output like `light.turn_on(target=area("kitchen"))` is a
+        # reportArgumentType error in every real bundle (owner field
+        # report, round 2).
+        body.append(
+            "type _SingleTarget = str | AreaTarget | DeviceIdTarget | FloorTarget | LabelTarget"
+        )
+        body.append("type _TargetArg = _SingleTarget | Sequence[_SingleTarget] | dict[str, Any]")
+        body.append("")
         prev_was_empty = False
         for domain in domains:
             class_name = _services_domain_class_name(domain)
@@ -476,6 +502,15 @@ def generate_services_stub(snapshot: RegistrySnapshot) -> str:
     if stdlib_imports:
         header.extend(stdlib_imports)
         header.append("")
+    if "_TargetArg" in body_text:
+        # First-party block after stdlib (isort I001 grouping) -- these are
+        # the concrete return types of the public target helpers; importable
+        # from their defining module even though not re-exported.
+        header.append(
+            "from hassle.compiler.purpose import "
+            "AreaTarget, DeviceIdTarget, FloorTarget, LabelTarget"
+        )
+        header.append("")
     return "\n".join(header) + "\n" + body_text
 
 
@@ -515,6 +550,7 @@ def generate_entities_stub(snapshot: RegistrySnapshot) -> str:
         lines.append(f"class {entity_type}(str):")
         lines.append("    @property")
         lines.append("    def state(self) -> Any: ...")
+        lines.append("    def attr(self, attribute: str) -> Any: ...")
         lines.extend(method_lines)
         lines.append("")
     if lines and lines[-1] != "":

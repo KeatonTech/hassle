@@ -62,7 +62,10 @@ def test_services_stub_service_functions_accept_target(snapshot: RegistrySnapsho
     ``hassle.compiler.actions.service`` call this delegates to always accepts
     ``target=``."""
     stub = generate_services_stub(snapshot)
-    assert "target: str | Sequence[str] | dict[str, Any] = ..." in stub
+    # Round 2 widened the annotation to the _TargetArg alias (purpose-target
+    # helpers) -- the contract here is only that target= exists on every
+    # generated function.
+    assert "target: _TargetArg = ..." in stub
     assert "from collections.abc import Sequence" in stub
 
 
@@ -185,9 +188,8 @@ def test_namespace_target_accepts_purpose_targets(snapshot: RegistrySnapshot) ->
     stub = generate_services_stub(snapshot)
     assert "from hassle.compiler.purpose import" in stub
     assert (
-        "_SingleTarget: TypeAlias = str | AreaTarget | DeviceIdTarget | FloorTarget | LabelTarget"
-        in stub
+        "type _SingleTarget = str | AreaTarget | DeviceIdTarget | FloorTarget | LabelTarget" in stub
     )
-    assert "_TargetArg: TypeAlias = _SingleTarget | Sequence[_SingleTarget] | dict[str, Any]" in stub
+    assert "type _TargetArg = _SingleTarget | Sequence[_SingleTarget] | dict[str, Any]" in stub
     assert "target: _TargetArg = ..." in stub
     assert "target: str | Sequence[str]" not in stub
