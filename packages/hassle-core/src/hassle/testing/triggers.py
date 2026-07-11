@@ -115,6 +115,15 @@ def _entity_ids(trigger: dict[str, Any]) -> list[Any]:
     return [entity_id]
 
 
+def _state_filter_matches(state_filter: Any, state: str | None) -> bool:
+    """HA state triggers accept a scalar or a LIST for `from:`/`to:` (match
+    any) -- decompiled triggers routinely carry the list form
+    (`state([x]).is_(["off"]).to(["on"])`, task #35)."""
+    if isinstance(state_filter, list):
+        return state in state_filter
+    return state == state_filter
+
+
 def state_trigger_matches(trigger: dict[str, Any], change: StateChange) -> bool:
     """v1 state trigger: entity_id + optional from/to filters, no `for:` here.
 
@@ -126,11 +135,11 @@ def state_trigger_matches(trigger: dict[str, Any], change: StateChange) -> bool:
         return False
     to_filter = trigger.get("to")
     from_filter = trigger.get("from")
-    if to_filter is not None and change.new.state != to_filter:
+    if to_filter is not None and not _state_filter_matches(to_filter, change.new.state):
         return False
     if from_filter is not None:
         old_state = change.old.state if change.old is not None else None
-        if old_state != from_filter:
+        if not _state_filter_matches(from_filter, old_state):
             return False
     if to_filter is None and from_filter is None:
         # No filters at all: HA fires on any actual state-string change.
