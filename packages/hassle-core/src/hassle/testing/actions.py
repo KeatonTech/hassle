@@ -166,7 +166,14 @@ def evaluate_condition(condition: dict[str, Any], ctx: ActionContext) -> bool:
     if kind == "state":
         state = ctx.states.get(condition["entity_id"])
         current = state.state if state is not None else None
-        return current == condition.get("state")
+        expected = condition.get("state")
+        if isinstance(expected, list):
+            # HA: `state: [a, b]` matches ANY of the listed states -- the
+            # shape `.state.in_([...])`/`state(x).is_([...])` compiles to
+            # (task #35; previously compared the current state to the list
+            # itself, silently false forever).
+            return current in expected
+        return current == expected
     if kind == "numeric_state":
         state = ctx.states.get(condition["entity_id"])
         if state is None:
@@ -361,11 +368,20 @@ def _run_one(
     if "parallel" in action:
         # The simulator executes parallel branches sequentially (deterministic,
         # single-threaded) but treats each branch as logically concurrent: no
-        # branch's `stop`/early-exit affects another (unlike `then`/`sequence`),
-        # matching HA's isolation semantics for `parallel`.
+        # branch's plain `stop`/early-exit affects another (unlike
+        # `then`/`sequence`), matching HA's isolation semantics for
+        # `parallel`. An ERROR stop is different: real HA fails the whole
+        # parallel step when any branch errors, so it must halt this sequence
+        # too (PR #27 review) -- and the flag is scoped per branch so a
+        # branch's error is never misattributed to a later unrelated halt.
+        prior_error = ctx.halted_by_error
+        any_branch_error = False
         for branch in action["parallel"]:
+            ctx.halted_by_error = False
             yield from run_actions(branch.get("sequence", []), ctx)
-        return True
+            any_branch_error = any_branch_error or ctx.halted_by_error
+        ctx.halted_by_error = prior_error or any_branch_error
+        return not any_branch_error
     if "wait_for_trigger" in action:
         return (yield from _run_wait_for_trigger(action, ctx))
     if "wait_template" in action:

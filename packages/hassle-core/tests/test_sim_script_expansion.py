@@ -268,3 +268,94 @@ def test_time_trigger_at_entity_resolves_the_entitys_state(tmp_path: Path) -> No
     sim.assert_not_called("light.turn_on")
     sim.advance(minutes=1)
     sim.assert_called("light.turn_on", entity_id="light.bedroom")
+
+
+def test_state_condition_with_list_of_states_matches_any(tmp_path: Path) -> None:
+    """HA state conditions accept `state: [a, b]` (match any) -- exactly what
+    M20's `.state.in_([...])` and `state(x).is_([...])` compile to. The
+    evaluator compared the current state to the LIST itself, silently false
+    forever (owner field report, task #35)."""
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, if_then, service, state, when
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("button.go").to("on"))
+            with if_then(state("input_select.phase").is_(["Sleeping", "Unoccupied"])):
+                service("light.turn_on", entity_id="light.bedroom")
+        """,
+    )
+    sim.set_state("input_select.phase", "Sleeping")
+    sim.state_change("button.go", "off", "on")
+    sim.assert_called("light.turn_on", times=1, entity_id="light.bedroom")
+    sim.set_state("input_select.phase", "Daytime")
+    sim.state_change("button.go", "on", "off")
+    sim.state_change("button.go", "off", "on")
+    sim.assert_called("light.turn_on", times=1)
+
+
+def test_parallel_branch_error_stop_fails_the_step_and_plain_stop_stays_isolated(
+    tmp_path: Path,
+) -> None:
+    """PR #27 review finding: `parallel` shares the run ctx and discarded
+    branch results, so (a) an error-stop in a branch never failed the caller
+    (real HA fails the parallel step) and (b) the sticky flag could turn a
+    later PLAIN stop into a spurious error abort."""
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, parallel, service, shared_script, state, stop, when
+
+        @shared_script(id="branch_error", alias="Branch error")
+        def branch_error():
+            with parallel() as p:
+                with p.branch():
+                    stop("branch failed", error=True)
+                with p.branch():
+                    service("light.turn_on", entity_id="light.other_branch")
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state("button.err").to("on"))
+            service("script.branch_error")
+            service("switch.turn_on", entity_id="switch.after_error")
+
+        @shared_script(id="branch_plain", alias="Branch plain")
+        def branch_plain():
+            with parallel() as p:
+                with p.branch():
+                    stop("branch done")
+
+        @automation(id="b", alias="b")
+        def b():
+            when(state("button.plain").to("on"))
+            service("script.branch_plain")
+            service("switch.turn_on", entity_id="switch.after_plain")
+        """,
+    )
+    sim.state_change("button.err", "off", "on")
+    # Branch isolation still holds for the OTHER branch...
+    sim.assert_called("light.turn_on", entity_id="light.other_branch")
+    # ...but a branch's error-stop fails the parallel step, so the caller aborts.
+    sim.assert_not_called("switch.turn_on", entity_id="switch.after_error")
+    sim.state_change("button.plain", "off", "on")
+    # A PLAIN stop in a branch stays isolated (HA parallel semantics): the
+    # step succeeds and script b's caller continues normally.
+    sim.assert_called("switch.turn_on", entity_id="switch.after_plain")
+
+
+def test_recursion_error_message_has_what_where_fix() -> None:
+    """R6: the error surface is product surface -- pin the full wording, not
+    just a substring (PR #27 review finding)."""
+    from hassle.testing.errors import ScriptRecursionError
+
+    message = str(ScriptRecursionError("ping", 10))
+    assert message == (
+        "Simulating this run expanded nested script calls more than 10 levels deep "
+        "(last callee: `script.ping`) -- almost certainly scripts calling each other "
+        "in a cycle (recursion), which would never terminate in real HA either. "
+        "Fix: break the cycle so no script (transitively) calls itself, or "
+        "restructure the shared logic into one script both callers use."
+    )
