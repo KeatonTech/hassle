@@ -72,6 +72,14 @@ class Simulator:
         self._sun_times_raw: dict[str, str] = {}
         self._engines: list[AutomationEngine] = []
         self._engines_by_key: dict[str, AutomationEngine] = {}
+        # Bundle scripts by slug, for blocking script-call expansion
+        # (task #35): a direct `script.<slug>` action inside any run expands
+        # into the callee's sequence, exactly like real HA.
+        self._scripts: dict[str, dict[str, Any]] = {
+            key.removeprefix("script:"): obj.to_ha()
+            for key, obj in compiled.objects.items()
+            if key.startswith("script:")
+        }
         for key, obj in compiled.objects.items():
             if not isinstance(obj, AutomationConfig):
                 continue
@@ -83,6 +91,7 @@ class Simulator:
                 calls=self._calls,
                 clock_now=lambda: self._clock.now,
                 sun_times=self._sun_times_today,
+                scripts=self._scripts,
             )
             self._engines.append(engine)
             self._engines_by_key[key] = engine

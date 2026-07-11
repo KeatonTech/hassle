@@ -198,18 +198,18 @@ def test_door_left_open_reminder_resets_on_flap() -> None:
 # 8. good morning shared script ------------------------------------------------
 
 
-def test_good_morning_script_call_records_the_call_with_the_field_kwarg() -> None:
-    """The simulator's action executor (DESIGN §10.1 v1 scope) records a
-    `script.<id>` action as an opaque service call -- it does not expand the
-    callee script's own sequence (there is no automation trigger/condition
-    to evaluate for a script, so there is nothing for the engine to "run" in
-    the sense it runs automations). This pins that documented behavior:
-    the call itself, with the field kwarg passed at the call site, is what's
-    observable here; the script's OWN sequence has its own coverage via the
-    golden pair in docs/DSL.md (`shared_script` section)."""
+def test_good_morning_script_call_records_the_call_and_runs_the_callee() -> None:
+    """A direct `script.<id>` call is recorded as a service call AND expands
+    the callee script's sequence inline, blocking, exactly like real HA
+    (task #35 -- superseding the v1 "opaque call only" scope this test used
+    to pin): the call's data becomes the callee's variables, so the
+    `param("brightness")` marker renders the caller's 180, not the field
+    default."""
     sim = _sim()
     sim.state_change("input_boolean.armed", "on", "off")
     sim.assert_called("script.cookbook_good_morning", brightness=180)
+    sim.assert_called("light.turn_on", entity_id="light.bedroom", brightness="180")
+    sim.assert_called("light.turn_on", entity_id="light.kitchen", brightness="180")
 
 
 # 9. vacuum daily schedule -----------------------------------------------------

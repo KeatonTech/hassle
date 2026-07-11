@@ -99,6 +99,7 @@ class AutomationEngine:
         calls: list[ServiceCall],
         clock_now: Any,
         sun_times: SunTimesProvider = no_sun_times,
+        scripts: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.object_key = object_key
         self.config = config
@@ -107,6 +108,9 @@ class AutomationEngine:
         self._calls = calls
         self._clock_now = clock_now
         self._sun_times = sun_times
+        # Bundle scripts by slug, threaded into every run's ActionContext so
+        # direct `script.<slug>` calls expand inline (task #35).
+        self._scripts = scripts if scripts is not None else {}
         self.mode = config.get("mode", "single")
         self.max = int(config.get("max", _DEFAULT_MAX))
         default_max_exceeded = "single" if self.mode != "parallel" else "silent"
@@ -294,6 +298,7 @@ class AutomationEngine:
             calls=self._calls,
             trigger_ctx=trigger_ctx,
             sun_times=self._sun_times,
+            scripts=self._scripts,
         )
         gen = None if queued else run_actions(self.config.get("actions", []), ctx)
         return _Run(generator=gen, ctx=ctx, started_at=self._clock_now(), trigger_ctx=trigger_ctx)
