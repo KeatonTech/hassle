@@ -79,6 +79,13 @@ def _bundle_declared_keys(result: CompileResult) -> set[str]:
     return set(result.objects)
 
 
+#: Core entities that exist in every HA instance but never appear in the
+#: entity REGISTRY (they predate it), so no registry snapshot can contain
+#: them -- referencing them is always legitimate (owner field report: a
+#: template reading state_attr('sun.sun', 'elevation') failed validate).
+_CORE_NON_REGISTRY_ENTITIES = frozenset({"sun.sun"})
+
+
 def _check_entity(
     entity_id: str,
     *,
@@ -87,6 +94,8 @@ def _check_entity(
     file: str | None,
     line: int | None,
 ) -> Finding | None:
+    if entity_id in _CORE_NON_REGISTRY_ENTITIES:
+        return None
     if entity_id in snapshot.entity_ids():
         return None
     domain, _, object_id = entity_id.partition(".")
