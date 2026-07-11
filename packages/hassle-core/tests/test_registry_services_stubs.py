@@ -122,3 +122,21 @@ def test_service_functions_accept_envelope_kwargs(snapshot: RegistrySnapshot) ->
     for stub in (generate_services_stub(snapshot), generate_entities_stub(snapshot)):
         assert "metadata: dict[str, Any] = ..." in stub
         assert "response_variable: str = ..." in stub
+
+
+def test_envelope_kwarg_skipped_when_field_claims_the_name() -> None:
+    """A per-service field literally named `enabled` (legal as an HA data
+    key) must not produce a duplicate parameter -- the field wins and the
+    generated stub stays syntactically valid."""
+    from hassle.registry.snapshot import ServiceDef, ServiceField
+    from hassle.registry.stubs import _envelope_params, _service_function
+
+    service = ServiceDef(
+        name="Exotic",
+        description="",
+        fields={"enabled": ServiceField(type="boolean", selector={"boolean": {}})},
+    )
+    assert not any(p.startswith("enabled:") for p in _envelope_params(service))
+    rendered = "\n".join(_service_function("exotic", service))
+    assert rendered.count("enabled:") == 1
+    assert "metadata: dict[str, Any] = ..." in rendered
