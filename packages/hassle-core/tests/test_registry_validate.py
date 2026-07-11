@@ -643,3 +643,21 @@ def test_no_false_positives_on_golden_corpus(case_dir: Path, snapshot: RegistryS
     result = compile_bundle(case_dir / "bundle")
     findings = validate_bundle(result, snapshot)
     assert findings == [], f"{case_dir.name}: unexpected findings: {findings}"
+
+
+def test_core_non_registry_entities_are_never_unknown(tmp_path: Path) -> None:
+    """`sun.sun` exists in every HA instance but never appears in the entity
+    REGISTRY (it predates the registry), so the registry snapshot can't
+    contain it -- referencing it must not be an unknown-entity finding
+    (owner field report: a template reading state_attr('sun.sun',
+    'elevation') failed validate on a real bundle)."""
+    from hassle.registry.validate import _check_entity
+
+    finding = _check_entity(
+        "sun.sun",
+        snapshot=RegistrySnapshot(),
+        declared_helpers=set(),
+        file="desk_lighting.py",
+        line=1,
+    )
+    assert finding is None
