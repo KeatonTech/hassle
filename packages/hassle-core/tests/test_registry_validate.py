@@ -661,3 +661,26 @@ def test_core_non_registry_entities_are_never_unknown(tmp_path: Path) -> None:
         line=1,
     )
     assert finding is None
+
+
+def test_sun_template_validates_end_to_end(
+    tmp_path: Path, snapshot: RegistrySnapshot
+) -> None:
+    """The exact field shape that failed: a condition template reading
+    state_attr('sun.sun', 'elevation'), through the full compile -> template
+    extraction -> validate path (reviewer hardening on PR #28)."""
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, if_then, service, state, template, when
+
+@automation(id="a", alias="A")
+def a():
+    when(state("light.hallway").to("on"))
+    with if_then(template("{{ (state_attr('sun.sun', 'elevation') | float(45)) > 10 }}")):
+        service("light.turn_on", target={"entity_id": "light.hallway"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert [f for f in findings if f.code == "unknown-entity"] == []
