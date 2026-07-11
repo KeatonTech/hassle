@@ -318,6 +318,11 @@ def _emittable_fields(service_def: ServiceDef, reserved: frozenset[str]) -> list
     )
 
 
+#: str attribute names, computed from the actual runtime type the entity
+#: classes subclass -- a service sharing one of these names is an override.
+_STR_ATTRIBUTE_NAMES = frozenset(dir(str))
+
+
 def _envelope_params(service_def: ServiceDef) -> list[str]:
     """Envelope params minus any name a per-service field already claims --
     a duplicate parameter would make the generated ``.pyi`` a syntax error
@@ -333,8 +338,15 @@ def _service_method(service_name: str, service_def: ServiceDef) -> list[str]:
         py_type = _field_type(field.type, selector=field.selector)
         params.append(f"{field_name}: {py_type} = ...")
     params.extend(_envelope_params(service_def))
+    # Entity classes subclass str (task #28 annotation-truth), so a service
+    # named after a str method (`media_player.join`, owner field report
+    # round 3) is an incompatible override -- suppressed per-method with the
+    # targeted rule name, never file-wide.
+    suffix = ""
+    if service_name in _STR_ATTRIBUTE_NAMES:
+        suffix = "  # pyright: ignore[reportIncompatibleMethodOverride]"
     joined = ", ".join(params)
-    one_line = f"    def {service_name}({joined}) -> None: ..."
+    one_line = f"    def {service_name}({joined}) -> None: ...{suffix}"
     if len(one_line) <= 100:
         return [one_line]
     # Wrap one parameter per line (R7 line-length convention) rather than
@@ -343,7 +355,7 @@ def _service_method(service_name: str, service_def: ServiceDef) -> list[str]:
     lines = [f"    def {service_name}("]
     for param in params:
         lines.append(f"        {param},")
-    lines.append("    ) -> None: ...")
+    lines.append(f"    ) -> None: ...{suffix}")
     return lines
 
 
