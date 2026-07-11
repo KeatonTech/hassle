@@ -351,11 +351,13 @@ def _service_method(service_name: str, service_def: ServiceDef) -> list[str]:
         return [one_line]
     # Wrap one parameter per line (R7 line-length convention) rather than
     # overflow -- a generated stub with many typed fields (e.g. `light.turn_on`)
-    # can easily exceed 100 columns on one line.
-    lines = [f"    def {service_name}("]
+    # can easily exceed 100 columns on one line. The ignore suffix goes on
+    # the `def` line: that is where pyright reports the override error, so
+    # anywhere else it suppresses nothing (round-3 bug, verified live).
+    lines = [f"    def {service_name}({suffix}"]
     for param in params:
         lines.append(f"        {param},")
-    lines.append(f"    ) -> None: ...{suffix}")
+    lines.append("    ) -> None: ...")
     return lines
 
 
