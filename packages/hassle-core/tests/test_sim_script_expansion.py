@@ -264,7 +264,7 @@ def test_time_trigger_at_entity_resolves_the_entitys_state(tmp_path: Path) -> No
     sim.advance(minutes=1)
     sim.assert_not_called("light.turn_on")
     sim.set_state("input_datetime.wakeup", "06:30:00")
-    sim.advance(minutes=29)
+    sim.advance(minutes=28)
     sim.assert_not_called("light.turn_on")
     sim.advance(minutes=1)
     sim.assert_called("light.turn_on", entity_id="light.bedroom")

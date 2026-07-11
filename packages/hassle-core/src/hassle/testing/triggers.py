@@ -13,6 +13,7 @@ vocabulary) is simply never matched by :func:`matches_state_change` /
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, cast
@@ -190,13 +191,33 @@ def template_trigger_edge(trigger: dict[str, Any], was_true: bool, is_true: bool
     return is_true and not was_true
 
 
-def time_matches(trigger: dict[str, Any], moment: datetime) -> bool:
+#: Optional entity-state lookup for `time` triggers whose `at:` is an entity
+#: id (task #35): returns the entity's state string, or None when unset.
+EntityStateResolver = Callable[[str], str | None] | None
+
+
+def time_matches(
+    trigger: dict[str, Any], moment: datetime, *, resolve_entity: EntityStateResolver = None
+) -> bool:
     at = trigger.get("at")
     if not isinstance(at, str):
         return False
-    parts = at.split(":")
-    hour, minute = int(parts[0]), int(parts[1])
-    second = int(parts[2]) if len(parts) > 2 else 0
+    if "." in at and not at.replace(".", "").replace(":", "").isdigit():
+        # HA also accepts `at: <input_datetime/sensor entity>`: the trigger
+        # time is that entity's current state. Unset/unresolvable state (or
+        # no resolver wired in) = the trigger simply never fires -- never a
+        # parse crash on the entity id (owner field report, task #35).
+        if resolve_entity is None:
+            return False
+        at = resolve_entity(at)
+        if at is None:
+            return False
+    try:
+        parts = at.split(":")
+        hour, minute = int(parts[0]), int(parts[1])
+        second = int(parts[2]) if len(parts) > 2 else 0
+    except ValueError:
+        return False
     return (moment.hour, moment.minute, moment.second) == (hour, minute, second)
 
 

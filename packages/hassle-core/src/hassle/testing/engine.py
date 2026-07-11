@@ -124,6 +124,11 @@ class AutomationEngine:
         # Sun-trigger previous-past cache (offset-adjusted), by trigger index.
         self._sun_past: dict[int, bool] = {}
 
+    def _entity_state(self, entity_id: str) -> str | None:
+        """Entity-state lookup for `at: <entity>` time triggers (task #35)."""
+        state = self._states.get(entity_id)
+        return state.state if state is not None else None
+
     # -- stimulus entry points -------------------------------------------------
 
     def on_state_change(self, change: StateChange) -> None:
@@ -204,7 +209,9 @@ class AutomationEngine:
 
     def on_time(self, moment: datetime, *, patterns: bool = True) -> None:
         for trigger in self.config.get("triggers", []):
-            is_due_time = is_time_trigger(trigger) and time_matches(trigger, moment)
+            is_due_time = is_time_trigger(trigger) and time_matches(
+                trigger, moment, resolve_entity=self._entity_state
+            )
             is_pattern_trigger = patterns and is_time_pattern_trigger(trigger)
             is_due_pattern = is_pattern_trigger and time_pattern_matches(trigger, moment)
             if is_due_time or is_due_pattern:
