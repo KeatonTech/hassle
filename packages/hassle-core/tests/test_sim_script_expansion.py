@@ -359,3 +359,26 @@ def test_recursion_error_message_has_what_where_fix() -> None:
         "Fix: break the cycle so no script (transitively) calls itself, or "
         "restructure the shared logic into one script both callers use."
     )
+
+
+def test_state_trigger_with_list_from_to_filters_matches_any(tmp_path: Path) -> None:
+    """Decompiled state triggers carry LIST from/to filters
+    (`state([x]).is_(["off"]).to(["on"])`); the matcher compared the state
+    string to the list itself, so such automations never fired at all
+    (owner field report, task #35)."""
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import automation, service, state, when
+
+        @automation(id="a", alias="a")
+        def a():
+            when(state(["schedule.bedtime"]).is_(["off"]).to(["on"]))
+            service("light.turn_on", entity_id="light.bedroom")
+        """,
+    )
+    sim.state_change("schedule.bedtime", "off", "on")
+    sim.assert_called("light.turn_on", times=1)
+    # A non-matching transition still doesn't fire.
+    sim.state_change("schedule.bedtime", "on", "off")
+    sim.assert_called("light.turn_on", times=1)
