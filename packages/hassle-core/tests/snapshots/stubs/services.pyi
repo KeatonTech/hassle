@@ -10,6 +10,11 @@ class _AutomationServices:
     def trigger(
         target: str | Sequence[str] | dict[str, Any] = ...,
         skip_condition: bool | str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
     ) -> None: ...
 
 class _ClimateServices:
@@ -17,38 +22,102 @@ class _ClimateServices:
     def set_temperature(
         target: str | Sequence[str] | dict[str, Any] = ...,
         temperature: float | str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
     ) -> None: ...
 
 class _FanServices:
     @staticmethod
-    def turn_off(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def turn_off(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
     @staticmethod
     def turn_on(
         target: str | Sequence[str] | dict[str, Any] = ...,
         percentage: int | str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
     ) -> None: ...
 
 class _HomeassistantServices:
     @staticmethod
-    def turn_on(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def turn_on(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
     @staticmethod
-    def update_entity(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def update_entity(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class _InputBooleanServices:
     @staticmethod
-    def toggle(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def toggle(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
     @staticmethod
-    def turn_off(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def turn_off(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
     @staticmethod
-    def turn_on(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def turn_on(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class _LightServices:
     @staticmethod
-    def toggle(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def toggle(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
     @staticmethod
     def turn_off(
         target: str | Sequence[str] | dict[str, Any] = ...,
         transition: float | str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
     ) -> None: ...
     @staticmethod
     def turn_on(
@@ -57,6 +126,11 @@ class _LightServices:
         brightness_pct: int | str = ...,
         color_temp: int | str = ...,
         transition: float | str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
     ) -> None: ...
 
 class _NotifyServices:
@@ -65,38 +139,104 @@ class _NotifyServices:
         target: str | Sequence[str] | dict[str, Any] = ...,
         message: str = ...,
         title: str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
     ) -> None: ...
 
 class _ScheduleServices:
     @staticmethod
-    def reload(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def reload(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class _ScriptServices:
     @staticmethod
-    def turn_on(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def turn_on(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class _SwitchServices:
     @staticmethod
-    def toggle(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def toggle(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
     @staticmethod
-    def turn_off(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def turn_off(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
     @staticmethod
-    def turn_on(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def turn_on(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class _TimerServices:
     @staticmethod
-    def cancel(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def cancel(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
     @staticmethod
     def start(
         target: str | Sequence[str] | dict[str, Any] = ...,
         duration: str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
     ) -> None: ...
 
 class _VacuumServices:
     @staticmethod
-    def return_to_base(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def return_to_base(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
     @staticmethod
-    def start(target: str | Sequence[str] | dict[str, Any] = ...) -> None: ...
+    def start(
+        target: str | Sequence[str] | dict[str, Any] = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 automation: _AutomationServices
 climate: _ClimateServices
