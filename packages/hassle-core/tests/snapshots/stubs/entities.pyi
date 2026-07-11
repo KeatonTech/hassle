@@ -11,7 +11,15 @@ class AlarmControlPanelEntity(str):
 class AutomationEntity(str):
     @property
     def state(self) -> Any: ...
-    def trigger(self, skip_condition: bool | str = ...) -> None: ...
+    def trigger(
+        self,
+        skip_condition: bool | str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class BinarySensorEntity(str):
     @property
@@ -32,7 +40,15 @@ class CameraEntity(str):
 class ClimateEntity(str):
     @property
     def state(self) -> Any: ...
-    def set_temperature(self, temperature: float | str = ...) -> None: ...
+    def set_temperature(
+        self,
+        temperature: float | str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class CounterEntity(str):
     @property
@@ -53,8 +69,23 @@ class EventEntity(str):
 class FanEntity(str):
     @property
     def state(self) -> Any: ...
-    def turn_off(self) -> None: ...
-    def turn_on(self, percentage: int | str = ...) -> None: ...
+    def turn_off(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
+    def turn_on(
+        self,
+        percentage: int | str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class GeoLocationEntity(str):
     @property
@@ -71,9 +102,30 @@ class ImageEntity(str):
 class InputBooleanEntity(str):
     @property
     def state(self) -> Any: ...
-    def toggle(self) -> None: ...
-    def turn_off(self) -> None: ...
-    def turn_on(self) -> None: ...
+    def toggle(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
+    def turn_off(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
+    def turn_on(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class InputButtonEntity(str):
     @property
@@ -98,14 +150,34 @@ class InputTextEntity(str):
 class LightEntity(str):
     @property
     def state(self) -> Any: ...
-    def toggle(self) -> None: ...
-    def turn_off(self, transition: float | str = ...) -> None: ...
+    def toggle(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
+    def turn_off(
+        self,
+        transition: float | str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
     def turn_on(
         self,
         brightness: int | str = ...,
         brightness_pct: int | str = ...,
         color_temp: int | str = ...,
         transition: float | str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
     ) -> None: ...
 
 class LockEntity(str):
@@ -119,7 +191,16 @@ class MediaPlayerEntity(str):
 class NotifyEntity(str):
     @property
     def state(self) -> Any: ...
-    def notify(self, message: str = ..., title: str = ...) -> None: ...
+    def notify(
+        self,
+        message: str = ...,
+        title: str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class NumberEntity(str):
     @property
@@ -136,12 +217,26 @@ class SceneEntity(str):
 class ScheduleEntity(str):
     @property
     def state(self) -> Any: ...
-    def reload(self) -> None: ...
+    def reload(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class ScriptEntity(str):
     @property
     def state(self) -> Any: ...
-    def turn_on(self) -> None: ...
+    def turn_on(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class SelectEntity(str):
     @property
@@ -162,15 +257,51 @@ class SunEntity(str):
 class SwitchEntity(str):
     @property
     def state(self) -> Any: ...
-    def toggle(self) -> None: ...
-    def turn_off(self) -> None: ...
-    def turn_on(self) -> None: ...
+    def toggle(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
+    def turn_off(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
+    def turn_on(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class TimerEntity(str):
     @property
     def state(self) -> Any: ...
-    def cancel(self) -> None: ...
-    def start(self, duration: str = ...) -> None: ...
+    def cancel(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
+    def start(
+        self,
+        duration: str = ...,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class UpdateEntity(str):
     @property
@@ -179,8 +310,22 @@ class UpdateEntity(str):
 class VacuumEntity(str):
     @property
     def state(self) -> Any: ...
-    def return_to_base(self) -> None: ...
-    def start(self) -> None: ...
+    def return_to_base(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
+    def start(
+        self,
+        metadata: dict[str, Any] = ...,
+        response_variable: str = ...,
+        alias: str = ...,
+        enabled: bool = ...,
+        continue_on_error: bool = ...,
+    ) -> None: ...
 
 class WaterHeaterEntity(str):
     @property

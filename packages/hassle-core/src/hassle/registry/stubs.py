@@ -288,11 +288,36 @@ def _field_type(field_type: str | None, *, selector: dict[str, object] | None = 
     return "str"
 
 
+#: HA's universal service-call envelope kwargs (owner field report,
+#: BrandtCamp prettify pass): every decompiled call carries `metadata={}`
+#: verbatim from stored config, and response-capable services take
+#: `response_variable=`. These are call-envelope keys, not per-service
+#: fields, so the snapshot's field list never includes them -- without
+#: them here, every real decompiled bundle lights up with
+#: reportCallIssue "No parameter named 'metadata'".
+_ENVELOPE_PARAMS = [
+    "metadata: dict[str, Any] = ...",
+    "response_variable: str = ...",
+    "alias: str = ...",
+    "enabled: bool = ...",
+    "continue_on_error: bool = ...",
+]
+
+
+def _envelope_params(service_def: ServiceDef) -> list[str]:
+    """Envelope params minus any name a per-service field already claims --
+    a duplicate parameter would make the generated ``.pyi`` a syntax error
+    (nothing in HA's schema forbids a data key literally named ``enabled``;
+    the service's own field wins, since it carries the snapshot's type)."""
+    return [p for p in _ENVELOPE_PARAMS if p.split(":")[0] not in service_def.fields]
+
+
 def _service_method(service_name: str, service_def: ServiceDef) -> list[str]:
     params = ["self"]
     for field_name, field in sorted(service_def.fields.items()):
         py_type = _field_type(field.type, selector=field.selector)
         params.append(f"{field_name}: {py_type} = ...")
+    params.extend(_envelope_params(service_def))
     joined = ", ".join(params)
     one_line = f"    def {service_name}({joined}) -> None: ..."
     if len(one_line) <= 100:
@@ -339,6 +364,7 @@ def _service_function(service_name: str, service_def: ServiceDef) -> list[str]:
     for field_name, field in sorted(service_def.fields.items()):
         py_type = _field_type(field.type, selector=field.selector)
         params.append(f"{field_name}: {py_type} = ...")
+    params.extend(_envelope_params(service_def))
     joined = ", ".join(params)
     one_line = f"    def {service_name}({joined}) -> None: ..."
     if len(one_line) <= 100 - 4:  # account for the `@staticmethod` line above it
