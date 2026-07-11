@@ -211,9 +211,9 @@ def test_entity_method_shadowing_str_gets_targeted_ignore() -> None:
     # pyright reports the override error on the `def` line -- an ignore
     # anywhere else (e.g. the wrapped form's closing paren line, round 3's
     # bug) suppresses nothing.
-    assert rendered[0].rstrip().endswith(
-        "# pyright: ignore[reportIncompatibleMethodOverride]"
-    ), rendered[0]
+    assert rendered[0].rstrip().endswith("# pyright: ignore[reportIncompatibleMethodOverride]"), (
+        rendered[0]
+    )
     rendered = "\n".join(rendered)
     plain = "\n".join(_service_method("turn_on", join))
     assert "pyright: ignore" not in plain
