@@ -106,7 +106,12 @@ def hall_light_on_motion():
     return root
 
 
-def run_cli(args: list[str], cwd: Path, env: dict[str, str] | None = None) -> Result:
+def run_cli(
+    args: list[str],
+    cwd: Path,
+    env: dict[str, str] | None = None,
+    input: str | None = None,
+) -> Result:
     runner = CliRunner()
     full_env = {"NO_COLOR": "1", "HASSLE_CONFIG_HOME": str(cwd / "_global_config")}
     if env:
@@ -114,15 +119,20 @@ def run_cli(args: list[str], cwd: Path, env: dict[str, str] | None = None) -> Re
     old_cwd = Path.cwd()
     os.chdir(cwd)
     try:
-        return runner.invoke(main, args, env=full_env, catch_exceptions=False)
+        return runner.invoke(main, args, env=full_env, input=input, catch_exceptions=False)
     finally:
         os.chdir(old_cwd)
 
 
 @pytest.fixture
 def cli(tmp_path: Path):
-    def _run(args: list[str], cwd: Path | None = None, env: dict[str, str] | None = None) -> Result:
-        return run_cli(args, cwd or tmp_path, env)
+    def _run(
+        args: list[str],
+        cwd: Path | None = None,
+        env: dict[str, str] | None = None,
+        input: str | None = None,
+    ) -> Result:
+        return run_cli(args, cwd or tmp_path, env, input=input)
 
     return _run
 
