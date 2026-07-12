@@ -711,3 +711,13 @@ def a():
     result = compile_bundle(bundle)
     findings = validate_bundle(result, snapshot)
     assert [f for f in findings if f.code == "unknown-entity"] == []
+
+
+def test_template_entity_domain_map_covers_every_template_domain() -> None:
+    """Drift guard (PR #32 review): a new template domain added to
+    TEMPLATE_DOMAINS without a _TEMPLATE_ENTITY_DOMAIN entry silently
+    reintroduces the unknown-entity-before-first-push bug for that domain."""
+    from hassle.ir.keys import TEMPLATE_DOMAINS
+    from hassle.registry.validate import _TEMPLATE_ENTITY_DOMAIN
+
+    assert set(_TEMPLATE_ENTITY_DOMAIN) == set(TEMPLATE_DOMAINS)
