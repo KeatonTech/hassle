@@ -170,13 +170,19 @@ def apply_plan(
 
         try:
             _apply_one(backend, entry, identity)
-        except Exception:
+        except Exception as exc:
             outcomes[entry.object_key] = ApplyOutcome.FAILED
             _mark_remaining_aborted(push_entries, entry, outcomes, skip_first=True)
             _rollback(backend, snapshots[:-1])
             for key in applied:
                 outcomes[key] = ApplyOutcome.ROLLED_BACK
-            return ApplyResult(outcomes=outcomes, succeeded=False, manifest=None)
+            failure_message = str(exc) if isinstance(exc, CreatedIdentityDivergedError) else None
+            return ApplyResult(
+                outcomes=outcomes,
+                succeeded=False,
+                manifest=None,
+                failure_message=failure_message,
+            )
 
         outcomes[entry.object_key] = ApplyOutcome.SUCCEEDED
         applied.append(entry.object_key)
@@ -250,10 +256,41 @@ def _identity_of(object_key: str) -> str:
     return identity
 
 
+_CALLER_KEYED_KINDS = frozenset({"automation", "script"})
+
+
+class CreatedIdentityDivergedError(Exception):
+    """`backend.create` derived a different identity than the bundle
+    declares (HA ignores a helper create's supplied id and slugifies its
+    NAME). Left alone, the manifest entry never matches the remote object
+    and every subsequent push silently creates another copy (owner field
+    report: `_degf`, `_degf_2`, `_degf_3`). The just-created object is
+    rolled back before this is raised."""
+
+    def __init__(self, declared: str, actual: str, source_path: str | None = None) -> None:
+        self.declared = declared
+        self.actual = actual
+        where = f" (declared in {source_path})" if source_path else ""
+        super().__init__(
+            f"Home Assistant derived the id `{actual}` for this new object, but the "
+            f"bundle declares `{declared}`{where} -- the two can never link up, so "
+            f"pushing again would create a duplicate every time. The created object "
+            f"was removed. Fix: change the declaration's id to `{actual}` (or rename "
+            f"it so its name slugifies to `{declared}`), then push again."
+        )
+
+
 def _apply_one(backend: Backend, entry: PlanEntry, identity: str) -> None:
     if entry.action is PlanAction.CREATE:
         assert entry.local is not None
-        backend.create(entry.kind, entry.local)
+        actual = backend.create(entry.kind, entry.local)
+        # Only the domains where HA itself assigns identity (storage helpers
+        # slugify the name; template helpers likewise, docs/ha-api-notes.md
+        # §17.5/§26.6) can diverge -- scripts/automations are caller-keyed
+        # (the id rides in the config URL), so their create is always exact.
+        if entry.kind not in _CALLER_KEYED_KINDS and actual != identity:
+            backend.delete(entry.kind, actual)
+            raise CreatedIdentityDivergedError(identity, actual, entry.source_path)
     elif entry.action is PlanAction.UPDATE:
         assert entry.local is not None
         backend.update(entry.kind, identity, entry.local)

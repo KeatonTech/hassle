@@ -56,3 +56,25 @@ def test_push_prints_ready_made_commit_message(
     result = cli(["push", "--yes"], cwd=git_repo)
     assert result.exit_code == 0, result.output
     assert "sync:" in result.output.lower() or "commit" in result.output.lower()
+
+
+def test_push_surfaces_the_created_identity_divergence_message(
+    git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """Owner duplicate-create report: when HA derives a different helper id
+    than the bundle declares, push must SAY so (naming the derived id),
+    not just print a FAILED outcome map."""
+    _backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    (git_repo / "helpers_misnamed.py").write_text(
+        """
+from hassle import input_boolean
+
+input_boolean(id="declared_id_that_wont_match", name="Totally Different Name")
+""",
+        encoding="utf-8",
+    )
+    result = cli(["push", "--yes"], cwd=git_repo)
+    assert result.exit_code != 0
+    assert "totally_different_name" in result.output  # the id HA derived
+    assert "declared_id_that_wont_match" in result.output

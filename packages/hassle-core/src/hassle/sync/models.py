@@ -187,6 +187,11 @@ class ApplyResult(BaseModel):
     outcomes: dict[str, ApplyOutcome] = {}
     succeeded: bool
     manifest: Manifest | None = None
+    #: Additive (owner duplicate-create report): WHY the failing entry
+    #: failed, when the apply engine knows -- e.g. the created-identity
+    #: divergence message naming the id HA actually derived. `None` for
+    #: successes and for failures with no better story than the outcome enum.
+    failure_message: str | None = None
     # M11 (additive): non-fatal warnings from category write-back on CREATE
     # (`hassle.sync.category_writeback`) -- always empty when nothing was
     # attempted or everything succeeded. Never affects `succeeded` (I6: a

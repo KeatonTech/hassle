@@ -15,7 +15,7 @@ storage-collection WS API the nine ``HELPER_DOMAINS`` use.
 
 from __future__ import annotations
 
-import re
+from slugify import slugify as _unicode_slugify
 
 # The nine storage-collection helper domains Hassle manages in v1 (DESIGN §4, §13).
 HELPER_DOMAINS: frozenset[str] = frozenset(
@@ -74,15 +74,18 @@ def object_key(kind: str, identity: str) -> str:
 
 def slugify(name: str) -> str:
     """HA's storage-collection helper-id derivation rule (docs/ha-api-notes.md
-    §4/§17.5): lowercase, non-alphanumeric runs collapsed to a single
-    underscore, leading/trailing underscores stripped.
+    §4/§17.5), matched EXACTLY by delegating to the same library HA's own
+    ``homeassistant.util.slugify`` wraps (python-slugify): unicode is
+    TRANSLITERATED, not collapsed -- "°F" -> "degf", "Café" -> "cafe".
+    Owner field report: our old regex collapsed non-alphanumerics to an
+    underscore, so validate blessed ids HA would never derive and every
+    push re-created such helpers under fresh ``_N`` copies.
 
     F1-compatible addition: shared by `hassle.backend.fake`/`hassle.backend.
-    direct` (which previously each carried a private copy of this exact
-    logic) and `hassle.registry.validate`'s helper-id/name-slug mismatch
+    direct` and `hassle.registry.validate`'s helper-id/name-slug mismatch
     check (M7, MILESTONES M7 "beyond the milestone text").
     """
-    slug = re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
+    slug = _unicode_slugify(name, separator="_")
     return slug or "item"
 
 
