@@ -801,7 +801,7 @@ def push(
 ) -> None:
     """Plan, confirm, and apply to HA (DESIGN §8.2)."""
     from hassle.sync.apply import apply_plan
-    from hassle.sync.models import PlanAction
+    from hassle.sync.models import PlanAction, PlanEntry
     from hassle_cli import backend_factory
     from hassle_cli.plan_render import plan_summary, render_plan
 
@@ -830,10 +830,12 @@ def push(
         for e in the_plan.entries_with_action(PlanAction.CONFLICT)
         if e.object_key not in accept_local and e.object_key not in accept_remote
     ]
+    plan_already_rendered = False
     if unresolved_conflicts and _interactive() and not yes:
         # Resolve each conflict at the prompt instead of demanding
         # --accept-local/--accept-remote round trips (task #39).
         render_plan(console, the_plan)
+        plan_already_rendered = True
         accept_local, accept_remote = list(accept_local), list(accept_remote)
         for entry in unresolved_conflicts:
             choice = click.prompt(
@@ -859,7 +861,8 @@ def push(
     if not yes and _interactive():
         # Plan-then-confirm at the terminal: deletions default to NO (they
         # need a deliberate yes), everything else defaults to YES.
-        render_plan(console, the_plan)
+        if not plan_already_rendered:
+            render_plan(console, the_plan)
         prompt = (
             "This plan includes deletion(s). Apply it?"
             if has_deletions
@@ -891,7 +894,7 @@ def push(
     ha_url, token = _require_backend_config(root)
     manifest = manifest_io.load_manifest(root)
 
-    def _progress(index: int, total: int, entry) -> None:
+    def _progress(index: int, total: int, entry: PlanEntry) -> None:
         # One honest line per applied entry -- TTY or not -- so a long apply
         # is visibly alive (task #39).
         console.print(f"[{index}/{total}] {entry.action.value} {_esc(entry.object_key)}")

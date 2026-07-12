@@ -55,6 +55,7 @@ def test_ordinary_plan_prompt_defaults_to_apply(
     toml_writer(git_repo, backend_token=token)
     result = cli(["push"], cwd=git_repo, input="\n")  # bare Enter accepts
     assert result.exit_code == 0, result.output
+    assert "Apply?" in result.output  # the prompt actually happened
     assert "hall_light_on_motion" in backend.list_remote("automation")
 
 
@@ -126,6 +127,7 @@ def test_conflict_prompt_abort(interactive, git_repo: Path, cli, fake_backend, t
 
     result = cli(["push"], cwd=git_repo, input="a\n")
     assert result.exit_code != 0
+    assert "aborted, nothing applied" in result.output.lower()  # the PROMPT path
     identity = next(iter(backend.list_remote("automation")))
     stored = str(backend.list_remote("automation")[identity])
     assert "Renamed on the HA side" in stored  # untouched
