@@ -910,6 +910,8 @@ def push(
         )
 
     if not result.succeeded:
+        if result.failure_message:
+            console.print(f"[bold red]hassle push: {_esc(result.failure_message)}[/bold red]")
         console.print(
             f"[bold red]hassle push: apply failed/aborted: {_esc(result.outcomes)}[/bold red]"
         )

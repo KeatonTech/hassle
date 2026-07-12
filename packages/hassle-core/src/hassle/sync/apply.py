@@ -267,15 +267,16 @@ class CreatedIdentityDivergedError(Exception):
     report: `_degf`, `_degf_2`, `_degf_3`). The just-created object is
     rolled back before this is raised."""
 
-    def __init__(self, declared: str, actual: str) -> None:
+    def __init__(self, declared: str, actual: str, source_path: str | None = None) -> None:
         self.declared = declared
         self.actual = actual
+        where = f" (declared in {source_path})" if source_path else ""
         super().__init__(
             f"Home Assistant derived the id `{actual}` for this new object, but the "
-            f"bundle declares `{declared}` -- the two can never link up, so pushing "
-            f"again would create a duplicate every time. The created object was "
-            f"removed. Fix: change the declaration's id to `{actual}` (or rename it "
-            f"so its name slugifies to `{declared}`), then push again."
+            f"bundle declares `{declared}`{where} -- the two can never link up, so "
+            f"pushing again would create a duplicate every time. The created object "
+            f"was removed. Fix: change the declaration's id to `{actual}` (or rename "
+            f"it so its name slugifies to `{declared}`), then push again."
         )
 
 
@@ -289,7 +290,7 @@ def _apply_one(backend: Backend, entry: PlanEntry, identity: str) -> None:
         # (the id rides in the config URL), so their create is always exact.
         if entry.kind not in _CALLER_KEYED_KINDS and actual != identity:
             backend.delete(entry.kind, actual)
-            raise CreatedIdentityDivergedError(identity, actual)
+            raise CreatedIdentityDivergedError(identity, actual, entry.source_path)
     elif entry.action is PlanAction.UPDATE:
         assert entry.local is not None
         backend.update(entry.kind, identity, entry.local)
