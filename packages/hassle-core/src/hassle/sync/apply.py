@@ -46,6 +46,8 @@ UNCHANGED so the next plan/push surfaces the identical conflict again.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from hassle.backend.protocol import Backend
 from hassle.ir.canonical import sha256_hash
 from hassle.sync.category_move import local_category_for_source_path, sync_category_on_move
@@ -106,6 +108,7 @@ def apply_plan(
     *,
     synced_at: str | None = None,
     category_overrides: dict[str, str] | None = None,
+    on_progress: Callable[[int, int, PlanEntry], None] | None = None,
 ) -> ApplyResult:
     """Apply the push-side actions of ``plan`` against ``backend``.
 
@@ -119,6 +122,10 @@ def apply_plan(
     matching CREATE; a missing/absent entry behaves exactly like M11's
     `humanize_slug` fallback (M12 test 3 -- byte-identical when no override
     is supplied at all).
+
+    ``on_progress`` (task #39, additive): called before each push entry is
+    applied with ``(index, total, entry)`` (1-based) -- the CLI's visible
+    heartbeat during a long apply. Never called for an empty plan.
     """
     push_entries = [entry for entry in plan.entries if entry.action in _PUSH_ACTIONS]
     push_entries.sort(key=lambda entry: _kind_sort_key(entry.kind))
@@ -137,7 +144,9 @@ def apply_plan(
     # change, or a conflict/failure that must not silently advance the base).
     resolved_categories: dict[str, str | None] = {}
 
-    for entry in push_entries:
+    for entry_index, entry in enumerate(push_entries, start=1):
+        if on_progress is not None:
+            on_progress(entry_index, len(push_entries), entry)
         identity = _identity_of(entry.object_key)
 
         if entry.action in (PlanAction.UPDATE, PlanAction.DELETE):

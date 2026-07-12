@@ -321,15 +321,24 @@ def pull(allow_dirty: bool) -> None:
             "dropped from the manifest (HA untouched); it is no longer managed by Hassle.[/yellow]"
         )
 
-    local_objects, compile_result = bundle_ops.compile_local_objects(root)
+    from contextlib import nullcontext
 
-    with backend_factory.connect(ha_url, token) as backend:
-        remote_objects = bundle_ops.remote_objects_from_backend(backend, list(OBJECT_KINDS))
-        # DESIGN §9.2: the registry snapshot is refreshed on every pull (tier-2/3
-        # validation and stubs depend on it). Best-effort: skipped when the
-        # backend lacks the registry surface. Also drives DESIGN §7.3's
-        # category-based placement for newly-adopted objects (below).
-        registry_snapshot = _write_registry_snapshot(backend, root)
+    # Visible heartbeat for the slow compile+fetch phase (task #39) -- a big
+    # bundle plus a slow HA link used to look hung here.
+    heartbeat = (
+        console.status("pulling from Home Assistant...") if _interactive() else nullcontext()
+    )
+    with heartbeat:
+        local_objects, compile_result = bundle_ops.compile_local_objects(root)
+
+        with backend_factory.connect(ha_url, token) as backend:
+            remote_objects = bundle_ops.remote_objects_from_backend(backend, list(OBJECT_KINDS))
+            # DESIGN §9.2: the registry snapshot is refreshed on every pull
+            # (tier-2/3 validation and stubs depend on it). Best-effort:
+            # skipped when the backend lacks the registry surface. Also drives
+            # DESIGN §7.3's category-based placement for newly-adopted
+            # objects (below).
+            registry_snapshot = _write_registry_snapshot(backend, root)
 
     # ux/stub-docstrings item 2: `typings/hassle/registry/__init__.pyi` is
     # regenerated from the just-refreshed registry snapshot on every pull
@@ -758,6 +767,15 @@ def status(ctx: click.Context) -> None:
         console.print("[yellow]not a git repository[/yellow]")
 
 
+def _interactive() -> bool:
+    """A human is at the terminal: prompts beat flags (task #39). Both ends
+    must be TTYs -- piped stdin or redirected stdout means scripts/CI, where
+    behavior stays flag-driven and byte-compatible."""
+    import sys
+
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
 # ---------------------------------------------------------------------------
 # push
 # ---------------------------------------------------------------------------
@@ -783,13 +801,19 @@ def push(
 ) -> None:
     """Plan, confirm, and apply to HA (DESIGN §8.2)."""
     from hassle.sync.apply import apply_plan
-    from hassle.sync.models import PlanAction
+    from hassle.sync.models import PlanAction, PlanEntry
     from hassle_cli import backend_factory
     from hassle_cli.plan_render import plan_summary, render_plan
 
     console = get_console(force_plain=ctx.obj.get("plain", False))
     root = _bundle_root_or_fail()
-    the_plan, compile_result = _build_plan_with_compile_result(root)
+    if _interactive() and not ctx.obj.get("plain", False):
+        # The visible heartbeat for the slow phase (compile + remote fetch):
+        # without it a big bundle looks hung (owner report, task #39).
+        with console.status("planning against Home Assistant..."):
+            the_plan, compile_result = _build_plan_with_compile_result(root)
+    else:
+        the_plan, compile_result = _build_plan_with_compile_result(root)
     # MILESTONES M12: `category_overrides` (bundle-relative source path ->
     # exact display name) from every file's `CATEGORY` global that actually
     # slugifies to its own file stem; a mismatched file's global is left out
@@ -806,6 +830,24 @@ def push(
         for e in the_plan.entries_with_action(PlanAction.CONFLICT)
         if e.object_key not in accept_local and e.object_key not in accept_remote
     ]
+    plan_already_rendered = False
+    if unresolved_conflicts and _interactive() and not yes:
+        # Resolve each conflict at the prompt instead of demanding
+        # --accept-local/--accept-remote round trips (task #39).
+        render_plan(console, the_plan)
+        plan_already_rendered = True
+        accept_local, accept_remote = list(accept_local), list(accept_remote)
+        for entry in unresolved_conflicts:
+            choice = click.prompt(
+                f"{entry.object_key}: keep [l]ocal (push it), keep [r]emote, or [a]bort",
+                type=click.Choice(["l", "r", "a"]),
+                show_choices=False,
+            )
+            if choice == "a":
+                console.print("[bold red]hassle push: aborted, nothing applied.[/bold red]")
+                raise SystemExit(1)
+            (accept_local if choice == "l" else accept_remote).append(entry.object_key)
+        unresolved_conflicts = []
     if unresolved_conflicts:
         render_plan(console, the_plan)
         console.print(
@@ -816,7 +858,20 @@ def push(
         raise SystemExit(1)
 
     has_deletions = bool(the_plan.entries_with_action(PlanAction.DELETE))
-    if has_deletions and not yes:
+    if not yes and _interactive():
+        # Plan-then-confirm at the terminal: deletions default to NO (they
+        # need a deliberate yes), everything else defaults to YES.
+        if not plan_already_rendered:
+            render_plan(console, the_plan)
+        prompt = (
+            "This plan includes deletion(s). Apply it?"
+            if has_deletions
+            else f"Apply? ({plan_summary(the_plan)})"
+        )
+        if not click.confirm(prompt, default=not has_deletions):
+            console.print("[bold red]hassle push: declined, nothing applied.[/bold red]")
+            raise SystemExit(1)
+    elif has_deletions and not yes:
         render_plan(console, the_plan)
         console.print(
             "[bold red]hassle push: this plan includes deletion(s), which require "
@@ -838,6 +893,12 @@ def push(
 
     ha_url, token = _require_backend_config(root)
     manifest = manifest_io.load_manifest(root)
+
+    def _progress(index: int, total: int, entry: PlanEntry) -> None:
+        # One honest line per applied entry -- TTY or not -- so a long apply
+        # is visibly alive (task #39).
+        console.print(f"[{index}/{total}] {entry.action.value} {_esc(entry.object_key)}")
+
     with backend_factory.connect(ha_url, token) as backend:
         result = apply_plan(
             resolved_plan,
@@ -845,6 +906,7 @@ def push(
             manifest,
             synced_at=manifest_io.now_iso(),
             category_overrides=category_overrides,
+            on_progress=_progress,
         )
 
     if not result.succeeded:
@@ -1245,7 +1307,13 @@ def run(target: str, live: bool, yes: bool, skip_conditions: bool) -> None:
             console.print(f"  called {_esc(call.action)} {_esc(call.data)}")
         return
 
-    if not yes:
+    if not yes and _interactive():
+        if not click.confirm(
+            f"Run {target} against the LIVE Home Assistant (real devices)?",
+            default=True,
+        ):
+            raise SystemExit(1)
+    elif not yes:
         console.print(
             "[bold red]hassle run --live executes real service calls on real devices. "
             "Fix: re-run with --yes to confirm.[/bold red]"
