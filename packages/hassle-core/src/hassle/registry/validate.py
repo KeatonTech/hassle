@@ -69,14 +69,34 @@ def _where(span: SourceSpan | None) -> tuple[str | None, int | None]:
     return span.file, span.line
 
 
+#: Template-helper object kinds -> the REAL entity domain the created
+#: config entry produces (template_binary_sensor:x -> binary_sensor.x).
+_TEMPLATE_ENTITY_DOMAIN = {
+    "template_sensor": "sensor",
+    "template_binary_sensor": "binary_sensor",
+    "template_number": "number",
+    "template_select": "select",
+}
+
+
 def _bundle_declared_keys(result: CompileResult) -> set[str]:
     """``"<domain>:<id>"`` keys for every object this bundle itself declares:
     helper domains (milestone test 3) plus automations/scripts (an automation
     referencing its own or a sibling automation/script entity, e.g.
     ``automation.turn_off`` targeting itself, or a ``script.<id>`` call,
     counts as existing exactly like a bundle-declared helper).
-    """
-    return set(result.objects)
+
+    Template helpers additionally register the ENTITY their config entry
+    creates (`template_binary_sensor:x` also declares `binary_sensor:x`) --
+    an automation gating on the bundle's own fused template sensor must not
+    trip unknown-entity before the first push (owner field case)."""
+    keys = set(result.objects)
+    for key in result.objects:
+        kind, _, object_id = key.partition(":")
+        entity_domain = _TEMPLATE_ENTITY_DOMAIN.get(kind)
+        if entity_domain is not None:
+            keys.add(f"{entity_domain}:{object_id}")
+    return keys
 
 
 #: Core entities that exist in every HA instance but never appear in the
