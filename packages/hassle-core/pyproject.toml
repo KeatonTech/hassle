@@ -11,6 +11,7 @@ dependencies = [
     # Runtime dependency, not just dev tooling: the decompiler formats every
     # generated file by shelling out to the ruff binary (codegen._format_with_ruff).
     "ruff>=0.4",
+    "python-slugify>=8",
 ]
 
 [project.entry-points.pytest11]

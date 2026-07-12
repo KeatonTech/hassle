@@ -339,3 +339,31 @@ def test_apply_plan_reports_per_entry_progress() -> None:
     )
     assert result.succeeded
     assert [(i, t) for i, t, _ in seen] == [(1, 2), (2, 2)]
+
+
+def test_create_whose_backend_identity_diverges_fails_loud_and_rolls_back() -> None:
+    """Owner field report: HA ignores a helper create's supplied id and
+    derives its own from the name. When they diverge, the manifest entry can
+    never match the remote object, and every subsequent push silently
+    creates ANOTHER copy (`_2`, `_3`, ...). The apply engine must catch the
+    divergence: delete the just-created object and fail with a message
+    naming the id HA actually derived."""
+    backend = FakeBackend()
+    plan = Plan(
+        entries=[
+            PlanEntry(
+                object_key="input_number:wrong_declared_id",
+                kind="input_number",
+                action=PlanAction.CREATE,
+                # FakeBackend derives helper identity from the name, like HA.
+                local={"id": "wrong_declared_id", "name": "Real Name", "min": 0, "max": 1},
+            )
+        ]
+    )
+    manifest = Manifest(synced_at="t", ha_version="v", objects={})
+    result = apply_plan(plan, backend, manifest)
+    assert result.succeeded is False
+    outcome = result.outcomes["input_number:wrong_declared_id"]
+    assert "real_name" in str(outcome.message)  # names the id HA derived
+    assert "wrong_declared_id" in str(outcome.message)
+    assert backend.list_remote("input_number") == {}  # rolled back, no orphan
