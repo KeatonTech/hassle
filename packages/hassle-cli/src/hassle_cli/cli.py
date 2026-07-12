@@ -825,6 +825,17 @@ def push(
     for warning in category_global_warnings:
         console.print(f"[yellow]{_esc(warning)}[/yellow]")
 
+    adopts = the_plan.entries_with_action(PlanAction.ADOPT)
+    if adopts:
+        # Owner confusion (twice): adopt rows look actionable but push
+        # ignores them -- they are remote objects nothing local owns.
+        console.print(
+            f"[yellow]{len(adopts)} object(s) exist in HA that this bundle doesn't "
+            "manage (the `adopt` rows) -- not touched by push. `hassle pull` would "
+            "import them into the bundle; delete them in the HA UI if they're "
+            "unwanted (e.g. duplicates).[/yellow]"
+        )
+
     unresolved_conflicts = [
         e
         for e in the_plan.entries_with_action(PlanAction.CONFLICT)
