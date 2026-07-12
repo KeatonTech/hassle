@@ -148,3 +148,16 @@ def test_apply_prints_per_entry_progress(git_repo: Path, cli, fake_backend, toml
     result = cli(["push", "--yes"], cwd=git_repo)
     assert result.exit_code == 0, result.output
     assert "[1/2]" in result.output and "[2/2]" in result.output
+
+
+def test_push_explains_adopt_rows(git_repo: Path, cli, fake_backend, toml_writer) -> None:
+    """Owner confusion (twice): adopt rows in a push plan look actionable but
+    push ignores them entirely. The plan output must say what they are and
+    that only pull (or deleting in the HA UI) does anything about them."""
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    backend.create("input_number", {"name": "Stray Duplicate", "min": 0, "max": 1})
+    result = cli(["push", "--yes"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+    assert "not touched by push" in result.output
+    assert "pull" in result.output
