@@ -307,3 +307,35 @@ def test_manifest_unchanged_on_failure() -> None:
 
     assert result.succeeded is False
     assert result.manifest is None
+
+
+def test_apply_plan_reports_per_entry_progress() -> None:
+    """Task #39 (additive): on_progress fires once per push entry, 1-based,
+    before the entry is applied -- the CLI's heartbeat during a long push."""
+    backend = FakeBackend()
+    plan = Plan(
+        entries=[
+            PlanEntry(
+                object_key="automation:p1",
+                kind="automation",
+                action=PlanAction.CREATE,
+                local={"id": "p1", "alias": "One"},
+            ),
+            PlanEntry(
+                object_key="automation:p2",
+                kind="automation",
+                action=PlanAction.CREATE,
+                local={"id": "p2", "alias": "Two"},
+            ),
+        ]
+    )
+    manifest = Manifest(synced_at="t", ha_version="v", objects={})
+    seen: list[tuple[int, int, str]] = []
+    result = apply_plan(
+        plan,
+        backend,
+        manifest,
+        on_progress=lambda i, total, entry: seen.append((i, total, entry.object_key)),
+    )
+    assert result.succeeded
+    assert [(i, t) for i, t, _ in seen] == [(1, 2), (2, 2)]

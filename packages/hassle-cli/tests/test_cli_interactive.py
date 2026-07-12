@@ -120,9 +120,7 @@ def test_conflict_prompt_accept_remote(
     assert "Renamed on the HA side" in stored  # remote kept
 
 
-def test_conflict_prompt_abort(
-    interactive, git_repo: Path, cli, fake_backend, toml_writer
-) -> None:
+def test_conflict_prompt_abort(interactive, git_repo: Path, cli, fake_backend, toml_writer) -> None:
     backend, token = fake_backend
     _make_conflict(git_repo, cli, backend, token, toml_writer)
 
@@ -133,9 +131,7 @@ def test_conflict_prompt_abort(
     assert "Renamed on the HA side" in stored  # untouched
 
 
-def test_apply_prints_per_entry_progress(
-    git_repo: Path, cli, fake_backend, toml_writer
-) -> None:
+def test_apply_prints_per_entry_progress(git_repo: Path, cli, fake_backend, toml_writer) -> None:
     """The hang report: every applied entry gets a visible [i/N] line (TTY or
     not -- progress is honest output, not decoration)."""
     _backend, token = fake_backend
