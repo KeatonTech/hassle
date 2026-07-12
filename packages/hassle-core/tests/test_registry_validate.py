@@ -682,3 +682,32 @@ def a():
     result = compile_bundle(bundle)
     findings = validate_bundle(result, snapshot)
     assert [f for f in findings if f.code == "unknown-entity"] == []
+
+
+def test_template_helper_entities_count_as_declared(
+    tmp_path: Path, snapshot: RegistrySnapshot
+) -> None:
+    """A template helper declared in THIS bundle produces a real entity
+    (template_binary_sensor:x -> binary_sensor.x) that other templates --
+    including self-referential hysteresis templates -- may reference before
+    the first push ever creates it (owner field case: presence-fusion
+    binary referencing itself for hysteresis)."""
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, service, state, template_binary_sensor, when, only_if
+
+@template_binary_sensor(name="Living Room Occupied Fused")
+def occupied_fused():
+    return "{{ 1 == 1 }}"
+
+@automation(id="a", alias="A")
+def a():
+    when(state("light.hallway").to("on"))
+    with only_if(state("binary_sensor.living_room_occupied_fused").is_("on")):
+        service("light.turn_on", target={"entity_id": "light.hallway"})
+""",
+    )
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, snapshot)
+    assert [f for f in findings if f.code == "unknown-entity"] == []
