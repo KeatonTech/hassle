@@ -637,8 +637,10 @@ class FakeBackend:
             # before POSTing to /api/config/script/config/{object_id}).
             return str(normalized.get("id") or _slugify(str(normalized.get("alias", "script"))))
         if kind in HELPER_DOMAINS:
-            supplied = normalized.get("id")
-            if supplied:
-                return str(supplied)
-            return _slugify(str(normalized.get("name", kind)))
+            # Real HA's storage-collection WS create IGNORES any supplied id
+            # and derives identity by slugifying the NAME (docs/ha-api-notes
+            # §17.5; validate's helper-id-name-mismatch rule documents the
+            # same). This fake used to honor `id`, which is exactly why the
+            # owner's duplicate-create loop was never caught in tests.
+            return _slugify(str(normalized.get("name") or normalized.get("id") or kind))
         raise ValueError(f"unknown object kind {kind!r}")

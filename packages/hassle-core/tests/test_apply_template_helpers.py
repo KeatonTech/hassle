@@ -58,7 +58,7 @@ def test_apply_order_places_template_helpers_after_storage_helpers_before_script
                 "template_number",
                 {"name": "Zones", "state": "{{ 1 }}", "set_value": _SET_VALUE},
             ),
-            _create_entry("input_boolean:b1", "input_boolean", {"name": "B"}),
+            _create_entry("input_boolean:b1", "input_boolean", {"name": "B1"}),
         ]
     )
     manifest = Manifest(synced_at="t", ha_version="v", objects={})

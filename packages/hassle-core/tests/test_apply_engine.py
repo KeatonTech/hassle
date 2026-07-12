@@ -109,7 +109,7 @@ def test_apply_order_is_helpers_then_scripts_then_automations() -> None:
                 object_key="input_boolean:b1",
                 kind="input_boolean",
                 action=PlanAction.CREATE,
-                local={"name": "B"},
+                local={"name": "B1"},
             ),
         ]
     )
@@ -363,7 +363,8 @@ def test_create_whose_backend_identity_diverges_fails_loud_and_rolls_back() -> N
     manifest = Manifest(synced_at="t", ha_version="v", objects={})
     result = apply_plan(plan, backend, manifest)
     assert result.succeeded is False
-    outcome = result.outcomes["input_number:wrong_declared_id"]
-    assert "real_name" in str(outcome.message)  # names the id HA derived
-    assert "wrong_declared_id" in str(outcome.message)
+    assert result.outcomes["input_number:wrong_declared_id"] is ApplyOutcome.FAILED
+    assert result.failure_message is not None
+    assert "real_name" in result.failure_message  # names the id HA derived
+    assert "wrong_declared_id" in result.failure_message
     assert backend.list_remote("input_number") == {}  # rolled back, no orphan
