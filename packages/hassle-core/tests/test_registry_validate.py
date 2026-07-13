@@ -745,7 +745,11 @@ from hassle import field_default
     },
     id="adjust_widget",
 )
-def adjust_widget(*, old_field: TemplateExpr = field_default(""), brand_new_flag: TemplateExpr = field_default(False)):
+def adjust_widget(
+    *,
+    old_field: TemplateExpr = field_default(""),
+    brand_new_flag: TemplateExpr = field_default(False),
+):
     service("light.turn_on", target={"entity_id": "light.hallway"})
 
 @automation(id="a", alias="A")

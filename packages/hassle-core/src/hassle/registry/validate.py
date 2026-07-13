@@ -416,6 +416,15 @@ def _validate_service_params(result: CompileResult, snapshot: RegistrySnapshot) 
                 continue
             action = action_raw
             domain, _, service_name = action.partition(".")
+            if domain == "script" and f"script:{service_name}" in result.objects:
+                # A script declared in THIS bundle: its local field list is
+                # the truth. The snapshot's copy is the LAST PUSH's schema --
+                # a freshly added field would false-positive as unknown
+                # (owner field case: adjust_tdbu_blind's
+                # triggered_by_automation flag). The local declaration is
+                # already validated structurally at compile time, so skip
+                # the stale-schema comparison entirely.
+                continue
             service_def = snapshot.service_def(domain, service_name)
             if service_def is None or not service_def.fields:
                 # No schema (or a deliberately empty/unenforced one) -> nothing to
