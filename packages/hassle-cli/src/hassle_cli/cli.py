@@ -624,7 +624,7 @@ def pull(allow_dirty: bool) -> None:
     # adopt/create. Advancing the manifest for pull-side actions is this
     # CLI's own bookkeeping (no core-layer test covers it: `apply_pull`
     # deliberately never accepts a manifest, MILESTONES M5 test 2).
-    from hassle.ir.canonical import sha256_hash
+    from hassle.ir.canonical import sha256_hash, storage_canonical
     from hassle.sync.category_move import local_category_for_source_path
 
     new_objects = dict(manifest.objects)
@@ -635,7 +635,7 @@ def pull(allow_dirty: bool) -> None:
             source_path = source_paths.get(entry.object_key)
             new_objects[entry.object_key] = ManifestEntry(
                 source=source_path,
-                compiled_hash=sha256_hash(entry.remote),
+                compiled_hash=sha256_hash(storage_canonical(entry.kind, entry.remote)),
                 kind=existing.kind if existing is not None else "dsl",
                 # M15 work item A: the base category this object was JUST
                 # placed under on this pull -- so the very next push's
