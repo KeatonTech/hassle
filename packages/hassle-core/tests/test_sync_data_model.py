@@ -281,3 +281,56 @@ def test_real_helper_changes_still_update() -> None:
     )
     [entry] = plan.entries
     assert entry.action is PlanAction.UPDATE
+
+
+def test_omitted_step_counter_and_long_timer_normalize_too() -> None:
+    """PR #34 review: HA also defaults input_number step=1, counter
+    restore/initial/step, timer duration, and renders >=24h durations as
+    '1 day, H:MM:SS'."""
+    from hassle.ir.canonical import storage_canonical
+
+    assert storage_canonical("input_number", {"id": "x", "min": 0, "max": 100})["step"] == 1.0
+    assert storage_canonical("counter", {"id": "c"})["restore"] is True
+    assert storage_canonical("timer", {"id": "t"})["duration"] == "0:00:00"
+    assert (
+        storage_canonical("timer", {"id": "t", "duration": "25:00:00"})["duration"]
+        == "1 day, 1:00:00"
+    )
+    assert storage_canonical("timer", {"id": "t", "duration": 5400})["duration"] == "1:30:00"
+
+
+def test_migration_raw_base_hash_still_matches_unchanged_sides() -> None:
+    """PR #34 review: a pre-upgrade manifest recorded RAW hashes. A remote
+    UI edit with local unchanged must stay a clean remote-side refresh, not
+    a phantom conflict."""
+    from hassle.ir.canonical import sha256_hash
+    from hassle.sync.models import Manifest, ManifestEntry, PlanAction
+    from hassle.sync.plan import compute_plan
+
+    local = {"id": "lux", "name": "Lux", "min": 50, "max": 1000, "step": 10}
+    remote_edited = {
+        "id": "lux",
+        "name": "Brighter Lux",  # UI rename
+        "min": 50.0,
+        "max": 1000.0,
+        "step": 10.0,
+        "mode": "slider",
+    }
+    manifest = Manifest(
+        synced_at="t",
+        ha_version="v",
+        objects={
+            "input_number:lux": ManifestEntry(
+                source="x.py",
+                compiled_hash=sha256_hash(local),
+                kind="dsl",  # RAW
+            )
+        },
+    )
+    plan = compute_plan(
+        manifest=manifest,
+        local_objects={"input_number:lux": ("input_number", local)},
+        remote_objects={"input_number:lux": ("input_number", remote_edited)},
+    )
+    [entry] = plan.entries
+    assert entry.action is not PlanAction.CONFLICT

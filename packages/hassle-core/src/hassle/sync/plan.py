@@ -77,6 +77,11 @@ def _plan_one(
     canon_remote = None if remote_config is None else storage_canonical(kind, remote_config)
     local_hash = None if canon_local is None else sha256_hash(canon_local)
     remote_hash = None if canon_remote is None else sha256_hash(canon_remote)
+    # Migration dual-accept: manifests written before canonical hashing
+    # recorded RAW hashes -- match either shape so an existing bundle's
+    # first plan after upgrading stays clean (no phantom conflicts).
+    raw_local_hash = None if local_config is None else sha256_hash(local_config)
+    raw_remote_hash = None if remote_config is None else sha256_hash(remote_config)
 
     # Normalization-drift guard (owner field report: 29 perpetual updates):
     # if the two sides are the SAME object once HA's storage normalization
@@ -88,8 +93,8 @@ def _plan_one(
     if base_hash is None:
         return _plan_no_base(object_key, kind, local_config, remote_config, remote_hash)
 
-    base_vs_remote_same = base_hash == remote_hash
-    base_vs_local_same = base_hash == local_hash
+    base_vs_remote_same = base_hash in (remote_hash, raw_remote_hash)
+    base_vs_local_same = base_hash in (local_hash, raw_local_hash)
 
     def conflict(kind_: ConflictKind) -> Conflict:
         return Conflict(

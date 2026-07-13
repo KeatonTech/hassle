@@ -40,9 +40,10 @@ def sha256_hash(data: Any) -> str:
 #: to compiled output -- I3 round-trips stay byte-exact).
 _STORAGE_FLOAT_FIELDS = {"input_number": ("min", "max", "step", "initial")}
 _STORAGE_DEFAULTS = {
-    "input_number": {"mode": "slider"},
+    "input_number": {"mode": "slider", "step": 1},
     "input_text": {"mode": "text", "min": 0, "max": 100},
-    "timer": {"restore": False},
+    "timer": {"restore": False, "duration": "0:00:00"},
+    "counter": {"restore": True, "initial": 0, "step": 1},
 }
 
 
@@ -58,9 +59,26 @@ def storage_canonical(kind: str, config: dict[str, Any]) -> dict[str, Any]:
             out[field] = float(out[field])
     for field, default in _STORAGE_DEFAULTS.get(kind, {}).items():
         out.setdefault(field, default)
-    if kind == "timer" and isinstance(out.get("duration"), str):
-        parts = out["duration"].split(":")
-        if len(parts) == 3 and all(x.isdigit() for x in parts):
-            h, m, sec = (int(x) for x in parts)
-            out["duration"] = f"{h}:{m:02d}:{sec:02d}"
+    if kind == "timer":
+        duration = out.get("duration")
+        total: int | None = None
+        if isinstance(duration, (int, float)) and not isinstance(duration, bool):
+            total = int(duration)
+        elif isinstance(duration, str):
+            parts = duration.split(":")
+            if len(parts) == 3 and all(x.isdigit() for x in parts):
+                h, m, sec = (int(x) for x in parts)
+                total = h * 3600 + m * 60 + sec
+        if total is not None:
+            # str(timedelta) shape, HA's stored form -- including the
+            # "1 day, 1:00:00" rendering past 24 hours.
+            days, rem = divmod(total, 86400)
+            h, rem = divmod(rem, 3600)
+            m, sec = divmod(rem, 60)
+            base_str = f"{h}:{m:02d}:{sec:02d}"
+            if days == 1:
+                base_str = f"1 day, {base_str}"
+            elif days > 1:
+                base_str = f"{days} days, {base_str}"
+            out["duration"] = base_str
     return out
