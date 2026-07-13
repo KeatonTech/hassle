@@ -721,3 +721,52 @@ def test_template_entity_domain_map_covers_every_template_domain() -> None:
     from hassle.registry.validate import _TEMPLATE_ENTITY_DOMAIN
 
     assert set(_TEMPLATE_ENTITY_DOMAIN) == set(TEMPLATE_DOMAINS)
+
+
+def test_bundle_declared_script_fields_beat_the_stale_snapshot(
+    tmp_path: Path, snapshot: RegistrySnapshot
+) -> None:
+    """Owner field case: adding a NEW field to a bundle-declared shared
+    script tripped unknown-service-param, because the check consulted the
+    stale snapshot's field list from the last push. For a script declared in
+    THIS bundle, the local declaration is the truth."""
+    bundle = _write_bundle(
+        tmp_path,
+        """
+from hassle import automation, service, shared_script, state, when
+from hassle.compiler.templates import TemplateExpr
+from hassle import field_default
+
+@shared_script(
+    alias="Adjust Widget",
+    fields={
+        "old_field": {"selector": {"text": {}}},
+        "brand_new_flag": {"selector": {"boolean": {}}, "default": False},
+    },
+    id="adjust_widget",
+)
+def adjust_widget(
+    *,
+    old_field: TemplateExpr = field_default(""),
+    brand_new_flag: TemplateExpr = field_default(False),
+):
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+
+@automation(id="a", alias="A")
+def a():
+    when(state("light.hallway").to("on"))
+    adjust_widget(old_field="x", brand_new_flag=True)
+""",
+    )
+    result = compile_bundle(bundle)
+    from hassle.registry.snapshot import ServiceDef, ServiceField
+
+    stale = snapshot.model_copy(deep=True)
+    stale.services.setdefault("script", {})["adjust_widget"] = ServiceDef(
+        name="Adjust Widget",
+        description="",
+        # The LAST PUSH's field list -- brand_new_flag doesn't exist yet.
+        fields={"old_field": ServiceField(type="string", selector={"text": {}})},
+    )
+    findings = validate_bundle(result, stale)
+    assert [f for f in findings if f.code == "unknown-service-param"] == []
