@@ -190,3 +190,96 @@ def test_apply_result_records_outcome_per_object() -> None:
     assert result.outcomes["script:foo"] is ApplyOutcome.ROLLED_BACK
     assert result.succeeded is False
     assert result.manifest is None
+
+
+def test_ha_normalization_drift_is_not_an_update() -> None:
+    """Owner field report (29 perpetually-spurious plan updates): HA's
+    storage collections store input_number numerics as floats and fill
+    mode='slider'; timers store duration as H:MM:SS (no hour zero-pad) and
+    fill restore=False. A local config differing ONLY by those is the same
+    object -- NOOP, never update (and never a conflict against a stale
+    base hash)."""
+    from hassle.ir.canonical import sha256_hash
+    from hassle.sync.models import Manifest, ManifestEntry, PlanAction
+    from hassle.sync.plan import compute_plan
+
+    local_number = {"id": "lux", "name": "Lux", "min": 50, "max": 1000, "step": 10}
+    remote_number = {
+        "id": "lux",
+        "name": "Lux",
+        "min": 50.0,
+        "max": 1000.0,
+        "step": 10.0,
+        "mode": "slider",
+    }
+    local_timer = {"id": "grace", "name": "Grace", "duration": "00:30:00"}
+    remote_timer = {
+        "id": "grace",
+        "name": "Grace",
+        "duration": "0:30:00",
+        "restore": False,
+    }
+    manifest = Manifest(
+        synced_at="t",
+        ha_version="v",
+        objects={
+            "input_number:lux": ManifestEntry(
+                source="x.py", compiled_hash=sha256_hash(local_number), kind="dsl"
+            ),
+            "timer:grace": ManifestEntry(
+                source="x.py", compiled_hash=sha256_hash(local_timer), kind="dsl"
+            ),
+        },
+    )
+    plan = compute_plan(
+        manifest=manifest,
+        local_objects={
+            "input_number:lux": ("input_number", local_number),
+            "timer:grace": ("timer", local_timer),
+        },
+        remote_objects={
+            "input_number:lux": ("input_number", remote_number),
+            "timer:grace": ("timer", remote_timer),
+        },
+    )
+    actions = {e.object_key: e.action for e in plan.entries}
+    assert actions["input_number:lux"] is PlanAction.NOOP
+    assert actions["timer:grace"] is PlanAction.NOOP
+
+
+def test_real_helper_changes_still_update() -> None:
+    from hassle.ir.canonical import sha256_hash
+    from hassle.sync.models import Manifest, ManifestEntry, PlanAction
+    from hassle.sync.plan import compute_plan
+
+    from hassle.ir.canonical import storage_canonical
+
+    local = {"id": "lux", "name": "Lux", "min": 40, "max": 1000, "step": 10}  # min edited
+    remote = {
+        "id": "lux",
+        "name": "Lux",
+        "min": 50.0,
+        "max": 1000.0,
+        "step": 10.0,
+        "mode": "slider",
+    }
+    base = {"id": "lux", "name": "Lux", "min": 50, "max": 1000, "step": 10}
+    manifest = Manifest(
+        synced_at="t",
+        ha_version="v",
+        objects={
+            "input_number:lux": ManifestEntry(
+                source="x.py",
+                # Post-fix manifests record CANONICAL hashes (push/pull both).
+                compiled_hash=sha256_hash(storage_canonical("input_number", base)),
+                kind="dsl",
+            )
+        },
+    )
+    plan = compute_plan(
+        manifest=manifest,
+        local_objects={"input_number:lux": ("input_number", local)},
+        remote_objects={"input_number:lux": ("input_number", remote)},
+    )
+    [entry] = plan.entries
+    assert entry.action is PlanAction.UPDATE

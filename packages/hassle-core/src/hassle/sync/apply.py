@@ -49,7 +49,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from hassle.backend.protocol import Backend
-from hassle.ir.canonical import sha256_hash
+from hassle.ir.canonical import sha256_hash, storage_canonical
 from hassle.sync.category_move import local_category_for_source_path, sync_category_on_move
 from hassle.sync.category_writeback import (
     _SCOPE_FOR_KIND,  # pyright: ignore[reportPrivateUsage]
@@ -151,7 +151,11 @@ def apply_plan(
 
         if entry.action in (PlanAction.UPDATE, PlanAction.DELETE):
             remote_now = backend.list_remote(entry.kind).get(identity)
-            remote_hash_now = None if remote_now is None else sha256_hash(remote_now)
+            remote_hash_now = (
+                None
+                if remote_now is None
+                else sha256_hash(storage_canonical(entry.kind, remote_now))
+            )
             if remote_hash_now != entry.remote_hash_at_plan:
                 # Drift since plan time: abort before writing this or anything
                 # after it. Objects already applied this run are rolled back.
@@ -369,7 +373,7 @@ def _advance_manifest(
             category = existing.category if existing is not None else None
         new_objects[entry.object_key] = ManifestEntry(
             source=existing.source if existing is not None else None,
-            compiled_hash=sha256_hash(current),
+            compiled_hash=sha256_hash(storage_canonical(entry.kind, current)),
             kind=existing.kind if existing is not None else "dsl",
             entry_id=_entry_id_of(backend, entry.kind, identity),
             category=category,

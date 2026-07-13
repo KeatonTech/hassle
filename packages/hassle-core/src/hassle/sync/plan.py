@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from hassle.ir.canonical import sha256_hash
+from hassle.ir.canonical import sha256_hash, storage_canonical
 from hassle.sync.models import Conflict, ConflictKind, Manifest, Plan, PlanAction, PlanEntry
 
 # object_key -> (kind, config)
@@ -73,8 +73,17 @@ def _plan_one(
     remote_kind, remote_config = remote_objects.get(object_key, (None, None))
     kind = local_kind or remote_kind or "unknown"
 
-    local_hash = None if local_config is None else sha256_hash(local_config)
-    remote_hash = None if remote_config is None else sha256_hash(remote_config)
+    canon_local = None if local_config is None else storage_canonical(kind, local_config)
+    canon_remote = None if remote_config is None else storage_canonical(kind, remote_config)
+    local_hash = None if canon_local is None else sha256_hash(canon_local)
+    remote_hash = None if canon_remote is None else sha256_hash(canon_remote)
+
+    # Normalization-drift guard (owner field report: 29 perpetual updates):
+    # if the two sides are the SAME object once HA's storage normalization
+    # is applied (floats, filled defaults, duration format), there is
+    # nothing to sync -- regardless of what a stale manifest hash says.
+    if canon_local is not None and canon_local == canon_remote:
+        return PlanEntry(object_key=object_key, kind=kind, action=PlanAction.NOOP)
 
     if base_hash is None:
         return _plan_no_base(object_key, kind, local_config, remote_config, remote_hash)
