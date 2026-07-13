@@ -248,11 +248,9 @@ def test_ha_normalization_drift_is_not_an_update() -> None:
 
 
 def test_real_helper_changes_still_update() -> None:
-    from hassle.ir.canonical import sha256_hash
+    from hassle.ir.canonical import sha256_hash, storage_canonical
     from hassle.sync.models import Manifest, ManifestEntry, PlanAction
     from hassle.sync.plan import compute_plan
-
-    from hassle.ir.canonical import storage_canonical
 
     local = {"id": "lux", "name": "Lux", "min": 40, "max": 1000, "step": 10}  # min edited
     remote = {
