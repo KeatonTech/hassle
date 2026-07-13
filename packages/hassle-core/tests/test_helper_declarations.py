@@ -113,3 +113,35 @@ def test_declared_helpers_reset_between_compiles() -> None:
     assert len(declared_helpers()) == 1
     reset_declared_helpers()
     assert declared_helpers() == []
+
+
+def test_storage_helper_configs_normalize_to_what_ha_stores() -> None:
+    """Owner field report (29 perpetually-spurious plan updates): HA's
+    storage collections coerce input_number numerics to float, fill
+    mode='slider' (input_number) / mode='text' (input_text) /
+    restore=False (timer) when unset, and reformat timer durations to
+    H:MM:SS without hour zero-padding. The compiled local IR must be
+    byte-identical with what HA stores, or every helper diffs forever."""
+    input_number(id="lux", name="Lux", min=50, max=1000, step=10)
+    input_text(id="memo", name="Memo", min=0, max=30)
+    timer(id="grace", name="Grace", duration="00:30:00")
+    number, text, tmr = declared_helpers()
+
+    body = number.to_ha()
+    assert body["min"] == 50.0 and isinstance(body["min"], float)
+    assert body["max"] == 1000.0 and isinstance(body["max"], float)
+    assert body["step"] == 10.0 and isinstance(body["step"], float)
+    assert body["mode"] == "slider"
+    assert text.to_ha()["mode"] == "text"
+    t = tmr.to_ha()
+    assert t["duration"] == "0:30:00"
+    assert t["restore"] is False
+
+
+def test_explicit_helper_values_are_preserved_through_normalization() -> None:
+    input_number(id="n", name="N", min=0, max=1, step=0.5, mode="box")
+    timer(id="t", name="T", duration="1:05:00", restore=True)
+    number, tmr = declared_helpers()
+    assert number.to_ha()["mode"] == "box"
+    t = tmr.to_ha()
+    assert t["duration"] == "1:05:00" and t["restore"] is True
