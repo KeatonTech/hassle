@@ -54,11 +54,16 @@ def storage_canonical(kind: str, config: dict[str, Any]) -> dict[str, Any]:
     if kind not in _STORAGE_FLOAT_FIELDS and kind not in _STORAGE_DEFAULTS:
         return config
     out = dict(config)
+    # Defaults FIRST, coercion second: a defaulted input_number step must
+    # come out as HA's float 1.0, not int 1 -- dict equality treats them the
+    # same but canonical JSON (and therefore every hash) does not (PR #34
+    # delta review). Counter/input_text defaults stay int: those kinds are
+    # not in the float-fields map.
+    for field, default in _STORAGE_DEFAULTS.get(kind, {}).items():
+        out.setdefault(field, default)
     for field in _STORAGE_FLOAT_FIELDS.get(kind, ()):
         if field in out and isinstance(out[field], (int, float)):
             out[field] = float(out[field])
-    for field, default in _STORAGE_DEFAULTS.get(kind, {}).items():
-        out.setdefault(field, default)
     if kind == "timer":
         duration = out.get("duration")
         total: int | None = None
