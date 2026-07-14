@@ -11,11 +11,18 @@ this suite is transport-agnostic: it exercises the SAME `Backend.create`/
 **Identity (§38.1):** there is no `unique_id` -- identity is derived from
 `name` (slugified), same as template helpers.
 
-**One divergence from the M10 pattern (docs/ha-api-notes.md §38 amendment):**
-the group options-flow schema RE-PRESENTS THE SAME FORM as create -- `name`
-INCLUDED -- unlike template's options-flow schema, which never includes
-`name`. So an UPDATE here submits `name` unmodified; there is no name-
-stripping/name-rejection dance to test.
+**CI-corrected (PR #35, both HA stable and dev): the group options-flow
+schema does NOT include `name`, same as template (docs/ha-api-notes.md §38.1,
+amended).** The owner's live capture note ("options flows re-present the same
+form... with current values as suggested values") was ambiguous and read as
+"the exact same schema, `name` included" in the original M21 implementation
+-- CI found real HA 400s an options-flow submission that carries `name`:
+`{"errors": {"base": ["extra keys not allowed @ data['name']"]}}`, on both
+`stable` and `dev`. A group's title is simply not editable through the
+options flow -- exactly like template, a rename is an identity change
+(delete+create), never an in-place update. `update()` strips `name` at the
+public-API boundary before it ever reaches the simulated options-flow
+submission (mirroring `_update_via_options_flow` above byte-for-byte).
 """
 
 from __future__ import annotations
@@ -103,7 +110,7 @@ def test_group_cover_list_remote_returns_stored_options() -> None:
     assert "unique_id" not in stored
 
 
-def test_group_cover_update_drives_options_flow_same_entry_id_and_includes_name() -> None:
+def test_group_cover_update_drives_options_flow_same_entry_id() -> None:
     backend = FakeBackend()
     identity = backend.create(
         "group_cover", {"name": "Top", "entities": ["cover.a"], "hide_members": False}
@@ -112,8 +119,8 @@ def test_group_cover_update_drives_options_flow_same_entry_id_and_includes_name(
     backend.reset_write_tracking()
     log_len_before = len(backend.flow_log)
 
-    # Unlike template, `name` IS resubmitted -- the group options-flow schema
-    # re-presents the same form as create (docs/ha-api-notes.md §38.1).
+    # `name` is NOT resubmitted (docs/ha-api-notes.md §38.1, CI-corrected --
+    # the options-flow schema never includes it; real HA 400s if it's sent).
     backend.update(
         "group_cover",
         identity,
@@ -126,6 +133,8 @@ def test_group_cover_update_drives_options_flow_same_entry_id_and_includes_name(
     stored = backend.list_remote("group_cover")[identity]
     assert stored["entities"] == ["cover.a", "cover.b"]
     assert stored["hide_members"] is True
+    # `name` survives an update it was never resubmitted in (merged from the
+    # existing stored options, same as template §26.7 finding 3).
     assert stored["name"] == "Top"
 
     new_steps = backend.flow_log[log_len_before:]
@@ -133,11 +142,69 @@ def test_group_cover_update_drives_options_flow_same_entry_id_and_includes_name(
     form, result = new_steps
     assert form.type == "form"
     assert "unique_id" not in form.data_schema
-    # `name` IS part of the group options-flow submission (§38 amendment).
-    assert "name" in form.data_schema
+    assert "name" not in form.data_schema
     assert result.type == "create_entry"
     assert result.result is not None
     assert result.result["entry_id"] == entry_id_before
+
+
+def test_group_cover_update_silently_strips_name_at_the_public_api_boundary() -> None:
+    # `update()` (F2, the `Backend`-protocol-facing method) still takes the
+    # FULL local config, exactly like every other kind -- `name` is stripped
+    # before it ever reaches the simulated options-flow submission, mirroring
+    # `DirectBackend._aupdate_group_helper` protecting a caller from ever
+    # producing the real HA 400 (docs/ha-api-notes.md §38.1). A caller must
+    # never see this as an error.
+    backend = FakeBackend()
+    identity = backend.create(
+        "group_cover", {"name": "Top", "entities": ["cover.a"], "hide_members": False}
+    )
+    backend.update(
+        "group_cover",
+        identity,
+        {"name": "Top", "entities": ["cover.a", "cover.b"], "hide_members": True},
+    )
+    stored = backend.list_remote("group_cover")[identity]
+    assert stored["entities"] == ["cover.a", "cover.b"]
+    assert stored["name"] == "Top"
+
+
+def test_group_cover_internal_options_flow_submission_rejects_name_field() -> None:
+    # The internal flow-submission step itself (mirroring the real
+    # options-flow schema, docs/ha-api-notes.md §38.1) must reject `name` if
+    # it ever reached it -- `update()`'s stripping (previous test) is what
+    # actually prevents this in practice; this test pins the lower-level
+    # simulation's fidelity to the real 400 directly.
+    backend = FakeBackend()
+    identity = backend.create(
+        "group_cover", {"name": "Top", "entities": ["cover.a"], "hide_members": False}
+    )
+    with pytest.raises(ConfigEntryFlowError, match="name"):
+        backend._update_group_via_options_flow(  # type: ignore[attr-defined]
+            "group_cover",
+            identity,
+            {"name": "Top", "entities": ["cover.a", "cover.b"], "hide_members": True},
+        )
+
+
+def test_group_cover_update_preserves_name_without_resubmitting_it() -> None:
+    # Real HA merges the update's fields into the entry's EXISTING options
+    # rather than replacing the dict outright (mirrors template §26.7
+    # finding 3) -- `name` (never part of the options-flow schema) survives
+    # untouched across an update that never resubmits it.
+    backend = FakeBackend()
+    identity = backend.create(
+        "group_cover",
+        {"name": "Entryway Top", "entities": ["cover.a"], "hide_members": False},
+    )
+    backend.update(
+        "group_cover",
+        identity,
+        {"entities": ["cover.a", "cover.b"], "hide_members": True},
+    )
+    stored = backend.list_remote("group_cover")[identity]
+    assert stored["name"] == "Entryway Top"
+    assert stored["entities"] == ["cover.a", "cover.b"]
 
 
 def test_group_cover_delete_is_entry_removal() -> None:
