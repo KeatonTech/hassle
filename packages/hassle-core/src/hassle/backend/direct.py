@@ -649,16 +649,21 @@ class DirectBackend:
     # Same create (menu -> form -> create_entry) / read-back (options-flow
     # suggested values) / update (options-flow form -> create_entry) /
     # delete (entry removal) mechanics as the M10 template-helper flows
-    # above, live-captured against the owner's HA. **One divergence from the
-    # M10 pattern (docs/ha-api-notes.md §38 amendment):** the `group`
-    # integration's options-flow schema RE-PRESENTS THE SAME FORM as create
-    # (§38.1 -- `name` INCLUDED), unlike template's options-flow schema
-    # (§26.7 finding 2, `name` excluded). So, unlike
-    # `_aupdate_template_helper` above, `_aupdate_group_helper` submits the
-    # full config unmodified -- no name-stripping needed, and `name` doesn't
-    # need a separate post-hoc merge on read-back either (the options-flow's
-    # own suggested values already include it, since it's part of the
-    # schema).
+    # above, live-captured against the owner's HA.
+    #
+    # **CI-corrected (PR #35, HA stable + dev, §38.1 amended): the group
+    # options-flow schema does NOT include `name`, same as template.** The
+    # ORIGINAL implementation read the owner's live capture note ("options
+    # flows re-present the same form ... with current values as suggested
+    # values") as "the exact same schema, `name` included" -- that was
+    # wrong: CI found real HA 400s `{"errors": {"base": ["extra keys not
+    # allowed @ data['name']"]}}` on an options-flow submission that carries
+    # `name`, on BOTH `stable` and `dev`. So, exactly like
+    # `_aupdate_template_helper` above, `_aupdate_group_helper` strips
+    # `name` before submitting to the options flow, and `_alist_group_
+    # helpers`'s `options.setdefault("name", str(title))` fallback IS
+    # load-bearing after all (not merely defensive, as the pre-correction
+    # comment there claimed) -- it is the ONLY source of `name` on read-back.
 
     async def _acurrent_group_options(self, entry_id: str) -> dict[str, Any]:
         """The stored options of a group config entry, read back via an
@@ -703,11 +708,13 @@ class DirectBackend:
             identity = _slugify(str(title))
             self._group_entry_ids[(kind, identity)] = entry_id
             options = await self._acurrent_group_options(entry_id)
-            # Defensive fallback only -- unlike template (§26.7 finding 2),
-            # the group options-flow schema already includes `name`
-            # (§38.1), so `_acurrent_group_options` normally returns it
-            # already; `setdefault` never overwrites a genuinely-read value.
-            options.setdefault("name", str(title))
+            # LOAD-BEARING (CI-corrected, §38.1 amended): the group
+            # options-flow schema does NOT include `name` (same as template,
+            # §26.7 finding 2) -- `_acurrent_group_options` never returns it,
+            # so `title` (the flow's create-time correlator) is the ONLY
+            # source of `name` on read-back, exactly mirroring
+            # `_alist_template_helpers` above.
+            options["name"] = str(title)
             out[identity] = options
         return out
 
@@ -777,16 +784,21 @@ class DirectBackend:
                 "(HA's group form schema rejects the submission without them, "
                 "docs/ha-api-notes.md §38.1)"
             )
-        # Unlike template (`_aupdate_template_helper` above), the group
-        # options-flow schema RE-PRESENTS THE SAME FORM as create, `name`
-        # included (docs/ha-api-notes.md §38.1) -- submitted unmodified, no
-        # stripping needed (the M10 pattern that did NOT transfer cleanly).
+        # `name` (and any other non-options-flow-schema key) must NOT be
+        # resubmitted -- the options-flow schema never includes it
+        # (CI-corrected, PR #35, docs/ha-api-notes.md §38.1: same rule as
+        # template, §26.7 finding 2); HA 400s with "extra keys not allowed @
+        # data['name']" otherwise. `name` survives untouched server-side
+        # regardless (mirrors §26.7 finding 3) since an UPDATE's
+        # object_key/identity -- and hence its `name` -- never actually
+        # changes.
+        payload = {k: v for k, v in config.items() if k != "name"}
         flow = await self._client.rest_post(
             "/api/config/config_entries/options/flow", json={"handler": entry_id}
         )
         flow_id = flow["flow_id"]
         await self._client.rest_post(
-            f"/api/config/config_entries/options/flow/{flow_id}", json=dict(config)
+            f"/api/config/config_entries/options/flow/{flow_id}", json=payload
         )
 
     async def _adelete_group_helper(self, kind: str, identity: str) -> None:

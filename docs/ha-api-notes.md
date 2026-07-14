@@ -3456,9 +3456,25 @@ canonical body, not two).
 
 No `unique_id` is settable (same §26.6 rule as template — the schema rejects
 extra keys); the entry `title` is set from `name` and is the identity
-correlator on read-back. Options flows re-present the same form (step_id =
-the flavor, no menu) with current values as suggested values; entry deletion
-is the same `DELETE /api/config/config_entries/entry/{entry_id}`.
+correlator on read-back. Options flows re-present the SAME FORM STEP SHAPE
+(step_id = the flavor, no menu) with current values as suggested values —
+but **NOT the `name` field itself** (CI-corrected, PR #35, both HA `stable`
+and `dev`, §38.4 finding #1): the options-flow schema is `entities`/
+`hide_members`(+`all`/`type`) ONLY, exactly like template's own options-flow
+schema (§26.7 finding 2) — a group's title is not editable through the
+options flow at all. The original capture note here ("re-present the same
+form ... with current values as suggested values") was ambiguous about
+whether `name` rode along; it does not. Entry deletion is the same
+`DELETE /api/config/config_entries/entry/{entry_id}`.
+
+~~Options flows re-present the same form (step_id = the flavor, no menu)
+with current values as suggested values~~ — **superseded above**; the live
+capture never actually exercised an options-flow submission end-to-end
+(read-only open+cancel only, module intro), so the "same form" phrasing
+was never checked against a real submission. CI's field failure (§38.4
+finding #1) is the actual verification; kept here struck through, not
+deleted, per the standing "every bug becomes evidence" practice (cf. §17.5,
+§26.5).
 
 ### 38.2 Sub-kind discrimination comes free from the flavor step_id
 
@@ -3477,15 +3493,18 @@ optional sensor-group fields (`ignore_non_numeric`, `unit_of_measurement`,
 (HA stable + dev, M6 pattern) is the authority, per §0. If CI's schemas
 differ, widen the sensor kwargs there and record it here.
 
-### 38.4 Implementation findings (M21 build) — three places the M10 pattern did NOT transfer verbatim
+### 38.4 Implementation findings (M21 build) — places the M10 pattern did NOT transfer verbatim
 
-Building the plugin surfaced three genuine divergences from the M10
-template-helper template, all source-informed from the live capture (§38.1)
-rather than CI-verified yet (CI is still the authority per §0 — flagged here
-per the standing "record findings, flag to human" rule in case CI finds any
-of these three wrong the way M10's own round 2/3 corrections did):
+Building the plugin surfaced genuine divergences from the M10
+template-helper template. Finding #1 below was CI-verified WRONG on the
+first PR round (both HA `stable` and `dev`, PR #35) and is corrected here in
+place, struck through rather than deleted, per the standing "every bug
+becomes evidence, not silently erased" practice (cf. §17.5, §26.5's own
+identity-scheme correction). Findings #2-#3 remain source-informed only
+(§0: CI is the authority; #2 is exercised end-to-end by the same PR #35 run
+and did NOT fail, #3 is not yet exercised by any integration test).
 
-1. **The group options-flow schema RE-PRESENTS THE SAME FORM as create,
+1. ~~**The group options-flow schema RE-PRESENTS THE SAME FORM as create,
    `name` included** — unlike template, whose options-flow schema
    (`generate_schema(domain, flow_type="options")`) never adds `CONF_NAME`
    at all (§26.7 finding 2). §38.1's own capture note ("Options flows
@@ -3502,7 +3521,52 @@ of these three wrong the way M10's own round 2/3 corrections did):
    IS load-bearing there since the field is never in the schema at all).
    If CI finds the real group options-flow schema actually excludes `name`
    after all (contradicting the live capture), this is the one place to
-   revisit first.
+   revisit first.~~
+
+   **WRONG — CI-verified, PR #35, both HA `stable` and `dev`.** The verbatim
+   failure:
+
+   ```
+   FAILED test_group_cover_create_read_update_delete_cycle:
+     HaApiError: HA returned 400 for POST
+     /api/config/config_entries/options/flow/<flow_id>:
+     {"errors":{"base":["extra keys not allowed @ data['name']"]}}
+   FAILED test_group_helper_rollback_restores_prior_options_live:
+     outcome FAILED instead of ROLLED_BACK (same root cause: the rollback's
+     re-update also submits name and 400s)
+   ```
+
+   **The group options-flow schema does NOT include `name` — the exact same
+   rule as template (§26.7 finding 2).** The live capture's "options flows
+   re-present the same form … with current values as suggested values" note
+   (§38.1) was ambiguous — the capture itself only ever opened and cancelled
+   an options flow read-only (module intro: "flows opened read-only and
+   DELETEd before any `create_entry`"), so it never actually exercised a real
+   options-flow SUBMISSION to find out whether `name` survives one. It does
+   not: a group's title is simply not editable through the options flow at
+   all, exactly like a storage helper's `id` or a template helper's `name` —
+   a rename is an identity change (`identity = slugify(name)`, delete+create
+   or an id-collision conflict), never an in-place update, by the same
+   reasoning §26.7 finding 5 gives for template. **Fixed** (same PR as this
+   correction): `update()` (`hassle.backend.fake`/`hassle.backend.direct`)
+   strips `name` at the public-API boundary before the options-flow
+   submission, mirroring the TEMPLATE_DOMAINS branch exactly;
+   `_update_group_via_options_flow` (`FakeBackend`) rejects a `name`-bearing
+   submission with `ConfigEntryFlowError` as a second line of defense
+   (mirrors `_update_via_options_flow`'s existing check) and merges the
+   submission into the entry's EXISTING stored options rather than replacing
+   wholesale, so `name` survives an update that never resubmits it;
+   `_alist_group_helpers`'s `options["name"] = str(title)` is now
+   unconditional (no longer a defensive `setdefault` — it is the ONLY source
+   of `name` on read-back, exactly like template's own `options["name"] =
+   str(title)`). Regression tests:
+   `test_fake_backend_group_flow.py::test_group_cover_update_drives_options_flow_same_entry_id`
+   / `test_group_cover_update_silently_strips_name_at_the_public_api_boundary`
+   / `test_group_cover_internal_options_flow_submission_rejects_name_field`
+   / `test_group_cover_update_preserves_name_without_resubmitting_it`,
+   `test_direct_backend_group_helpers.py::test_update_strips_name_before_submitting_to_options_flow`
+   (confirmed to fail against the pre-fix code for the exact CI-reported
+   reason before the fix landed).
 
 2. **Sub-kind discrimination reuses the SAME entity-registry cross-reference
    mechanism as template, not the step_id fallback §38.2 offered as an
@@ -3520,7 +3584,15 @@ of these three wrong the way M10's own round 2/3 corrections did):
    costs no extra call" note is exactly why this was the right choice;
    the step_id is genuinely unused in the shipped implementation, kept only
    as documentation of a fallback that would still work if the entity
-   registry cross-reference method were ever unavailable.
+   registry cross-reference method were ever unavailable. **CI-exercised,
+   PR #35, not falsified:** every test that lists/reads a group entry back
+   (`test_group_cover_create_read_update_delete_cycle`'s read half,
+   `test_group_binary_sensor_schema_shape_with_all_live`,
+   `test_group_sensor_schema_shape_with_type_live`,
+   `test_group_helper_plan_apply_create_then_noop_on_repush`) passed on both
+   `stable` and `dev` — the two failures that PR run found were both
+   root-caused to finding #1 (the options-flow submission itself), not this
+   mechanism.
 
 3. **Assumption (untested by the live capture): a group entity's
    `unique_id` equals its config entry's `entry_id`**, the same

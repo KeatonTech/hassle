@@ -306,13 +306,17 @@ class FakeBackend:
             self._update_via_options_flow(kind, identity, payload)
             return
         if kind in GROUP_DOMAINS:
-            # Unlike template, the `group` integration's options-flow schema
-            # RE-PRESENTS THE SAME FORM as create (docs/ha-api-notes.md
-            # §38.1: "Options flows re-present the same form ... with current
-            # values as suggested values") -- `name` IS part of it, so no
-            # stripping is needed (the M10 pattern that did NOT transfer
-            # cleanly, docs/ha-api-notes.md §38 amendment).
-            self._update_group_via_options_flow(kind, identity, config)
+            # `update()`'s contract (F2) still takes the FULL local config,
+            # same as every other kind -- `name` is stripped here, at the
+            # public-API boundary, before it ever reaches the simulated
+            # options-flow submission, exactly mirroring the TEMPLATE_DOMAINS
+            # branch above (docs/ha-api-notes.md §38.1, CI-corrected: the
+            # group options-flow schema does NOT include `name` either --
+            # same rule as template, §26.7 finding 2 -- real HA 400s
+            # `{"errors": {"base": ["extra keys not allowed @ data['name']"]}}`
+            # on both stable and dev, PR #35).
+            payload = {k: v for k, v in config.items() if k != "name"}
+            self._update_group_via_options_flow(kind, identity, payload)
             return
         normalized = normalize_ha(config, kind=kind)
         normalized = self._stored_body(kind, identity, normalized)
@@ -472,12 +476,21 @@ class FakeBackend:
     # helper flows above (docs/ha-api-notes.md §38, mirroring §26): a menu
     # step choosing the flavor (twelve options, §38.1), then a form step
     # collecting `name`/`entities`/`hide_members`(+`all`/`type`), ending in a
-    # flat `type: "create_entry"` body. **One divergence from the M10
-    # pattern (docs/ha-api-notes.md §38 amendment):** the `group` options
-    # flow re-presents the SAME schema as create, `name` included -- so,
-    # unlike `_update_via_options_flow` above, no name-stripping/name-reject/
-    # merge-around-name dance is needed; `update()` passes the full config
-    # straight through and the stored options are replaced wholesale.
+    # flat `type: "create_entry"` body.
+    #
+    # **CI-corrected (PR #35, HA stable + dev, §38.1 amended):** the ORIGINAL
+    # implementation believed the group options-flow schema RE-PRESENTS THE
+    # SAME FORM as create, `name` included -- the owner's live capture note
+    # ("options flows re-present the same form ... with current values as
+    # suggested values") was ambiguous and got read that way. CI found real
+    # HA 400s an options-flow submission that carries `name`, on BOTH
+    # `stable` and `dev`: `{"errors": {"base": ["extra keys not allowed @
+    # data['name']"]}}` -- the SAME rule as template (§26.7 finding 2): a
+    # group's title is not editable through the options flow at all, exactly
+    # mirroring `_update_via_options_flow` above (name-stripping at the
+    # public-API boundary in `update()`, name-rejection here as a second line
+    # of defense, merge-with-existing-options so `name` survives an update
+    # that never resubmits it).
 
     def _create_group_via_flow(self, kind: str, config: dict[str, Any]) -> str:
         name = config.get("name")
@@ -534,6 +547,16 @@ class FakeBackend:
                 f"no config entry tracked for {kind}:{identity} -- an UPDATE must "
                 "target an existing entry (options-flow update, never a recreate, I2 analog)"
             )
+        # `name` is REJECTED by the real options-flow schema outright
+        # (CI-corrected, PR #35, docs/ha-api-notes.md §38.1: same rule as
+        # template, §26.7 finding 2). Mirrors HA's real `400 {"errors":
+        # {"base": ["extra keys not allowed @ data['name']"]}}`.
+        if "name" in config:
+            raise ConfigEntryFlowError(
+                f"{kind} options-flow form rejected: extra keys not allowed @ data['name'] "
+                "(the options-flow schema never includes `name` -- it is create-only and "
+                "becomes the entry's title, docs/ha-api-notes.md §38.1)"
+            )
         _check_required_fields(kind, config, _GROUP_REQUIRED_FIELDS[kind])
         flow_id = f"optflow_{entry_id}"
         form_step = FlowStep(
@@ -544,11 +567,12 @@ class FakeBackend:
         )
         self.flow_log.append(form_step)
 
-        # Unlike template (§26.7 finding 3's merge-around-missing-name), the
-        # group options-flow schema includes every field create's does
-        # (§38.1) -- the submission wholesale REPLACES the stored options,
-        # nothing to merge in from the existing body.
-        options = dict(config)
+        # Real HA MERGES the submitted fields into the entry's existing
+        # options rather than replacing the dict outright (mirrors template
+        # §26.7 finding 3) -- `name` (never part of the options-flow schema)
+        # survives an update untouched.
+        existing = self._store[kind].get(identity, {})
+        options = {**existing, **config}
         result_step = FlowStep(
             flow_id=flow_id,
             type="create_entry",

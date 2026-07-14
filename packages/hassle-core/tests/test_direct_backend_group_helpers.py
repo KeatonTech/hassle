@@ -3,13 +3,18 @@ group-helper read-back/create/update, verified at the unit level against a
 fake `_client` that reproduces the real HA wire shapes docs/ha-api-notes.md
 §38 records -- mirrors `test_direct_backend_template_helpers.py` (M10).
 
-**One divergence from the M10 pattern (docs/ha-api-notes.md §38 amendment):**
-the group options-flow schema RE-PRESENTS THE SAME FORM as create -- `name`
-INCLUDED (§38.1) -- so, unlike template's `_aupdate_template_helper`,
-`_aupdate_group_helper` never strips `name` before submitting, and
-`_alist_group_helpers`'s read-back gets `name` back from the options-flow's
-suggested values directly (the `options.setdefault("name", ...)` fallback in
-the implementation is defensive, never load-bearing here).
+**CI-corrected (PR #35, HA stable + dev, §38.1 amended): the group
+options-flow schema does NOT include `name`, same as template (§26.7
+finding 2).** The original implementation read the owner's live capture note
+("options flows re-present the same form ... with current values as
+suggested values") as "the exact same schema, `name` included" -- CI found
+real HA 400s an options-flow submission that carries `name`
+(`{"errors": {"base": ["extra keys not allowed @ data['name']"]}}`), on both
+`stable` and `dev`. So, exactly like template's `_aupdate_template_helper`,
+`_aupdate_group_helper` strips `name` before submitting to the options flow,
+and `_alist_group_helpers`'s read-back gets `name` back from `title` (the
+flow's create-time correlator) -- the options-flow's suggested values never
+carry it at all.
 
 This suite is unit-level (no network, R2): it monkeypatches
 `DirectBackend._client` with a fake object exposing async `ws_command`/
@@ -39,10 +44,11 @@ class _FakeClient:
       entry is (§38.2: the flavor equals the created entity's own domain).
     - `POST /api/config/config_entries/options/flow` (REST): starts an
       options flow, returning a form step whose `data_schema` carries each
-      field's current value as `description.suggested_value` -- including
-      `name` this time (§38.1, unlike template).
+      field's current value as `description.suggested_value` -- EXCLUDING
+      `name` (CI-corrected, §38.1: same as template).
     - `POST /api/config/config_entries/options/flow/{flow_id}` (REST): the
-      form submission.
+      form submission. 400s (`HaApiError`) if `name` is among the submitted
+      keys, mirroring the real schema rejection.
     - `DELETE /api/config/config_entries/options/flow/{flow_id}` (REST):
       cancels the flow.
     """
@@ -105,11 +111,13 @@ class _FakeClient:
             flow_id = f"flow_{self._flow_counter}"
             self._flows[flow_id] = entry_id
             options = self._entries[entry_id]["options"]
-            # Unlike template, `name` IS part of the group options-flow
-            # schema (§38.1) -- included in suggested values, no filtering.
+            # `name` is NEVER part of the group options-flow schema
+            # (CI-corrected, §38.1: same as template, §26.7 finding 2) --
+            # excluded from suggested values.
             data_schema = [
                 {"name": key, "description": {"suggested_value": value}}
                 for key, value in options.items()
+                if key != "name"
             ]
             return {
                 "type": "form",
@@ -120,8 +128,17 @@ class _FakeClient:
         if path.startswith("/api/config/config_entries/options/flow/"):
             flow_id = path.rsplit("/", 1)[1]
             entry_id = self._flows[flow_id]
-            # Wholesale replace (no name-omission merge needed, §38.1).
-            self._entries[entry_id]["options"] = dict(json or {})
+            if isinstance(json, dict) and "name" in json:
+                raise HaApiError(
+                    f"HA returned 400 for POST {path}: "
+                    '{"errors":{"base":["extra keys not allowed @ data[\'name\']"]}}'
+                )
+            # Merge (not replace) -- mirrors real HA keeping `name` untouched
+            # across an update that never resubmits it (§38.1, CI-corrected).
+            self._entries[entry_id]["options"] = {
+                **self._entries[entry_id]["options"],
+                **(json or {}),
+            }
             return {"type": "create_entry", "flow_id": flow_id, "result": {}}
         raise HaApiError(f"unexpected rest_post {path!r}")
 
@@ -234,9 +251,11 @@ def test_list_remote_ignores_entries_of_a_different_group_flavor() -> None:
     assert set(covers) == {"a_cover_group"}
 
 
-def test_update_submits_name_unmodified_no_stripping() -> None:
-    # Divergence from the M10 pattern (docs/ha-api-notes.md §38 amendment):
-    # the group options-flow schema includes `name` -- must NOT be stripped.
+def test_update_strips_name_before_submitting_to_options_flow() -> None:
+    # CI-corrected (PR #35, docs/ha-api-notes.md §38.1 amended): the group
+    # options-flow schema does NOT include `name` -- `update()` still takes
+    # a full config dict (F2 unchanged) but must never forward `name` to the
+    # options-flow submission.
     client = _FakeClient(
         entries={
             "entry_1": {
@@ -262,8 +281,11 @@ def test_update_submits_name_unmodified_no_stripping() -> None:
         for method, path, json in client.rest_calls
         if method == "POST" and path == "/api/config/config_entries/options/flow/flow_1"
     )
-    assert form_submission["name"] == "Top"
+    assert "name" not in form_submission
     assert form_submission["entities"] == ["cover.a", "cover.b"]
+
+    # `name` survives untouched, never having been resubmitted.
+    assert client._entries["entry_1"]["options"]["name"] == "Top"
     assert client._entries["entry_1"]["options"]["hide_members"] is True
 
 
