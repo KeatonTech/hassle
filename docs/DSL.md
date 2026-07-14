@@ -2271,6 +2271,2442 @@ Compiles to (canonical IR / stored HA shape):
 }
 ```
 
+### `group_binary_sensor`
+
+Golden case: `fixtures/dsl/group_helper_declarations/`.
+
+```python
+"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
+
+Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
+(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+unrecognized `unique_id` key outright. Identity is derived from `name`
+(slugified): "Entryway Top" -> `group_cover:entryway_top`.
+
+`hide_members`/`all` are always materialized explicitly in the compiled
+options body (one canonical form, §38.1) -- never omitted just because they
+equal their default.
+
+Every `entities=` member below is a REAL entity id from
+`fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
+bundle's OWN nested group's entity -- the owner's own live example, §38.1:
+"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group"), so this fixture is also exercised by
+`test_registry_validate.py::test_no_false_positives_on_golden_corpus`
+(validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
+"""
+
+from hassle import (
+    group_binary_sensor,
+    group_button,
+    group_cover,
+    group_event,
+    group_fan,
+    group_light,
+    group_lock,
+    group_media_player,
+    group_notify,
+    group_sensor,
+    group_switch,
+    group_valve,
+)
+
+# Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
+# its produced entity (`cover.bay_window_top`) as a member -- a group whose
+# members are themselves a group, the owner's own live example (§38.1).
+group_cover(
+    name="Bay Window Top",
+    entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
+)
+group_cover(
+    name="Entryway Top",
+    entities=["cover.bay_window_top", "cover.garage_door"],
+)
+group_light(
+    name="Downstairs Lights",
+    entities=["light.hallway", "light.living_room", "light.kitchen"],
+    all=True,
+)
+group_switch(
+    name="Outdoor Switches",
+    entities=["switch.garage_door_opener", "switch.office_monitor"],
+    hide_members=True,
+)
+group_binary_sensor(
+    name="Any Door Open",
+    entities=["binary_sensor.door", "binary_sensor.back_door"],
+)
+group_sensor(
+    name="Average Temp",
+    entities=["sensor.living_room_temperature", "sensor.bedroom_temperature"],
+    type="mean",
+)
+group_button(name="All Doorbells", entities=["button.restart"])
+group_event(name="All Doorbell Events", entities=["event.doorbell"])
+group_fan(name="All Fans", entities=["fan.bedroom", "fan.living_room"])
+group_lock(name="All Locks", entities=["lock.front_door", "lock.back_door"])
+group_media_player(
+    name="Whole House Audio",
+    entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
+)
+group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+# No `valve` entities exist in fixtures/registry/home.json at all (its
+# registry snapshot has no valve domain coverage) -- validation only checks
+# that a referenced entity id EXISTS, not that its domain matches the
+# group's own flavor, so a real (if domain-mismatched) registry entity keeps
+# this fixture validation-clean without needing to touch the shared registry
+# fixture just for this one domain.
+group_valve(name="Irrigation Zone A", entities=["cover.garage_door"])
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "group_binary_sensor:any_door_open": {
+    "all": false,
+    "entities": [
+      "binary_sensor.door",
+      "binary_sensor.back_door"
+    ],
+    "hide_members": false,
+    "name": "Any Door Open"
+  },
+  "group_button:all_doorbells": {
+    "entities": [
+      "button.restart"
+    ],
+    "hide_members": false,
+    "name": "All Doorbells"
+  },
+  "group_cover:bay_window_top": {
+    "entities": [
+      "cover.bedroom_blinds",
+      "cover.living_room_blinds"
+    ],
+    "hide_members": false,
+    "name": "Bay Window Top"
+  },
+  "group_cover:entryway_top": {
+    "entities": [
+      "cover.bay_window_top",
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Entryway Top"
+  },
+  "group_event:all_doorbell_events": {
+    "entities": [
+      "event.doorbell"
+    ],
+    "hide_members": false,
+    "name": "All Doorbell Events"
+  },
+  "group_fan:all_fans": {
+    "entities": [
+      "fan.bedroom",
+      "fan.living_room"
+    ],
+    "hide_members": false,
+    "name": "All Fans"
+  },
+  "group_light:downstairs_lights": {
+    "all": true,
+    "entities": [
+      "light.hallway",
+      "light.living_room",
+      "light.kitchen"
+    ],
+    "hide_members": false,
+    "name": "Downstairs Lights"
+  },
+  "group_lock:all_locks": {
+    "entities": [
+      "lock.front_door",
+      "lock.back_door"
+    ],
+    "hide_members": false,
+    "name": "All Locks"
+  },
+  "group_media_player:whole_house_audio": {
+    "entities": [
+      "media_player.living_room_speaker",
+      "media_player.kitchen_speaker"
+    ],
+    "hide_members": false,
+    "name": "Whole House Audio"
+  },
+  "group_notify:all_phones": {
+    "entities": [
+      "notify.mobile_app_keaton",
+      "notify.mobile_app_spouse"
+    ],
+    "hide_members": false,
+    "name": "All Phones"
+  },
+  "group_sensor:average_temp": {
+    "entities": [
+      "sensor.living_room_temperature",
+      "sensor.bedroom_temperature"
+    ],
+    "hide_members": false,
+    "name": "Average Temp",
+    "type": "mean"
+  },
+  "group_switch:outdoor_switches": {
+    "all": false,
+    "entities": [
+      "switch.garage_door_opener",
+      "switch.office_monitor"
+    ],
+    "hide_members": true,
+    "name": "Outdoor Switches"
+  },
+  "group_valve:irrigation_zone_a": {
+    "entities": [
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Irrigation Zone A"
+  }
+}
+```
+
+### `group_button`
+
+Golden case: `fixtures/dsl/group_helper_declarations/`.
+
+```python
+"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
+
+Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
+(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+unrecognized `unique_id` key outright. Identity is derived from `name`
+(slugified): "Entryway Top" -> `group_cover:entryway_top`.
+
+`hide_members`/`all` are always materialized explicitly in the compiled
+options body (one canonical form, §38.1) -- never omitted just because they
+equal their default.
+
+Every `entities=` member below is a REAL entity id from
+`fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
+bundle's OWN nested group's entity -- the owner's own live example, §38.1:
+"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group"), so this fixture is also exercised by
+`test_registry_validate.py::test_no_false_positives_on_golden_corpus`
+(validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
+"""
+
+from hassle import (
+    group_binary_sensor,
+    group_button,
+    group_cover,
+    group_event,
+    group_fan,
+    group_light,
+    group_lock,
+    group_media_player,
+    group_notify,
+    group_sensor,
+    group_switch,
+    group_valve,
+)
+
+# Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
+# its produced entity (`cover.bay_window_top`) as a member -- a group whose
+# members are themselves a group, the owner's own live example (§38.1).
+group_cover(
+    name="Bay Window Top",
+    entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
+)
+group_cover(
+    name="Entryway Top",
+    entities=["cover.bay_window_top", "cover.garage_door"],
+)
+group_light(
+    name="Downstairs Lights",
+    entities=["light.hallway", "light.living_room", "light.kitchen"],
+    all=True,
+)
+group_switch(
+    name="Outdoor Switches",
+    entities=["switch.garage_door_opener", "switch.office_monitor"],
+    hide_members=True,
+)
+group_binary_sensor(
+    name="Any Door Open",
+    entities=["binary_sensor.door", "binary_sensor.back_door"],
+)
+group_sensor(
+    name="Average Temp",
+    entities=["sensor.living_room_temperature", "sensor.bedroom_temperature"],
+    type="mean",
+)
+group_button(name="All Doorbells", entities=["button.restart"])
+group_event(name="All Doorbell Events", entities=["event.doorbell"])
+group_fan(name="All Fans", entities=["fan.bedroom", "fan.living_room"])
+group_lock(name="All Locks", entities=["lock.front_door", "lock.back_door"])
+group_media_player(
+    name="Whole House Audio",
+    entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
+)
+group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+# No `valve` entities exist in fixtures/registry/home.json at all (its
+# registry snapshot has no valve domain coverage) -- validation only checks
+# that a referenced entity id EXISTS, not that its domain matches the
+# group's own flavor, so a real (if domain-mismatched) registry entity keeps
+# this fixture validation-clean without needing to touch the shared registry
+# fixture just for this one domain.
+group_valve(name="Irrigation Zone A", entities=["cover.garage_door"])
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "group_binary_sensor:any_door_open": {
+    "all": false,
+    "entities": [
+      "binary_sensor.door",
+      "binary_sensor.back_door"
+    ],
+    "hide_members": false,
+    "name": "Any Door Open"
+  },
+  "group_button:all_doorbells": {
+    "entities": [
+      "button.restart"
+    ],
+    "hide_members": false,
+    "name": "All Doorbells"
+  },
+  "group_cover:bay_window_top": {
+    "entities": [
+      "cover.bedroom_blinds",
+      "cover.living_room_blinds"
+    ],
+    "hide_members": false,
+    "name": "Bay Window Top"
+  },
+  "group_cover:entryway_top": {
+    "entities": [
+      "cover.bay_window_top",
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Entryway Top"
+  },
+  "group_event:all_doorbell_events": {
+    "entities": [
+      "event.doorbell"
+    ],
+    "hide_members": false,
+    "name": "All Doorbell Events"
+  },
+  "group_fan:all_fans": {
+    "entities": [
+      "fan.bedroom",
+      "fan.living_room"
+    ],
+    "hide_members": false,
+    "name": "All Fans"
+  },
+  "group_light:downstairs_lights": {
+    "all": true,
+    "entities": [
+      "light.hallway",
+      "light.living_room",
+      "light.kitchen"
+    ],
+    "hide_members": false,
+    "name": "Downstairs Lights"
+  },
+  "group_lock:all_locks": {
+    "entities": [
+      "lock.front_door",
+      "lock.back_door"
+    ],
+    "hide_members": false,
+    "name": "All Locks"
+  },
+  "group_media_player:whole_house_audio": {
+    "entities": [
+      "media_player.living_room_speaker",
+      "media_player.kitchen_speaker"
+    ],
+    "hide_members": false,
+    "name": "Whole House Audio"
+  },
+  "group_notify:all_phones": {
+    "entities": [
+      "notify.mobile_app_keaton",
+      "notify.mobile_app_spouse"
+    ],
+    "hide_members": false,
+    "name": "All Phones"
+  },
+  "group_sensor:average_temp": {
+    "entities": [
+      "sensor.living_room_temperature",
+      "sensor.bedroom_temperature"
+    ],
+    "hide_members": false,
+    "name": "Average Temp",
+    "type": "mean"
+  },
+  "group_switch:outdoor_switches": {
+    "all": false,
+    "entities": [
+      "switch.garage_door_opener",
+      "switch.office_monitor"
+    ],
+    "hide_members": true,
+    "name": "Outdoor Switches"
+  },
+  "group_valve:irrigation_zone_a": {
+    "entities": [
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Irrigation Zone A"
+  }
+}
+```
+
+### `group_cover`
+
+Golden case: `fixtures/dsl/group_helper_declarations/`.
+
+```python
+"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
+
+Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
+(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+unrecognized `unique_id` key outright. Identity is derived from `name`
+(slugified): "Entryway Top" -> `group_cover:entryway_top`.
+
+`hide_members`/`all` are always materialized explicitly in the compiled
+options body (one canonical form, §38.1) -- never omitted just because they
+equal their default.
+
+Every `entities=` member below is a REAL entity id from
+`fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
+bundle's OWN nested group's entity -- the owner's own live example, §38.1:
+"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group"), so this fixture is also exercised by
+`test_registry_validate.py::test_no_false_positives_on_golden_corpus`
+(validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
+"""
+
+from hassle import (
+    group_binary_sensor,
+    group_button,
+    group_cover,
+    group_event,
+    group_fan,
+    group_light,
+    group_lock,
+    group_media_player,
+    group_notify,
+    group_sensor,
+    group_switch,
+    group_valve,
+)
+
+# Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
+# its produced entity (`cover.bay_window_top`) as a member -- a group whose
+# members are themselves a group, the owner's own live example (§38.1).
+group_cover(
+    name="Bay Window Top",
+    entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
+)
+group_cover(
+    name="Entryway Top",
+    entities=["cover.bay_window_top", "cover.garage_door"],
+)
+group_light(
+    name="Downstairs Lights",
+    entities=["light.hallway", "light.living_room", "light.kitchen"],
+    all=True,
+)
+group_switch(
+    name="Outdoor Switches",
+    entities=["switch.garage_door_opener", "switch.office_monitor"],
+    hide_members=True,
+)
+group_binary_sensor(
+    name="Any Door Open",
+    entities=["binary_sensor.door", "binary_sensor.back_door"],
+)
+group_sensor(
+    name="Average Temp",
+    entities=["sensor.living_room_temperature", "sensor.bedroom_temperature"],
+    type="mean",
+)
+group_button(name="All Doorbells", entities=["button.restart"])
+group_event(name="All Doorbell Events", entities=["event.doorbell"])
+group_fan(name="All Fans", entities=["fan.bedroom", "fan.living_room"])
+group_lock(name="All Locks", entities=["lock.front_door", "lock.back_door"])
+group_media_player(
+    name="Whole House Audio",
+    entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
+)
+group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+# No `valve` entities exist in fixtures/registry/home.json at all (its
+# registry snapshot has no valve domain coverage) -- validation only checks
+# that a referenced entity id EXISTS, not that its domain matches the
+# group's own flavor, so a real (if domain-mismatched) registry entity keeps
+# this fixture validation-clean without needing to touch the shared registry
+# fixture just for this one domain.
+group_valve(name="Irrigation Zone A", entities=["cover.garage_door"])
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "group_binary_sensor:any_door_open": {
+    "all": false,
+    "entities": [
+      "binary_sensor.door",
+      "binary_sensor.back_door"
+    ],
+    "hide_members": false,
+    "name": "Any Door Open"
+  },
+  "group_button:all_doorbells": {
+    "entities": [
+      "button.restart"
+    ],
+    "hide_members": false,
+    "name": "All Doorbells"
+  },
+  "group_cover:bay_window_top": {
+    "entities": [
+      "cover.bedroom_blinds",
+      "cover.living_room_blinds"
+    ],
+    "hide_members": false,
+    "name": "Bay Window Top"
+  },
+  "group_cover:entryway_top": {
+    "entities": [
+      "cover.bay_window_top",
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Entryway Top"
+  },
+  "group_event:all_doorbell_events": {
+    "entities": [
+      "event.doorbell"
+    ],
+    "hide_members": false,
+    "name": "All Doorbell Events"
+  },
+  "group_fan:all_fans": {
+    "entities": [
+      "fan.bedroom",
+      "fan.living_room"
+    ],
+    "hide_members": false,
+    "name": "All Fans"
+  },
+  "group_light:downstairs_lights": {
+    "all": true,
+    "entities": [
+      "light.hallway",
+      "light.living_room",
+      "light.kitchen"
+    ],
+    "hide_members": false,
+    "name": "Downstairs Lights"
+  },
+  "group_lock:all_locks": {
+    "entities": [
+      "lock.front_door",
+      "lock.back_door"
+    ],
+    "hide_members": false,
+    "name": "All Locks"
+  },
+  "group_media_player:whole_house_audio": {
+    "entities": [
+      "media_player.living_room_speaker",
+      "media_player.kitchen_speaker"
+    ],
+    "hide_members": false,
+    "name": "Whole House Audio"
+  },
+  "group_notify:all_phones": {
+    "entities": [
+      "notify.mobile_app_keaton",
+      "notify.mobile_app_spouse"
+    ],
+    "hide_members": false,
+    "name": "All Phones"
+  },
+  "group_sensor:average_temp": {
+    "entities": [
+      "sensor.living_room_temperature",
+      "sensor.bedroom_temperature"
+    ],
+    "hide_members": false,
+    "name": "Average Temp",
+    "type": "mean"
+  },
+  "group_switch:outdoor_switches": {
+    "all": false,
+    "entities": [
+      "switch.garage_door_opener",
+      "switch.office_monitor"
+    ],
+    "hide_members": true,
+    "name": "Outdoor Switches"
+  },
+  "group_valve:irrigation_zone_a": {
+    "entities": [
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Irrigation Zone A"
+  }
+}
+```
+
+### `group_event`
+
+Golden case: `fixtures/dsl/group_helper_declarations/`.
+
+```python
+"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
+
+Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
+(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+unrecognized `unique_id` key outright. Identity is derived from `name`
+(slugified): "Entryway Top" -> `group_cover:entryway_top`.
+
+`hide_members`/`all` are always materialized explicitly in the compiled
+options body (one canonical form, §38.1) -- never omitted just because they
+equal their default.
+
+Every `entities=` member below is a REAL entity id from
+`fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
+bundle's OWN nested group's entity -- the owner's own live example, §38.1:
+"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group"), so this fixture is also exercised by
+`test_registry_validate.py::test_no_false_positives_on_golden_corpus`
+(validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
+"""
+
+from hassle import (
+    group_binary_sensor,
+    group_button,
+    group_cover,
+    group_event,
+    group_fan,
+    group_light,
+    group_lock,
+    group_media_player,
+    group_notify,
+    group_sensor,
+    group_switch,
+    group_valve,
+)
+
+# Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
+# its produced entity (`cover.bay_window_top`) as a member -- a group whose
+# members are themselves a group, the owner's own live example (§38.1).
+group_cover(
+    name="Bay Window Top",
+    entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
+)
+group_cover(
+    name="Entryway Top",
+    entities=["cover.bay_window_top", "cover.garage_door"],
+)
+group_light(
+    name="Downstairs Lights",
+    entities=["light.hallway", "light.living_room", "light.kitchen"],
+    all=True,
+)
+group_switch(
+    name="Outdoor Switches",
+    entities=["switch.garage_door_opener", "switch.office_monitor"],
+    hide_members=True,
+)
+group_binary_sensor(
+    name="Any Door Open",
+    entities=["binary_sensor.door", "binary_sensor.back_door"],
+)
+group_sensor(
+    name="Average Temp",
+    entities=["sensor.living_room_temperature", "sensor.bedroom_temperature"],
+    type="mean",
+)
+group_button(name="All Doorbells", entities=["button.restart"])
+group_event(name="All Doorbell Events", entities=["event.doorbell"])
+group_fan(name="All Fans", entities=["fan.bedroom", "fan.living_room"])
+group_lock(name="All Locks", entities=["lock.front_door", "lock.back_door"])
+group_media_player(
+    name="Whole House Audio",
+    entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
+)
+group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+# No `valve` entities exist in fixtures/registry/home.json at all (its
+# registry snapshot has no valve domain coverage) -- validation only checks
+# that a referenced entity id EXISTS, not that its domain matches the
+# group's own flavor, so a real (if domain-mismatched) registry entity keeps
+# this fixture validation-clean without needing to touch the shared registry
+# fixture just for this one domain.
+group_valve(name="Irrigation Zone A", entities=["cover.garage_door"])
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "group_binary_sensor:any_door_open": {
+    "all": false,
+    "entities": [
+      "binary_sensor.door",
+      "binary_sensor.back_door"
+    ],
+    "hide_members": false,
+    "name": "Any Door Open"
+  },
+  "group_button:all_doorbells": {
+    "entities": [
+      "button.restart"
+    ],
+    "hide_members": false,
+    "name": "All Doorbells"
+  },
+  "group_cover:bay_window_top": {
+    "entities": [
+      "cover.bedroom_blinds",
+      "cover.living_room_blinds"
+    ],
+    "hide_members": false,
+    "name": "Bay Window Top"
+  },
+  "group_cover:entryway_top": {
+    "entities": [
+      "cover.bay_window_top",
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Entryway Top"
+  },
+  "group_event:all_doorbell_events": {
+    "entities": [
+      "event.doorbell"
+    ],
+    "hide_members": false,
+    "name": "All Doorbell Events"
+  },
+  "group_fan:all_fans": {
+    "entities": [
+      "fan.bedroom",
+      "fan.living_room"
+    ],
+    "hide_members": false,
+    "name": "All Fans"
+  },
+  "group_light:downstairs_lights": {
+    "all": true,
+    "entities": [
+      "light.hallway",
+      "light.living_room",
+      "light.kitchen"
+    ],
+    "hide_members": false,
+    "name": "Downstairs Lights"
+  },
+  "group_lock:all_locks": {
+    "entities": [
+      "lock.front_door",
+      "lock.back_door"
+    ],
+    "hide_members": false,
+    "name": "All Locks"
+  },
+  "group_media_player:whole_house_audio": {
+    "entities": [
+      "media_player.living_room_speaker",
+      "media_player.kitchen_speaker"
+    ],
+    "hide_members": false,
+    "name": "Whole House Audio"
+  },
+  "group_notify:all_phones": {
+    "entities": [
+      "notify.mobile_app_keaton",
+      "notify.mobile_app_spouse"
+    ],
+    "hide_members": false,
+    "name": "All Phones"
+  },
+  "group_sensor:average_temp": {
+    "entities": [
+      "sensor.living_room_temperature",
+      "sensor.bedroom_temperature"
+    ],
+    "hide_members": false,
+    "name": "Average Temp",
+    "type": "mean"
+  },
+  "group_switch:outdoor_switches": {
+    "all": false,
+    "entities": [
+      "switch.garage_door_opener",
+      "switch.office_monitor"
+    ],
+    "hide_members": true,
+    "name": "Outdoor Switches"
+  },
+  "group_valve:irrigation_zone_a": {
+    "entities": [
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Irrigation Zone A"
+  }
+}
+```
+
+### `group_fan`
+
+Golden case: `fixtures/dsl/group_helper_declarations/`.
+
+```python
+"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
+
+Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
+(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+unrecognized `unique_id` key outright. Identity is derived from `name`
+(slugified): "Entryway Top" -> `group_cover:entryway_top`.
+
+`hide_members`/`all` are always materialized explicitly in the compiled
+options body (one canonical form, §38.1) -- never omitted just because they
+equal their default.
+
+Every `entities=` member below is a REAL entity id from
+`fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
+bundle's OWN nested group's entity -- the owner's own live example, §38.1:
+"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group"), so this fixture is also exercised by
+`test_registry_validate.py::test_no_false_positives_on_golden_corpus`
+(validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
+"""
+
+from hassle import (
+    group_binary_sensor,
+    group_button,
+    group_cover,
+    group_event,
+    group_fan,
+    group_light,
+    group_lock,
+    group_media_player,
+    group_notify,
+    group_sensor,
+    group_switch,
+    group_valve,
+)
+
+# Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
+# its produced entity (`cover.bay_window_top`) as a member -- a group whose
+# members are themselves a group, the owner's own live example (§38.1).
+group_cover(
+    name="Bay Window Top",
+    entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
+)
+group_cover(
+    name="Entryway Top",
+    entities=["cover.bay_window_top", "cover.garage_door"],
+)
+group_light(
+    name="Downstairs Lights",
+    entities=["light.hallway", "light.living_room", "light.kitchen"],
+    all=True,
+)
+group_switch(
+    name="Outdoor Switches",
+    entities=["switch.garage_door_opener", "switch.office_monitor"],
+    hide_members=True,
+)
+group_binary_sensor(
+    name="Any Door Open",
+    entities=["binary_sensor.door", "binary_sensor.back_door"],
+)
+group_sensor(
+    name="Average Temp",
+    entities=["sensor.living_room_temperature", "sensor.bedroom_temperature"],
+    type="mean",
+)
+group_button(name="All Doorbells", entities=["button.restart"])
+group_event(name="All Doorbell Events", entities=["event.doorbell"])
+group_fan(name="All Fans", entities=["fan.bedroom", "fan.living_room"])
+group_lock(name="All Locks", entities=["lock.front_door", "lock.back_door"])
+group_media_player(
+    name="Whole House Audio",
+    entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
+)
+group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+# No `valve` entities exist in fixtures/registry/home.json at all (its
+# registry snapshot has no valve domain coverage) -- validation only checks
+# that a referenced entity id EXISTS, not that its domain matches the
+# group's own flavor, so a real (if domain-mismatched) registry entity keeps
+# this fixture validation-clean without needing to touch the shared registry
+# fixture just for this one domain.
+group_valve(name="Irrigation Zone A", entities=["cover.garage_door"])
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "group_binary_sensor:any_door_open": {
+    "all": false,
+    "entities": [
+      "binary_sensor.door",
+      "binary_sensor.back_door"
+    ],
+    "hide_members": false,
+    "name": "Any Door Open"
+  },
+  "group_button:all_doorbells": {
+    "entities": [
+      "button.restart"
+    ],
+    "hide_members": false,
+    "name": "All Doorbells"
+  },
+  "group_cover:bay_window_top": {
+    "entities": [
+      "cover.bedroom_blinds",
+      "cover.living_room_blinds"
+    ],
+    "hide_members": false,
+    "name": "Bay Window Top"
+  },
+  "group_cover:entryway_top": {
+    "entities": [
+      "cover.bay_window_top",
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Entryway Top"
+  },
+  "group_event:all_doorbell_events": {
+    "entities": [
+      "event.doorbell"
+    ],
+    "hide_members": false,
+    "name": "All Doorbell Events"
+  },
+  "group_fan:all_fans": {
+    "entities": [
+      "fan.bedroom",
+      "fan.living_room"
+    ],
+    "hide_members": false,
+    "name": "All Fans"
+  },
+  "group_light:downstairs_lights": {
+    "all": true,
+    "entities": [
+      "light.hallway",
+      "light.living_room",
+      "light.kitchen"
+    ],
+    "hide_members": false,
+    "name": "Downstairs Lights"
+  },
+  "group_lock:all_locks": {
+    "entities": [
+      "lock.front_door",
+      "lock.back_door"
+    ],
+    "hide_members": false,
+    "name": "All Locks"
+  },
+  "group_media_player:whole_house_audio": {
+    "entities": [
+      "media_player.living_room_speaker",
+      "media_player.kitchen_speaker"
+    ],
+    "hide_members": false,
+    "name": "Whole House Audio"
+  },
+  "group_notify:all_phones": {
+    "entities": [
+      "notify.mobile_app_keaton",
+      "notify.mobile_app_spouse"
+    ],
+    "hide_members": false,
+    "name": "All Phones"
+  },
+  "group_sensor:average_temp": {
+    "entities": [
+      "sensor.living_room_temperature",
+      "sensor.bedroom_temperature"
+    ],
+    "hide_members": false,
+    "name": "Average Temp",
+    "type": "mean"
+  },
+  "group_switch:outdoor_switches": {
+    "all": false,
+    "entities": [
+      "switch.garage_door_opener",
+      "switch.office_monitor"
+    ],
+    "hide_members": true,
+    "name": "Outdoor Switches"
+  },
+  "group_valve:irrigation_zone_a": {
+    "entities": [
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Irrigation Zone A"
+  }
+}
+```
+
+### `group_light`
+
+Golden case: `fixtures/dsl/group_helper_declarations/`.
+
+```python
+"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
+
+Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
+(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+unrecognized `unique_id` key outright. Identity is derived from `name`
+(slugified): "Entryway Top" -> `group_cover:entryway_top`.
+
+`hide_members`/`all` are always materialized explicitly in the compiled
+options body (one canonical form, §38.1) -- never omitted just because they
+equal their default.
+
+Every `entities=` member below is a REAL entity id from
+`fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
+bundle's OWN nested group's entity -- the owner's own live example, §38.1:
+"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group"), so this fixture is also exercised by
+`test_registry_validate.py::test_no_false_positives_on_golden_corpus`
+(validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
+"""
+
+from hassle import (
+    group_binary_sensor,
+    group_button,
+    group_cover,
+    group_event,
+    group_fan,
+    group_light,
+    group_lock,
+    group_media_player,
+    group_notify,
+    group_sensor,
+    group_switch,
+    group_valve,
+)
+
+# Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
+# its produced entity (`cover.bay_window_top`) as a member -- a group whose
+# members are themselves a group, the owner's own live example (§38.1).
+group_cover(
+    name="Bay Window Top",
+    entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
+)
+group_cover(
+    name="Entryway Top",
+    entities=["cover.bay_window_top", "cover.garage_door"],
+)
+group_light(
+    name="Downstairs Lights",
+    entities=["light.hallway", "light.living_room", "light.kitchen"],
+    all=True,
+)
+group_switch(
+    name="Outdoor Switches",
+    entities=["switch.garage_door_opener", "switch.office_monitor"],
+    hide_members=True,
+)
+group_binary_sensor(
+    name="Any Door Open",
+    entities=["binary_sensor.door", "binary_sensor.back_door"],
+)
+group_sensor(
+    name="Average Temp",
+    entities=["sensor.living_room_temperature", "sensor.bedroom_temperature"],
+    type="mean",
+)
+group_button(name="All Doorbells", entities=["button.restart"])
+group_event(name="All Doorbell Events", entities=["event.doorbell"])
+group_fan(name="All Fans", entities=["fan.bedroom", "fan.living_room"])
+group_lock(name="All Locks", entities=["lock.front_door", "lock.back_door"])
+group_media_player(
+    name="Whole House Audio",
+    entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
+)
+group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+# No `valve` entities exist in fixtures/registry/home.json at all (its
+# registry snapshot has no valve domain coverage) -- validation only checks
+# that a referenced entity id EXISTS, not that its domain matches the
+# group's own flavor, so a real (if domain-mismatched) registry entity keeps
+# this fixture validation-clean without needing to touch the shared registry
+# fixture just for this one domain.
+group_valve(name="Irrigation Zone A", entities=["cover.garage_door"])
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "group_binary_sensor:any_door_open": {
+    "all": false,
+    "entities": [
+      "binary_sensor.door",
+      "binary_sensor.back_door"
+    ],
+    "hide_members": false,
+    "name": "Any Door Open"
+  },
+  "group_button:all_doorbells": {
+    "entities": [
+      "button.restart"
+    ],
+    "hide_members": false,
+    "name": "All Doorbells"
+  },
+  "group_cover:bay_window_top": {
+    "entities": [
+      "cover.bedroom_blinds",
+      "cover.living_room_blinds"
+    ],
+    "hide_members": false,
+    "name": "Bay Window Top"
+  },
+  "group_cover:entryway_top": {
+    "entities": [
+      "cover.bay_window_top",
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Entryway Top"
+  },
+  "group_event:all_doorbell_events": {
+    "entities": [
+      "event.doorbell"
+    ],
+    "hide_members": false,
+    "name": "All Doorbell Events"
+  },
+  "group_fan:all_fans": {
+    "entities": [
+      "fan.bedroom",
+      "fan.living_room"
+    ],
+    "hide_members": false,
+    "name": "All Fans"
+  },
+  "group_light:downstairs_lights": {
+    "all": true,
+    "entities": [
+      "light.hallway",
+      "light.living_room",
+      "light.kitchen"
+    ],
+    "hide_members": false,
+    "name": "Downstairs Lights"
+  },
+  "group_lock:all_locks": {
+    "entities": [
+      "lock.front_door",
+      "lock.back_door"
+    ],
+    "hide_members": false,
+    "name": "All Locks"
+  },
+  "group_media_player:whole_house_audio": {
+    "entities": [
+      "media_player.living_room_speaker",
+      "media_player.kitchen_speaker"
+    ],
+    "hide_members": false,
+    "name": "Whole House Audio"
+  },
+  "group_notify:all_phones": {
+    "entities": [
+      "notify.mobile_app_keaton",
+      "notify.mobile_app_spouse"
+    ],
+    "hide_members": false,
+    "name": "All Phones"
+  },
+  "group_sensor:average_temp": {
+    "entities": [
+      "sensor.living_room_temperature",
+      "sensor.bedroom_temperature"
+    ],
+    "hide_members": false,
+    "name": "Average Temp",
+    "type": "mean"
+  },
+  "group_switch:outdoor_switches": {
+    "all": false,
+    "entities": [
+      "switch.garage_door_opener",
+      "switch.office_monitor"
+    ],
+    "hide_members": true,
+    "name": "Outdoor Switches"
+  },
+  "group_valve:irrigation_zone_a": {
+    "entities": [
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Irrigation Zone A"
+  }
+}
+```
+
+### `group_lock`
+
+Golden case: `fixtures/dsl/group_helper_declarations/`.
+
+```python
+"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
+
+Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
+(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+unrecognized `unique_id` key outright. Identity is derived from `name`
+(slugified): "Entryway Top" -> `group_cover:entryway_top`.
+
+`hide_members`/`all` are always materialized explicitly in the compiled
+options body (one canonical form, §38.1) -- never omitted just because they
+equal their default.
+
+Every `entities=` member below is a REAL entity id from
+`fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
+bundle's OWN nested group's entity -- the owner's own live example, §38.1:
+"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group"), so this fixture is also exercised by
+`test_registry_validate.py::test_no_false_positives_on_golden_corpus`
+(validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
+"""
+
+from hassle import (
+    group_binary_sensor,
+    group_button,
+    group_cover,
+    group_event,
+    group_fan,
+    group_light,
+    group_lock,
+    group_media_player,
+    group_notify,
+    group_sensor,
+    group_switch,
+    group_valve,
+)
+
+# Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
+# its produced entity (`cover.bay_window_top`) as a member -- a group whose
+# members are themselves a group, the owner's own live example (§38.1).
+group_cover(
+    name="Bay Window Top",
+    entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
+)
+group_cover(
+    name="Entryway Top",
+    entities=["cover.bay_window_top", "cover.garage_door"],
+)
+group_light(
+    name="Downstairs Lights",
+    entities=["light.hallway", "light.living_room", "light.kitchen"],
+    all=True,
+)
+group_switch(
+    name="Outdoor Switches",
+    entities=["switch.garage_door_opener", "switch.office_monitor"],
+    hide_members=True,
+)
+group_binary_sensor(
+    name="Any Door Open",
+    entities=["binary_sensor.door", "binary_sensor.back_door"],
+)
+group_sensor(
+    name="Average Temp",
+    entities=["sensor.living_room_temperature", "sensor.bedroom_temperature"],
+    type="mean",
+)
+group_button(name="All Doorbells", entities=["button.restart"])
+group_event(name="All Doorbell Events", entities=["event.doorbell"])
+group_fan(name="All Fans", entities=["fan.bedroom", "fan.living_room"])
+group_lock(name="All Locks", entities=["lock.front_door", "lock.back_door"])
+group_media_player(
+    name="Whole House Audio",
+    entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
+)
+group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+# No `valve` entities exist in fixtures/registry/home.json at all (its
+# registry snapshot has no valve domain coverage) -- validation only checks
+# that a referenced entity id EXISTS, not that its domain matches the
+# group's own flavor, so a real (if domain-mismatched) registry entity keeps
+# this fixture validation-clean without needing to touch the shared registry
+# fixture just for this one domain.
+group_valve(name="Irrigation Zone A", entities=["cover.garage_door"])
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "group_binary_sensor:any_door_open": {
+    "all": false,
+    "entities": [
+      "binary_sensor.door",
+      "binary_sensor.back_door"
+    ],
+    "hide_members": false,
+    "name": "Any Door Open"
+  },
+  "group_button:all_doorbells": {
+    "entities": [
+      "button.restart"
+    ],
+    "hide_members": false,
+    "name": "All Doorbells"
+  },
+  "group_cover:bay_window_top": {
+    "entities": [
+      "cover.bedroom_blinds",
+      "cover.living_room_blinds"
+    ],
+    "hide_members": false,
+    "name": "Bay Window Top"
+  },
+  "group_cover:entryway_top": {
+    "entities": [
+      "cover.bay_window_top",
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Entryway Top"
+  },
+  "group_event:all_doorbell_events": {
+    "entities": [
+      "event.doorbell"
+    ],
+    "hide_members": false,
+    "name": "All Doorbell Events"
+  },
+  "group_fan:all_fans": {
+    "entities": [
+      "fan.bedroom",
+      "fan.living_room"
+    ],
+    "hide_members": false,
+    "name": "All Fans"
+  },
+  "group_light:downstairs_lights": {
+    "all": true,
+    "entities": [
+      "light.hallway",
+      "light.living_room",
+      "light.kitchen"
+    ],
+    "hide_members": false,
+    "name": "Downstairs Lights"
+  },
+  "group_lock:all_locks": {
+    "entities": [
+      "lock.front_door",
+      "lock.back_door"
+    ],
+    "hide_members": false,
+    "name": "All Locks"
+  },
+  "group_media_player:whole_house_audio": {
+    "entities": [
+      "media_player.living_room_speaker",
+      "media_player.kitchen_speaker"
+    ],
+    "hide_members": false,
+    "name": "Whole House Audio"
+  },
+  "group_notify:all_phones": {
+    "entities": [
+      "notify.mobile_app_keaton",
+      "notify.mobile_app_spouse"
+    ],
+    "hide_members": false,
+    "name": "All Phones"
+  },
+  "group_sensor:average_temp": {
+    "entities": [
+      "sensor.living_room_temperature",
+      "sensor.bedroom_temperature"
+    ],
+    "hide_members": false,
+    "name": "Average Temp",
+    "type": "mean"
+  },
+  "group_switch:outdoor_switches": {
+    "all": false,
+    "entities": [
+      "switch.garage_door_opener",
+      "switch.office_monitor"
+    ],
+    "hide_members": true,
+    "name": "Outdoor Switches"
+  },
+  "group_valve:irrigation_zone_a": {
+    "entities": [
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Irrigation Zone A"
+  }
+}
+```
+
+### `group_media_player`
+
+Golden case: `fixtures/dsl/group_helper_declarations/`.
+
+```python
+"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
+
+Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
+(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+unrecognized `unique_id` key outright. Identity is derived from `name`
+(slugified): "Entryway Top" -> `group_cover:entryway_top`.
+
+`hide_members`/`all` are always materialized explicitly in the compiled
+options body (one canonical form, §38.1) -- never omitted just because they
+equal their default.
+
+Every `entities=` member below is a REAL entity id from
+`fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
+bundle's OWN nested group's entity -- the owner's own live example, §38.1:
+"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group"), so this fixture is also exercised by
+`test_registry_validate.py::test_no_false_positives_on_golden_corpus`
+(validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
+"""
+
+from hassle import (
+    group_binary_sensor,
+    group_button,
+    group_cover,
+    group_event,
+    group_fan,
+    group_light,
+    group_lock,
+    group_media_player,
+    group_notify,
+    group_sensor,
+    group_switch,
+    group_valve,
+)
+
+# Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
+# its produced entity (`cover.bay_window_top`) as a member -- a group whose
+# members are themselves a group, the owner's own live example (§38.1).
+group_cover(
+    name="Bay Window Top",
+    entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
+)
+group_cover(
+    name="Entryway Top",
+    entities=["cover.bay_window_top", "cover.garage_door"],
+)
+group_light(
+    name="Downstairs Lights",
+    entities=["light.hallway", "light.living_room", "light.kitchen"],
+    all=True,
+)
+group_switch(
+    name="Outdoor Switches",
+    entities=["switch.garage_door_opener", "switch.office_monitor"],
+    hide_members=True,
+)
+group_binary_sensor(
+    name="Any Door Open",
+    entities=["binary_sensor.door", "binary_sensor.back_door"],
+)
+group_sensor(
+    name="Average Temp",
+    entities=["sensor.living_room_temperature", "sensor.bedroom_temperature"],
+    type="mean",
+)
+group_button(name="All Doorbells", entities=["button.restart"])
+group_event(name="All Doorbell Events", entities=["event.doorbell"])
+group_fan(name="All Fans", entities=["fan.bedroom", "fan.living_room"])
+group_lock(name="All Locks", entities=["lock.front_door", "lock.back_door"])
+group_media_player(
+    name="Whole House Audio",
+    entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
+)
+group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+# No `valve` entities exist in fixtures/registry/home.json at all (its
+# registry snapshot has no valve domain coverage) -- validation only checks
+# that a referenced entity id EXISTS, not that its domain matches the
+# group's own flavor, so a real (if domain-mismatched) registry entity keeps
+# this fixture validation-clean without needing to touch the shared registry
+# fixture just for this one domain.
+group_valve(name="Irrigation Zone A", entities=["cover.garage_door"])
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "group_binary_sensor:any_door_open": {
+    "all": false,
+    "entities": [
+      "binary_sensor.door",
+      "binary_sensor.back_door"
+    ],
+    "hide_members": false,
+    "name": "Any Door Open"
+  },
+  "group_button:all_doorbells": {
+    "entities": [
+      "button.restart"
+    ],
+    "hide_members": false,
+    "name": "All Doorbells"
+  },
+  "group_cover:bay_window_top": {
+    "entities": [
+      "cover.bedroom_blinds",
+      "cover.living_room_blinds"
+    ],
+    "hide_members": false,
+    "name": "Bay Window Top"
+  },
+  "group_cover:entryway_top": {
+    "entities": [
+      "cover.bay_window_top",
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Entryway Top"
+  },
+  "group_event:all_doorbell_events": {
+    "entities": [
+      "event.doorbell"
+    ],
+    "hide_members": false,
+    "name": "All Doorbell Events"
+  },
+  "group_fan:all_fans": {
+    "entities": [
+      "fan.bedroom",
+      "fan.living_room"
+    ],
+    "hide_members": false,
+    "name": "All Fans"
+  },
+  "group_light:downstairs_lights": {
+    "all": true,
+    "entities": [
+      "light.hallway",
+      "light.living_room",
+      "light.kitchen"
+    ],
+    "hide_members": false,
+    "name": "Downstairs Lights"
+  },
+  "group_lock:all_locks": {
+    "entities": [
+      "lock.front_door",
+      "lock.back_door"
+    ],
+    "hide_members": false,
+    "name": "All Locks"
+  },
+  "group_media_player:whole_house_audio": {
+    "entities": [
+      "media_player.living_room_speaker",
+      "media_player.kitchen_speaker"
+    ],
+    "hide_members": false,
+    "name": "Whole House Audio"
+  },
+  "group_notify:all_phones": {
+    "entities": [
+      "notify.mobile_app_keaton",
+      "notify.mobile_app_spouse"
+    ],
+    "hide_members": false,
+    "name": "All Phones"
+  },
+  "group_sensor:average_temp": {
+    "entities": [
+      "sensor.living_room_temperature",
+      "sensor.bedroom_temperature"
+    ],
+    "hide_members": false,
+    "name": "Average Temp",
+    "type": "mean"
+  },
+  "group_switch:outdoor_switches": {
+    "all": false,
+    "entities": [
+      "switch.garage_door_opener",
+      "switch.office_monitor"
+    ],
+    "hide_members": true,
+    "name": "Outdoor Switches"
+  },
+  "group_valve:irrigation_zone_a": {
+    "entities": [
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Irrigation Zone A"
+  }
+}
+```
+
+### `group_notify`
+
+Golden case: `fixtures/dsl/group_helper_declarations/`.
+
+```python
+"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
+
+Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
+(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+unrecognized `unique_id` key outright. Identity is derived from `name`
+(slugified): "Entryway Top" -> `group_cover:entryway_top`.
+
+`hide_members`/`all` are always materialized explicitly in the compiled
+options body (one canonical form, §38.1) -- never omitted just because they
+equal their default.
+
+Every `entities=` member below is a REAL entity id from
+`fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
+bundle's OWN nested group's entity -- the owner's own live example, §38.1:
+"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group"), so this fixture is also exercised by
+`test_registry_validate.py::test_no_false_positives_on_golden_corpus`
+(validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
+"""
+
+from hassle import (
+    group_binary_sensor,
+    group_button,
+    group_cover,
+    group_event,
+    group_fan,
+    group_light,
+    group_lock,
+    group_media_player,
+    group_notify,
+    group_sensor,
+    group_switch,
+    group_valve,
+)
+
+# Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
+# its produced entity (`cover.bay_window_top`) as a member -- a group whose
+# members are themselves a group, the owner's own live example (§38.1).
+group_cover(
+    name="Bay Window Top",
+    entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
+)
+group_cover(
+    name="Entryway Top",
+    entities=["cover.bay_window_top", "cover.garage_door"],
+)
+group_light(
+    name="Downstairs Lights",
+    entities=["light.hallway", "light.living_room", "light.kitchen"],
+    all=True,
+)
+group_switch(
+    name="Outdoor Switches",
+    entities=["switch.garage_door_opener", "switch.office_monitor"],
+    hide_members=True,
+)
+group_binary_sensor(
+    name="Any Door Open",
+    entities=["binary_sensor.door", "binary_sensor.back_door"],
+)
+group_sensor(
+    name="Average Temp",
+    entities=["sensor.living_room_temperature", "sensor.bedroom_temperature"],
+    type="mean",
+)
+group_button(name="All Doorbells", entities=["button.restart"])
+group_event(name="All Doorbell Events", entities=["event.doorbell"])
+group_fan(name="All Fans", entities=["fan.bedroom", "fan.living_room"])
+group_lock(name="All Locks", entities=["lock.front_door", "lock.back_door"])
+group_media_player(
+    name="Whole House Audio",
+    entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
+)
+group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+# No `valve` entities exist in fixtures/registry/home.json at all (its
+# registry snapshot has no valve domain coverage) -- validation only checks
+# that a referenced entity id EXISTS, not that its domain matches the
+# group's own flavor, so a real (if domain-mismatched) registry entity keeps
+# this fixture validation-clean without needing to touch the shared registry
+# fixture just for this one domain.
+group_valve(name="Irrigation Zone A", entities=["cover.garage_door"])
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "group_binary_sensor:any_door_open": {
+    "all": false,
+    "entities": [
+      "binary_sensor.door",
+      "binary_sensor.back_door"
+    ],
+    "hide_members": false,
+    "name": "Any Door Open"
+  },
+  "group_button:all_doorbells": {
+    "entities": [
+      "button.restart"
+    ],
+    "hide_members": false,
+    "name": "All Doorbells"
+  },
+  "group_cover:bay_window_top": {
+    "entities": [
+      "cover.bedroom_blinds",
+      "cover.living_room_blinds"
+    ],
+    "hide_members": false,
+    "name": "Bay Window Top"
+  },
+  "group_cover:entryway_top": {
+    "entities": [
+      "cover.bay_window_top",
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Entryway Top"
+  },
+  "group_event:all_doorbell_events": {
+    "entities": [
+      "event.doorbell"
+    ],
+    "hide_members": false,
+    "name": "All Doorbell Events"
+  },
+  "group_fan:all_fans": {
+    "entities": [
+      "fan.bedroom",
+      "fan.living_room"
+    ],
+    "hide_members": false,
+    "name": "All Fans"
+  },
+  "group_light:downstairs_lights": {
+    "all": true,
+    "entities": [
+      "light.hallway",
+      "light.living_room",
+      "light.kitchen"
+    ],
+    "hide_members": false,
+    "name": "Downstairs Lights"
+  },
+  "group_lock:all_locks": {
+    "entities": [
+      "lock.front_door",
+      "lock.back_door"
+    ],
+    "hide_members": false,
+    "name": "All Locks"
+  },
+  "group_media_player:whole_house_audio": {
+    "entities": [
+      "media_player.living_room_speaker",
+      "media_player.kitchen_speaker"
+    ],
+    "hide_members": false,
+    "name": "Whole House Audio"
+  },
+  "group_notify:all_phones": {
+    "entities": [
+      "notify.mobile_app_keaton",
+      "notify.mobile_app_spouse"
+    ],
+    "hide_members": false,
+    "name": "All Phones"
+  },
+  "group_sensor:average_temp": {
+    "entities": [
+      "sensor.living_room_temperature",
+      "sensor.bedroom_temperature"
+    ],
+    "hide_members": false,
+    "name": "Average Temp",
+    "type": "mean"
+  },
+  "group_switch:outdoor_switches": {
+    "all": false,
+    "entities": [
+      "switch.garage_door_opener",
+      "switch.office_monitor"
+    ],
+    "hide_members": true,
+    "name": "Outdoor Switches"
+  },
+  "group_valve:irrigation_zone_a": {
+    "entities": [
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Irrigation Zone A"
+  }
+}
+```
+
+### `group_sensor`
+
+Golden case: `fixtures/dsl/group_helper_declarations/`.
+
+```python
+"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
+
+Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
+(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+unrecognized `unique_id` key outright. Identity is derived from `name`
+(slugified): "Entryway Top" -> `group_cover:entryway_top`.
+
+`hide_members`/`all` are always materialized explicitly in the compiled
+options body (one canonical form, §38.1) -- never omitted just because they
+equal their default.
+
+Every `entities=` member below is a REAL entity id from
+`fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
+bundle's OWN nested group's entity -- the owner's own live example, §38.1:
+"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group"), so this fixture is also exercised by
+`test_registry_validate.py::test_no_false_positives_on_golden_corpus`
+(validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
+"""
+
+from hassle import (
+    group_binary_sensor,
+    group_button,
+    group_cover,
+    group_event,
+    group_fan,
+    group_light,
+    group_lock,
+    group_media_player,
+    group_notify,
+    group_sensor,
+    group_switch,
+    group_valve,
+)
+
+# Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
+# its produced entity (`cover.bay_window_top`) as a member -- a group whose
+# members are themselves a group, the owner's own live example (§38.1).
+group_cover(
+    name="Bay Window Top",
+    entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
+)
+group_cover(
+    name="Entryway Top",
+    entities=["cover.bay_window_top", "cover.garage_door"],
+)
+group_light(
+    name="Downstairs Lights",
+    entities=["light.hallway", "light.living_room", "light.kitchen"],
+    all=True,
+)
+group_switch(
+    name="Outdoor Switches",
+    entities=["switch.garage_door_opener", "switch.office_monitor"],
+    hide_members=True,
+)
+group_binary_sensor(
+    name="Any Door Open",
+    entities=["binary_sensor.door", "binary_sensor.back_door"],
+)
+group_sensor(
+    name="Average Temp",
+    entities=["sensor.living_room_temperature", "sensor.bedroom_temperature"],
+    type="mean",
+)
+group_button(name="All Doorbells", entities=["button.restart"])
+group_event(name="All Doorbell Events", entities=["event.doorbell"])
+group_fan(name="All Fans", entities=["fan.bedroom", "fan.living_room"])
+group_lock(name="All Locks", entities=["lock.front_door", "lock.back_door"])
+group_media_player(
+    name="Whole House Audio",
+    entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
+)
+group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+# No `valve` entities exist in fixtures/registry/home.json at all (its
+# registry snapshot has no valve domain coverage) -- validation only checks
+# that a referenced entity id EXISTS, not that its domain matches the
+# group's own flavor, so a real (if domain-mismatched) registry entity keeps
+# this fixture validation-clean without needing to touch the shared registry
+# fixture just for this one domain.
+group_valve(name="Irrigation Zone A", entities=["cover.garage_door"])
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "group_binary_sensor:any_door_open": {
+    "all": false,
+    "entities": [
+      "binary_sensor.door",
+      "binary_sensor.back_door"
+    ],
+    "hide_members": false,
+    "name": "Any Door Open"
+  },
+  "group_button:all_doorbells": {
+    "entities": [
+      "button.restart"
+    ],
+    "hide_members": false,
+    "name": "All Doorbells"
+  },
+  "group_cover:bay_window_top": {
+    "entities": [
+      "cover.bedroom_blinds",
+      "cover.living_room_blinds"
+    ],
+    "hide_members": false,
+    "name": "Bay Window Top"
+  },
+  "group_cover:entryway_top": {
+    "entities": [
+      "cover.bay_window_top",
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Entryway Top"
+  },
+  "group_event:all_doorbell_events": {
+    "entities": [
+      "event.doorbell"
+    ],
+    "hide_members": false,
+    "name": "All Doorbell Events"
+  },
+  "group_fan:all_fans": {
+    "entities": [
+      "fan.bedroom",
+      "fan.living_room"
+    ],
+    "hide_members": false,
+    "name": "All Fans"
+  },
+  "group_light:downstairs_lights": {
+    "all": true,
+    "entities": [
+      "light.hallway",
+      "light.living_room",
+      "light.kitchen"
+    ],
+    "hide_members": false,
+    "name": "Downstairs Lights"
+  },
+  "group_lock:all_locks": {
+    "entities": [
+      "lock.front_door",
+      "lock.back_door"
+    ],
+    "hide_members": false,
+    "name": "All Locks"
+  },
+  "group_media_player:whole_house_audio": {
+    "entities": [
+      "media_player.living_room_speaker",
+      "media_player.kitchen_speaker"
+    ],
+    "hide_members": false,
+    "name": "Whole House Audio"
+  },
+  "group_notify:all_phones": {
+    "entities": [
+      "notify.mobile_app_keaton",
+      "notify.mobile_app_spouse"
+    ],
+    "hide_members": false,
+    "name": "All Phones"
+  },
+  "group_sensor:average_temp": {
+    "entities": [
+      "sensor.living_room_temperature",
+      "sensor.bedroom_temperature"
+    ],
+    "hide_members": false,
+    "name": "Average Temp",
+    "type": "mean"
+  },
+  "group_switch:outdoor_switches": {
+    "all": false,
+    "entities": [
+      "switch.garage_door_opener",
+      "switch.office_monitor"
+    ],
+    "hide_members": true,
+    "name": "Outdoor Switches"
+  },
+  "group_valve:irrigation_zone_a": {
+    "entities": [
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Irrigation Zone A"
+  }
+}
+```
+
+### `group_switch`
+
+Golden case: `fixtures/dsl/group_helper_declarations/`.
+
+```python
+"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
+
+Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
+(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+unrecognized `unique_id` key outright. Identity is derived from `name`
+(slugified): "Entryway Top" -> `group_cover:entryway_top`.
+
+`hide_members`/`all` are always materialized explicitly in the compiled
+options body (one canonical form, §38.1) -- never omitted just because they
+equal their default.
+
+Every `entities=` member below is a REAL entity id from
+`fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
+bundle's OWN nested group's entity -- the owner's own live example, §38.1:
+"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group"), so this fixture is also exercised by
+`test_registry_validate.py::test_no_false_positives_on_golden_corpus`
+(validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
+"""
+
+from hassle import (
+    group_binary_sensor,
+    group_button,
+    group_cover,
+    group_event,
+    group_fan,
+    group_light,
+    group_lock,
+    group_media_player,
+    group_notify,
+    group_sensor,
+    group_switch,
+    group_valve,
+)
+
+# Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
+# its produced entity (`cover.bay_window_top`) as a member -- a group whose
+# members are themselves a group, the owner's own live example (§38.1).
+group_cover(
+    name="Bay Window Top",
+    entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
+)
+group_cover(
+    name="Entryway Top",
+    entities=["cover.bay_window_top", "cover.garage_door"],
+)
+group_light(
+    name="Downstairs Lights",
+    entities=["light.hallway", "light.living_room", "light.kitchen"],
+    all=True,
+)
+group_switch(
+    name="Outdoor Switches",
+    entities=["switch.garage_door_opener", "switch.office_monitor"],
+    hide_members=True,
+)
+group_binary_sensor(
+    name="Any Door Open",
+    entities=["binary_sensor.door", "binary_sensor.back_door"],
+)
+group_sensor(
+    name="Average Temp",
+    entities=["sensor.living_room_temperature", "sensor.bedroom_temperature"],
+    type="mean",
+)
+group_button(name="All Doorbells", entities=["button.restart"])
+group_event(name="All Doorbell Events", entities=["event.doorbell"])
+group_fan(name="All Fans", entities=["fan.bedroom", "fan.living_room"])
+group_lock(name="All Locks", entities=["lock.front_door", "lock.back_door"])
+group_media_player(
+    name="Whole House Audio",
+    entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
+)
+group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+# No `valve` entities exist in fixtures/registry/home.json at all (its
+# registry snapshot has no valve domain coverage) -- validation only checks
+# that a referenced entity id EXISTS, not that its domain matches the
+# group's own flavor, so a real (if domain-mismatched) registry entity keeps
+# this fixture validation-clean without needing to touch the shared registry
+# fixture just for this one domain.
+group_valve(name="Irrigation Zone A", entities=["cover.garage_door"])
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "group_binary_sensor:any_door_open": {
+    "all": false,
+    "entities": [
+      "binary_sensor.door",
+      "binary_sensor.back_door"
+    ],
+    "hide_members": false,
+    "name": "Any Door Open"
+  },
+  "group_button:all_doorbells": {
+    "entities": [
+      "button.restart"
+    ],
+    "hide_members": false,
+    "name": "All Doorbells"
+  },
+  "group_cover:bay_window_top": {
+    "entities": [
+      "cover.bedroom_blinds",
+      "cover.living_room_blinds"
+    ],
+    "hide_members": false,
+    "name": "Bay Window Top"
+  },
+  "group_cover:entryway_top": {
+    "entities": [
+      "cover.bay_window_top",
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Entryway Top"
+  },
+  "group_event:all_doorbell_events": {
+    "entities": [
+      "event.doorbell"
+    ],
+    "hide_members": false,
+    "name": "All Doorbell Events"
+  },
+  "group_fan:all_fans": {
+    "entities": [
+      "fan.bedroom",
+      "fan.living_room"
+    ],
+    "hide_members": false,
+    "name": "All Fans"
+  },
+  "group_light:downstairs_lights": {
+    "all": true,
+    "entities": [
+      "light.hallway",
+      "light.living_room",
+      "light.kitchen"
+    ],
+    "hide_members": false,
+    "name": "Downstairs Lights"
+  },
+  "group_lock:all_locks": {
+    "entities": [
+      "lock.front_door",
+      "lock.back_door"
+    ],
+    "hide_members": false,
+    "name": "All Locks"
+  },
+  "group_media_player:whole_house_audio": {
+    "entities": [
+      "media_player.living_room_speaker",
+      "media_player.kitchen_speaker"
+    ],
+    "hide_members": false,
+    "name": "Whole House Audio"
+  },
+  "group_notify:all_phones": {
+    "entities": [
+      "notify.mobile_app_keaton",
+      "notify.mobile_app_spouse"
+    ],
+    "hide_members": false,
+    "name": "All Phones"
+  },
+  "group_sensor:average_temp": {
+    "entities": [
+      "sensor.living_room_temperature",
+      "sensor.bedroom_temperature"
+    ],
+    "hide_members": false,
+    "name": "Average Temp",
+    "type": "mean"
+  },
+  "group_switch:outdoor_switches": {
+    "all": false,
+    "entities": [
+      "switch.garage_door_opener",
+      "switch.office_monitor"
+    ],
+    "hide_members": true,
+    "name": "Outdoor Switches"
+  },
+  "group_valve:irrigation_zone_a": {
+    "entities": [
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Irrigation Zone A"
+  }
+}
+```
+
+### `group_valve`
+
+Golden case: `fixtures/dsl/group_helper_declarations/`.
+
+```python
+"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
+
+Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
+(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+unrecognized `unique_id` key outright. Identity is derived from `name`
+(slugified): "Entryway Top" -> `group_cover:entryway_top`.
+
+`hide_members`/`all` are always materialized explicitly in the compiled
+options body (one canonical form, §38.1) -- never omitted just because they
+equal their default.
+
+Every `entities=` member below is a REAL entity id from
+`fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
+bundle's OWN nested group's entity -- the owner's own live example, §38.1:
+"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group"), so this fixture is also exercised by
+`test_registry_validate.py::test_no_false_positives_on_golden_corpus`
+(validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
+"""
+
+from hassle import (
+    group_binary_sensor,
+    group_button,
+    group_cover,
+    group_event,
+    group_fan,
+    group_light,
+    group_lock,
+    group_media_player,
+    group_notify,
+    group_sensor,
+    group_switch,
+    group_valve,
+)
+
+# Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
+# its produced entity (`cover.bay_window_top`) as a member -- a group whose
+# members are themselves a group, the owner's own live example (§38.1).
+group_cover(
+    name="Bay Window Top",
+    entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
+)
+group_cover(
+    name="Entryway Top",
+    entities=["cover.bay_window_top", "cover.garage_door"],
+)
+group_light(
+    name="Downstairs Lights",
+    entities=["light.hallway", "light.living_room", "light.kitchen"],
+    all=True,
+)
+group_switch(
+    name="Outdoor Switches",
+    entities=["switch.garage_door_opener", "switch.office_monitor"],
+    hide_members=True,
+)
+group_binary_sensor(
+    name="Any Door Open",
+    entities=["binary_sensor.door", "binary_sensor.back_door"],
+)
+group_sensor(
+    name="Average Temp",
+    entities=["sensor.living_room_temperature", "sensor.bedroom_temperature"],
+    type="mean",
+)
+group_button(name="All Doorbells", entities=["button.restart"])
+group_event(name="All Doorbell Events", entities=["event.doorbell"])
+group_fan(name="All Fans", entities=["fan.bedroom", "fan.living_room"])
+group_lock(name="All Locks", entities=["lock.front_door", "lock.back_door"])
+group_media_player(
+    name="Whole House Audio",
+    entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
+)
+group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+# No `valve` entities exist in fixtures/registry/home.json at all (its
+# registry snapshot has no valve domain coverage) -- validation only checks
+# that a referenced entity id EXISTS, not that its domain matches the
+# group's own flavor, so a real (if domain-mismatched) registry entity keeps
+# this fixture validation-clean without needing to touch the shared registry
+# fixture just for this one domain.
+group_valve(name="Irrigation Zone A", entities=["cover.garage_door"])
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "group_binary_sensor:any_door_open": {
+    "all": false,
+    "entities": [
+      "binary_sensor.door",
+      "binary_sensor.back_door"
+    ],
+    "hide_members": false,
+    "name": "Any Door Open"
+  },
+  "group_button:all_doorbells": {
+    "entities": [
+      "button.restart"
+    ],
+    "hide_members": false,
+    "name": "All Doorbells"
+  },
+  "group_cover:bay_window_top": {
+    "entities": [
+      "cover.bedroom_blinds",
+      "cover.living_room_blinds"
+    ],
+    "hide_members": false,
+    "name": "Bay Window Top"
+  },
+  "group_cover:entryway_top": {
+    "entities": [
+      "cover.bay_window_top",
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Entryway Top"
+  },
+  "group_event:all_doorbell_events": {
+    "entities": [
+      "event.doorbell"
+    ],
+    "hide_members": false,
+    "name": "All Doorbell Events"
+  },
+  "group_fan:all_fans": {
+    "entities": [
+      "fan.bedroom",
+      "fan.living_room"
+    ],
+    "hide_members": false,
+    "name": "All Fans"
+  },
+  "group_light:downstairs_lights": {
+    "all": true,
+    "entities": [
+      "light.hallway",
+      "light.living_room",
+      "light.kitchen"
+    ],
+    "hide_members": false,
+    "name": "Downstairs Lights"
+  },
+  "group_lock:all_locks": {
+    "entities": [
+      "lock.front_door",
+      "lock.back_door"
+    ],
+    "hide_members": false,
+    "name": "All Locks"
+  },
+  "group_media_player:whole_house_audio": {
+    "entities": [
+      "media_player.living_room_speaker",
+      "media_player.kitchen_speaker"
+    ],
+    "hide_members": false,
+    "name": "Whole House Audio"
+  },
+  "group_notify:all_phones": {
+    "entities": [
+      "notify.mobile_app_keaton",
+      "notify.mobile_app_spouse"
+    ],
+    "hide_members": false,
+    "name": "All Phones"
+  },
+  "group_sensor:average_temp": {
+    "entities": [
+      "sensor.living_room_temperature",
+      "sensor.bedroom_temperature"
+    ],
+    "hide_members": false,
+    "name": "Average Temp",
+    "type": "mean"
+  },
+  "group_switch:outdoor_switches": {
+    "all": false,
+    "entities": [
+      "switch.garage_door_opener",
+      "switch.office_monitor"
+    ],
+    "hide_members": true,
+    "name": "Outdoor Switches"
+  },
+  "group_valve:irrigation_zone_a": {
+    "entities": [
+      "cover.garage_door"
+    ],
+    "hide_members": false,
+    "name": "Irrigation Zone A"
+  }
+}
+```
+
 ### `when`
 
 Golden case: `fixtures/dsl/state_delay_service/`.
