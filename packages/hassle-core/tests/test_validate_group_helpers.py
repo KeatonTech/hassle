@@ -105,7 +105,7 @@ def test_group_referencing_real_member_entity_does_not_flag(
 ) -> None:
     bundle = _write_bundle(
         tmp_path,
-        'from hassle import group_cover\n\n'
+        "from hassle import group_cover\n\n"
         'group_cover(name="Real Group", entities=["cover.garage_door"])\n',
     )
     result = compile_bundle(bundle)
@@ -130,6 +130,4 @@ group_cover(name="Entryway Top", entities=["cover.bay_window_top"])
     )
     result = compile_bundle(bundle)
     findings = validate_bundle(result, snapshot)
-    assert not any(
-        f.code == "unknown-entity" and "bay_window_top" in f.message for f in findings
-    )
+    assert not any(f.code == "unknown-entity" and "bay_window_top" in f.message for f in findings)

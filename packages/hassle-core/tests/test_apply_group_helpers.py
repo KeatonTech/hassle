@@ -86,9 +86,7 @@ def test_group_helper_create_collision_aborts_and_rolls_back() -> None:
 
     # Drift: a UI-created group cover materializes under the same
     # name-derived identity before apply runs.
-    backend.create(
-        "group_cover", {"name": "Top", "entities": ["cover.z"], "hide_members": True}
-    )
+    backend.create("group_cover", {"name": "Top", "entities": ["cover.z"], "hide_members": True})
     backend.reset_write_tracking()
 
     result = apply_plan(plan, backend, manifest)
