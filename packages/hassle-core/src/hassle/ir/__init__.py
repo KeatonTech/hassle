@@ -11,6 +11,7 @@ from __future__ import annotations
 from hassle.ir.canonical import canonical_json, sha256_hash
 from hassle.ir.keys import (
     CONFIG_ENTRY_DOMAINS,
+    GROUP_DOMAINS,
     HELPER_DOMAINS,
     OBJECT_KINDS,
     TEMPLATE_DOMAINS,
@@ -19,6 +20,7 @@ from hassle.ir.keys import (
 )
 from hassle.ir.models import (
     AutomationConfig,
+    GroupHelperConfig,
     HelperConfig,
     IRObject,
     ScriptConfig,
@@ -30,10 +32,12 @@ from hassle.ir.normalize import normalize_ha
 
 __all__ = [
     "CONFIG_ENTRY_DOMAINS",
+    "GROUP_DOMAINS",
     "HELPER_DOMAINS",
     "OBJECT_KINDS",
     "TEMPLATE_DOMAINS",
     "AutomationConfig",
+    "GroupHelperConfig",
     "HelperConfig",
     "IRObject",
     "ScriptConfig",

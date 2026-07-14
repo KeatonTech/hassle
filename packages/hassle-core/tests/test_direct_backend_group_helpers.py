@@ -131,6 +131,10 @@ class _FakeClient:
             flow_id = path.rsplit("/", 1)[1]
             self.cancelled_flow_ids.append(flow_id)
             return {"message": "Flow aborted"}
+        if path.startswith("/api/config/config_entries/entry/"):
+            entry_id = path.rsplit("/", 1)[1]
+            self._entries.pop(entry_id, None)
+            return {"require_restart": False}
         raise HaApiError(f"unexpected rest_delete {path!r}")
 
 
@@ -204,11 +208,19 @@ def test_list_remote_ignores_entries_of_a_different_group_flavor() -> None:
         entries={
             "entry_1": {
                 "title": "A Cover Group",
-                "options": {"name": "A Cover Group", "entities": ["cover.a"], "hide_members": False},
+                "options": {
+                    "name": "A Cover Group",
+                    "entities": ["cover.a"],
+                    "hide_members": False,
+                },
             },
             "entry_2": {
                 "title": "A Light Group",
-                "options": {"name": "A Light Group", "entities": ["light.a"], "hide_members": False},
+                "options": {
+                    "name": "A Light Group",
+                    "entities": ["light.a"],
+                    "hide_members": False,
+                },
             },
         },
         entities=[
@@ -263,7 +275,9 @@ def test_update_missing_required_field_still_checked_before_any_wire_call() -> N
     with pytest.raises(ValueError, match="type"):
         asyncio.run(
             backend._aupdate_group_helper(  # type: ignore[attr-defined]
-                "group_sensor", "avg", {"name": "Avg", "entities": ["sensor.a"], "hide_members": False}
+                "group_sensor",
+                "avg",
+                {"name": "Avg", "entities": ["sensor.a"], "hide_members": False},
             )
         )
     assert client.rest_calls == []

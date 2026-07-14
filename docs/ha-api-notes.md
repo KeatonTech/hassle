@@ -3476,3 +3476,78 @@ optional sensor-group fields (`ignore_non_numeric`, `unit_of_measurement`,
 `device_class`, `state_class`) in some versions; the CI integration matrix
 (HA stable + dev, M6 pattern) is the authority, per §0. If CI's schemas
 differ, widen the sensor kwargs there and record it here.
+
+### 38.4 Implementation findings (M21 build) — three places the M10 pattern did NOT transfer verbatim
+
+Building the plugin surfaced three genuine divergences from the M10
+template-helper template, all source-informed from the live capture (§38.1)
+rather than CI-verified yet (CI is still the authority per §0 — flagged here
+per the standing "record findings, flag to human" rule in case CI finds any
+of these three wrong the way M10's own round 2/3 corrections did):
+
+1. **The group options-flow schema RE-PRESENTS THE SAME FORM as create,
+   `name` included** — unlike template, whose options-flow schema
+   (`generate_schema(domain, flow_type="options")`) never adds `CONF_NAME`
+   at all (§26.7 finding 2). §38.1's own capture note ("Options flows
+   re-present the same form … with current values as suggested values")
+   already says this, but it's easy to miss reading past the create-flow
+   table: `DirectBackend._aupdate_group_helper`/`FakeBackend.
+   _update_group_via_options_flow` submit the FULL config unmodified — no
+   name-stripping, no name-rejection check, no merge-around-a-missing-name
+   dance. This also means `_alist_group_helpers`'s read-back gets `name`
+   back from the options-flow's suggested values directly, same as every
+   other field — the `options.setdefault("name", str(title))` line in
+   `DirectBackend._alist_group_helpers` is a defensive fallback only, never
+   load-bearing (unlike template's `options["name"] = str(title)`, which
+   IS load-bearing there since the field is never in the schema at all).
+   If CI finds the real group options-flow schema actually excludes `name`
+   after all (contradicting the live capture), this is the one place to
+   revisit first.
+
+2. **Sub-kind discrimination reuses the SAME entity-registry cross-reference
+   mechanism as template, not the step_id fallback §38.2 offered as an
+   alternative.** `DirectBackend._template_entry_domains` (M10) was
+   generalized and renamed `_config_entry_entity_domains` — it was never
+   actually template-specific to begin with (it doesn't filter by
+   integration domain at all, just maps every config entry's single created
+   entity to its HA domain via `config/entity_registry/list`), so reusing it
+   verbatim for group costs the same one WS call `list_remote` already made
+   for template and avoids opening (and cancelling) an options flow for
+   every group entry of every OTHER flavor on each single-kind
+   `list_remote(kind)` call — the step_id fallback would have to open a
+   flow per entry just to find out its flavor, before it even knows whether
+   to keep reading it. §38.2's own "prefer the template mechanism if it
+   costs no extra call" note is exactly why this was the right choice;
+   the step_id is genuinely unused in the shipped implementation, kept only
+   as documentation of a fallback that would still work if the entity
+   registry cross-reference method were ever unavailable.
+
+3. **Assumption (untested by the live capture): a group entity's
+   `unique_id` equals its config entry's `entry_id`**, the same
+   `SchemaConfigFlowHandler`-family construction §31.8 source-verified for
+   `template/helpers.py`'s `async_setup_template_entry`. §38's capture
+   notes don't confirm this for `group` specifically (the capture only
+   exercised read-only flow-open/cancel + a WS entity-registry list, never
+   a real create+category-assign round trip). `DirectBackend.
+   _unique_id_to_match` extends the same rule to `GROUP_DOMAINS` on this
+   assumption, for `hassle.sync.category_writeback`/`category_move`'s
+   category-assignment lookup (§31.8's "identity anchor"). If CI's category
+   write-back integration test finds a group entity's `unique_id` is
+   something else entirely, this is the one call site to fix — the general
+   `Backend`/plan/apply/decompile/validate machinery does not depend on it
+   at all, only category assignment does.
+
+**A fourth item, not a divergence but new work with no M10 analogue:** a
+group helper's own `entities=` list is validated for unknown member entities
+(MILESTONES M21 test 5) by a NEW function, `hassle.registry.validate.
+_validate_group_entities` — `hassle.registry.extract.extract_references`
+(the M3 walker `_validate_references` reuses for every other kind) only ever
+descends into an object's `triggers`/`conditions`/`actions` sections, and
+neither a template helper's nor a group helper's IR body has any of those.
+A template helper's `state=` Jinja string was therefore never checked for
+entity references either (nothing new there) — but a group helper's
+`entities=` field is a literal list of entity ids, exactly the shape M21
+test 5 asks to validate, so it needed its own small walker rather than
+falling out of the existing one for free the way `_bundle_declared_keys`'s
+widening (a bundle's own group declares its produced entity, mirroring
+template) did.

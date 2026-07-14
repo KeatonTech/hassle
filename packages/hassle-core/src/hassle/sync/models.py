@@ -119,13 +119,15 @@ class Plan(BaseModel):
 class ManifestEntry(BaseModel):
     """One object's entry in `manifest.lock` (DESIGN §8.1).
 
-    ``entry_id`` (M10 addition, additive/optional): for a config-entry
-    template-helper object (``hassle.ir.TEMPLATE_DOMAINS``), the HA-assigned
-    config entry id (docs/ha-api-notes.md §26.5) -- transport-side identity
-    only, never the object-key identity (``unique_id``) and never part of the
-    IR body (docs/backend.md's config-entry addendum). ``None`` for every
-    other kind (automation/script/storage-collection helper), which have no
-    such secondary identity to track.
+    ``entry_id`` (M10 addition, additive/optional; M21 widens the kinds that
+    populate it): for a config-entry template-helper (``hassle.ir.
+    TEMPLATE_DOMAINS``) or group-helper (``hassle.ir.GROUP_DOMAINS``) object,
+    the HA-assigned config entry id (docs/ha-api-notes.md §26.5/§38) --
+    transport-side identity only, never the object-key identity
+    (``unique_id``) and never part of the IR body (docs/backend.md's
+    config-entry addendum). ``None`` for every other kind (automation/script/
+    storage-collection helper), which have no such secondary identity to
+    track.
 
     ``category`` (MILESTONES M15 F2 amendment, additive/optional): the
     object's HA UI category **slug** as of the last successful sync (base,

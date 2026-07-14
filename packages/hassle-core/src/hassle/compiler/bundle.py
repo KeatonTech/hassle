@@ -285,12 +285,14 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
     # bundle import in the same process) never bleeds objects into this one (R8).
     # These modules track declarations in module globals in addition to the
     # per-compile registry, so both must be cleared.
+    from hassle.compiler.group_helpers import reset_declared_group_helpers
     from hassle.compiler.helpers import reset_declared_helpers
     from hassle.compiler.raw_automation import reset_declared_raw_automations
     from hassle.compiler.template_helpers import reset_declared_template_helpers
 
     reset_declared_helpers()
     reset_declared_template_helpers()
+    reset_declared_group_helpers()
     reset_declared_raw_automations()
 
     reg = fresh()

@@ -199,7 +199,9 @@ def test_every_group_domain_supports_full_cycle(domain: str) -> None:
     )
     assert backend.list_remote(domain)[identity]["name"] == "Thing"
     backend.update(
-        domain, identity, {"name": "Thing", "entities": ["x.a", "x.b"], "hide_members": True, **extra}
+        domain,
+        identity,
+        {"name": "Thing", "entities": ["x.a", "x.b"], "hide_members": True, **extra},
     )
     updated = backend.list_remote(domain)[identity]
     assert updated["entities"] == ["x.a", "x.b"]

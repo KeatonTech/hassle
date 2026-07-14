@@ -67,11 +67,14 @@ from hassle.sync.models import (
 
 # Push-side apply order (DESIGN §8.2 / docs/ha-api-notes.md §11): storage
 # helper domains first (any order among themselves), then the config-entry
-# template-helper domains (M10 -- also "helpers" from the dependency-ordering
-# point of view: an automation/script may reference a template helper's
-# entity id, so it must exist first, exactly like the storage helpers), then
-# scripts, then automations (automations may reference scripts/helpers, so
-# those must exist first).
+# template-helper (M10) and group-helper (M21) domains -- also "helpers" from
+# the dependency-ordering point of view: an automation/script may reference a
+# template/group helper's entity id, so it must exist first, exactly like the
+# storage helpers; a group may also nest another group's entity id, but that
+# is still satisfied by "every config-entry helper before scripts/
+# automations" since apply doesn't need a stricter order within the family --
+# then scripts, then automations (automations may reference scripts/helpers,
+# so those must exist first).
 _KIND_ORDER = (
     "input_boolean",
     "input_number",
@@ -86,6 +89,18 @@ _KIND_ORDER = (
     "template_sensor",
     "template_binary_sensor",
     "template_select",
+    "group_binary_sensor",
+    "group_button",
+    "group_cover",
+    "group_event",
+    "group_fan",
+    "group_light",
+    "group_lock",
+    "group_media_player",
+    "group_notify",
+    "group_sensor",
+    "group_switch",
+    "group_valve",
     "script",
     "automation",
 )

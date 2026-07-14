@@ -331,6 +331,43 @@ domain (an IR shape + a DSL builder); steps 3-6 are membership-set additions
 into machinery this milestone already built generically. This is the
 concrete evidence for MILESTONES M10's "mechanical follow-ons" framing.
 
+**M21 update (the `group` follow-on, docs/ha-api-notes.md §38): this
+prediction held for steps 1-5, almost exactly as written**, with the
+`step_id`-based sub-kind discrimination §38.2 flagged as a possible
+alternative found unnecessary in practice -- `_template_entry_domains`
+(renamed `_config_entry_entity_domains`, generalized since it was never
+template-specific) was reused verbatim, exactly as step 4 predicted. Two
+corrections to step 6's "zero code changes" framing, found while actually
+building the follow-on:
+
+- **Apply order is a literal ordered tuple (`_KIND_ORDER`), not a bare
+  `OBJECT_KINDS` membership check** — `_kind_sort_key`'s fallback for a kind
+  absent from the tuple is `len(_KIND_ORDER)`, which sorts AFTER `script`/
+  `automation` (the tuple's own last two entries), not merely "unordered
+  among the helpers". A domain merely added to `OBJECT_KINDS` without also
+  being added to `_KIND_ORDER` would apply dead last, after automations that
+  might reference its entities — silently wrong dependency order, not a
+  visible failure until something actually races on it. `GROUP_DOMAINS`
+  needed its twelve entries added to `_KIND_ORDER` explicitly (`hassle.sync.
+  apply`); this was already true of `TEMPLATE_DOMAINS` too (M10 added its
+  four to the same tuple) — step 6's text just didn't call the tuple out by
+  name, having listed "apply order" alongside "validation/ignore-glob" (which
+  genuinely ARE bare membership/string-matching) as if all three worked the
+  same way.
+- **Validation is NOT always "zero code changes for a new domain."** A group
+  helper's own `entities=` field is a literal list of member entity ids —
+  MILESTONES M21 test 5 wants a nonexistent member flagged, and nothing in
+  the existing validator walks a helper object's own body at all
+  (`hassle.registry.extract.extract_references` only ever descends into an
+  object's `triggers`/`conditions`/`actions`, and neither template nor group
+  helpers have any of those sections) — so this needed a genuinely new
+  function, `hassle.registry.validate._validate_group_entities`, not a
+  membership-set addition. `threshold`/`derivative` (§13's other named
+  future domains) likely don't have an analogous "list of entity ids" field
+  the way `group` does, so this may be a `group`-specific step 6 addendum
+  rather than a universal one — worth checking against each new domain's
+  own schema shape rather than assuming it never applies.
+
 ## 4. Where things live
 
 - `hassle.backend` — `Backend` Protocol (`protocol.py`), `FakeBackend`

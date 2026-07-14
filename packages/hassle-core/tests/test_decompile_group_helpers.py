@@ -24,7 +24,11 @@ from hassle.compiler.bundle import compile_bundle
 from hassle.decompiler.codegen import decompile_object
 
 FIXTURE = (
-    Path(__file__).resolve().parents[3] / "fixtures" / "dsl" / "group_helper_declarations" / "bundle"
+    Path(__file__).resolve().parents[3]
+    / "fixtures"
+    / "dsl"
+    / "group_helper_declarations"
+    / "bundle"
 )
 
 
@@ -71,7 +75,7 @@ def test_decompile_every_group_domain_uses_matching_builder_name() -> None:
         "group_lock:all_locks": "group_lock",
         "group_media_player:whole_house_audio": "group_media_player",
         "group_notify:all_phones": "group_notify",
-        "group_valve:all_valves": "group_valve",
+        "group_valve:irrigation_zone_a": "group_valve",
     }
     for key, builder in expected_builder.items():
         obj = result.objects[key]

@@ -66,22 +66,31 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from hassle.ir.keys import HELPER_DOMAINS, TEMPLATE_DOMAINS, category_shaped_stem, humanize_slug
+from hassle.ir.keys import (
+    GROUP_DOMAINS,
+    HELPER_DOMAINS,
+    TEMPLATE_DOMAINS,
+    category_shaped_stem,
+    humanize_slug,
+)
 
 # Every object kind's HA UI category-registry scope (docs/ha-api-notes.md
 # §31.2/§31.6, source-verified -- corrects §22/§30's belief that only
 # automations/scripts have a category-registry scope at all: real HA's
 # category registry has no scope allowlist whatsoever, §31.1, and the
-# frontend's helpers page shares ONE scope, `"helpers"`, across all 13 helper
+# frontend's helpers page shares ONE scope, `"helpers"`, across all 25 helper
 # kinds -- 9 storage-collection (`HELPER_DOMAINS`) + 4 template config-entry
-# (`TEMPLATE_DOMAINS`)). Bundle PLACEMENT (MILESTONES M15 work item B) now
-# gives every kind a real root-level category-shaped file (`<slug>.py`) --
-# `category_shaped_stem` recognizes it kind-independently; this map is what
-# lets `_category_slug_from_source_path` additionally confirm a specific
-# object's OWN kind is entitled to a category action at all (every real
-# `OBJECT_KINDS` entry is, so in practice this is just a scope lookup).
+# (`TEMPLATE_DOMAINS`) + 12 group config-entry (`GROUP_DOMAINS`, M21)).
+# Bundle PLACEMENT (MILESTONES M15 work item B) now gives every kind a real
+# root-level category-shaped file (`<slug>.py`) -- `category_shaped_stem`
+# recognizes it kind-independently; this map is what lets
+# `_category_slug_from_source_path` additionally confirm a specific object's
+# OWN kind is entitled to a category action at all (every real `OBJECT_KINDS`
+# entry is, so in practice this is just a scope lookup).
 _SCOPE_FOR_KIND = {"automation": "automation", "script": "script"}
-_SCOPE_FOR_KIND.update({kind: "helpers" for kind in HELPER_DOMAINS | TEMPLATE_DOMAINS})
+_SCOPE_FOR_KIND.update(
+    {kind: "helpers" for kind in HELPER_DOMAINS | TEMPLATE_DOMAINS | GROUP_DOMAINS}
+)
 
 
 @dataclass(frozen=True)

@@ -42,7 +42,7 @@ from typing import Any, cast
 from hassle.backend.client import HaClient
 from hassle.backend.errors import HaApiError
 from hassle.backend.version import version_warning
-from hassle.ir.keys import HELPER_DOMAINS, OBJECT_KINDS, TEMPLATE_DOMAINS
+from hassle.ir.keys import GROUP_DOMAINS, HELPER_DOMAINS, OBJECT_KINDS, TEMPLATE_DOMAINS
 from hassle.ir.keys import slugify as _slugify
 from hassle.registry.snapshot import PurposeVocabulary, RegistrySnapshot
 
@@ -65,6 +65,33 @@ _TEMPLATE_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "template_sensor": (),
     "template_binary_sensor": (),
     "template_select": ("options", "select_option"),
+}
+
+# The `group` integration's config-flow menu step_id per flavor (M21, docs/
+# ha-api-notes.md §38.1) -- live-captured against the owner's HA. Unlike
+# template, the step_id per flavor equals the flavor name itself (§38.2).
+_GROUP_FLOW_TYPE = {
+    "group_binary_sensor": "binary_sensor",
+    "group_button": "button",
+    "group_cover": "cover",
+    "group_event": "event",
+    "group_fan": "fan",
+    "group_light": "light",
+    "group_lock": "lock",
+    "group_media_player": "media_player",
+    "group_notify": "notify",
+    "group_sensor": "sensor",
+    "group_switch": "switch",
+    "group_valve": "valve",
+}
+
+# `name`/`entities`/`hide_members` are always supplied by the DSL builders'
+# own required-kwarg signatures; the only field HA's form schema requires
+# that isn't already covered by the DSL signature is `type` on `group_sensor`
+# (docs/ha-api-notes.md §38.1) -- mirrors `_TEMPLATE_REQUIRED_FIELDS` covering
+# only the EXTRA fields beyond what every domain already shares.
+_GROUP_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    domain: ("type",) if domain == "group_sensor" else () for domain in GROUP_DOMAINS
 }
 
 
@@ -96,6 +123,10 @@ class DirectBackend:
         # DirectBackend rebuilds it from `_alist_template_helpers` on first
         # list_remote.
         self._template_entry_ids: dict[tuple[str, str], str] = {}
+        # M21: same cache, for the group-helper domains -- a SEPARATE dict
+        # (never folded into `_template_entry_ids`), mirroring FakeBackend's
+        # split (`hassle.backend.fake`'s own `_group_entry_ids` docstring).
+        self._group_entry_ids: dict[tuple[str, str], str] = {}
 
     # -- lifecycle / bridge ------------------------------------------------
 
@@ -153,6 +184,8 @@ class DirectBackend:
             return self._run(self._alist_scripts())
         if kind in TEMPLATE_DOMAINS:
             return self._run(self._alist_template_helpers(kind))
+        if kind in GROUP_DOMAINS:
+            return self._run(self._alist_group_helpers(kind))
         return self._run(self._alist_helpers(kind))
 
     def create(self, kind: str, config: dict[str, Any]) -> str:
@@ -163,6 +196,8 @@ class DirectBackend:
             return self._run(self._awrite_script(config))
         if kind in TEMPLATE_DOMAINS:
             return self._run(self._acreate_template_helper(kind, config))
+        if kind in GROUP_DOMAINS:
+            return self._run(self._acreate_group_helper(kind, config))
         return self._run(self._acreate_helper(kind, config))
 
     def update(self, kind: str, identity: str, config: dict[str, Any]) -> None:
@@ -173,6 +208,8 @@ class DirectBackend:
             self._run(self._awrite_script({**config, "id": identity}))
         elif kind in TEMPLATE_DOMAINS:
             self._run(self._aupdate_template_helper(kind, identity, config))
+        elif kind in GROUP_DOMAINS:
+            self._run(self._aupdate_group_helper(kind, identity, config))
         else:
             self._run(self._aupdate_helper(kind, identity, config))
 
@@ -184,13 +221,17 @@ class DirectBackend:
             self._run(self._adelete_config("script", identity))
         elif kind in TEMPLATE_DOMAINS:
             self._run(self._adelete_template_helper(kind, identity))
+        elif kind in GROUP_DOMAINS:
+            self._run(self._adelete_group_helper(kind, identity))
         else:
             self._run(self._client.ws_command(f"{kind}/delete", **{f"{kind}_id": identity}))
 
     def entry_id_for(self, kind: str, identity: str) -> str | None:
         """Additive, non-`Backend`-Protocol lookup (docs/backend.md §3.1):
-        the config entry_id for a template-helper kind, `None` for any other
-        kind or an identity DirectBackend hasn't seen this process."""
+        the config entry_id for a template/group-helper kind, `None` for any
+        other kind or an identity DirectBackend hasn't seen this process."""
+        if kind in GROUP_DOMAINS:
+            return self._group_entry_ids.get((kind, identity))
         return self._template_entry_ids.get((kind, identity))
 
     # -- config-REST reload settling --------------------------------------
@@ -403,11 +444,27 @@ class DirectBackend:
     #    change the title. Recorded here rather than wired up, since wiring an
     #    unused rename path would be untested dead code.
 
-    async def _template_entry_domains(self) -> dict[str, str]:
-        """`entry_id -> HA entity domain` for every template config entry,
-        by cross-referencing the entity registry (docs/ha-api-notes.md
-        §26.6): each template config entry creates exactly one entity, and
-        its registry row's `config_entry_id` links back to the entry."""
+    async def _config_entry_entity_domains(self) -> dict[str, str]:
+        """`entry_id -> HA entity domain` for EVERY config entry regardless of
+        integration, by cross-referencing the entity registry (docs/
+        ha-api-notes.md §26.6): a config entry that creates exactly one
+        entity has that entity's registry row's `config_entry_id` link back
+        to the entry -- true of both a template config entry and a group
+        config entry (both create exactly one entity per entry). Shared by
+        `_alist_template_helpers` (M10) and `_alist_group_helpers` (M21,
+        docs/ha-api-notes.md §38.2: a group entry's flavor is ALSO visible for
+        free as the options-flow's own `step_id`, but this mechanism is
+        preferred since it's already a single WS call this class makes
+        regardless -- reusing it here costs nothing extra, exactly the
+        "prefer the template mechanism if it costs no extra call" note §38.2
+        makes).
+
+        (Named generically, not `_template_entry_domains`, since M21 found it
+        was never template-specific to begin with -- it doesn't filter by
+        integration at all, so extending its docstring and reusing it
+        verbatim for group was simpler and safer than adding a near-duplicate
+        method.)
+        """
         entities = await self._client.ws_command("config/entity_registry/list")
         out: dict[str, str] = {}
         for entity in entities:
@@ -450,7 +507,7 @@ class DirectBackend:
     async def _alist_template_helpers(self, kind: str) -> dict[str, dict[str, Any]]:
         wanted_domain = _TEMPLATE_FLOW_TYPE[kind]
         entries = await self._client.ws_command("config_entries/get")
-        entry_domains = await self._template_entry_domains()
+        entry_domains = await self._config_entry_entity_domains()
         out: dict[str, dict[str, Any]] = {}
         for entry in entries:
             if entry.get("domain") != "template":
@@ -586,6 +643,161 @@ class DirectBackend:
             return  # already gone / never existed -- delete is idempotent
         await self._client.rest_delete(f"/api/config/config_entries/entry/{entry_id}")
         self._template_entry_ids.pop((kind, identity), None)
+
+    # -- config-entry group helpers (M21, docs/ha-api-notes.md §38) --------
+    #
+    # Same create (menu -> form -> create_entry) / read-back (options-flow
+    # suggested values) / update (options-flow form -> create_entry) /
+    # delete (entry removal) mechanics as the M10 template-helper flows
+    # above, live-captured against the owner's HA. **One divergence from the
+    # M10 pattern (docs/ha-api-notes.md §38 amendment):** the `group`
+    # integration's options-flow schema RE-PRESENTS THE SAME FORM as create
+    # (§38.1 -- `name` INCLUDED), unlike template's options-flow schema
+    # (§26.7 finding 2, `name` excluded). So, unlike
+    # `_aupdate_template_helper` above, `_aupdate_group_helper` submits the
+    # full config unmodified -- no name-stripping needed, and `name` doesn't
+    # need a separate post-hoc merge on read-back either (the options-flow's
+    # own suggested values already include it, since it's part of the
+    # schema).
+
+    async def _acurrent_group_options(self, entry_id: str) -> dict[str, Any]:
+        """The stored options of a group config entry, read back via an
+        options-flow's suggested values -- same mechanism as
+        `_acurrent_template_options` (docs/ha-api-notes.md §26.7/§38.1: there
+        is no admin API that returns a config entry's options directly, for
+        ANY integration). Opens an options flow, harvests `data_schema`'s
+        `description.suggested_value` per field, then cancels the flow."""
+        flow = await self._client.rest_post(
+            "/api/config/config_entries/options/flow", json={"handler": entry_id}
+        )
+        flow_id = flow["flow_id"]
+        try:
+            options: dict[str, Any] = {}
+            data_schema: list[dict[str, Any]] = flow.get("data_schema") or []
+            for field in data_schema:
+                name = field.get("name")
+                description = field.get("description")
+                if name is None or not isinstance(description, dict):
+                    continue
+                if "suggested_value" in description:
+                    options[str(name)] = description["suggested_value"]
+            return options
+        finally:
+            with contextlib.suppress(HaApiError):
+                await self._client.rest_delete(f"/api/config/config_entries/options/flow/{flow_id}")
+
+    async def _alist_group_helpers(self, kind: str) -> dict[str, dict[str, Any]]:
+        wanted_flavor = _GROUP_FLOW_TYPE[kind]
+        entries = await self._client.ws_command("config_entries/get")
+        entry_domains = await self._config_entry_entity_domains()
+        out: dict[str, dict[str, Any]] = {}
+        for entry in entries:
+            if entry.get("domain") != "group":
+                continue
+            entry_id = str(entry["entry_id"])
+            if entry_domains.get(entry_id) != wanted_flavor:
+                continue
+            title = entry.get("title")
+            if not title:
+                continue
+            identity = _slugify(str(title))
+            self._group_entry_ids[(kind, identity)] = entry_id
+            options = await self._acurrent_group_options(entry_id)
+            # Defensive fallback only -- unlike template (§26.7 finding 2),
+            # the group options-flow schema already includes `name`
+            # (§38.1), so `_acurrent_group_options` normally returns it
+            # already; `setdefault` never overwrites a genuinely-read value.
+            options.setdefault("name", str(title))
+            out[identity] = options
+        return out
+
+    async def _acreate_group_helper(self, kind: str, config: dict[str, Any]) -> str:
+        name = config.get("name")
+        if not name:
+            raise ValueError(f"{kind} config has no 'name' (required to derive identity/title)")
+        identity = _slugify(str(name))
+        missing = [f for f in _GROUP_REQUIRED_FIELDS[kind] if config.get(f) is None]
+        if missing:
+            raise ValueError(
+                f"{kind} config is missing required field(s) {missing} "
+                "(HA's group form schema rejects the submission without them, "
+                "docs/ha-api-notes.md §38.1)"
+            )
+        step_id = _GROUP_FLOW_TYPE[kind]
+
+        flow = await self._client.rest_post(
+            "/api/config/config_entries/flow", json={"handler": "group"}
+        )
+        flow_id = flow["flow_id"]
+        if flow.get("type") == "menu":
+            flow = await self._client.rest_post(
+                f"/api/config/config_entries/flow/{flow_id}", json={"next_step_id": step_id}
+            )
+        result = await self._client.rest_post(
+            f"/api/config/config_entries/flow/{flow_id}", json=dict(config)
+        )
+        # Same nested-`result` wire shape as template (docs/ha-api-notes.md
+        # §31.8) -- never a top-level `entry_id` key, and never a silent
+        # flow_id fallback if it's missing (the exact bug class §31.8
+        # documents).
+        entry_json = cast("dict[str, Any]", result.get("result") or {})
+        entry_id_value = entry_json.get("entry_id")
+        if not entry_id_value:
+            raise HaApiError(
+                f"POST /api/config/config_entries/flow/{flow_id}: the create_entry "
+                f"response for {kind}:{identity} had no result.entry_id (received "
+                f"top-level keys {sorted(result)}, result keys "
+                f"{sorted(entry_json) if entry_json else '<result missing/empty>'}). "
+                "This is a Hassle bug, not a mistake in your configuration -- the "
+                "expected shape is documented at docs/ha-api-notes.md §31.8. Fix: "
+                "please report this (include the keys listed above) at "
+                "https://github.com/hassle-project/hassle/issues; the config entry "
+                "may have been created in HA regardless -- check the HA UI's "
+                "Settings -> Devices & services page before retrying, to avoid a "
+                "duplicate."
+            )
+        entry_id = str(entry_id_value)
+        self._group_entry_ids[(kind, identity)] = entry_id
+        return identity
+
+    async def _aupdate_group_helper(self, kind: str, identity: str, config: dict[str, Any]) -> None:
+        entry_id = self._group_entry_ids.get((kind, identity))
+        if entry_id is None:
+            await self._alist_group_helpers(kind)
+            entry_id = self._group_entry_ids.get((kind, identity))
+        if entry_id is None:
+            raise ValueError(
+                f"no config entry found for {kind}:{identity} -- an UPDATE must "
+                "target an existing entry (options-flow update, never a recreate, I2 analog)"
+            )
+        missing = [f for f in _GROUP_REQUIRED_FIELDS[kind] if config.get(f) is None]
+        if missing:
+            raise ValueError(
+                f"{kind} config is missing required field(s) {missing} "
+                "(HA's group form schema rejects the submission without them, "
+                "docs/ha-api-notes.md §38.1)"
+            )
+        # Unlike template (`_aupdate_template_helper` above), the group
+        # options-flow schema RE-PRESENTS THE SAME FORM as create, `name`
+        # included (docs/ha-api-notes.md §38.1) -- submitted unmodified, no
+        # stripping needed (the M10 pattern that did NOT transfer cleanly).
+        flow = await self._client.rest_post(
+            "/api/config/config_entries/options/flow", json={"handler": entry_id}
+        )
+        flow_id = flow["flow_id"]
+        await self._client.rest_post(
+            f"/api/config/config_entries/options/flow/{flow_id}", json=dict(config)
+        )
+
+    async def _adelete_group_helper(self, kind: str, identity: str) -> None:
+        entry_id = self._group_entry_ids.get((kind, identity))
+        if entry_id is None:
+            await self._alist_group_helpers(kind)
+            entry_id = self._group_entry_ids.get((kind, identity))
+        if entry_id is None:
+            return  # already gone / never existed -- delete is idempotent
+        await self._client.rest_delete(f"/api/config/config_entries/entry/{entry_id}")
+        self._group_entry_ids.pop((kind, identity), None)
 
     # -- registry snapshot (DESIGN §9.2) ----------------------------------
 
@@ -745,12 +957,17 @@ class DirectBackend:
     def _unique_id_to_match(self, kind: str, identity: str) -> str | None:
         """The `unique_id` value `kind:identity`'s entity-registry row must
         carry (docs/ha-api-notes.md §31.8): the object-key identity itself
-        for every kind EXCEPT a TEMPLATE_DOMAINS kind, whose entity's
-        `unique_id` is the config entry's `entry_id` instead (there is no
-        caller-settable `unique_id` for these, §26.6) -- `None` if this
-        process hasn't cached that kind/identity's `entry_id` yet."""
+        for every kind EXCEPT a TEMPLATE_DOMAINS/GROUP_DOMAINS kind, whose
+        entity's `unique_id` is the config entry's `entry_id` instead (there
+        is no caller-settable `unique_id` for these, §26.6/§38.1 -- the same
+        `SchemaConfigFlowHandler`-family entity setup pattern
+        `async_setup_template_entry` uses, §31.8, is the generic HA
+        config-entry-helper convention, not template-specific) -- `None` if
+        this process hasn't cached that kind/identity's `entry_id` yet."""
         if kind in TEMPLATE_DOMAINS:
             return self._template_entry_ids.get((kind, identity))
+        if kind in GROUP_DOMAINS:
+            return self._group_entry_ids.get((kind, identity))
         return identity
 
     async def _find_entity_registry_row(self, kind: str, identity: str) -> str | None:
