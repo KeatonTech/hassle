@@ -1052,3 +1052,48 @@ via the capture-recipe work item.
 | M7 | M | 2 |
 | M8 | S–M | 1 |
 | M9 | M | 2 (docs generators / agent-acceptance harness) |
+
+## M21 — Config-entry helpers, round 2: the group-helper plugin (owner-commissioned)
+
+Owner field need: UI-created Group helpers (`binary_sensor.game_room_occupancy_status`, the
+whole cover-group ladder behind the blind automations, the light groups) are invisible to
+sync — pull leaves them UI-owned, push can never touch them. M10 predicted this milestone
+("other config-entry helper domains … become mechanical follow-ons"): reuse the M10 plugin
+protocol wholesale for the `group` domain. Flow shapes captured live against the owner's HA
+(docs/ha-api-notes.md §38); CI integration (HA stable + dev) is the authority per §0.
+
+**Identity freeze (mirrors M10's re-frozen rule exactly):** object key is
+`"group_<flavor>:<slugify(name)>"` (e.g. `group_cover:entryway_top` for `name="Entryway Top"`).
+`name=` is the sole identity-bearing kwarg; the wire sets entry `title` from it; `list_remote`
+re-derives identity by slugifying the title. `GROUP_DOMAINS` widens `OBJECT_KINDS` additively
+(F1 format unchanged); `ManifestEntry.entry_id` bookkeeping identical to template kinds.
+Twelve flavors: binary_sensor, button, cover, event, fan, light, lock, media_player, notify,
+sensor, switch, valve — three schema shapes total (§38.1). DSL kwargs are wire-verbatim
+(`entities=`, `hide_members=`, `all=` on the three flavors that have it, `type=` on sensor);
+`hide_members`/`all` always materialized explicitly in the compiled options body (one
+canonical form, §38.1). The declared entity (`<flavor>.<slug>`) counts as existing for
+registry validation, like template helpers' declared entities.
+
+**Write these tests first**
+1. DSL → IR: `group_cover(name=..., entities=[...])` (+ the other 11) compiles to the frozen
+   options body; slug-of-name identity; golden pair per schema shape (base / +all / +type).
+2. FakeBackend group flows: menu → flavor form → create_entry; options-flow update preserves
+   `entry_id`; delete removes the entry; missing required field (`type` on sensor) raises
+   ConfigEntryFlowError; recreate-after-delete gets a fresh entry_id (rollback caveat parity,
+   M10 test 4).
+3. Decompile/adopt: a listed group entry round-trips into `helpers/` (category/misc placement
+   rules unchanged) byte-stable (I3 on options bodies); nested groups (a group whose members
+   are groups) decompile as plain entity references, no ordering games — `entities` list order
+   preserved verbatim both directions.
+4. Plan/apply: create/update/delete parity with §8.2 semantics; CREATE-collision drift abort;
+   fuzz extension covering the new kinds; NOOP short-circuit on canonical equality (the §31
+   storage-normalization lesson applies: pin option value types as HA returns them).
+5. Validation interplay: declared group entities count as existing; a group referencing a
+   nonexistent member entity surfaces the standard unknown-entity finding (file:line, fix).
+6. CI integration (M6 pattern, stable + dev): create/update/delete a cover group end-to-end;
+   assert the twelve-option menu and the three schema shapes of §38.1 (the sensor-flavor
+   version caveat, §38.3, resolves here).
+
+Out of scope: legacy YAML `group:` platform objects (not config entries); the `person`/`zone`
+domains; any write to a group the bundle does not declare (I6 conflict surfacing applies as
+everywhere).

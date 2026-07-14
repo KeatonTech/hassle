@@ -3417,3 +3417,62 @@ spellings render identically, and both now validate cleanly) and would need
 `test_capture_notify_recipe.py`'s asserted `value_template` strings updated
 to match, plus (if the compiled JSON fixture corpus embeds this recipe's
 output anywhere) a `hassle-dev goldens --update` regen.
+
+## 38. M21: group-helper config-entry flow shapes — captured live (owner HA, 2026-07-13)
+
+The `group` integration is the second config-entry helper family (M10 said
+"other config-entry helper domains (threshold, derivative, group, …) become
+mechanical follow-ons" — this is the group follow-on). Captured against the
+owner's live HA via the exact REST/WS endpoints §26.0 froze (flows opened
+read-only and DELETEd before any `create_entry`, the same thing the UI does
+when a dialog is opened and closed; ~25 real group entries enumerated and
+their options read via the options flow's suggested values).
+
+### 38.1 Create flow: same menu → form → create_entry shape as template
+
+`POST /api/config/config_entries/flow {"handler": "group"}` returns a menu
+step (`step_id: "user"`) with **twelve** flavor options:
+
+```
+binary_sensor, button, cover, event, fan, light, lock,
+media_player, notify, sensor, switch, valve
+```
+
+Choosing a flavor (`{"next_step_id": "<flavor>"}`) yields a single form step
+(`step_id` = the flavor) with one of exactly three schema shapes:
+
+| Flavors | Fields (all listed fields REQUIRED) |
+|---|---|
+| button, cover, event, fan, lock, media_player, notify, valve | `name`, `entities`, `hide_members` (default false) |
+| binary_sensor, light, switch | base three + `all` (default false) |
+| sensor | base three + `type` (min/max/mean/median/last/range/product/sum/stdev) |
+
+`entities` is a list of entity ids of the flavor's own domain (groups may
+nest: the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group). `hide_members`/`all` carry voluptuous defaults, so the form
+accepts omission on CREATE — but Hassle always submits them explicitly (the
+options read-back returns them explicitly, and I3 byte-stability wants one
+canonical body, not two).
+
+No `unique_id` is settable (same §26.6 rule as template — the schema rejects
+extra keys); the entry `title` is set from `name` and is the identity
+correlator on read-back. Options flows re-present the same form (step_id =
+the flavor, no menu) with current values as suggested values; entry deletion
+is the same `DELETE /api/config/config_entries/entry/{entry_id}`.
+
+### 38.2 Sub-kind discrimination comes free from the flavor step_id
+
+Unlike template (§26.6, entity-registry cross-reference required), a group
+entry's flavor is visible as the options flow's `step_id` (captured live:
+`options step: cover` / `light` / …). Whichever mechanism `DirectBackend`
+already uses for template sub-kinds should be preferred if it costs no
+extra call; the step_id is the fallback that provably works.
+
+### 38.3 Version caveat
+
+Captured on the owner's HA (2026.6.x era). The sensor flavor's form showed
+ONLY `name`/`entities`/`hide_members`/`type` — HA core source has grown
+optional sensor-group fields (`ignore_non_numeric`, `unit_of_measurement`,
+`device_class`, `state_class`) in some versions; the CI integration matrix
+(HA stable + dev, M6 pattern) is the authority, per §0. If CI's schemas
+differ, widen the sensor kwargs there and record it here.
