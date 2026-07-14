@@ -511,7 +511,8 @@ output form, independent of how the DSL source happened to be written).
   (docs/ha-api-notes.md §38.1: real HA's `group` config-flow form schema
   also rejects an unrecognized `unique_id` key outright). `name=` is the
   sole identity-bearing kwarg: the object key is
-  `"<flavor>:<slugify(name)>"`. The HA-assigned `entry_id` is manifest-only
+  `"group_<flavor>:<slugify(name)>"` (e.g. `group_cover:entryway_top`).
+  The HA-assigned `entry_id` is manifest-only
   (docs/backend.md), never in the DSL body. `entities=` (a list of member
   entity ids, possibly another group's own produced entity id — groups may
   nest) preserves order verbatim (I3).
