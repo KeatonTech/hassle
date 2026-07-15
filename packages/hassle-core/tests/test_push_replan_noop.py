@@ -66,7 +66,9 @@ def test_push_update_then_replan_is_noop_automation() -> None:
     manifest = Manifest(
         synced_at="t0",
         ha_version="2026.7",
-        objects={"automation:hvac_coordinator": _base_entry(backend, "automation", "hvac_coordinator")},
+        objects={
+            "automation:hvac_coordinator": _base_entry(backend, "automation", "hvac_coordinator")
+        },
     )
 
     local: ObjectMap = {
@@ -111,7 +113,10 @@ def test_push_update_then_replan_is_noop_template_sensor() -> None:
     local: ObjectMap = {
         key: (
             "template_sensor",
-            {"name": "HVAC Status Zone1", "state": "{{ state_attr('climate.zone1', 'hvac_action') }}"},
+            {
+                "name": "HVAC Status Zone1",
+                "state": "{{ state_attr('climate.zone1', 'hvac_action') }}",
+            },
         )
     }
     plan = compute_plan(

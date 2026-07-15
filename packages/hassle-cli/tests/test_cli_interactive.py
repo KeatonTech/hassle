@@ -184,7 +184,9 @@ def test_accept_remote_records_base_so_replan_is_refresh_not_conflict(
     assert cli(["pull"], cwd=git_repo).exit_code == 0
     assert "Renamed on the HA side" in (git_repo / "hallway.py").read_text(encoding="utf-8")
     plan = _build_plan(git_repo)
-    non_noop = {e.object_key: e.action.value for e in plan.entries if e.action is not PlanAction.NOOP}
+    non_noop = {
+        e.object_key: e.action.value for e in plan.entries if e.action is not PlanAction.NOOP
+    }
     assert non_noop == {}, non_noop
 
 
