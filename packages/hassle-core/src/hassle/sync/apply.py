@@ -189,12 +189,23 @@ def apply_plan(
 
         try:
             _apply_one(backend, entry, identity)
-        except Exception as exc:
+        except BaseException as exc:
             outcomes[entry.object_key] = ApplyOutcome.FAILED
             _mark_remaining_aborted(push_entries, entry, outcomes, skip_first=True)
             _rollback(backend, snapshots[:-1])
             for key in applied:
                 outcomes[key] = ApplyOutcome.ROLLED_BACK
+            if not isinstance(exc, Exception):
+                # KeyboardInterrupt/SystemExit mid-apply (owner field report,
+                # 2026-07-14 false conflicts): roll back like any other
+                # failure, then let the interrupt propagate. An un-rolled-back
+                # partial push leaves the already-written objects live in HA
+                # while the manifest keeps their PRE-push bases -- the next
+                # plan then reports a false `both_edited` conflict against the
+                # owner's own pushed content once the local side is edited
+                # again. Rollback is best-effort (a second interrupt during
+                # the rollback's own backend calls still escapes).
+                raise
             failure_message = str(exc) if isinstance(exc, CreatedIdentityDivergedError) else None
             return ApplyResult(
                 outcomes=outcomes,

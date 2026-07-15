@@ -171,3 +171,80 @@ def hall_light_on_motion():
     )
     assert result.exit_code == 0, result.output
     assert backend.list_remote("automation")["hall_light_on_motion"]["alias"] == "Local edit"
+
+
+def test_push_accept_remote_records_base_so_replan_is_refresh(
+    git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """The non-interactive `--accept-remote` flag path records the same base
+    the interactive [r] prompt does (field report, BrandtCamp 2026-07-14:
+    an accept-remote that records nothing re-surfaces the IDENTICAL conflict
+    on every subsequent plan, training the owner to ignore prompts -- I6).
+    Base advances to the LOCAL side: next plan reads `refresh`, and push
+    leaves the kept remote untouched."""
+    from hassle.sync.models import PlanAction
+    from hassle_cli.cli import _build_plan
+
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    assert cli(["push", "--yes"], cwd=git_repo).exit_code == 0
+
+    remote = backend.list_remote("automation")["hall_light_on_motion"]
+    backend.update("automation", "hall_light_on_motion", {**remote, "alias": "UI edit"})
+    (git_repo / "hallway.py").write_text(
+        """
+from hassle import automation, service, state, when
+
+@automation(id="hall_light_on_motion", alias="Local edit")
+def hall_light_on_motion():
+    when(state("binary_sensor.hall_motion").to("on"))
+    service("light.turn_on", target={"entity_id": "light.hallway"})
+""",
+        encoding="utf-8",
+    )
+
+    result = cli(
+        ["push", "--yes", "--accept-remote", "automation:hall_light_on_motion"], cwd=git_repo
+    )
+    assert result.exit_code == 0, result.output
+    # The kept remote was not clobbered by the push...
+    assert backend.list_remote("automation")["hall_light_on_motion"]["alias"] == "UI edit"
+    # ...and the next plan is a refresh (pull-side), never the same conflict again.
+    plan = _build_plan(git_repo)
+    actions = {e.object_key: e.action for e in plan.entries}
+    assert actions.get("automation:hall_light_on_motion") is PlanAction.REFRESH, actions
+    # A --yes push right now must not push the rejected local version over the
+    # kept remote (I6: the accepted UI edit is never silently lost).
+    assert cli(["push", "--yes"], cwd=git_repo).exit_code == 0
+    assert backend.list_remote("automation")["hall_light_on_motion"]["alias"] == "UI edit"
+
+
+def test_push_accept_remote_of_locally_deleted_object_replans_as_adopt(
+    git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """accept-remote on a deleted-locally/edited-remotely conflict: the bundle
+    no longer declares the object and the user chose to keep HA's version, so
+    the manifest entry is dropped -- the next plan reads `adopt` (unmanaged
+    until pulled back in), never the same conflict again."""
+    from hassle.sync.models import PlanAction
+    from hassle_cli.cli import _build_plan
+
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    assert cli(["push", "--yes"], cwd=git_repo).exit_code == 0
+
+    remote = backend.list_remote("automation")["hall_light_on_motion"]
+    backend.update("automation", "hall_light_on_motion", {**remote, "alias": "UI edit"})
+    (git_repo / "hallway.py").unlink()
+
+    # deleted locally + edited remotely = conflict; unresolved push refuses.
+    assert cli(["push", "--yes"], cwd=git_repo).exit_code != 0
+
+    result = cli(
+        ["push", "--yes", "--accept-remote", "automation:hall_light_on_motion"], cwd=git_repo
+    )
+    assert result.exit_code == 0, result.output
+    assert backend.list_remote("automation")["hall_light_on_motion"]["alias"] == "UI edit"
+    plan = _build_plan(git_repo)
+    actions = {e.object_key: e.action for e in plan.entries}
+    assert actions.get("automation:hall_light_on_motion") is PlanAction.ADOPT, actions

@@ -929,7 +929,43 @@ def push(
         raise SystemExit(1)
 
     if result.manifest is not None:
-        manifest_io.save_manifest(root, result.manifest)
+        # accept-remote resolutions (flag or interactive [r]) never reach
+        # `apply_plan` -- there is nothing to push for them -- but they DO
+        # resolve the conflict, so the manifest base must advance or the
+        # IDENTICAL conflict re-surfaces on every subsequent plan forever
+        # (owner field report, 2026-07-14: false conflicts train the owner to
+        # stop reading conflict prompts, defeating I6). A kept remote is a
+        # remote-side edit accepted as-is: record base := the LOCAL side's
+        # canonical hash, so the next plan reads the object as `refresh`
+        # (pull-side; a `push --yes` never clobbers the kept remote, and
+        # `hassle pull` reconciles the bundle). A locally-DELETED object
+        # resolved to keep-remote instead drops its manifest entry entirely:
+        # nothing local claims it anymore, so it re-plans as `adopt`.
+        new_manifest = result.manifest
+        accepted_remote = [
+            entry
+            for entry in the_plan.entries
+            if entry.action is PlanAction.CONFLICT and entry.object_key in accept_remote
+        ]
+        if accepted_remote:
+            from hassle.ir.canonical import sha256_hash, storage_canonical
+            from hassle.sync.models import ManifestEntry
+
+            new_objects = dict(new_manifest.objects)
+            for entry in accepted_remote:
+                if entry.local is None:
+                    new_objects.pop(entry.object_key, None)
+                    continue
+                existing = new_objects.get(entry.object_key)
+                new_objects[entry.object_key] = ManifestEntry(
+                    source=existing.source if existing is not None else None,
+                    compiled_hash=sha256_hash(storage_canonical(entry.kind, entry.local)),
+                    kind=existing.kind if existing is not None else "dsl",
+                    entry_id=existing.entry_id if existing is not None else None,
+                    category=existing.category if existing is not None else None,
+                )
+            new_manifest = new_manifest.model_copy(update={"objects": new_objects})
+        manifest_io.save_manifest(root, new_manifest)
 
     # M11: category write-back warnings are metadata-only (I6) -- the push
     # already succeeded (checked above); these are printed, never fatal.

@@ -121,6 +121,93 @@ def test_conflict_prompt_accept_remote(
     assert "Renamed on the HA side" in stored  # remote kept
 
 
+def test_accept_local_records_base_so_later_edit_replans_as_update(
+    interactive, git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """Field report (BrandtCamp bundle, 2026-07-14): after a keep-local
+    resolution is pushed, the manifest base must equal the pushed read-back --
+    a LATER local edit re-plans as a plain update, never a repeat conflict
+    against the owner's own previous push."""
+    from hassle.sync.models import PlanAction
+    from hassle_cli.cli import _build_plan
+
+    backend, token = fake_backend
+    _make_conflict(git_repo, cli, backend, token, toml_writer)
+    assert cli(["push"], cwd=git_repo, input="l\n\n").exit_code == 0
+
+    # NOTE: the replacement changes the file SIZE on purpose -- Python's
+    # bytecode cache invalidates on (mtime, size), and this test writes twice
+    # within the same second (a same-length edit would re-import stale
+    # bytecode in-process; real CLI runs are separate processes).
+    src = (git_repo / "hallway.py").read_text(encoding="utf-8")
+    (git_repo / "hallway.py").write_text(
+        src.replace('"light.hallway_2"', '"light.hallway_edited_again"'), encoding="utf-8"
+    )
+    plan = _build_plan(git_repo)
+    actions = {e.object_key: e.action for e in plan.entries}
+    assert actions.get("automation:hall_light_on_motion") is PlanAction.UPDATE, actions
+
+
+def test_accept_remote_records_base_so_replan_is_refresh_not_conflict(
+    interactive, git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """Field report hypothesis (1), confirmed: an interactive [r] resolution
+    recorded NOTHING -- `ManifestEntry.compiled_hash` kept the stale
+    pre-conflict base, so the identical conflict re-surfaced on every
+    subsequent plan forever (I6 damage: trains the owner to stop reading
+    conflict prompts). A kept remote is a remote-side edit accepted as-is:
+    the base must advance to the LOCAL side, so the next plan reads
+    `refresh` (pull-side -- push never clobbers the kept remote) until
+    `hassle pull` reconciles the bundle, after which everything is noop."""
+    import subprocess
+
+    from hassle.sync.models import PlanAction
+    from hassle_cli.cli import _build_plan
+
+    backend, token = fake_backend
+    _make_conflict(git_repo, cli, backend, token, toml_writer)
+    assert cli(["push"], cwd=git_repo, input="r\n\n").exit_code == 0
+
+    plan = _build_plan(git_repo)
+    actions = {e.object_key: e.action for e in plan.entries}
+    assert actions.get("automation:hall_light_on_motion") is PlanAction.REFRESH, actions
+
+    # The loop closes through pull: the kept remote lands in the bundle and
+    # the next plan has nothing left to do.
+    subprocess.run(["git", "add", "-A"], cwd=git_repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-q", "-m", "local state before pull"],
+        cwd=git_repo,
+        check=True,
+        capture_output=True,
+    )
+    assert cli(["pull"], cwd=git_repo).exit_code == 0
+    assert "Renamed on the HA side" in (git_repo / "hallway.py").read_text(encoding="utf-8")
+    plan = _build_plan(git_repo)
+    non_noop = {
+        e.object_key: e.action.value for e in plan.entries if e.action is not PlanAction.NOOP
+    }
+    assert non_noop == {}, non_noop
+
+
+def test_conflict_abort_keeps_conflict_pending(
+    interactive, git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """[a] resolves nothing, so the SAME conflict must re-surface on the next
+    plan -- unlike [r], nothing may be recorded (I6: the divergence is still
+    real and unresolved)."""
+    from hassle.sync.models import PlanAction
+    from hassle_cli.cli import _build_plan
+
+    backend, token = fake_backend
+    _make_conflict(git_repo, cli, backend, token, toml_writer)
+    assert cli(["push"], cwd=git_repo, input="a\n").exit_code != 0
+
+    plan = _build_plan(git_repo)
+    actions = {e.object_key: e.action for e in plan.entries}
+    assert actions.get("automation:hall_light_on_motion") is PlanAction.CONFLICT, actions
+
+
 def test_conflict_prompt_abort(interactive, git_repo: Path, cli, fake_backend, toml_writer) -> None:
     backend, token = fake_backend
     _make_conflict(git_repo, cli, backend, token, toml_writer)
