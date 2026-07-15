@@ -30,6 +30,21 @@ compiled options body (never omitted just because they equal their default)
 this keeps a single canonical compiled form (I3/plan-noop, the same
 one-canonical-form rule §38.1 documents).
 
+**Optional sensor fields (docs/ha-api-notes.md §38.3):** newer HA versions'
+`sensor` flavor schema has grown four OPTIONAL fields --
+``ignore_non_numeric``/``unit_of_measurement``/``device_class``/
+``state_class`` -- which ``group_sensor`` models as explicit kwargs. Unlike
+``hide_members``/``all`` these are NOT always materialized: they are
+version-dependent and optional in HA's own schema (the CI integration matrix
+is the authority, §0/§38.3), so an OMITTED kwarg stays out of the compiled
+body entirely, while an EXPLICITLY passed one lands in it verbatim --
+*including an explicit ``None``*. The distinction is carried by the
+``_UNSET`` sentinel default, not by ``None``: a wire options body can store
+an explicit null (HA's read-back for an unset optional selector), the
+decompiler reproduces it as ``field=None``, and recompiling must preserve it
+byte-stable (I3 -- the M21 review found the previous drop-``None`` body
+assembly would silently lose exactly that field).
+
 ``entities`` is a list of entity ids of the flavor's own domain, in the
 EXACT order given -- never sorted/deduped (I3: order is caller-declared
 data). Groups may nest (a group whose members are themselves group
@@ -58,6 +73,19 @@ from hassle.compiler.spans import capture_span
 from hassle.ir import GROUP_DOMAINS
 from hassle.ir.keys import slugify
 from hassle.ir.models import GroupHelperConfig
+
+
+class _UnsetType:
+    """Sentinel type for "kwarg not passed at all" (module docstring's
+    optional-sensor-fields paragraph) -- distinct from ``None``, which is a
+    real wire value (an explicit null in the stored options body) and must
+    survive compile/decompile round trips verbatim (I3)."""
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging nicety only
+        return "<UNSET>"
+
+
+_UNSET = _UnsetType()
 
 # All GroupHelperConfig instances built by this module's constructor
 # functions, in declaration order, for the lifetime of the process (or since
@@ -97,7 +125,12 @@ def _declare_group_helper(
         # retroactively change an already-compiled/registered IR body (R8).
         "entities": list(entities),
         "hide_members": bool(hide_members),
-        **{k: v for k, v in fields.items() if v is not None},
+        # Drop only the `_UNSET` sentinel (kwarg not passed), NEVER a real
+        # `None`: an explicit null is wire data -- the decompiler emits
+        # `field=None` for a stored null, and recompiling must reproduce it
+        # byte-stable (I3; the M21 review found dropping `None` here made
+        # exactly that round trip lossy).
+        **{k: v for k, v in fields.items() if v is not _UNSET},
     }
     helper = GroupHelperConfig.model_validate(body)
     helper.attach_domain(domain)
@@ -227,6 +260,10 @@ def group_sensor(
     entities: list[str],
     type: str,
     hide_members: bool = False,
+    ignore_non_numeric: bool | None | _UnsetType = _UNSET,
+    unit_of_measurement: str | None | _UnsetType = _UNSET,
+    device_class: str | None | _UnsetType = _UNSET,
+    state_class: str | None | _UnsetType = _UNSET,
     **fields: Any,
 ) -> EntityRef:
     """Declare a ``group_sensor`` helper (M21, docs/ha-api-notes.md §38.1).
@@ -237,6 +274,14 @@ def group_sensor(
     is a plain Python ``TypeError`` at the call site (module docstring) --
     there is no decorator form to accommodate here, so the required-keyword
     signature itself is the compile-time check.
+
+    ``ignore_non_numeric``/``unit_of_measurement``/``device_class``/
+    ``state_class`` are the OPTIONAL sensor-flavor fields newer HA schemas
+    carry (docs/ha-api-notes.md §38.3; the CI integration matrix is the
+    authority on which HA versions accept them, §0). Omitted -> absent from
+    the compiled options body; passed -> stored verbatim, including an
+    explicit ``None`` (a stored null round-trips byte-stable, I3 -- module
+    docstring's optional-sensor-fields paragraph).
     """
     return _declare_group_helper(
         "group_sensor",
@@ -244,6 +289,10 @@ def group_sensor(
         entities=entities,
         hide_members=hide_members,
         type=type,
+        ignore_non_numeric=ignore_non_numeric,
+        unit_of_measurement=unit_of_measurement,
+        device_class=device_class,
+        state_class=state_class,
         **fields,
     )
 

@@ -17,6 +17,10 @@ Covers:
   menu itself, plus one live create per schema shape: base/+all/+type) --
   resolves the sensor-flavor version caveat (§38.3) by asserting against
   whatever the CI HA image's schema actually returns.
+- the §38.3 optional sensor fields (`ignore_non_numeric`/
+  `unit_of_measurement`/`device_class`/`state_class`,
+  `m21/sensor-group-fields`): probes the live sensor form schema and
+  exercises whichever subset this HA image advertises.
 - plan/apply integration: compute_plan + apply_plan drive a real create, and
   a second push is a no-op (round-trip byte-stable, I3 applied to options
   bodies).
@@ -26,6 +30,8 @@ Covers:
 from __future__ import annotations
 
 from typing import Any
+
+import pytest
 
 from hassle.backend import DirectBackend
 from hassle.compiler.group_helpers import (
@@ -153,6 +159,62 @@ def test_group_sensor_schema_shape_with_type_live(ha: DirectBackend) -> None:
     stored = ha.list_remote("group_sensor")[identity]
     assert stored["type"] == "mean"
     ha.delete("group_sensor", identity)
+
+
+def test_group_sensor_optional_fields_live(ha: DirectBackend) -> None:
+    """§38.3's version caveat, resolved against whatever this CI image's
+    sensor-flavor schema actually returns (§0: CI is the authority): probe
+    the create-flow form for the four optional sensor fields
+    (`ignore_non_numeric`/`unit_of_measurement`/`device_class`/
+    `state_class`, modeled as `group_sensor` kwargs on
+    `m21/sensor-group-fields`) and, for whichever subset the schema
+    advertises, create a sensor group carrying them and assert the stored
+    options round-trip verbatim."""
+    flow = ha._run(  # type: ignore[attr-defined]
+        ha._client.rest_post("/api/config/config_entries/flow", json={"handler": "group"})
+    )
+    form = ha._run(  # type: ignore[attr-defined]
+        ha._client.rest_post(
+            f"/api/config/config_entries/flow/{flow['flow_id']}",
+            json={"next_step_id": "sensor"},
+        )
+    )
+    # The probe flow is left unsubmitted and expires server-side (same
+    # opened-read-only pattern as `test_group_menu_offers_twelve_flavors_live`).
+    assert form["type"] == "form"
+    assert form["step_id"] == "sensor"
+    schema_fields = {item.get("name") for item in form["data_schema"]}
+
+    probe_values: dict[str, Any] = {
+        "ignore_non_numeric": True,
+        "unit_of_measurement": "°C",
+        "device_class": "temperature",
+        "state_class": "measurement",
+    }
+    advertised = {k: v for k, v in probe_values.items() if k in schema_fields}
+    if not advertised:
+        pytest.skip(
+            "sensor flavor schema has no optional fields on this HA image "
+            f"(the §38.3 owner-HA-era shape): {sorted(schema_fields)}"
+        )
+
+    identity = ha.create(
+        "group_sensor",
+        _compiled(
+            "group_sensor",
+            name="Optional Fields Probe",
+            entities=["sensor.optional_fields_probe_member"],
+            hide_members=False,
+            type="mean",
+            **advertised,
+        ),
+    )
+    try:
+        stored = ha.list_remote("group_sensor")[identity]
+        for field, value in advertised.items():
+            assert stored[field] == value
+    finally:
+        ha.delete("group_sensor", identity)
 
 
 def test_group_helper_plan_apply_create_then_noop_on_repush(ha: DirectBackend) -> None:
