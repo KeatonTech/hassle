@@ -270,6 +270,14 @@ def pull(allow_dirty: bool) -> None:
         )
         raise SystemExit(1)
 
+    # BINDING ORDER: this clean-tree guard must stay ahead of EVERY write pull
+    # can perform -- the scaffold steps, the registry-snapshot refresh, the
+    # typings-stub regeneration, docs refresh, and apply_pull's source writes
+    # all sit BELOW it on purpose. A dirty tree + `pull` must leave every
+    # bundle file byte-identical (owner field report, 2026-07-13: a build with
+    # this guard sequenced after those steps rewrote bundle files and THEN
+    # refused -- tangling exactly what the guard promises to prevent).
+    # Locked by `test_pull_clean_tree.py::test_pull_on_dirty_tree_writes_nothing`.
     is_git = git_support.is_git_repo(root)
     if is_git and not allow_dirty and not git_support.is_clean(root):
         console.print(

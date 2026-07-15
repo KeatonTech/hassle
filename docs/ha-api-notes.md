@@ -3417,3 +3417,36 @@ spellings render identically, and both now validate cleanly) and would need
 `test_capture_notify_recipe.py`'s asserted `value_template` strings updated
 to match, plus (if the compiled JSON fixture corpus embeds this recipe's
 output anywhere) a `hassle-dev goldens --update` regen.
+
+## 38. Task `fix/pull-guard-ordering`: the reported guard-after-writes bug is NOT reproducible at current HEAD — regression lock added instead
+
+**The report (owner, BrandtCamp bundle, 2026-07-13).** `hassle pull` on a dirty tree emitted
+"working tree is not clean … never tangled with in-progress edits" with exit 1 *after* already
+rewriting bundle files (`misc.py` +627 lines, `.hassle/registry.json`, `typings/` stubs,
+`docs/DSL.md`) — i.e. the clean-tree guard ran after pull's writes.
+
+**What the code actually does (verified, not assumed).**
+
+- At HEAD (`e638336`), `pull`'s clean-tree guard (`cli.py`, right after the committed-token
+  scan) precedes *every* write: the init scaffolds, the registry-snapshot refresh, the stub
+  regeneration, layout migration, `apply_pull_with_decompiler`'s source writes, and the
+  manifest save. Everything ahead of the guard (`_bundle_root_or_fail`/`load_config`,
+  `find_committed_tokens`, `is_git_repo`) is read-only.
+- An end-to-end reproduction (dirty tracked edit + stale on-disk registry + a pending remote
+  ADOPT + a scaffold-less bundle, FakeBackend) exits 1 at the guard with the tree
+  **byte-identical** — the reported failure does not occur.
+- A sweep of **all 17 commits** in the visible history that touch
+  `packages/hassle-cli/src/hassle_cli/cli.py` (back to `5fbb324`) shows the guard ahead of the
+  first write in every one of them. Note the visible history starts at the M12/M13-era squash;
+  builds older than that (or a locally-modified toolchain checkout — bundles consume the
+  toolchain via M17's local path source) are the plausible source of the field behavior. A
+  deliberately re-broken ordering (guard moved below the scaffold steps) reproduces the exact
+  reported file family (`docs/DSL.md`, scaffolds, …), consistent with an older build having had
+  the guard sequenced later.
+
+**What changed.** No reorder was needed (nothing to move). Instead the invariant is now locked:
+`test_pull_clean_tree.py::test_pull_on_dirty_tree_writes_nothing` asserts a dirty tree +
+`pull` leaves every bundle file byte-identical (mutation-verified: it fails if the guard is
+moved below the scaffold steps), and the guard carries a BINDING ORDER comment naming that
+test. Born green — flagged here per the "record it, don't silently work around it" rule since
+the task description assumed the defect was present at HEAD.
