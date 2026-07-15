@@ -125,16 +125,20 @@ def test_pull_adopt_into_existing_misc_preserves_prior_objects(
     assert "automation:1769914409999" in compiled_keys, sorted(compiled_keys)
 
     # And the very next plan proposes ZERO deletes (the field failure's blast
-    # radius: 13 DELETEs against live HA).
+    # radius: 13 DELETEs against live HA). The one `create` for the bundle
+    # fixture's own hallway.py automation (local-only, never pushed to the
+    # FakeBackend) is expected and unrelated -- the contract here is that no
+    # pulled-then-dropped object shows up as a DELETE.
     result = cli(["plan"], cwd=git_repo)
     assert result.exit_code == 0, result.output
     assert "delete" not in result.output, result.output
-    assert "no changes" in result.output, result.output
+    action_lines = [line for line in result.output.splitlines() if line.strip()]
+    assert action_lines == ["                  create  automation:hall_light_on_motion"], (
+        result.output
+    )
 
 
-def test_apply_pull_adopt_splices_into_existing_file(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_apply_pull_adopt_splices_into_existing_file(tmp_path: Path, monkeypatch) -> None:
     """Unit-level: `apply_pull_with_decompiler` with the real
     `SplicingSourceWriter` must MERGE an ADOPT batch into an existing
     destination file, preserving every statement already there (including a
@@ -144,7 +148,7 @@ def test_apply_pull_adopt_splices_into_existing_file(
     from hassle_cli.pull_apply import apply_pull_with_decompiler
 
     monkeypatch.chdir(tmp_path)
-    existing_source = '''from hassle import automation, service, state, when
+    existing_source = """from hassle import automation, service, state, when
 
 # hand-written note: keep this automation last
 
@@ -152,7 +156,7 @@ def test_apply_pull_adopt_splices_into_existing_file(
 def everything_off():
     when(state("input_boolean.leaving").to("on"))
     service("light.turn_off", target={"entity_id": "light.all"})
-'''
+"""
     (tmp_path / "misc.py").write_text(existing_source, encoding="utf-8")
 
     def adopt_entry(ident: str) -> PlanEntry:
@@ -176,7 +180,9 @@ def everything_off():
         )
 
     writer = SplicingSourceWriter(updated_on="2026-07-15")
-    apply_pull_with_decompiler(Plan(entries=[adopt_entry("ui_new_1"), adopt_entry("ui_new_2")]), writer)
+    apply_pull_with_decompiler(
+        Plan(entries=[adopt_entry("ui_new_1"), adopt_entry("ui_new_2")]), writer
+    )
 
     merged = (tmp_path / "misc.py").read_text(encoding="utf-8")
     assert 'id="everything_off"' in merged, merged
