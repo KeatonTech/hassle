@@ -3493,6 +3493,44 @@ optional sensor-group fields (`ignore_non_numeric`, `unit_of_measurement`,
 (HA stable + dev, M6 pattern) is the authority, per §0. If CI's schemas
 differ, widen the sensor kwargs there and record it here.
 
+**Widened (`m21/sensor-group-fields`, 2026-07-15):** `group_sensor` now
+models the four optional fields as explicit kwargs. Semantics (deliberately
+NOT the always-materialized `hide_members`/`all` rule, because these fields
+are optional in HA's own schema and version-dependent): an omitted kwarg
+stays out of the compiled options body entirely; a passed one is stored
+verbatim — **including an explicit `None`** (an `_UNSET` sentinel default
+carries the omitted-vs-explicitly-null distinction). The explicit-`None`
+case matters because it fixes an I3 latent break the M21 review found:
+`_declare_group_helper` used to drop every `None`-valued field from the
+body, so a wire options body storing an explicit null (a plausible HA
+read-back shape for an unset optional selector) would decompile to
+`field=None` and then silently LOSE the field on recompile. Regression
+tests: `test_group_helper_optional_fields.py` (unit — committed failing
+first, R1/R4). The CI matrix remains the schema authority:
+`test_m21_group_flow.py::test_group_sensor_optional_fields_live` probes the
+sensor flavor's live form schema and exercises whichever of the four fields
+the image actually advertises (skips with the observed schema when none
+are present, i.e. an owner-HA-era image). Only the sensor flavor is
+widened; if CI ever shows optional fields on OTHER flavors, the same
+`_UNSET` pattern extends kwarg-by-kwarg (the `**fields` catch-all already
+round-trips unknown fields, explicit nulls included, in the meantime).
+
+**Follow-up finding (reviewer, `m21/sensor-group-fields` — recorded, not
+yet fixed):** the SAME drop-`None` body assembly survives at two sibling
+call sites, `hassle.compiler.helpers` (storage-collection builders) and
+`hassle.compiler.template_helpers._declare_template_helper`. The template
+one is the concrete concern: it uses `None` itself as the omitted-kwarg
+sentinel (every optional kwarg defaults to `None`, and `state=None` is
+additionally the decorator-form signal, M13), so it cannot distinguish
+omitted from explicitly-null at all — and template sensors carry exactly
+the nullable optional fields (`unit_of_measurement`/`device_class`) that
+made the group version reachable. A wire template-helper options body
+storing an explicit null would today decompile to `field=None` and lose
+the field on recompile (same I3 break this section's group fix closed).
+Needs its own scoped work item (the `_UNSET` migration there must not
+disturb the `state=None` decorator-form contract); out of scope for the
+group_sensor item, recorded here so it isn't silently rediscovered.
+
 ### 38.4 Implementation findings (M21 build) — places the M10 pattern did NOT transfer verbatim
 
 Building the plugin surfaced genuine divergences from the M10
