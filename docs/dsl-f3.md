@@ -494,6 +494,28 @@ output form, independent of how the DSL source happened to be written).
   needs a write-target action sequence; `template_sensor`/
   `template_binary_sensor` are read-only and need neither). The HA-assigned
   `entry_id` is manifest-only (docs/backend.md), never in the DSL body.
+- **M21 ADDITION** — group-helper declarations (config-entry domain, DESIGN
+  §13's config-entry plugin, the mechanical follow-on M10 itself predicted;
+  docs/ha-api-notes.md §38): one builder per flavor, all taking
+  `name=`/`entities=`/`hide_members=` (default `False`, always materialized
+  explicitly): `group_button`, `group_cover`, `group_event`, `group_fan`,
+  `group_lock`, `group_media_player`, `group_notify`, `group_valve`. Three
+  flavors additionally take `all=` (default `False`, always materialized
+  explicitly): `group_binary_sensor`, `group_light`, `group_switch`. One
+  flavor additionally takes a REQUIRED `type=` (the aggregation kind:
+  min/max/mean/median/last/range/product/sum/stdev): `group_sensor`. Same
+  import-and-reference pattern as every other helper builder (returns an
+  `EntityRef`); no decorator form (no Jinja `state=` field to defer, unlike
+  template).
+  **No `id=`/`unique_id=` kwarg**, same rule as template helpers
+  (docs/ha-api-notes.md §38.1: real HA's `group` config-flow form schema
+  also rejects an unrecognized `unique_id` key outright). `name=` is the
+  sole identity-bearing kwarg: the object key is
+  `"group_<flavor>:<slugify(name)>"` (e.g. `group_cover:entryway_top`).
+  The HA-assigned `entry_id` is manifest-only
+  (docs/backend.md), never in the DSL body. `entities=` (a list of member
+  entity ids, possibly another group's own produced entity id — groups may
+  nest) preserves order verbatim (I3).
 
 ### Recording verbs
 - `when(*triggers)` — append triggers to the active automation. Fully

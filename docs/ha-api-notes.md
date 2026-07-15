@@ -3417,3 +3417,209 @@ spellings render identically, and both now validate cleanly) and would need
 `test_capture_notify_recipe.py`'s asserted `value_template` strings updated
 to match, plus (if the compiled JSON fixture corpus embeds this recipe's
 output anywhere) a `hassle-dev goldens --update` regen.
+
+## 38. M21: group-helper config-entry flow shapes — captured live (owner HA, 2026-07-13)
+
+The `group` integration is the second config-entry helper family (M10 said
+"other config-entry helper domains (threshold, derivative, group, …) become
+mechanical follow-ons" — this is the group follow-on). Captured against the
+owner's live HA via the exact REST/WS endpoints §26.0 froze (flows opened
+read-only and DELETEd before any `create_entry`, the same thing the UI does
+when a dialog is opened and closed; ~25 real group entries enumerated and
+their options read via the options flow's suggested values).
+
+### 38.1 Create flow: same menu → form → create_entry shape as template
+
+`POST /api/config/config_entries/flow {"handler": "group"}` returns a menu
+step (`step_id: "user"`) with **twelve** flavor options:
+
+```
+binary_sensor, button, cover, event, fan, light, lock,
+media_player, notify, sensor, switch, valve
+```
+
+Choosing a flavor (`{"next_step_id": "<flavor>"}`) yields a single form step
+(`step_id` = the flavor) with one of exactly three schema shapes:
+
+| Flavors | Fields (all listed fields REQUIRED) |
+|---|---|
+| button, cover, event, fan, lock, media_player, notify, valve | `name`, `entities`, `hide_members` (default false) |
+| binary_sensor, light, switch | base three + `all` (default false) |
+| sensor | base three + `type` (min/max/mean/median/last/range/product/sum/stdev) |
+
+`entities` is a list of entity ids of the flavor's own domain (groups may
+nest: the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+itself a group). `hide_members`/`all` carry voluptuous defaults, so the form
+accepts omission on CREATE — but Hassle always submits them explicitly (the
+options read-back returns them explicitly, and I3 byte-stability wants one
+canonical body, not two).
+
+No `unique_id` is settable (same §26.6 rule as template — the schema rejects
+extra keys); the entry `title` is set from `name` and is the identity
+correlator on read-back. Options flows re-present the SAME FORM STEP SHAPE
+(step_id = the flavor, no menu) with current values as suggested values —
+but **NOT the `name` field itself** (CI-corrected, PR #35, both HA `stable`
+and `dev`, §38.4 finding #1): the options-flow schema is `entities`/
+`hide_members`(+`all`/`type`) ONLY, exactly like template's own options-flow
+schema (§26.7 finding 2) — a group's title is not editable through the
+options flow at all. The original capture note here ("re-present the same
+form ... with current values as suggested values") was ambiguous about
+whether `name` rode along; it does not. Entry deletion is the same
+`DELETE /api/config/config_entries/entry/{entry_id}`.
+
+~~Options flows re-present the same form (step_id = the flavor, no menu)
+with current values as suggested values~~ — **superseded above**; the live
+capture never actually exercised an options-flow submission end-to-end
+(read-only open+cancel only, module intro), so the "same form" phrasing
+was never checked against a real submission. CI's field failure (§38.4
+finding #1) is the actual verification; kept here struck through, not
+deleted, per the standing "every bug becomes evidence" practice (cf. §17.5,
+§26.5).
+
+### 38.2 Sub-kind discrimination comes free from the flavor step_id
+
+Unlike template (§26.6, entity-registry cross-reference required), a group
+entry's flavor is visible as the options flow's `step_id` (captured live:
+`options step: cover` / `light` / …). Whichever mechanism `DirectBackend`
+already uses for template sub-kinds should be preferred if it costs no
+extra call; the step_id is the fallback that provably works.
+
+### 38.3 Version caveat
+
+Captured on the owner's HA (2026.6.x era). The sensor flavor's form showed
+ONLY `name`/`entities`/`hide_members`/`type` — HA core source has grown
+optional sensor-group fields (`ignore_non_numeric`, `unit_of_measurement`,
+`device_class`, `state_class`) in some versions; the CI integration matrix
+(HA stable + dev, M6 pattern) is the authority, per §0. If CI's schemas
+differ, widen the sensor kwargs there and record it here.
+
+### 38.4 Implementation findings (M21 build) — places the M10 pattern did NOT transfer verbatim
+
+Building the plugin surfaced genuine divergences from the M10
+template-helper template. Finding #1 below was CI-verified WRONG on the
+first PR round (both HA `stable` and `dev`, PR #35) and is corrected here in
+place, struck through rather than deleted, per the standing "every bug
+becomes evidence, not silently erased" practice (cf. §17.5, §26.5's own
+identity-scheme correction). Findings #2-#3 remain source-informed only
+(§0: CI is the authority; #2 is exercised end-to-end by the same PR #35 run
+and did NOT fail, #3 is not yet exercised by any integration test).
+
+1. ~~**The group options-flow schema RE-PRESENTS THE SAME FORM as create,
+   `name` included** — unlike template, whose options-flow schema
+   (`generate_schema(domain, flow_type="options")`) never adds `CONF_NAME`
+   at all (§26.7 finding 2). §38.1's own capture note ("Options flows
+   re-present the same form … with current values as suggested values")
+   already says this, but it's easy to miss reading past the create-flow
+   table: `DirectBackend._aupdate_group_helper`/`FakeBackend.
+   _update_group_via_options_flow` submit the FULL config unmodified — no
+   name-stripping, no name-rejection check, no merge-around-a-missing-name
+   dance. This also means `_alist_group_helpers`'s read-back gets `name`
+   back from the options-flow's suggested values directly, same as every
+   other field — the `options.setdefault("name", str(title))` line in
+   `DirectBackend._alist_group_helpers` is a defensive fallback only, never
+   load-bearing (unlike template's `options["name"] = str(title)`, which
+   IS load-bearing there since the field is never in the schema at all).
+   If CI finds the real group options-flow schema actually excludes `name`
+   after all (contradicting the live capture), this is the one place to
+   revisit first.~~
+
+   **WRONG — CI-verified, PR #35, both HA `stable` and `dev`.** The verbatim
+   failure:
+
+   ```
+   FAILED test_group_cover_create_read_update_delete_cycle:
+     HaApiError: HA returned 400 for POST
+     /api/config/config_entries/options/flow/<flow_id>:
+     {"errors":{"base":["extra keys not allowed @ data['name']"]}}
+   FAILED test_group_helper_rollback_restores_prior_options_live:
+     outcome FAILED instead of ROLLED_BACK (same root cause: the rollback's
+     re-update also submits name and 400s)
+   ```
+
+   **The group options-flow schema does NOT include `name` — the exact same
+   rule as template (§26.7 finding 2).** The live capture's "options flows
+   re-present the same form … with current values as suggested values" note
+   (§38.1) was ambiguous — the capture itself only ever opened and cancelled
+   an options flow read-only (module intro: "flows opened read-only and
+   DELETEd before any `create_entry`"), so it never actually exercised a real
+   options-flow SUBMISSION to find out whether `name` survives one. It does
+   not: a group's title is simply not editable through the options flow at
+   all, exactly like a storage helper's `id` or a template helper's `name` —
+   a rename is an identity change (`identity = slugify(name)`, delete+create
+   or an id-collision conflict), never an in-place update, by the same
+   reasoning §26.7 finding 5 gives for template. **Fixed** (same PR as this
+   correction): `update()` (`hassle.backend.fake`/`hassle.backend.direct`)
+   strips `name` at the public-API boundary before the options-flow
+   submission, mirroring the TEMPLATE_DOMAINS branch exactly;
+   `_update_group_via_options_flow` (`FakeBackend`) rejects a `name`-bearing
+   submission with `ConfigEntryFlowError` as a second line of defense
+   (mirrors `_update_via_options_flow`'s existing check) and merges the
+   submission into the entry's EXISTING stored options rather than replacing
+   wholesale, so `name` survives an update that never resubmits it;
+   `_alist_group_helpers`'s `options["name"] = str(title)` is now
+   unconditional (no longer a defensive `setdefault` — it is the ONLY source
+   of `name` on read-back, exactly like template's own `options["name"] =
+   str(title)`). Regression tests:
+   `test_fake_backend_group_flow.py::test_group_cover_update_drives_options_flow_same_entry_id`
+   / `test_group_cover_update_silently_strips_name_at_the_public_api_boundary`
+   / `test_group_cover_internal_options_flow_submission_rejects_name_field`
+   / `test_group_cover_update_preserves_name_without_resubmitting_it`,
+   `test_direct_backend_group_helpers.py::test_update_strips_name_before_submitting_to_options_flow`
+   (confirmed to fail against the pre-fix code for the exact CI-reported
+   reason before the fix landed).
+
+2. **Sub-kind discrimination reuses the SAME entity-registry cross-reference
+   mechanism as template, not the step_id fallback §38.2 offered as an
+   alternative.** `DirectBackend._template_entry_domains` (M10) was
+   generalized and renamed `_config_entry_entity_domains` — it was never
+   actually template-specific to begin with (it doesn't filter by
+   integration domain at all, just maps every config entry's single created
+   entity to its HA domain via `config/entity_registry/list`), so reusing it
+   verbatim for group costs the same one WS call `list_remote` already made
+   for template and avoids opening (and cancelling) an options flow for
+   every group entry of every OTHER flavor on each single-kind
+   `list_remote(kind)` call — the step_id fallback would have to open a
+   flow per entry just to find out its flavor, before it even knows whether
+   to keep reading it. §38.2's own "prefer the template mechanism if it
+   costs no extra call" note is exactly why this was the right choice;
+   the step_id is genuinely unused in the shipped implementation, kept only
+   as documentation of a fallback that would still work if the entity
+   registry cross-reference method were ever unavailable. **CI-exercised,
+   PR #35, not falsified:** every test that lists/reads a group entry back
+   (`test_group_cover_create_read_update_delete_cycle`'s read half,
+   `test_group_binary_sensor_schema_shape_with_all_live`,
+   `test_group_sensor_schema_shape_with_type_live`,
+   `test_group_helper_plan_apply_create_then_noop_on_repush`) passed on both
+   `stable` and `dev` — the two failures that PR run found were both
+   root-caused to finding #1 (the options-flow submission itself), not this
+   mechanism.
+
+3. **Assumption (untested by the live capture): a group entity's
+   `unique_id` equals its config entry's `entry_id`**, the same
+   `SchemaConfigFlowHandler`-family construction §31.8 source-verified for
+   `template/helpers.py`'s `async_setup_template_entry`. §38's capture
+   notes don't confirm this for `group` specifically (the capture only
+   exercised read-only flow-open/cancel + a WS entity-registry list, never
+   a real create+category-assign round trip). `DirectBackend.
+   _unique_id_to_match` extends the same rule to `GROUP_DOMAINS` on this
+   assumption, for `hassle.sync.category_writeback`/`category_move`'s
+   category-assignment lookup (§31.8's "identity anchor"). If CI's category
+   write-back integration test finds a group entity's `unique_id` is
+   something else entirely, this is the one call site to fix — the general
+   `Backend`/plan/apply/decompile/validate machinery does not depend on it
+   at all, only category assignment does.
+
+**A fourth item, not a divergence but new work with no M10 analogue:** a
+group helper's own `entities=` list is validated for unknown member entities
+(MILESTONES M21 test 5) by a NEW function, `hassle.registry.validate.
+_validate_group_entities` — `hassle.registry.extract.extract_references`
+(the M3 walker `_validate_references` reuses for every other kind) only ever
+descends into an object's `triggers`/`conditions`/`actions` sections, and
+neither a template helper's nor a group helper's IR body has any of those.
+A template helper's `state=` Jinja string was therefore never checked for
+entity references either (nothing new there) — but a group helper's
+`entities=` field is a literal list of entity ids, exactly the shape M21
+test 5 asks to validate, so it needed its own small walker rather than
+falling out of the existing one for free the way `_bundle_declared_keys`'s
+widening (a bundle's own group declares its produced entity, mirroring
+template) did.

@@ -52,7 +52,7 @@ from typing import Any, cast
 from hassle.compiler.bundle import CompileResult
 from hassle.compiler.spans import SourceSpan
 from hassle.ir import slugify
-from hassle.ir.keys import humanize_slug
+from hassle.ir.keys import GROUP_DOMAINS, humanize_slug
 from hassle.ir.models import HelperConfig
 from hassle.registry.didyoumean import did_you_mean
 from hassle.registry.extract import as_dict_list, extract_references
@@ -78,6 +78,12 @@ _TEMPLATE_ENTITY_DOMAIN = {
     "template_select": "select",
 }
 
+#: Group-helper object kinds -> the REAL entity domain the created config
+#: entry produces (M21, mirrors `_TEMPLATE_ENTITY_DOMAIN`): a group's own
+#: flavor IS its entity domain by construction (`group_cover:x` ->
+#: `cover.x`), so this is just the `"group_"` prefix stripped off each kind.
+_GROUP_ENTITY_DOMAIN = {domain: domain[len("group_") :] for domain in GROUP_DOMAINS}
+
 
 def _bundle_declared_keys(result: CompileResult) -> set[str]:
     """``"<domain>:<id>"`` keys for every object this bundle itself declares:
@@ -86,14 +92,16 @@ def _bundle_declared_keys(result: CompileResult) -> set[str]:
     ``automation.turn_off`` targeting itself, or a ``script.<id>`` call,
     counts as existing exactly like a bundle-declared helper).
 
-    Template helpers additionally register the ENTITY their config entry
-    creates (`template_binary_sensor:x` also declares `binary_sensor:x`) --
-    an automation gating on the bundle's own fused template sensor must not
-    trip unknown-entity before the first push (owner field case)."""
+    Template AND group helpers additionally register the ENTITY their config
+    entry creates (`template_binary_sensor:x` also declares
+    `binary_sensor:x`; `group_cover:x` also declares `cover:x`, M21) -- an
+    automation gating on the bundle's own fused template sensor (or a group
+    nesting the bundle's own declared group) must not trip unknown-entity
+    before the first push (owner field case)."""
     keys = set(result.objects)
     for key in result.objects:
         kind, _, object_id = key.partition(":")
-        entity_domain = _TEMPLATE_ENTITY_DOMAIN.get(kind)
+        entity_domain = _TEMPLATE_ENTITY_DOMAIN.get(kind) or _GROUP_ENTITY_DOMAIN.get(kind)
         if entity_domain is not None:
             keys.add(f"{entity_domain}:{object_id}")
     return keys
@@ -608,6 +616,49 @@ def _validate_helper_slugs(
     return findings
 
 
+def _validate_group_entities(result: CompileResult, snapshot: RegistrySnapshot) -> list[Finding]:
+    """MILESTONES M21 test 5: a group helper's own ``entities=`` member list
+    is checked against the registry snapshot exactly like a trigger/
+    condition/action ``entity_id`` reference -- a member that doesn't exist
+    (declared bundle objects count as existing too, `_bundle_declared_keys`,
+    so referencing a sibling helper the bundle itself declares, or another
+    group nested inside this one, is never flagged) surfaces the standard
+    ``unknown-entity`` Finding (file:line, fix).
+
+    Unlike a trigger/condition/action reference, a group helper's own body is
+    never walked by `hassle.registry.extract.extract_references` at all (that
+    walker only descends into ``triggers``/``conditions``/``actions``
+    sections -- a group/template helper's IR body has none of those) -- this
+    is therefore new validation logic, not free reuse of the M3 walker, the
+    one M10-pattern touchpoint that genuinely didn't transfer (template
+    helpers have no analogous "list of entity ids" field to check)."""
+    findings: list[Finding] = []
+    declared_helpers = _bundle_declared_keys(result)
+    for key, obj in result.objects.items():
+        kind, _, _ = key.partition(":")
+        if kind not in GROUP_DOMAINS:
+            continue
+        body = obj.to_ha()
+        entities = body.get("entities")
+        if not isinstance(entities, list):
+            continue
+        span = result.decl_span_for(key)
+        file, line = _where(span)
+        for entity_id in cast("list[Any]", entities):
+            if not isinstance(entity_id, str):
+                continue
+            finding = _check_entity(
+                entity_id,
+                snapshot=snapshot,
+                declared_helpers=declared_helpers,
+                file=file,
+                line=line,
+            )
+            if finding is not None:
+                findings.append(finding)
+    return findings
+
+
 def _validate_category_globals(result: CompileResult) -> list[Finding]:
     """MILESTONES M12: a bundle file's ``CATEGORY`` global must slugify to
     that file's own stem (the same anchor `bundle_ops._category_source_path`/
@@ -668,5 +719,6 @@ def validate_bundle(
     findings.extend(_validate_unknown_services(result, snapshot))
     findings.extend(_validate_service_params(result, snapshot))
     findings.extend(_validate_helper_slugs(result, snapshot, adopted_helper_keys))
+    findings.extend(_validate_group_entities(result, snapshot))
     findings.extend(_validate_category_globals(result))
     return findings

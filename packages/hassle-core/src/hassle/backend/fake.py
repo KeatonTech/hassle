@@ -100,7 +100,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from hassle.ir.canonical import sha256_hash
-from hassle.ir.keys import HELPER_DOMAINS, OBJECT_KINDS, TEMPLATE_DOMAINS
+from hassle.ir.keys import GROUP_DOMAINS, HELPER_DOMAINS, OBJECT_KINDS, TEMPLATE_DOMAINS
 from hassle.ir.keys import slugify as _slugify
 from hassle.ir.normalize import normalize_ha
 
@@ -126,14 +126,43 @@ _TEMPLATE_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "template_select": ("options", "select_option"),
 }
 
+# The `group` integration's twelve flavors (M21, docs/ha-api-notes.md §38.1)
+# -- the config-flow menu's `step_id` per flavor also equals the flavor name
+# itself (§38.2), unlike template's `number`/`sensor`/`binary_sensor`/
+# `select` naming.
+_GROUP_FLAVOR: dict[str, str] = {
+    "group_binary_sensor": "binary_sensor",
+    "group_button": "button",
+    "group_cover": "cover",
+    "group_event": "event",
+    "group_fan": "fan",
+    "group_light": "light",
+    "group_lock": "lock",
+    "group_media_player": "media_player",
+    "group_notify": "notify",
+    "group_sensor": "sensor",
+    "group_switch": "switch",
+    "group_valve": "valve",
+}
 
-def _check_required_fields(kind: str, config: dict[str, Any]) -> None:
-    missing = [f for f in _TEMPLATE_REQUIRED_FIELDS[kind] if config.get(f) is None]
+# `name`/`entities`/`hide_members` are always supplied by the DSL builders'
+# own required-kwarg signatures (`hassle.compiler.group_helpers`); the only
+# field HA's form schema requires that Hassle's own DSL leaves as a runtime
+# check is `type` on `group_sensor` (docs/ha-api-notes.md §38.1) -- mirrors
+# `_TEMPLATE_REQUIRED_FIELDS` covering only the EXTRA required fields beyond
+# the ones every domain already shares.
+_GROUP_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    domain: ("type",) if domain == "group_sensor" else () for domain in GROUP_DOMAINS
+}
+
+
+def _check_required_fields(kind: str, config: dict[str, Any], required: tuple[str, ...]) -> None:
+    missing = [f for f in required if config.get(f) is None]
     if missing:
         raise ConfigEntryFlowError(
             f"{kind} form rejected: required key(s) not provided: {missing} "
             f"(mirrors HA's real 400 {{'errors': {{'<field>': 'required key not "
-            "provided'}}}} form-schema rejection, docs/ha-api-notes.md §26.6)"
+            "provided'}}}} form-schema rejection, docs/ha-api-notes.md §26.6/§38.1)"
         )
 
 
@@ -210,6 +239,14 @@ class FakeBackend:
         # the stored config body) -- (kind, name-derived identity) -> entry_id.
         self._entry_ids: dict[tuple[str, str], str] = {}
         self._entry_id_counter = 0
+        # M21: config-entry group-helper bookkeeping -- a SEPARATE dict from
+        # `_entry_ids` (never folded in), even though the entry_id counter is
+        # shared: `entry_id_for`/`delete` need to know which of the two
+        # families a `(kind, identity)` pair belongs to, and keeping the
+        # tables apart mirrors keeping `TEMPLATE_DOMAINS`/`GROUP_DOMAINS`
+        # apart in `hassle.ir.keys` (a separate set even though the apply
+        # mechanics are near-identical).
+        self._group_entry_ids: dict[tuple[str, str], str] = {}
         # Every simulated flow step this backend has driven, in order --
         # asserted on by the FakeBackend flow-shape tests (menu -> form ->
         # create_entry / options-flow form -> create_entry) so the shapes
@@ -243,6 +280,8 @@ class FakeBackend:
         self._require_kind(kind)
         if kind in TEMPLATE_DOMAINS:
             return self._create_via_flow(kind, config)
+        if kind in GROUP_DOMAINS:
+            return self._create_group_via_flow(kind, config)
         # normalize_ha only special-cases kind == "automation" (outer-key
         # pluralization); every other kind gets the same service:->action:
         # recursive rewrite, so passing `kind` straight through is correct.
@@ -265,6 +304,19 @@ class FakeBackend:
             # never be able to leak it onto the wire through this path).
             payload = {k: v for k, v in config.items() if k != "name"}
             self._update_via_options_flow(kind, identity, payload)
+            return
+        if kind in GROUP_DOMAINS:
+            # `update()`'s contract (F2) still takes the FULL local config,
+            # same as every other kind -- `name` is stripped here, at the
+            # public-API boundary, before it ever reaches the simulated
+            # options-flow submission, exactly mirroring the TEMPLATE_DOMAINS
+            # branch above (docs/ha-api-notes.md §38.1, CI-corrected: the
+            # group options-flow schema does NOT include `name` either --
+            # same rule as template, §26.7 finding 2 -- real HA 400s
+            # `{"errors": {"base": ["extra keys not allowed @ data['name']"]}}`
+            # on both stable and dev, PR #35).
+            payload = {k: v for k, v in config.items() if k != "name"}
+            self._update_group_via_options_flow(kind, identity, payload)
             return
         normalized = normalize_ha(config, kind=kind)
         normalized = self._stored_body(kind, identity, normalized)
@@ -301,7 +353,7 @@ class FakeBackend:
                 f"a {kind} config entry titled {name!r} already exists "
                 "(CREATE-collision -- the flow would need to be aborted, not overwrite)"
             )
-        _check_required_fields(kind, config)
+        _check_required_fields(kind, config, _TEMPLATE_REQUIRED_FIELDS[kind])
 
         flow_id = f"flow_{self._next_entry_id()}"
         menu_step = FlowStep(
@@ -374,7 +426,7 @@ class FakeBackend:
                 "(the options-flow schema never includes `name` -- it is create-only and "
                 "becomes the entry's title, docs/ha-api-notes.md §26.7)"
             )
-        _check_required_fields(kind, config)
+        _check_required_fields(kind, config, _TEMPLATE_REQUIRED_FIELDS[kind])
         flow_id = f"optflow_{entry_id}"
         form_step = FlowStep(
             flow_id=flow_id,
@@ -411,9 +463,127 @@ class FakeBackend:
         self._writes += 1
 
     def entry_id_for(self, kind: str, identity: str) -> str | None:
-        """Test/CLI-facing lookup of a template helper's HA-assigned
+        """Test/CLI-facing lookup of a template/group helper's HA-assigned
         `entry_id` (manifest-only in the real sync engine, docs/backend.md)."""
+        if kind in GROUP_DOMAINS:
+            return self._group_entry_ids.get((kind, identity))
         return self._entry_ids.get((kind, identity))
+
+    # -- M21: config-entry group-helper flows ------------------------------
+    #
+    # Same create (menu -> form -> create_entry) / update (options-flow form
+    # -> create_entry) / delete (entry removal) shape as the M10 template-
+    # helper flows above (docs/ha-api-notes.md §38, mirroring §26): a menu
+    # step choosing the flavor (twelve options, §38.1), then a form step
+    # collecting `name`/`entities`/`hide_members`(+`all`/`type`), ending in a
+    # flat `type: "create_entry"` body.
+    #
+    # **CI-corrected (PR #35, HA stable + dev, §38.1 amended):** the ORIGINAL
+    # implementation believed the group options-flow schema RE-PRESENTS THE
+    # SAME FORM as create, `name` included -- the owner's live capture note
+    # ("options flows re-present the same form ... with current values as
+    # suggested values") was ambiguous and got read that way. CI found real
+    # HA 400s an options-flow submission that carries `name`, on BOTH
+    # `stable` and `dev`: `{"errors": {"base": ["extra keys not allowed @
+    # data['name']"]}}` -- the SAME rule as template (§26.7 finding 2): a
+    # group's title is not editable through the options flow at all, exactly
+    # mirroring `_update_via_options_flow` above (name-stripping at the
+    # public-API boundary in `update()`, name-rejection here as a second line
+    # of defense, merge-with-existing-options so `name` survives an update
+    # that never resubmits it).
+
+    def _create_group_via_flow(self, kind: str, config: dict[str, Any]) -> str:
+        name = config.get("name")
+        if not name:
+            raise ValueError(f"{kind} config has no 'name' (required to derive identity/title)")
+        identity = _slugify(str(name))
+        if (kind, identity) in self._group_entry_ids:
+            raise ConfigEntryFlowError(
+                f"a {kind} config entry titled {name!r} already exists "
+                "(CREATE-collision -- the flow would need to be aborted, not overwrite)"
+            )
+        _check_required_fields(kind, config, _GROUP_REQUIRED_FIELDS[kind])
+
+        flow_id = f"flow_{self._next_entry_id()}"
+        menu_step = FlowStep(
+            flow_id=flow_id,
+            type="menu",
+            step_id="user",
+            menu_options=sorted(_GROUP_FLAVOR.values()),
+        )
+        self.flow_log.append(menu_step)
+
+        # `unique_id` is never part of the form's data_schema/submission
+        # (docs/ha-api-notes.md §38.1: same "extra keys not allowed" rule as
+        # template, §26.6).
+        form_step = FlowStep(
+            flow_id=flow_id,
+            type="form",
+            step_id=_GROUP_FLAVOR[kind],
+            data_schema=sorted(config),
+        )
+        self.flow_log.append(form_step)
+
+        options = dict(config)
+        entry_id = self._next_entry_id()
+        result_step = FlowStep(
+            flow_id=flow_id,
+            type="create_entry",
+            result={"entry_id": entry_id, "title": str(name), "options": dict(options)},
+        )
+        self.flow_log.append(result_step)
+
+        self._group_entry_ids[(kind, identity)] = entry_id
+        self._store[kind][identity] = options
+        self._writes += 1
+        return identity
+
+    def _update_group_via_options_flow(
+        self, kind: str, identity: str, config: dict[str, Any]
+    ) -> None:
+        entry_id = self._group_entry_ids.get((kind, identity))
+        if entry_id is None:
+            raise ValueError(
+                f"no config entry tracked for {kind}:{identity} -- an UPDATE must "
+                "target an existing entry (options-flow update, never a recreate, I2 analog)"
+            )
+        # `name` is REJECTED by the real options-flow schema outright
+        # (CI-corrected, PR #35, docs/ha-api-notes.md §38.1: same rule as
+        # template, §26.7 finding 2). Mirrors HA's real `400 {"errors":
+        # {"base": ["extra keys not allowed @ data['name']"]}}`.
+        if "name" in config:
+            raise ConfigEntryFlowError(
+                f"{kind} options-flow form rejected: extra keys not allowed @ data['name'] "
+                "(the options-flow schema never includes `name` -- it is create-only and "
+                "becomes the entry's title, docs/ha-api-notes.md §38.1)"
+            )
+        _check_required_fields(kind, config, _GROUP_REQUIRED_FIELDS[kind])
+        flow_id = f"optflow_{entry_id}"
+        form_step = FlowStep(
+            flow_id=flow_id,
+            type="form",
+            step_id=_GROUP_FLAVOR[kind],
+            data_schema=sorted(config),
+        )
+        self.flow_log.append(form_step)
+
+        # Real HA MERGES the submitted fields into the entry's existing
+        # options rather than replacing the dict outright (mirrors template
+        # §26.7 finding 3) -- `name` (never part of the options-flow schema)
+        # survives an update untouched.
+        existing = self._store[kind].get(identity, {})
+        options = {**existing, **config}
+        result_step = FlowStep(
+            flow_id=flow_id,
+            type="create_entry",
+            result={"entry_id": entry_id, "options": dict(options)},
+        )
+        self.flow_log.append(result_step)
+
+        # entry_id is UNCHANGED (I2 analog: an options-update never recreates
+        # the entry).
+        self._store[kind][identity] = options
+        self._writes += 1
 
     # -- M11: category registry + per-entity category assignment ----------
 
@@ -504,6 +674,10 @@ class FakeBackend:
             # identity gets a FRESH entry_id (the "entry_id-changes" rollback
             # caveat, DESIGN §13 amendment / MILESTONES M10 test 4).
             self._entry_ids.pop((kind, identity), None)
+        elif kind in GROUP_DOMAINS:
+            # Same rollback-by-recreate caveat as template (docs/
+            # ha-api-notes.md §38 mirrors §26.3).
+            self._group_entry_ids.pop((kind, identity), None)
         self._writes += 1
 
     # -- test-only helpers --------------------------------------------------

@@ -22,7 +22,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from hassle.ir.canonical import canonical_json, sha256_hash
-from hassle.ir.keys import HELPER_DOMAINS, TEMPLATE_DOMAINS, object_key
+from hassle.ir.keys import GROUP_DOMAINS, HELPER_DOMAINS, TEMPLATE_DOMAINS, object_key
 
 
 class IRObject(BaseModel):
@@ -176,6 +176,56 @@ class TemplateHelperConfig(IRObject):
         return None
 
 
+class GroupHelperConfig(IRObject):
+    """A group-helper config-entry subentry body (one of the twelve
+    ``GROUP_DOMAINS``, M21) -- the "options" a group config entry holds
+    (DESIGN §13's config-entry helper plugin, the mechanical follow-on M10
+    itself predicted for other config-entry domains).
+
+    **Identity: there is no ``unique_id`` field**, exactly mirroring
+    ``TemplateHelperConfig`` (M10, docs/ha-api-notes.md §26.6): the `group`
+    config flow's form schema rejects an unrecognized ``unique_id`` key
+    outright (docs/ha-api-notes.md §38.1) -- a flow-created entry has no
+    caller-settable unique id at all. Identity is derived from ``name``
+    (``hassle.ir.keys.slugify``), the ONLY identity source, same as template
+    helpers; on the wire, HA's own correlator is the entry's ``title`` (set
+    from the submitted ``name``). The HA-assigned config ``entry_id`` remains
+    HA-side transport identity only, tracked in the manifest entry, never in
+    this body or the object key (I2 spirit unchanged).
+
+    ``name``/``entities`` (a list of member entity ids, order preserved
+    verbatim -- I3) are common to every flavor; ``hide_members`` (bool,
+    always materialized) is common to every flavor too. ``all`` (bool, the
+    three flavors that have it: binary_sensor/light/switch) and ``type`` (the
+    aggregation kind, required for sensor) pass through via ``extra="allow"``
+    like every other IR model field, exactly the way ``TemplateHelperConfig``
+    passes through ``state``/``min``/``max``/etc.
+    """
+
+    name: Any = None
+
+    _domain: str = PrivateAttr(default="")
+
+    def attach_domain(self, domain: str) -> None:
+        """Attach the group flavor domain (used by :func:`parse`)."""
+        self._domain = domain
+
+    def kind(self) -> str:
+        if not self._domain:
+            raise ValueError("GroupHelperConfig has no domain; parse it with kind=<group domain>")
+        return self._domain
+
+    @property
+    def identity(self) -> str | None:
+        if self._key_id is not None:
+            return self._key_id
+        if self.name is not None:
+            from hassle.ir.keys import slugify
+
+            return slugify(str(self.name))
+        return None
+
+
 def parse(config: dict[str, Any], *, kind: str, key_hint: str | None = None) -> IRObject:
     """Parse an HA config body into the IR model for ``kind``.
 
@@ -195,6 +245,10 @@ def parse(config: dict[str, Any], *, kind: str, key_hint: str | None = None) -> 
         template_helper = TemplateHelperConfig.model_validate(config)
         template_helper.attach_domain(kind)
         obj = template_helper
+    elif kind in GROUP_DOMAINS:
+        group_helper = GroupHelperConfig.model_validate(config)
+        group_helper.attach_domain(kind)
+        obj = group_helper
     else:
         raise ValueError(f"unknown object kind {kind!r}")
     if key_hint is not None:

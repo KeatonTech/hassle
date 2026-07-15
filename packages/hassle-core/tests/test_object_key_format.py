@@ -5,12 +5,16 @@ template-helper domains (``TEMPLATE_DOMAINS``, docs/ha-api-notes.md §26) — th
 key *format* (``"<kind>:<identity>"``) is unchanged; only the enumerated domain
 vocabulary grew, exactly as it would for any future helper domain. The count
 assertion below is updated in the same PR (R5).
+
+M21 note: ``OBJECT_KINDS`` widened additively again for the twelve
+config-entry group-helper domains (``GROUP_DOMAINS``, docs/ha-api-notes.md
+§38) — same F1-compatible additive widening, count assertion updated again.
 """
 
 from __future__ import annotations
 
 from hassle.ir import HELPER_DOMAINS, OBJECT_KINDS, object_key, parse
-from hassle.ir.keys import TEMPLATE_DOMAINS
+from hassle.ir.keys import GROUP_DOMAINS, TEMPLATE_DOMAINS
 
 
 def test_object_key_string_format() -> None:
@@ -40,10 +44,13 @@ def test_object_kinds_cover_automation_script_and_helpers() -> None:
     assert "script" in OBJECT_KINDS
     assert HELPER_DOMAINS <= OBJECT_KINDS
     assert TEMPLATE_DOMAINS <= OBJECT_KINDS
-    # automation + script + 9 storage helper domains + 4 template domains == 15 kinds
-    assert len(OBJECT_KINDS) == 2 + len(HELPER_DOMAINS) + len(TEMPLATE_DOMAINS)
+    assert GROUP_DOMAINS <= OBJECT_KINDS
+    # automation + script + 9 storage helper domains + 4 template domains +
+    # 12 group domains == 27 kinds
+    assert len(OBJECT_KINDS) == 2 + len(HELPER_DOMAINS) + len(TEMPLATE_DOMAINS) + len(GROUP_DOMAINS)
     assert len(HELPER_DOMAINS) == 9
     assert len(TEMPLATE_DOMAINS) == 4
+    assert len(GROUP_DOMAINS) == 12
 
 
 def test_object_key_for_every_template_domain() -> None:
@@ -63,3 +70,16 @@ def test_object_key_for_template_domain_uses_key_hint_when_supplied() -> None:
     # re-deriving from `name`.
     obj = parse({"name": "Some Thing"}, kind="template_number", key_hint="some_thing")
     assert obj.object_key() == "template_number:some_thing"
+
+
+def test_object_key_for_every_group_domain() -> None:
+    # Same identity rule as template (M21, docs/ha-api-notes.md §38.1): no
+    # `unique_id` -- identity is derived from `name` (slugified).
+    for domain in GROUP_DOMAINS:
+        obj = parse({"name": "Some Thing"}, kind=domain)
+        assert obj.object_key() == f"{domain}:some_thing"
+
+
+def test_object_key_for_group_domain_uses_key_hint_when_supplied() -> None:
+    obj = parse({"name": "Some Thing"}, kind="group_cover", key_hint="some_thing")
+    assert obj.object_key() == "group_cover:some_thing"

@@ -52,14 +52,40 @@ TEMPLATE_DOMAINS: frozenset[str] = frozenset(
     }
 )
 
-# Every config-entry-backed helper domain (M10). A separate set from
+# The group-helper config-entry domains (M21, the "mechanical follow-on" M10
+# itself predicted). Same apply mechanics as TEMPLATE_DOMAINS (REST flow
+# create, REST options-flow update, REST entry removal delete -- docs/
+# ha-api-notes.md §38, mirroring §26.0) and the same identity rule (derived
+# from the declared `name`, slugified -- no settable `unique_id`, §38.1). The
+# real `group` integration's config flow offers twelve flavors (menu step
+# `step_id="user"`); each compiles to its own kind here so `object_key`
+# already discriminates them (`"group_cover:entryway_top"`, etc.) without a
+# separate sub-kind field anywhere in the IR body.
+GROUP_DOMAINS: frozenset[str] = frozenset(
+    {
+        "group_binary_sensor",
+        "group_button",
+        "group_cover",
+        "group_event",
+        "group_fan",
+        "group_light",
+        "group_lock",
+        "group_media_player",
+        "group_notify",
+        "group_sensor",
+        "group_switch",
+        "group_valve",
+    }
+)
+
+# Every config-entry-backed helper domain (M10 + M21). A separate set from
 # HELPER_DOMAINS (not folded in) because the apply mechanics genuinely differ
 # (flow-based vs. direct WS create/update/delete) even though both are
 # "helpers" from the DSL/bundle-placement point of view (DESIGN §5.7/§7.3).
-CONFIG_ENTRY_DOMAINS: frozenset[str] = TEMPLATE_DOMAINS
+CONFIG_ENTRY_DOMAINS: frozenset[str] = TEMPLATE_DOMAINS | GROUP_DOMAINS
 
 # Every object kind Hassle syncs: automation, script, the nine storage-collection
-# helpers, and (M10) the config-entry template-helper domains.
+# helpers, and the config-entry template-helper (M10) + group-helper (M21) domains.
 OBJECT_KINDS: frozenset[str] = (
     frozenset({"automation", "script"}) | HELPER_DOMAINS | CONFIG_ENTRY_DOMAINS
 )

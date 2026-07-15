@@ -27,9 +27,10 @@ from hassle.decompiler.actions import (
     shared_script_field_context,
 )
 from hassle.decompiler.exprs import decompile_condition, decompile_trigger, render_literal
-from hassle.ir.keys import HELPER_DOMAINS, TEMPLATE_DOMAINS, slugify
+from hassle.ir.keys import GROUP_DOMAINS, HELPER_DOMAINS, TEMPLATE_DOMAINS, slugify
 from hassle.ir.models import (
     AutomationConfig,
+    GroupHelperConfig,
     HelperConfig,
     IRObject,
     ScriptConfig,
@@ -642,12 +643,33 @@ def _script_source(obj: ScriptConfig, ident: str, resolver: CallResolver | None)
 
 _HELPER_BUILDER_NAMES = {domain: domain for domain in HELPER_DOMAINS}
 _TEMPLATE_HELPER_BUILDER_NAMES = {domain: domain for domain in TEMPLATE_DOMAINS}
+_GROUP_HELPER_BUILDER_NAMES = {domain: domain for domain in GROUP_DOMAINS}
 
 
 def _helper_source(obj: HelperConfig, ident: str) -> str:
     body = dict(obj.to_ha())
     domain = obj.kind()
     builder = _HELPER_BUILDER_NAMES[domain]
+    kwargs = [f"{k}={render_literal(v)}" for k, v in body.items()]
+    return f"{ident} = {builder}({', '.join(kwargs)})\n"
+
+
+def _group_helper_source(obj: GroupHelperConfig, ident: str) -> str:
+    """A group helper decompiles to the plain assignment call form (M21),
+    like the nine storage-collection helpers (:func:`_helper_source`) --
+    unlike template helpers, there is no Jinja `state=` field to defer into a
+    decorator body, so no decorator form exists here at all.
+
+    ``entities``'s member entity ids (which may themselves be another
+    group's entity id -- nested groups, docs/ha-api-notes.md §38.1) decompile
+    as PLAIN string literals via ``render_literal``, never the `e.<domain>.
+    <id>` cosmetic entity-reference form (`hassle.decompiler.exprs.
+    render_entity_position`) -- the milestone's "plain entity references, no
+    ordering games" contract, list order preserved verbatim (I3).
+    """
+    body = dict(obj.to_ha())
+    domain = obj.kind()
+    builder = _GROUP_HELPER_BUILDER_NAMES[domain]
     kwargs = [f"{k}={render_literal(v)}" for k, v in body.items()]
     return f"{ident} = {builder}({', '.join(kwargs)})\n"
 
@@ -826,6 +848,8 @@ def decompile_object(
         return _helper_source(obj, ident)
     if isinstance(obj, TemplateHelperConfig):
         return _template_helper_source(obj, ident)
+    if isinstance(obj, GroupHelperConfig):
+        return _group_helper_source(obj, ident)
     raise TypeError(f"cannot decompile object of type {type(obj).__name__}")  # pragma: no cover
 
 
