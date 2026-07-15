@@ -387,6 +387,36 @@ def _self_check_adopt_batches(
             raise DecompiledValueMismatchError(sorted(mismatched))
 
 
+def _merge_adopt_batch_into_existing(existing_source: str, batch_source: str) -> str:
+    """Append an ADOPT batch's decompiled objects to an ALREADY-EXISTING
+    destination file, preserving every statement already there (I6 -- the
+    BrandtCamp field failure, 2026-07-13: `write_whole_file` on an existing
+    `misc.py` silently dropped every pre-existing uncategorized object while
+    the manifest kept tracking them, so the very next `hassle plan` proposed
+    a DELETE for each one against live HA).
+
+    Same building blocks as `SplicingSourceWriter.splice_object`'s append
+    path (`hassle.decompiler.splice`): the batch module is split into its
+    import header and object statements, the objects are appended after the
+    existing content (two blank lines, the decompiler's own top-level
+    spacing), and whichever header imports the file doesn't already satisfy
+    are merged in after its last import. The existing content is never
+    reformatted or reordered -- hand-written comments and spacing survive
+    byte-for-byte, exactly like a REFRESH splice (DESIGN §7.3 test 4).
+
+    A freshly-decompiled def whose name collides with an existing def in the
+    file is legal (identity lives in the decorator's ``id=``, and both
+    register at decoration time -- `hassle.decompiler.splice`'s own
+    name-collision regressions cover targeting them independently), so no
+    dedup against existing names is needed for correctness.
+    """
+    from hassle.decompiler.splice import merge_missing_imports, split_module_source
+
+    import_sources, object_sources = split_module_source(batch_source)
+    appended = existing_source.rstrip("\n") + "\n\n\n" + "".join(object_sources).strip("\n") + "\n"
+    return merge_missing_imports(appended, import_sources)
+
+
 def _adopt_batch_source(
     entries: list[PlanEntry],
     script_refs: dict[str, ScriptRef] | None,
@@ -509,14 +539,14 @@ def apply_pull_with_decompiler(
     consulted for an ADOPT batch whose destination file does NOT already
     exist on disk -- i.e. pull is CREATING that category file for the first
     time (MILESTONES M12: "only when pull CREATES a new category file").
-    Adopting a further object into an ALREADY-EXISTING category file never
-    re-emits or duplicates the global (it's appended-to via the splicer's
-    own file-doesn't-exist-yet fallback path, `SplicingSourceWriter.
-    splice_object`, which only fires for a stale-manifest case, not a plain
-    second adopt into an existing multi-object file -- an existing file
-    already has its `CATEGORY` line, if any, and this function never
-    touches an existing file's content before deciding whether to insert
-    one).
+    Adopting a further object into an ALREADY-EXISTING file (category file
+    or the shared `misc.py`) never re-emits or duplicates the global: the
+    batch is MERGED into the existing content
+    (:func:`_merge_adopt_batch_into_existing` -- append the decompiled
+    objects, merge missing header imports, touch nothing else), so the
+    file's existing `CATEGORY` line, objects, and hand-written comments all
+    survive (I6; the BrandtCamp field failure, 2026-07-13, where this used
+    to be a whole-file overwrite that dropped every pre-existing object).
 
     ``snapshot`` (MILESTONES M18): the same registry snapshot `cli.py`'s pull
     command already refreshes every pull -- threaded through to every
@@ -570,6 +600,18 @@ def apply_pull_with_decompiler(
                 original_configs[e.object_key] = e.remote
     _self_check_adopt_batches(batch_sources, sorted(all_object_keys), original_configs)
     for path, source in batch_sources.items():
+        # An ALREADY-EXISTING destination (the shared uncategorized `misc.py`
+        # is the canonical case: every uncategorized UI object ever created
+        # adopts into it) is MERGED into, never overwritten -- the whole-file
+        # write here used to silently drop every pre-existing object in the
+        # file while the manifest kept tracking them, so the next `hassle
+        # plan` proposed a DELETE for each one (I6; the BrandtCamp field
+        # failure, 2026-07-13). The self-check above already validated the
+        # decompiled batch standalone; the merged file is covered by the
+        # CLI's post-write whole-bundle backstop (`hassle_cli.cli.pull`),
+        # which sees it exactly as the next compile will.
+        if path.exists():
+            source = _merge_adopt_batch_into_existing(path.read_text(encoding="utf-8"), source)
         source_writer.write_whole_file(path, source)
 
     for path, blocks in conflict_blocks_by_path.items():
