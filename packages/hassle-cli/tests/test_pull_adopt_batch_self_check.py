@@ -25,7 +25,7 @@ buggy: it wasn't context-free, and false-positived on a real bundle
 (`test_adopt_batch_self_check_does_not_false_positive_on_batch_context_text_
 diff` -- pins the fix: a name-collision `_2` suffix or a same-batch
 script-call rewrite changes decompiled TEXT without changing the underlying
-HA value, and the self-check must not care). `test_owner_bundle_shape_class_
+HA value, and the self-check must not care). `test_real_bundle_shape_class_
 pulls_clean_via_cli` is the end-to-end reproduction of that reported shape
 (helpers + an automation calling a same-batch shared script) via the real
 CLI + `FakeBackend`.
@@ -222,7 +222,7 @@ def test_adopt_batch_self_check_does_not_false_positive_on_batch_context_text_di
     assert "a1_2" in writer.written_files[Path("automations/misc.py")]
 
 
-def test_owner_bundle_shape_class_pulls_clean_via_cli(
+def test_real_bundle_shape_class_pulls_clean_via_cli(
     git_repo, cli, fake_backend, toml_writer
 ) -> None:
     """End-to-end (real CLI + FakeBackend, no monkeypatching): a reported

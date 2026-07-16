@@ -181,9 +181,7 @@ def test_door_left_open_reminder_fires_after_holding_10_minutes() -> None:
     sim = _sim()
     sim.state_change("binary_sensor.laundry_door", "closed", "open")
     sim.advance(minutes=10)
-    sim.assert_called(
-        "notify.mobile_app_kai", message="Laundry door has been open for 10 minutes"
-    )
+    sim.assert_called("notify.mobile_app_kai", message="Laundry door has been open for 10 minutes")
 
 
 def test_door_left_open_reminder_resets_on_flap() -> None:

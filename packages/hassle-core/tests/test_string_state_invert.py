@@ -151,14 +151,14 @@ def test_is_state_call_form_does_not_invert_cleanly() -> None:
     assert invert_template(jinja_text) is None
 
 
-def test_owner_bermuda_template_falls_back_cleanly() -> None:
+def test_real_world_bermuda_template_falls_back_cleanly() -> None:
     """A real multi-line `is_state(...) or is_state(...)` template
     falls back (byte-exact gate holds) -- never raises, never silently
     produces a false-positive inversion."""
     assert invert_template(BERMUDA_IS_STATE_TEMPLATE) is None
 
 
-def test_owner_bermuda_template_decompiles_to_decorator_fallback_and_round_trips(
+def test_real_world_bermuda_template_decompiles_to_decorator_fallback_and_round_trips(
     tmp_path: Path,
 ) -> None:
     """End-to-end: the gnarly (from this grammar's perspective) `is_state`

@@ -34,7 +34,7 @@ def _recompile_sha(obj_config: dict[str, object], *, kind: str, key_hint: str) -
     return source, sha256_hash(recompiled.to_ha())
 
 
-def test_bare_field_read_decompiles_to_bare_parameter_owner_shape() -> None:
+def test_bare_field_read_decompiles_to_bare_parameter_shape() -> None:
     """A real-world `dismiss_notification` shape: stored data
     `{"notification_id": "{{ tag }}"}` with field `tag` decompiles to
     `tag=tag` and recompiles byte-identically."""

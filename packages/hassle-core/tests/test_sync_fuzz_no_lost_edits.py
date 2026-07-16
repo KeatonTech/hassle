@@ -140,7 +140,8 @@ def _assert_no_silent_loss(
     if at_risk:
         assert entry.action is PlanAction.CONFLICT, (
             f"seed={seed} step={step_num} ({phase}): both sides diverged from base and "
-            f"from each other but action was {entry.action}, not conflict -- I6 violated"
+            f"from each other but action was {entry.action}, not conflict -- "
+            "an edit would be silently lost"
         )
 
 
