@@ -1,4 +1,4 @@
-"""MILESTONES M6 test 3 — conflict end-to-end against real HA.
+"""Conflict end-to-end against real HA.
 
 After pull, edit an automation via HA's API (simulating a UI edit) *and* edit the
 same object locally, to different values. `compute_plan` reports a `conflict`
@@ -8,7 +8,7 @@ same object locally, to different values. `compute_plan` reports a `conflict`
 - `--accept-remote`: HA is left as the UI edited it (no write); the working tree
   takes the remote version (pull-side refresh).
 
-Resolution flag handling proper is M7's CLI concern; here we model each path's
+Resolution flag handling proper is a CLI concern; here we model each path's
 effect and assert it against real HA.
 """
 

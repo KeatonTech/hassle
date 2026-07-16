@@ -1,9 +1,9 @@
-"""Shared fixtures for the M6 integration suite (talks to a real HA instance).
+"""Shared fixtures for the integration suite (talks to a real HA instance).
 
 Every test here is ``integration``-marked (auto-applied below) and targets **any**
-HA instance via two environment variables (MILESTONES M6): ``HASSLE_TEST_HA_URL``
+HA instance via two environment variables: ``HASSLE_TEST_HA_URL``
 and ``HASSLE_TEST_HA_TOKEN``. With either unset, the whole suite skips — so unit
-CI (``pytest -m "not integration"``) never touches the network (R2), and the CI
+CI (``pytest -m "not integration"``) never touches the network, and the CI
 integration job (``.github/workflows/ci.yml``) is the only place these run,
 against the Dockerized ``stable`` **and** ``dev`` images.
 
@@ -35,7 +35,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     test modules, so we add the marker here. This is a session-level hook and
     sees *all* collected items, so we filter to this directory's subtree — then
     ``pytest -m "not integration"`` deselects the whole suite and unit CI never
-    touches the network (R2).
+    touches the network.
     """
     for item in items:
         if _HERE in Path(str(item.fspath)).resolve().parents:

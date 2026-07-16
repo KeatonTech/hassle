@@ -1,4 +1,4 @@
-"""HaClient / DirectBackend basics against a live instance (MILESTONES M6 test 7).
+"""HaClient / DirectBackend basics against a live instance.
 
 - Auth: a bad token surfaces a clean `HaAuthError` with a fix hint (the
   `hassle login` validation path — DESIGN §4: validity is proven by a call,
@@ -29,7 +29,7 @@ def test_bad_token_raises_clean_auth_error() -> None:
     ):
         backend.list_remote("automation")
     message = str(excinfo.value)
-    # Product-surface error: what / where / fix (R6).
+    # Product-surface error: what / where / fix.
     assert "token" in message.lower()
     assert "hassle login" in message.lower() or "fix" in message.lower()
 
