@@ -1,11 +1,12 @@
-"""``ux/dsl-ergonomics``, item 1 -- `only_if` block form.
+"""`only_if` block form.
 
 `only_if(*conditions)` is dual-form: the bare call keeps its exact pre-existing
-behavior (F3); used as `with only_if(...):` it ALSO requires every action the
-automation records to be inside that one block (an action recorded outside --
-before or after -- raises `OnlyIfBlockCoverageError`). The decompiler emits the
-block form whenever an automation has any conditions at all; golden-pair parity
-proof lives in fixtures/dsl/only_if_block_form/ vs. only_if_bare_form_parity/.
+behavior (the frozen top-level DSL surface); used as `with only_if(...):` it
+ALSO requires every action the automation records to be inside that one block
+(an action recorded outside -- before or after -- raises
+`OnlyIfBlockCoverageError`). The decompiler emits the block form whenever an
+automation has any conditions at all; golden-pair parity proof lives in
+fixtures/dsl/only_if_block_form/ vs. only_if_bare_form_parity/.
 """
 
 from __future__ import annotations

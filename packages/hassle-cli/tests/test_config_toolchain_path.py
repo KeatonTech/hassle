@@ -1,8 +1,7 @@
-"""MILESTONES M17: `hassle.toml` gains a `toolchain_path` key (config-surface
-addition) -- the highest-priority entry in `hassle_cli.uv_project`'s
-toolchain resolution order. Purely config load/persist coverage here; the
-resolution-order semantics themselves are covered in
-`test_uv_project_scaffold.py`.
+"""`hassle.toml` gains a `toolchain_path` key -- the highest-priority entry
+in `hassle_cli.uv_project`'s toolchain resolution order. Purely config
+load/persist coverage here; the resolution-order semantics themselves are
+covered in `test_uv_project_scaffold.py`.
 """
 
 from __future__ import annotations

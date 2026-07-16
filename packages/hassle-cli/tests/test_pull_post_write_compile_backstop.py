@@ -1,8 +1,6 @@
-"""`ux/shared-script-calls-fix` (coordinator task 3): a safety backstop --
-after `hassle pull` writes files, recompile the bundle. If it doesn't
-actually compile (a decompiler bug -- the exact field failure this fix
-branch addresses, or any other coordination bug we haven't found yet),
-`hassle pull` must:
+"""A safety backstop: after `hassle pull` writes files, recompile the
+bundle. If it doesn't actually compile (a decompiler bug), `hassle pull`
+must:
 
 - print a what/where/fix error stating this is a Hassle decompiler bug (not
   a user mistake), asking the user to report it, and noting that a
@@ -12,7 +10,7 @@ branch addresses, or any other coordination bug we haven't found yet),
   the user needs them to file a useful bug report, and a subsequent fixed
   `hassle pull --allow-dirty` will just overwrite them again).
 
-Two backstops now exist (coordinator task 4 adds the second, cheaper one):
+Two backstops exist:
 
 1. A pre-write, adopt-batches-only self-check
    (`hassle.sync.pull_apply._self_check_adopt_batches`,

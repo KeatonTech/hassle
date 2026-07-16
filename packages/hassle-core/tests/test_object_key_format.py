@@ -1,14 +1,10 @@
-"""M0 test 4 — object-key derivation for all object kinds (F1).
+"""Object-key derivation for all object kinds, against the frozen IR schema.
 
-M10 note: ``OBJECT_KINDS`` widened additively to include the four config-entry
-template-helper domains (``TEMPLATE_DOMAINS``, docs/ha-api-notes.md §26) — the
-key *format* (``"<kind>:<identity>"``) is unchanged; only the enumerated domain
-vocabulary grew, exactly as it would for any future helper domain. The count
-assertion below is updated in the same PR (R5).
-
-M21 note: ``OBJECT_KINDS`` widened additively again for the twelve
-config-entry group-helper domains (``GROUP_DOMAINS``, docs/ha-api-notes.md
-§38) — same F1-compatible additive widening, count assertion updated again.
+``OBJECT_KINDS`` includes the four config-entry template-helper domains
+(``TEMPLATE_DOMAINS``, docs/ha-api-notes.md §26) and the twelve config-entry
+group-helper domains (``GROUP_DOMAINS``, docs/ha-api-notes.md §38). The key
+*format* (``"<kind>:<identity>"``) stays fixed; only the enumerated domain
+vocabulary grows, exactly as it would for any future helper domain.
 """
 
 from __future__ import annotations
@@ -73,7 +69,7 @@ def test_object_key_for_template_domain_uses_key_hint_when_supplied() -> None:
 
 
 def test_object_key_for_every_group_domain() -> None:
-    # Same identity rule as template (M21, docs/ha-api-notes.md §38.1): no
+    # Same identity rule as template (docs/ha-api-notes.md §38.1): no
     # `unique_id` -- identity is derived from `name` (slugified).
     for domain in GROUP_DOMAINS:
         obj = parse({"name": "Some Thing"}, kind=domain)
