@@ -1,4 +1,4 @@
-"""Runtime control-flow constructs (DESIGN §5.5) — the actions/control-flow workstream.
+"""Runtime control-flow constructs (DESIGN §5.5).
 
 Python ``if``/``for`` run at compile time (DESIGN §5.5); *runtime* branching on a
 live HA state must go through these context managers, which compile to HA's
@@ -51,15 +51,14 @@ _CM_DEPTH = 2
 # ``_require_active`` is the extension seam's sanctioned cross-module name
 # (docs/compiler-api.md §2: "import it from hassle.compiler.recording"),
 # underscore-prefixed by module-internal convention rather than by true
-# privacy; ``_RawAction`` is this workstream's own adapter, shared between its
+# privacy; ``_RawAction`` is this module's own adapter, shared between its
 # two sibling modules. Both trip pyright's reportPrivateUsage in --strict
 # mode, which the imports above suppress once, here, rather than at each call
 # site below.
 
 
 def _condition_body(condition: ConditionBuilder, *, call: str = "only_if") -> dict[str, Any]:
-    # R6 bool-guard (M20, entity-first conditions milestone, absorbed scope
-    # item (c)): every condition-accepting entry point in this module
+    # Bool guard: every condition-accepting entry point in this module
     # (`if_then`, `else_if`, `choose().when_`, `repeat_while`, `repeat_until`)
     # funnels through this one function -- a plain `bool` here is always the
     # classic `==`/`!=` mistake, and would otherwise surface as a bare
@@ -78,7 +77,7 @@ def _condition_body(condition: ConditionBuilder, *, call: str = "only_if") -> di
     # pyright statically sees `bool` can never satisfy `ConditionBuilder`
     # (`to_condition()`), so this looks "unnecessary" against the declared
     # type -- it defends a caller who ignored/couldn't satisfy that
-    # annotation at runtime (the documented typing dance, M20 spec).
+    # annotation at runtime, since Python itself does not enforce it.
     if isinstance(condition, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise ConditionArgumentTypeError(call, condition, capture_span(depth=_CM_DEPTH + 1))
     return condition.to_condition()
@@ -95,8 +94,8 @@ def if_then(
 ) -> Generator[None]:
     """``with if_then(cond): ...`` -> HA ``{"if": [...], "then": [...]}``.
 
-    ``alias=``/``enabled=`` (residue-coverage round 2, docs/ha-api-notes.md
-    §20): the UI names/toggles the whole ``if`` block, not just leaf actions.
+    ``alias=``/``enabled=`` (docs/ha-api-notes.md §20): the UI names/toggles
+    the whole ``if`` block, not just leaf actions.
     Both land on the assembled container body, same key names HA stores.
     """
     rec = _require_active("if_then")
@@ -117,7 +116,7 @@ def if_then(
 def _last_if_or_choose(call: str, span: Any) -> tuple[Any, dict[str, Any]]:
     """Return (Recorder, body) of the just-recorded ``if``/``choose`` action.
 
-    Raises :class:`ElseWithoutIfError` (what/where/fix, R6) if the immediately
+    Raises :class:`ElseWithoutIfError` (what/where/fix) if the immediately
     preceding action in the current list isn't an ``if``/``choose`` container.
     ``span`` is captured by the caller (at its own call site) rather than here,
     so the depth math never has to account for this extra helper frame.
@@ -197,8 +196,8 @@ class _ChooseBuilder:
     ``with c.default(): ...`` sets the ``default`` sequence (HA allows at most
     one; a second call overwrites, matching "last wins" elsewhere in the DSL).
 
-    ``with c.when_(cond, alias=, enabled=): ...`` (residue-coverage round 3,
-    docs/ha-api-notes.md §21): names/toggles *that branch* specifically — the
+    ``with c.when_(cond, alias=, enabled=): ...`` (docs/ha-api-notes.md §21):
+    names/toggles *that branch* specifically — the
     HA UI names individual ``choose`` branches, distinct from the whole
     ``choose`` block's own ``alias``/``enabled`` (``choose()``'s kwargs of the
     same name) and from any step's own ``alias``/``enabled`` inside it.
@@ -216,8 +215,8 @@ class _ChooseBuilder:
         enabled: bool | None = None,
     ) -> Generator[None]:
         """Zero conditions (`when_()`) is the UI's unconditional final branch —
-        stored as `"conditions": []`, deliberately distinct from `default:`
-        (owner-bundle finding); multiple conditions are HA's implicit AND."""
+        stored as `"conditions": []`, deliberately distinct from `default:`;
+        multiple conditions are HA's implicit AND."""
         rec = _require_active("when_")
         nodes: list[RecordedNode] = []
         with rec.push_actions(nodes):
@@ -249,8 +248,8 @@ class _ChooseBuilder:
         underscore-private either, since it is used from the same module just
         outside the class body.
 
-        ``alias=``/``enabled=`` (residue-coverage round 2): forwarded by
-        ``choose()``'s own kwargs of the same name.
+        ``alias=``/``enabled=``: forwarded by ``choose()``'s own kwargs of
+        the same name.
         """
         body: dict[str, Any] = {}
         if alias is not None:
@@ -271,8 +270,8 @@ def choose(*, alias: str | None = None, enabled: bool | None = None) -> Generato
     exactly: a list of ``{conditions, sequence}`` branches plus an optional
     trailing ``default`` sequence.
 
-    ``alias=``/``enabled=`` (residue-coverage round 2, docs/ha-api-notes.md
-    §20): names/toggles the whole ``choose`` block.
+    ``alias=``/``enabled=`` (docs/ha-api-notes.md §20): names/toggles the
+    whole ``choose`` block.
     """
     rec = _require_active("choose")
     span = capture_span(depth=_CM_DEPTH)
@@ -311,8 +310,7 @@ def _repeat_cm(
 def repeat_count(n: int, *, alias: str | None = None, enabled: bool | None = None) -> Any:
     """``with repeat_count(3): ...`` -> ``{"repeat": {"count": 3, "sequence": [...]}}``.
 
-    ``alias=``/``enabled=`` (residue-coverage round 2): names/toggles the
-    whole ``repeat`` block.
+    ``alias=``/``enabled=``: names/toggles the whole ``repeat`` block.
     """
     return _repeat_cm("count", n, alias=alias, enabled=enabled)
 
@@ -340,14 +338,15 @@ def repeat_for_each(
 ) -> Any:
     """``with repeat_for_each([...]): ...`` -> HA ``repeat.for_each``.
 
-    ``items`` also accepts a bare Jinja template STRING (``ux/dsl-ergonomics``, item 4, owner
-    bug report, ``scripts/misc.py``): HA's ``repeat.for_each`` may be stored as a template
-    string that renders to a list at runtime (e.g. ``"{{ states.light | map(attribute='entity_id')
-    | list }}"``), not just a literal list. A plain Python ``str`` is a ``list[str]``-like
-    ``Iterable[str]`` too, so ``list(items)`` on a string SILENTLY exploded it into a list of
-    individual characters instead of passing the template through -- a real bug (found on the
-    owner's bundle) that produced a `repeat.for_each` that couldn't possibly do what the
-    template said. Fixed here: a ``str`` passes through completely verbatim; only a genuine
+    ``items`` also accepts a bare Jinja template STRING: HA's ``repeat.for_each``
+    may be stored as a template string that renders to a list at runtime (e.g.
+    ``"{{ states.light | map(attribute='entity_id') | list }}"``), not just a
+    literal list. A plain Python ``str`` is a ``list[str]``-like
+    ``Iterable[str]`` too, so ``list(items)`` on a string would silently
+    explode it into a list of individual characters instead of passing the
+    template through -- a real bug found in a real bundle, which produced a
+    `repeat.for_each` that couldn't possibly do what the template said.
+    Fixed here: a ``str`` passes through completely verbatim; only a genuine
     (non-string) iterable is materialized into a list.
     """
     value: Any = items if isinstance(items, str) else list(items)
@@ -367,11 +366,12 @@ _PARALLEL_BRANCH_MARKER = "__hassle_parallel_branch__"
 
 
 class _ParallelBuilder:
-    """The object yielded by ``with parallel() as p:`` (residue-coverage round 3).
+    """The object yielded by ``with parallel() as p:``.
 
     Existing bundles that write ``with parallel(): action(); action()`` with no
     ``as p:`` binding are unaffected — each bare top-level action still becomes
-    its own single-action branch, exactly as before (F3-additive). ``with
+    its own single-action branch, exactly as before (additive to the frozen
+    DSL surface). ``with
     p.branch(alias=, enabled=): ...`` is new: it groups one or more steps into
     one explicit branch and optionally names/toggles *that branch* (distinct
     from any of its steps' own ``alias``/``enabled``) — the shape a real
@@ -412,12 +412,12 @@ def parallel(
     concurrently) — matching
     fixtures/configs/automation_parallel_action.json, where each parallel
     branch is a one-action ``sequence``. Bind ``as p:`` and use ``with
-    p.branch(alias=, enabled=): ...`` (residue-coverage round 3) for an
-    explicit branch grouping multiple steps, or naming/toggling one branch —
-    both interleave with bare actions in declaration order.
+    p.branch(alias=, enabled=): ...`` for an explicit branch grouping
+    multiple steps, or naming/toggling one branch — both interleave with
+    bare actions in declaration order.
 
-    ``alias=``/``enabled=`` (residue-coverage round 2, docs/ha-api-notes.md
-    §20): names/toggles the whole ``parallel`` block.
+    ``alias=``/``enabled=`` (docs/ha-api-notes.md §20): names/toggles the
+    whole ``parallel`` block.
     """
     rec = _require_active("parallel")
     span = capture_span(depth=_CM_DEPTH)
@@ -455,8 +455,8 @@ def wait_for(
 ) -> None:
     """Record a ``wait_for_trigger`` action (DESIGN §5.5).
 
-    ``alias=``/``enabled=`` (residue-coverage round 2, docs/ha-api-notes.md
-    §20): names/toggles the whole ``wait_for_trigger`` step.
+    ``alias=``/``enabled=`` (docs/ha-api-notes.md §20): names/toggles the
+    whole ``wait_for_trigger`` step.
     """
     body: dict[str, Any] = {}
     if alias is not None:
@@ -481,8 +481,7 @@ def wait_template(
 ) -> None:
     """Record a ``wait_template`` action (DESIGN §5.5).
 
-    ``alias=``/``enabled=`` (residue-coverage round 2): names/toggles the
-    whole ``wait_template`` step.
+    ``alias=``/``enabled=``: names/toggles the whole ``wait_template`` step.
     """
     body: dict[str, Any] = {}
     if alias is not None:

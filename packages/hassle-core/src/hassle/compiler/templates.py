@@ -24,8 +24,8 @@ a script's fields. Only the operators are overridden; everything else about
 being a string (equality with a plain str of the same text, hashing, repr for
 debugging) still works via the ``str`` base.
 
-Supported operator surface (kept documented here -- M4's simulator and the docs
-generator (M9) consume this table so a template can be interpreted/documented
+Supported operator surface (kept documented here -- the simulator and the docs
+generator consume this table so a template can be interpreted/documented
 without re-deriving it from the operator overloads). ``a``/``b`` stand for
 either a ``TemplateExpr`` or a bare Python literal (``int``/``float``/``str``/
 ``bool``, rendered with ``repr()`` -- so ``25`` -> ``25``, ``"on"`` -> ``'on'``,
@@ -37,21 +37,21 @@ wrapped in parens to preserve grouping:
 | Python            | Jinja (simple operands) | Notes                    |
 |--------------------|---------------------------|----------------------------|
 | ``state(x).value`` / ``expr(x)`` | ``states('x') \\| float`` | numeric read |
-| ``state_of(x)`` | ``states('x')`` | string read (M16) |
+| ``state_of(x)`` | ``states('x')`` | string read |
 | ``a > b`` / ``a < b`` | ``a > b`` / ``a < b`` | also ``>=``/``<=`` |
 | ``a == b`` / ``a != b`` | ``a == b`` / ``a != b`` | via ``.eq()``/``.ne()`` |
-| ``a.in_(["x", "y"])`` | ``a in ['x', 'y']`` | membership (M16) |
+| ``a.in_(["x", "y"])`` | ``a in ['x', 'y']`` | membership |
 | ``a + b`` / ``a - b`` | ``a + b`` / ``a - b`` | also ``*``/``/`` |
-| ``a // b`` | ``a // b`` | floor division (M1.1) |
-| ``a % b`` | ``a % b`` | modulo (M1.1) |
-| ``a ** b`` | ``a ** b`` | power (M1.1) |
-| ``-a`` | ``-a`` (``-(a)`` if compound) | unary negation (M1.1) |
+| ``a // b`` | ``a // b`` | floor division |
+| ``a % b`` | ``a % b`` | modulo |
+| ``a ** b`` | ``a ** b`` | power |
+| ``-a`` | ``-a`` (``-(a)`` if compound) | unary negation |
 | ``a & b`` | ``a and b`` | boolean and |
 | ``a \\| b`` | ``a or b`` | boolean or |
 | ``~a`` | ``not a`` (``not (a)`` if compound) | boolean not |
 | ``template("{{ ... }}")`` | ``{{ ... }}`` verbatim | raw passthrough |
-| ``var("name")`` | ``name`` | runtime ``variables:`` read (M1.1) |
-| ``x.attr("a")`` (entity ref) | ``state_attr('x', 'a')`` | attribute read (M1.1) |
+| ``var("name")`` | ``name`` | runtime ``variables:`` read |
+| ``x.attr("a")`` (entity ref) | ``state_attr('x', 'a')`` | attribute read |
 
 Note on ``==``/``!=``: ``TemplateExpr`` is a ``str`` subclass, and Python/pytest
 rely on plain ``==`` for equality and container membership everywhere (dict
@@ -59,14 +59,14 @@ keys, ``assert a == b``, ...). Overriding ``__eq__`` to build a template would
 break that silently. So ``==``/``!=`` keep their normal string-equality meaning;
 the Jinja comparison is spelled ``.eq(other)`` / ``.ne(other)`` instead.
 
-M1.1 adds one more trap alongside the ``__bool__``/``CompileTimeBranchError``
+There is one more trap alongside the ``__bool__``/``CompileTimeBranchError``
 one: ``__float__``/``__int__`` raise :class:`PythonMathMisuseError` so Python's
 stdlib ``math.*`` (which calls ``float()`` on its argument) fails loudly and
 teaches the fix (``hassle.compiler.math_expr``) instead of raising a bare
 ``TypeError`` or silently coercing to something meaningless. Expression sugar
-here is one-way: the M2 decompiler always reconstructs Jinja as a raw
+here is one-way: the decompiler always reconstructs Jinja as a raw
 ``template("...")`` string, never re-derives the builder call chain that
-produced it (MILESTONES M1.1 test 5).
+produced it.
 """
 
 from __future__ import annotations
@@ -81,9 +81,8 @@ from hassle.compiler.builders import StateExpr, _NoBool  # pyright: ignore[repor
 from hassle.compiler.errors import CompileError
 from hassle.compiler.spans import capture_span
 
-# `.value` reads the entity id through StateExpr's public `entity_id` accessor
-# (added in the M1 integration pass; the earlier private-`_entity_id` coupling
-# is gone). `.value` itself is attached to StateExpr as an additive property
+# `.value` reads the entity id through StateExpr's public `entity_id` accessor.
+# `.value` itself is attached to StateExpr as an additive property
 # from this sibling module (see the bottom of this file) — a purely additive
 # extension, not a rewrite of builders.py.
 
@@ -98,9 +97,9 @@ class PythonMathMisuseError(CompileError):
     value at compile time -- it is Jinja text under construction -- so this is
     the same class of mistake DESIGN §5.5 traps for a Python ``if`` on a state
     expression: it looks like it should work, and would either raise a bare
-    ``TypeError`` or (worse) silently coerce to something meaningless. M1.1
-    (MILESTONES M1.1 test 3) traps it at the same boundary (``__float__``/
-    ``__int__``/``__round__``/``__trunc__``) with the same what/where/fix shape.
+    ``TypeError`` or (worse) silently coerce to something meaningless. This
+    traps it at the same boundary (``__float__``/``__int__``/``__round__``/
+    ``__trunc__``) with the same what/where/fix shape.
     """
 
     def __init__(self, expr_repr: str, span: Any) -> None:
@@ -120,12 +119,11 @@ class PythonMathMisuseError(CompileError):
 
 class TemplateEntityRefError(CompileError):
     """`expr()`/`state(...).value`/`state_of()` was given something that
-    doesn't name exactly one entity (R6: what/where/fix -- M9 error-message
-    audit finding. Previously a bare `TypeError` with no file:line, reachable
-    from ordinary bundle authoring, e.g. `expr(state(["light.a", "light.b"]))`
-    or `expr(123)`. `state_of()` (M16) reuses this same check -- it mirrors
-    `expr()`'s argument handling exactly, so the same misuse is reachable
-    from it too)."""
+    doesn't name exactly one entity (what/where/fix, instead of a bare
+    `TypeError` with no file:line, reachable from ordinary bundle authoring,
+    e.g. `expr(state(["light.a", "light.b"]))` or `expr(123)`). `state_of()`
+    reuses this same check -- it mirrors `expr()`'s argument handling
+    exactly, so the same misuse is reachable from it too."""
 
     def __init__(self, detail: str, span: Any) -> None:
         where = f" at {span.file}:{span.line}" if span is not None else ""
@@ -139,7 +137,7 @@ class TemplateEntityRefError(CompileError):
 class TemplateComparisonOperandError(CompileError):
     """`.eq()`/`.ne()` was given something that is neither a `TemplateExpr`
     nor a bare Jinja-literal-compatible Python value (`int`/`float`/`str`/
-    `bool`) -- e.g. a list or dict (M16 test 5: what/where/fix, R6). Without
+    `bool`) -- e.g. a list or dict (what/where/fix). Without
     this check, `TemplateExpr._render_operand` would silently `repr()` the
     value into nonsense Jinja (a Python list's repr happens to look like a
     Jinja list literal for simple cases, but a dict, custom object, or nested
@@ -150,10 +148,10 @@ class TemplateComparisonOperandError(CompileError):
     def __init__(self, value: Any, method: str, span: Any) -> None:
         where = f" at {span.file}:{span.line}" if span is not None else ""
         if method == "in_":
-            # Polish-batch item 5: `.in_([...])` applies this SAME check to
-            # EACH element -- the generic "use `.in_([...])` instead" fix
-            # text (below, for `.eq()`/`.ne()`) would be self-referential
-            # nonsense here, so state the per-element requirement directly.
+            # `.in_([...])` applies this SAME check to EACH element -- the
+            # generic "use `.in_([...])` instead" fix text (below, for
+            # `.eq()`/`.ne()`) would be self-referential nonsense here, so
+            # state the per-element requirement directly.
             super().__init__(
                 f"`.in_([..., {value!r}, ...])`{where}: every element of `.in_([...])` must "
                 f"be a template expression or a bare int/float/str/bool literal, not "
@@ -229,15 +227,15 @@ class TemplateExpr(_NoBool, str):
         # `compound` marks "the result of a previous operator" so a later
         # operator knows to parenthesize this expression when nesting it.
         obj._compound = compound
-        # `prec` (M1.1 addition) is set only by the arithmetic binops
-        # (+ - * / // % **); `None` means "always parenthesize when compound"
-        # -- the original M1 behavior, preserved for every other operator
-        # family (comparisons, boolean and/or/not, filters, calls, ...).
-        # Arithmetic operators tag their precedence level so same-or-higher
-        # precedence children can render flat (`a * b / c`, not
-        # `(a * b) / c`) -- matches Python/Jinja's own binding rules and is
-        # what the `shade_tracks_sun` golden (MILESTONES M1.1 test 4) pins
-        # (`state_attr(...) * pi / 180`, no redundant parens).
+        # `prec` is set only by the arithmetic binops (+ - * / // % **);
+        # `None` means "always parenthesize when compound" -- the original
+        # behavior, preserved for every other operator family (comparisons,
+        # boolean and/or/not, filters, calls, ...). Arithmetic operators tag
+        # their precedence level so same-or-higher precedence children can
+        # render flat (`a * b / c`, not `(a * b) / c`) -- matches
+        # Python/Jinja's own binding rules and is what the
+        # `shade_tracks_sun` golden pins (`state_attr(...) * pi / 180`, no
+        # redundant parens).
         obj._prec = prec
         return obj
 
@@ -267,12 +265,12 @@ class TemplateExpr(_NoBool, str):
         TemplateExpr or Python literal bare (matches the DESIGN §5.4 examples,
         which have no redundant parens around a plain comparison/subtraction).
 
-        ``min_prec`` (M1.1 addition) is the calling arithmetic operator's
-        precedence level; an operand tagged with a precedence >= ``min_prec``
-        renders flat (``a * b / c``, matching Python/Jinja's own left-to-right,
+        ``min_prec`` is the calling arithmetic operator's precedence level;
+        an operand tagged with a precedence >= ``min_prec`` renders flat
+        (``a * b / c``, matching Python/Jinja's own left-to-right,
         same-precedence binding) instead of parenthesized. ``None`` (the
         default, and every non-arithmetic operator family) keeps the original
-        M1 behavior: any compound operand is always parenthesized.
+        behavior: any compound operand is always parenthesized.
         """
         if isinstance(value, TemplateExpr):
             return value._as_operand(min_prec=min_prec)
@@ -338,7 +336,7 @@ class TemplateExpr(_NoBool, str):
         return TemplateExpr._binop(self, other, "!=")
 
     def in_(self, values: list[Any]) -> TemplateExpr:
-        """``.in_(["a", "b"])`` -- Jinja membership (M16): ``in ['a', 'b']``.
+        """``.in_(["a", "b"])`` -- Jinja membership: ``in ['a', 'b']``.
 
         Renders the list literal with the same call-argument style
         ``hassle.compiler.math_expr``'s ``min_``/``max_`` use for their
@@ -346,12 +344,11 @@ class TemplateExpr(_NoBool, str):
         wrapped in ``[...]``) -- the canonical spacing every other DSL list
         literal in this codebase already uses.
 
-        Polish-batch item 5: each element gets the SAME
-        :func:`_check_comparison_operand` check ``.eq()``/``.ne()`` already
-        apply to their single operand -- without it, a bad element (a dict, a
-        custom object, ...) would silently ``repr()`` into nonsense Jinja
-        inside the ``in [...]`` list, same failure mode those two methods are
-        already protected against.
+        Each element gets the SAME :func:`_check_comparison_operand` check
+        ``.eq()``/``.ne()`` already apply to their single operand -- without
+        it, a bad element (a dict, a custom object, ...) would silently
+        ``repr()`` into nonsense Jinja inside the ``in [...]`` list, same
+        failure mode those two methods are already protected against.
         """
         for value in values:
             _check_comparison_operand(value, "in_")
@@ -371,7 +368,7 @@ class TemplateExpr(_NoBool, str):
         return self.le(other)
 
     # -- arithmetic --------------------------------------------------------
-    # Precedence levels (M1.1): `+`/`-` = 1, `*`/`/`/`//`/`%` = 2 -- matches
+    # Precedence levels: `+`/`-` = 1, `*`/`/`/`//`/`%` = 2 -- matches
     # Python/Jinja's own binding so a chain of same-or-higher-precedence
     # operators renders flat (`a * b / c`, `a + b - c`), while a lower-
     # precedence child (`(a + b) * c`) still gets its necessary parens (its
@@ -403,9 +400,8 @@ class TemplateExpr(_NoBool, str):
     def __rtruediv__(self, other: Any) -> TemplateExpr:
         return TemplateExpr._binop(other, self, "/", prec=TemplateExpr._PREC_MUL)
 
-    # -- M1.1 additions: the rest of the reflected-operator set (MILESTONES
-    # M1.1 "full reflected-operator set"). Jinja supports `//`/`%`/`**` and
-    # unary `-` with the same precedence as Python. ``**`` gets its own
+    # -- the rest of the reflected-operator set. Jinja supports `//`/`%`/`**`
+    # and unary `-` with the same precedence as Python. ``**`` gets its own
     # (higher) level rather than joining ``_PREC_MUL`` since it binds tighter.
     def __floordiv__(self, other: Any) -> TemplateExpr:
         return TemplateExpr._binop(self, other, "//", prec=TemplateExpr._PREC_MUL)
@@ -457,8 +453,8 @@ class TemplateExpr(_NoBool, str):
     def _as_operand(self, *, min_prec: int | None = None) -> str:
         if not self._compound:
             return self._inner
-        # M1.1: a compound operand tagged with an arithmetic precedence >=
-        # the caller's own precedence renders flat -- same rule Python/Jinja
+        # A compound operand tagged with an arithmetic precedence >= the
+        # caller's own precedence renders flat -- same rule Python/Jinja
         # apply for same-precedence, left-to-right binops (`a * b / c`, not
         # `(a * b) / c`). Every other case (non-arithmetic caller, or an
         # untagged/lower-precedence compound operand) keeps the original
@@ -468,17 +464,17 @@ class TemplateExpr(_NoBool, str):
         return f"({self._inner})"
 
     def render_as_operand(self, *, min_prec: int | None = None) -> str:
-        """Public seam for sibling builder modules (M1.1 addition, same
-        convention as subclassing ``builders._NoBool``): render this
+        """Public seam for sibling builder modules (same convention as
+        subclassing ``builders._NoBool``): render this
         expression as it would appear nested inside another operator/call,
         without building a whole new ``TemplateExpr``. See :func:`_as_operand`
         for the parenthesization rule ``min_prec`` controls.
         """
         return self._as_operand(min_prec=min_prec)
 
-    # -- M1.1 trap: Python's stdlib `math`/`float()`/`int()`/`round()`/
-    # `math.trunc()` on a runtime expression (MILESTONES M1.1 test 3).
-    # `math.cos(x)` etc. call `float(x)` on their argument, `round(x)` calls
+    # -- Trap: Python's stdlib `math`/`float()`/`int()`/`round()`/
+    # `math.trunc()` on a runtime expression. `math.cos(x)` etc. call
+    # `float(x)` on their argument, `round(x)` calls
     # `__round__`, `math.trunc(x)` calls `__trunc__` -- all before doing
     # anything else; without this, each would either raise a bare TypeError or
     # (for other stdlib consumers) silently coerce to something meaningless.
@@ -500,7 +496,7 @@ class TemplateExpr(_NoBool, str):
 
 def var(name: str) -> TemplateExpr:
     """``var("name")`` -- a runtime reference to an action-level ``variables:``
-    key (MILESTONES M1.1 deliverables): ``{{ name }}``.
+    key: ``{{ name }}``.
 
     Unlike :func:`hassle.compiler.scripts.param`, ``variables:`` keys are
     freeform (not bound to a function signature), so ``var()`` never validates
@@ -521,8 +517,8 @@ def expr(entity: Any) -> TemplateExpr:
 
 
 def state_of(entity: Any) -> TemplateExpr:
-    """``state_of(entity_ref)`` -- bare string-context template read (M16,
-    DESIGN §5.4 extension).
+    """``state_of(entity_ref)`` -- bare string-context template read
+    (DESIGN §5.4 extension).
 
     Mirrors :func:`expr`'s argument handling exactly (accepts a plain entity
     id string, an ``e.``-registry ref, or a ``state(...)`` builder built from
@@ -556,8 +552,8 @@ def _state_value(state_expr: StateExpr) -> TemplateExpr:
     return TemplateExpr(f"states({entity_id!r}) | float")
 
 
-# `.value` on the existing StateExpr type: builders.py is frozen for this
-# workstream and does not define `.value`, so it is attached here as a
-# read-only property -- an additive attribute, never touching builders.py's
-# source (see the deviation note above and docs/ha-api-notes.md).
+# `.value` on the existing StateExpr type: builders.py is frozen and does
+# not define `.value`, so it is attached here as a read-only property --
+# an additive attribute, never touching builders.py's source (see the
+# deviation note above and docs/ha-api-notes.md).
 StateExpr.value = property(_state_value)  # type: ignore[attr-defined]

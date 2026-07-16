@@ -1,4 +1,4 @@
-"""`hassle.toml` -- the per-bundle config file (DESIGN §8.4, MILESTONES M7).
+"""`hassle.toml` -- the per-bundle config file (DESIGN §8.4).
 
 Minimal, hand-rollable TOML subset (this project only ever needs flat
 key = "value"/true/false/integer pairs plus one string array, so a tiny parser
@@ -8,21 +8,21 @@ avoids adding a `tomli`/`tomllib` version-gate dependency -- Python 3.12 ships
 Fields:
 - `ha_url` -- the HA base URL (or a `fake://<token>` test seam, never written
   by production code).
-- `bundle_format` -- the bundle format version (MILESTONES M9 test 4: the CLI
+- `bundle_format` -- the bundle format version: the CLI
   refuses to operate on a bundle whose major version is NEWER than what this
-  CLI build understands, with a clear upgrade error). Renamed from the M7
-  placeholder field `format_version` (M9); `load_config` still reads the old
+  CLI build understands, with a clear upgrade error. Renamed from an earlier
+  placeholder field `format_version`; `load_config` still reads the old
   key name too (see `load_config`'s docstring) so a bundle written by an
   older `hassle init` keeps working with no migration step.
 - `mirror` -- DESIGN §8.5, off by default.
 - `token` -- **never legitimately present**; if found, `pull`/`doctor` treat
-  it as a committed-secret error (DESIGN §14, MILESTONES M7 test 6).
-- `ignore` -- DESIGN §8.2/§6 amendment (owner decision, `ux/pull-organization`):
-  a list of `fnmatch` globs on object keys (e.g. `"input_boolean:material_you_*"`)
-  that Hassle must never adopt, refresh, or delete -- see `hassle_cli.ignore_filter`
-  for the filtering semantics. Defaults to empty (today's "nothing is ever
-  unmanaged" behavior is unchanged unless the user opts in).
-- `toolchain_path` -- MILESTONES M17: an explicit path to a Hassle source
+  it as a committed-secret error (DESIGN §14).
+- `ignore` -- DESIGN §8.2/§6 amendment: a list of `fnmatch` globs on object
+  keys (e.g. `"input_boolean:material_you_*"`) that Hassle must never adopt,
+  refresh, or delete -- see `hassle_cli.ignore_filter` for the filtering
+  semantics. Defaults to empty (today's "nothing is ever unmanaged" behavior
+  is unchanged unless the user opts in).
+- `toolchain_path` -- an explicit path to a Hassle source
   checkout (the directory containing `packages/`), used by
   `hassle_cli.uv_project.resolve_toolchain_path` as the HIGHEST-priority entry
   in the bundle-as-uv-project `[tool.uv.sources]` resolution order (beats
@@ -30,11 +30,11 @@ Fields:
   bare-dependency fallback are used instead; see that module's docstring for
   the full order.
 
-MILESTONES M15 work item B bumps `CURRENT_BUNDLE_FORMAT` to 2 (the
-category-first, root-level bundle layout -- the RETIRED per-kind trees
-`automations/`/`scripts/`/`helpers/` are a breaking layout change an OLDER
-CLI build cannot make sense of, the exact M9-test-4 "older CLI, newer bundle"
-shape). Unlike a hand-authored `hassle.toml` bump, format `2` is written by
+`CURRENT_BUNDLE_FORMAT` is `2`, for the category-first, root-level bundle
+layout -- the retired per-kind trees
+`automations/`/`scripts/`/`helpers/` are a breaking layout change an older
+CLI build cannot make sense of, the classic "older CLI, newer bundle"
+shape. Unlike a hand-authored `hassle.toml` bump, format `2` is written by
 `hassle pull` ITSELF (`bump_bundle_format`) the moment it finishes migrating
 an old-layout bundle -- never by `hassle init` retroactively rewriting an
 existing bundle's file, and never required before migration can run (a
@@ -50,16 +50,16 @@ from pathlib import Path
 
 CONFIG_FILENAME = "hassle.toml"
 
-#: The bundle format version THIS CLI build understands (MILESTONES M9 test 4).
+#: The bundle format version THIS CLI build understands.
 #: A bundle whose `bundle_format` is newer (a greater integer -- there is only
 #: ever one "major" component, matching how `format_version`/`bundle_format`
 #: has always been stored, a single int) refuses to run with a clear upgrade
 #: error rather than attempting a partial operation.
 #:
-#: MILESTONES M15 work item B: bumped 1 -> 2 for the category-first,
-#: root-level layout (the RETIRED `automations/`/`scripts/`/`helpers/` trees).
-#: A format-1 bundle is NOT refused (only NEWER-than-understood is, per M9
-#: test 4's "older CLI accepts older/equal" rule) -- `hassle pull` migrates it
+#: Bumped 1 -> 2 for the category-first,
+#: root-level layout (the retired `automations/`/`scripts/`/`helpers/` trees).
+#: A format-1 bundle is NOT refused (only NEWER-than-understood is, per the
+#: "older CLI accepts older/equal" rule) -- `hassle pull` migrates it
 #: in place and writes `bundle_format = 2` itself once migration completes.
 CURRENT_BUNDLE_FORMAT = 2
 
@@ -79,7 +79,7 @@ class BundleConfig:
 
     @property
     def format_version(self) -> int:
-        """Deprecated alias for `bundle_format` (the M7-era field name)."""
+        """Deprecated alias for `bundle_format` (an earlier field name)."""
         return self.bundle_format
 
 
@@ -97,9 +97,9 @@ def load_config(bundle_root: Path) -> BundleConfig:
     if not path.is_file():
         return BundleConfig()
     data = tomllib.loads(path.read_text(encoding="utf-8"))
-    # `bundle_format` is the current key; `format_version` (M7-era) is still
-    # accepted for a bundle whose hassle.toml predates the M9 rename -- no
-    # migration step required. `bundle_format` wins if a bundle somehow has
+    # `bundle_format` is the current key; `format_version` (an earlier name)
+    # is still accepted for a bundle whose hassle.toml predates the rename --
+    # no migration step required. `bundle_format` wins if a bundle somehow has
     # both (shouldn't happen in practice, but pick a deterministic winner).
     raw_format = data.get("bundle_format", data.get("format_version", 1))
     return BundleConfig(
@@ -141,7 +141,7 @@ def persist_ha_url(bundle_root: Path, ha_url: str) -> None:
 
 def persist_toolchain_path(bundle_root: Path, toolchain_path: str) -> None:
     """Write/replace `toolchain_path` in the bundle's `hassle.toml`, creating
-    the file if missing (MILESTONES M17). Line-surgical, same convention as
+    the file if missing. Line-surgical, same convention as
     `persist_ha_url`: every other line is preserved byte-for-byte."""
     toml_path = bundle_root / CONFIG_FILENAME
     new_line = f'toolchain_path = "{toolchain_path}"'
@@ -160,8 +160,8 @@ def persist_toolchain_path(bundle_root: Path, toolchain_path: str) -> None:
 
 
 def bump_bundle_format(bundle_root: Path, *, to: int = CURRENT_BUNDLE_FORMAT) -> None:
-    """Write/replace `bundle_format` in the bundle's `hassle.toml` (MILESTONES
-    M15 work item B: `hassle pull` calls this itself once it finishes
+    """Write/replace `bundle_format` in the bundle's `hassle.toml` (`hassle
+    pull` calls this itself once it finishes
     migrating an old-layout bundle to the new one -- never a hand-authored
     step). Line-surgical, same convention as `persist_ha_url`: every other
     line is preserved byte-for-byte. Also replaces a legacy `format_version =`

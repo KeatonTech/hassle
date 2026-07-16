@@ -1,4 +1,4 @@
-"""Enums for HA's enumerated automation/script options (``ux/dsl-ergonomics``, item 2).
+"""Enums for HA's enumerated automation/script options.
 
 ``Mode`` (HA's automation/script ``mode:``) and ``MaxExceeded`` (``max_exceeded:``) are
 ``StrEnum`` -- a real ``str`` subclass, so passing an enum member anywhere the DSL currently

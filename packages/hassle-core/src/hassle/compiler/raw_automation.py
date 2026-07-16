@@ -16,7 +16,7 @@ over a zero-arg function returning the dict (mirroring ``@automation``'s own
 shape, so it slots into the same registration model below), and a plain-call
 form taking the dict directly.
 
-**Registration (§12 fix, M1 integration) -- same path as ``helpers.py``:** a
+**Registration (§12 fix) -- same path as ``helpers.py``:** a
 raw/blueprint automation is a whole bundle-level *object* (it appears in
 ``CompileResult.objects`` under ``"automation:<id>"``), not a trigger/condition/
 action *inside* one. Each builder registers the validated ``AutomationConfig``
@@ -47,7 +47,7 @@ _DECLARED: list[AutomationConfig] = []
 
 class RawAutomationNotJSONSerializableError(CompileError):
     """A ``raw_automation``/``@blueprint_automation`` body contains a value
-    that cannot round-trip as JSON (M1 test 5 / scope item 6)."""
+    that cannot round-trip as JSON."""
 
     def __init__(self, automation_id: str, detail: str, span: SourceSpan | None) -> None:
         where = f" at {span.file}:{span.line}" if span is not None else ""
@@ -143,8 +143,8 @@ def blueprint_automation(
     real stored blueprint automation's ``alias``/``description`` sit alongside
     ``use_blueprint``, not inside it) -- no ``triggers/conditions/actions``
     (the blueprint is applied at runtime by HA). ``alias=``/``description=``
-    are an F3 *addition* (M2, widening this signature with new optional
-    keywords, docs/dsl-extensions.md's stability contract). Wired into
+    are an addition to the frozen DSL surface (widening this signature with
+    new optional keywords, docs/dsl-extensions.md's stability contract). Wired into
     ``compile_bundle`` via the module docstring's Registration note
     (``Registry.add_object``).
     """

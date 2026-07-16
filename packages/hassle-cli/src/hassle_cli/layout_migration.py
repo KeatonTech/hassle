@@ -1,6 +1,7 @@
-"""MILESTONES M15 work item B -- one-time migration of an old-layout bundle
-(the RETIRED per-kind-tree shape: `automations/<slug>.py` / `scripts/<slug>.py`
-/ `helpers/<slug>.py`) into the new category-first, root-level layout.
+"""One-time migration of an old-layout bundle (the retired per-kind-tree
+shape: `automations/<slug>.py` / `scripts/<slug>.py` / `helpers/<slug>.py`)
+into the category-first, root-level layout. See docs/internals/cli.md for
+the design rationale.
 
 **Trigger.** `hassle pull` detects an old-layout bundle by the presence of any
 `.py` file under a top-level `automations/`, `scripts/`, or `helpers/`
@@ -23,8 +24,9 @@ those trees:**
    file, exactly like a fresh ADOPT batch -- `hassle.sync.pull_apply.
    _adopt_batch_source`'s shape, reused here via `decompile_bundle`).
 3. **Old files are deleted ONLY when nothing but imports would remain**
-   (I6 -- the exact same rule `remove_object`/`SplicingSourceWriter.
-   delete_object` already apply to an ordinary DROP: a user's own comment
+   (no local or UI edit is ever silently lost -- the exact same rule
+   `remove_object`/`SplicingSourceWriter.delete_object` already apply to an
+   ordinary DROP: a user's own comment
    attached to nothing, or bare imports, don't count as "content" worth
    keeping a file around for; a real top-level statement -- a custom `def`,
    a constant assignment, anything -- does, and the file survives with just
@@ -64,8 +66,8 @@ _RETIRED_TREES: tuple[str, ...] = ("automations", "scripts", "helpers")
 def _top_level_category_global(source: str) -> str | None:
     """The string value of a top-level ``CATEGORY = "..."`` assignment in
     ``source``, or ``None`` if there is none (or its value isn't a plain
-    string literal). Polish-batch item 4(b): used only to flag an ORPHANED
-    global left behind in a kept old-layout file after migration -- the file
+    string literal). Used only to flag an ORPHANED global left behind in a
+    kept old-layout file after migration -- the file
     is no longer category-shaped (`hassle.ir.keys.category_shaped_stem`
     rejects every nested path, including the retired per-kind trees), so this
     global is now inert bundle-side metadata, not a re-parse of a live
@@ -92,13 +94,13 @@ def _top_level_category_global(source: str) -> str | None:
 
 @dataclass(frozen=True)
 class OrphanedCategoryGlobal:
-    """A kept old-layout file's leftover `CATEGORY = "..."` global (polish-
-    batch item 4(b)): the migrated object(s) that used to make this path
-    category-shaped (under the M12-era per-kind-tree rule) have moved out,
-    and M15's `category_shaped_stem` never recognizes a nested path as
-    category-shaped at all -- so this global is now dead bundle-side
-    metadata. Reported, never auto-removed (surgical splice territory the
-    migration pass doesn't attempt); the user cleans it up by hand."""
+    """A kept old-layout file's leftover `CATEGORY = "..."` global: the
+    migrated object(s) that used to make this path category-shaped (under
+    the retired per-kind-tree rule) have moved out, and
+    `category_shaped_stem` never recognizes a nested path as category-shaped
+    at all -- so this global is now dead bundle-side metadata. Reported,
+    never auto-removed (surgical splice territory the migration pass
+    doesn't attempt); the user cleans it up by hand."""
 
     path: str
     category: str
@@ -133,11 +135,11 @@ class MigrationMove:
 class MigrationReport:
     moves: list[MigrationMove] = field(default_factory=list)
     deleted_files: list[str] = field(default_factory=list)
-    # Polish-batch item 4(b): kept old-tree files (I6 -- not deleted, because
-    # something besides the migrated object(s) remains) whose only remaining
-    # "content" is an orphaned `CATEGORY = "..."` global from the M12 era.
-    # Note (also polish-batch item 4(b)): any now-unused import left in a kept
-    # old file is deliberately NOT reported or auto-removed here -- migration
+    # Kept old-tree files (not deleted, because something besides the
+    # migrated object(s) remains) whose only remaining "content" is an
+    # orphaned `CATEGORY = "..."` global from the old per-kind-tree era.
+    # Note: any now-unused import left in a kept old file is deliberately NOT
+    # reported or auto-removed here -- migration
     # only ever splices OUT the migrated object's own statement, never
     # rewrites the rest of the file, so a leftover `from hassle import
     # automation` with nothing left to use it is left as-is for the user to
@@ -165,11 +167,11 @@ def migrate_old_layout(
     new_source_path_for: dict[str, str],
 ) -> MigrationReport:
     """Move every compiled object whose CURRENT declaration lives under a
-    RETIRED per-kind tree to its NEW (root-level, category-first) file,
+    retired per-kind tree to its NEW (root-level, category-first) file,
     splicing it out of the old file and regenerating it at the new
     destination -- old files are deleted only when no user content remains
-    (I6). Mutates the working tree; returns a report of every move/deletion
-    for `hassle pull` to print.
+    (no local or UI edit is ever silently lost). Mutates the working tree;
+    returns a report of every move/deletion for `hassle pull` to print.
 
     ``new_source_path_for`` is `object_key -> new bundle-relative path`,
     precomputed by the caller (`hassle_cli.bundle_ops.build_source_paths`,
@@ -219,7 +221,8 @@ def migrate_old_layout(
         return report
 
     # 1. Splice every migrated object OUT of its old file (delete the file
-    #    entirely when nothing but imports would remain -- I6).
+    #    entirely when nothing but imports would remain -- no local or UI
+    #    edit is ever silently lost).
     for old_path_posix, object_keys in sorted(by_old_path.items()):
         old_file = bundle_root / old_path_posix
         if not old_file.is_file():
@@ -239,11 +242,11 @@ def migrate_old_layout(
             report.deleted_files.append(old_path_posix)
         else:
             old_file.write_text(source, encoding="utf-8")
-            # Polish-batch item 4(b): the file was kept (I6 -- something
-            # besides the migrated object remains) -- flag it if that
-            # "something" is (at least) an orphaned CATEGORY global left
-            # over from the M12-era per-kind-tree category shape, now inert
-            # under M15's root-level-only `category_shaped_stem`.
+            # The file was kept (something besides the migrated object
+            # remains) -- flag it if that "something" is (at least) an
+            # orphaned CATEGORY global left over from the old per-kind-tree
+            # category shape, now inert under the root-level-only
+            # `category_shaped_stem`.
             category_value = _top_level_category_global(source)
             if category_value is not None:
                 report.orphaned_category_globals.append(

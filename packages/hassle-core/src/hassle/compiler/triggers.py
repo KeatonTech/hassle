@@ -1,4 +1,4 @@
-"""Classic HA trigger builders (DESIGN §5.4) — the triggers/conditions M1 workstream.
+"""Classic HA trigger builders (DESIGN §5.4).
 
 Every builder emits the canonical plural HA trigger dict directly
 (``{"trigger": "<type>", ...}``, per docs/compiler-api.md §1). Field shapes are
@@ -11,7 +11,7 @@ gets them uniformly without repeating the plumbing.
 
 Dual-purpose builders (``numeric_state``, ``time``, ``sun``, ``zone``,
 ``template``) implement both ``to_trigger`` and ``to_condition`` (like the
-M1-core ``state()``) and keep the ``__bool__`` trap (DESIGN §5.5) so a native
+core ``state()``) and keep the ``__bool__`` trap (DESIGN §5.5) so a native
 Python ``if`` on one of them fails loudly with ``CompileTimeBranchError``.
 """
 
@@ -98,9 +98,8 @@ class NumericStateExpr(_TriggerBase):
 
     ``entity_id`` accepts a single entity or a sequence (real-world
     smoke-test addition: the HA UI always stores this as a list, even for one
-    entity; widened ``list[str]`` -> ``Sequence[str]`` in the task #28
-    annotation-truth pass -- see ``StateExpr``'s docstring, ``builders.py``,
-    for the invariance rationale).
+    entity; ``list[str]`` widened to ``Sequence[str]`` -- see ``StateExpr``'s
+    docstring, ``builders.py``, for the invariance rationale).
     """
 
     def __init__(
@@ -157,8 +156,8 @@ def numeric_state(
 ) -> NumericStateExpr:
     """Build a ``numeric_state`` trigger/condition (DESIGN §5.4).
 
-    ``attribute=`` (M1.1 addition) reads an entity attribute instead of its
-    main state (HA's ``numeric_state`` schema field of the same name; see
+    ``attribute=`` reads an entity attribute instead of its main state (HA's
+    ``numeric_state`` schema field of the same name; see
     ``fixtures/dsl/shade_tracks_sun``'s sun-elevation condition). ``entity_id``
     accepts a sequence too (real-world smoke-test addition, same rationale as
     ``state()``).

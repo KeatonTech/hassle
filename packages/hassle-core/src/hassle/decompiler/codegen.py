@@ -6,9 +6,9 @@ of any subset) and produces one deterministic, ruff-formatted Python module.
 bare ``blueprint_automation(...)`` call), used both by ``decompile_bundle`` and
 by the splice codemod (which replaces one object's def in an existing file).
 
-Deterministic ordering (R8): objects are emitted sorted by object key, so the
-same IR always produces byte-identical source regardless of dict iteration
-order.
+Deterministic ordering: objects are emitted sorted by object key, so the same
+IR always produces byte-identical source regardless of dict iteration order
+(output must be byte-stable, with no wall-clock or other nondeterminism).
 """
 
 from __future__ import annotations
@@ -42,19 +42,18 @@ from hassle.ir.normalize import normalize_ha
 if TYPE_CHECKING:
     from hassle.registry.snapshot import RegistrySnapshot
 
-# Owner preference (DESIGN §7.3): a fresh whole-bundle decompile always emits a
-# star import of the frozen F3 DSL surface (`hassle.__all__` defines it, so
-# pyright resolves `from hassle import *` fine) rather than an enumerated
-# builder-name list. This also sidesteps the enumerated list's own staleness
-# risk -- an F3 addition no longer needs a matching update here. The entity-
-# registry accessor import stays explicit (DESIGN §5.3: `from hassle.registry
-# import entities as e`, its own dedicated, non-`__all__` entry point).
+# A fresh whole-bundle decompile always emits a star import of the frozen DSL
+# surface (`hassle.__all__` defines it, so pyright resolves `from hassle
+# import *` fine) rather than an enumerated builder-name list -- see
+# docs/internals/decompiler.md for why. The entity-registry accessor import
+# stays explicit (DESIGN §5.3: `from hassle.registry import entities as e`,
+# its own dedicated, non-`__all__` entry point).
 _STAR_IMPORT_LINE = "from hassle import *\n"
 _ENTITIES_IMPORT_LINE = "from hassle.registry import entities as e\n"
 
-# `mode=`/`max_exceeded=` enums (``ux/dsl-ergonomics``, item 2): a recognized value
-# decompiles to `Mode.RESTART`/`MaxExceeded.SILENT`; an unrecognized one (a future HA
-# value this DSL doesn't know about yet) falls back to the raw string -- never a
+# `mode=`/`max_exceeded=` enums: a recognized value decompiles to
+# `Mode.RESTART`/`MaxExceeded.SILENT`; an unrecognized one (a future HA value
+# this DSL doesn't know about yet) falls back to the raw string -- never a
 # decompiler error.
 _MODE_VALUES = {member.value: member for member in Mode}
 _MAX_EXCEEDED_VALUES = {member.value: member for member in MaxExceeded}
@@ -86,34 +85,19 @@ class ScriptRef:
     supplied for cross-file calls, where the decompiler must also emit
     ``from <module> import <function_name>``.
 
-    ``known_fields`` is the callee's own declared field names (its ``fields``
-    block's keys) -- needed here too, not just for same-batch calls, so the
-    "every data key is a declared field" rewrite condition can be checked for
-    a cross-file callee the decompiler never actually parses in this call.
-    Defaults to "anything goes" (``None``) so a caller that doesn't have this
-    information handy (e.g. a hand-built ``ScriptRef`` in a test) isn't forced
-    to enumerate it; real pull-layer callers always supply it.
+    ``known_fields`` is the callee's own declared field names, needed here too
+    (not just for same-batch calls) to check "every data key is a declared
+    field" for a cross-file callee this call never actually parses. Defaults
+    to "anything goes" (``None``) so a hand-built ``ScriptRef`` (e.g. in a
+    test) isn't forced to enumerate it; real pull-layer callers always supply
+    it.
 
-    ``is_shared_script`` (``ux/shared-script-calls-fix``, field-failure fix):
-    whether the callee actually decompiled to ``@shared_script`` (a real
-    parameterized call site) rather than falling back to plain ``@script``
-    (DESIGN §7.3's fallback rule -- rich field metadata, or a field with no
-    ``default`` at all: :func:`fields_signature_expressible`). A ``@script``
-    fallback has NO call-site parameters at all, regardless of what
-    ``known_fields``/the raw ``fields`` block name -- rewriting a caller to
-    invoke it with kwargs raises ``TypeError`` at compile time (the exact bug
-    this field carries the fix for: a script whose fields forced the
-    fallback still had its caller rewritten, because the resolver only ever
-    consulted the raw field NAMES, never whether they became real
-    parameters). ``False`` here means the ref must never resolve a rewrite,
-    period -- checked before ``known_fields``, not instead of it.
-
-    ``calls`` is this script's own outgoing call graph -- the object_ids of
-    OTHER managed scripts its own sequence calls directly (``script.<id>``
-    shorthand) -- used only for cross-file cycle detection (a script-to-script
-    call cycle must not have BOTH directions rewritten to an import, since
-    neither generated file could then be it importable without a circular
-    import); a leaf script (calls nothing) passes an empty frozenset.
+    ``is_shared_script`` and ``calls`` exist to avoid rewriting a caller into
+    a call the callee can't accept, and to avoid emitting a circular import
+    between two generated files -- see docs/internals/decompiler.md for the
+    full rationale. ``is_shared_script=False`` means the ref must never
+    resolve a rewrite, checked before ``known_fields``. A leaf script (calls
+    nothing) passes an empty frozenset for ``calls``.
     """
 
     module: str
@@ -193,10 +177,10 @@ def _sanitized_identity(object_key: str) -> str:
 
 
 def _automation_name(obj: AutomationConfig, used_names: dict[str, int]) -> str:
-    """DESIGN §7.3 as originally written: the function name derives from
-    ``alias`` (slugified), not from ``id`` -- the id kwarg is preserved
-    verbatim regardless (I2), this only changes what the generated Python
-    identifier looks like. No alias -> ``automation_<id>`` fallback."""
+    """DESIGN §7.3: the function name derives from ``alias`` (slugified), not
+    from ``id`` -- the id kwarg is preserved verbatim regardless (an existing
+    object's HA id is never changed), this only changes what the generated
+    Python identifier looks like. No alias -> ``automation_<id>`` fallback."""
     alias = obj.alias
     if isinstance(alias, str) and alias.strip():
         base = _slug_identifier(alias)
@@ -209,11 +193,10 @@ def script_function_name(obj: ScriptConfig, used_names: dict[str, int]) -> str:
     """The Python function name a script decompiles to: same alias-derivation
     rule as automations, ``script_<id>`` fallback.
 
-    Public (``ux/shared-script-calls``): the pull layer (``hassle_cli.
-    bundle_ops``) needs this exact name to build the cross-reference table for
-    the caller-side function-call rewrite -- shared here rather than
-    duplicated, since it must stay in lockstep with what this module's own
-    ``_script_source`` actually emits.
+    Public: the pull layer (``hassle_cli.bundle_ops``) needs this exact name
+    to build the cross-reference table for the caller-side function-call
+    rewrite -- shared here rather than duplicated, since it must stay in
+    lockstep with what this module's own ``_script_source`` actually emits.
     """
     alias = obj.alias
     if isinstance(alias, str) and alias.strip():
@@ -272,9 +255,10 @@ def _automation_source(
     # express at all -- e.g. the ancient inline single-trigger form (`platform`/
     # `entity_id`/`to` directly at the automation's top level, no `trigger:`
     # wrapper -- fixtures/configs/automation_legacy_platform_naming.json,
-    # docs/ha-api-notes.md's M2 findings). `@automation`'s option set has no
-    # room for arbitrary top-level fields like this; decompiling the whole
-    # object to `raw_automation` is the only lossless option (DESIGN §5.8, I3).
+    # docs/ha-api-notes.md). `@automation`'s option set has no room for
+    # arbitrary top-level fields like this; decompiling the whole object to
+    # `raw_automation` is the only lossless option (DESIGN §5.8: compile(decompile(x))
+    # must equal x for any config).
     _ALLOWED_TOP_LEVEL = {
         "id",
         "alias",
@@ -296,14 +280,15 @@ def _automation_source(
     decorator_kwargs: list[str] = []
     # Only emit an explicit id= when the id differs from what the function name
     # would already produce (bundle.py: `options.get("id") or func.__name__`)
-    # -- keeps the common case terse. I2: the id itself is never touched, only
-    # whether the (now alias-derived) function name happens to make it
-    # redundant to spell out. `obj.identity` (not just a literal `id` field in
-    # the body) is the true identity -- it also covers a fixture whose id was
-    # supplied extrinsically (`key_hint`, e.g. the corpus's hand-authored
-    # docs-example fixtures with no `id` field at all): now that the function
-    # name is alias-derived rather than id-derived, that identity would
-    # otherwise silently disappear (I2/I3) instead of round-tripping via id=.
+    # -- keeps the common case terse. The id itself is never touched (an
+    # existing object's HA id is never changed), only whether the (now
+    # alias-derived) function name happens to make it redundant to spell out.
+    # `obj.identity` (not just a literal `id` field in the body) is the true
+    # identity -- it also covers a fixture whose id was supplied extrinsically
+    # (`key_hint`, e.g. the corpus's hand-authored docs-example fixtures with
+    # no `id` field at all): now that the function name is alias-derived
+    # rather than id-derived, that identity would otherwise silently
+    # disappear instead of round-tripping via id=.
     body.pop("id", None)
     body_id = obj.identity
     if body_id is not None and str(body_id) != func_name:
@@ -316,8 +301,8 @@ def _automation_source(
     actions = body.pop("actions", [])
 
     # `triggers=` decorator metadata is the canonical decompiled form
-    # (ux/triggers-in-decorator, DESIGN §5.3/§5.5, docs/dsl-extensions.md): subscription
-    # metadata lives in the decorator, Python-idiom style (cf. `@app.route`).
+    # (DESIGN §5.3/§5.5, docs/dsl-extensions.md): subscription metadata lives
+    # in the decorator, Python-idiom style (cf. `@app.route`).
     # Only TYPED triggers can be nested as a kwarg's list-literal expression --
     # `raw_trigger(...)` is a recording *verb* (it calls `record_trigger` itself
     # and returns None), so it cannot be an element of a list literal. A raw
@@ -328,8 +313,8 @@ def _automation_source(
     # body statement still lands after the decorator's typed triggers; since
     # the original recorded order interleaved them in the single `triggers`
     # list, preserving typed-then-raw here can only reorder relative to each
-    # other, never drop data -- I3 holds via the underlying builder/verb
-    # semantics, not literal position).
+    # other, never drop data -- compile(decompile(x)) == x holds via the
+    # underlying builder/verb semantics, not literal position).
     typed_trigger_srcs: list[str] = []
     raw_trigger_stmts: list[str] = []
     for trig in triggers:
@@ -364,26 +349,23 @@ def _automation_source(
     # Any raw_trigger() leftover is emitted plain, right at the top of the
     # body (no section header -- see below).
     #
-    # Section comments removed (owner amendment, ``ux/dsl-ergonomics``,
-    # supersedes the original DESIGN §7.3 "judge readability" latitude): with
-    # triggers living in the decorator (ux/triggers-in-decorator) and
-    # conditions now emitted as the `with only_if(...):` block form (item 1
-    # below) whenever any are present, the body's structure is already
-    # self-describing -- decorator = when, only_if block = gate, plain
-    # statements = do -- so a `# --- conditions ---`/`# --- actions ---`
-    # comment no longer points at anything a reader couldn't already tell at
-    # a glance. See DESIGN §7.3's dated note.
+    # No `# --- conditions ---`/`# --- actions ---` section comments: with
+    # triggers living in the decorator and conditions emitted as the
+    # `with only_if(...):` block form below whenever any are present, the
+    # body's structure is already self-describing -- decorator = when,
+    # only_if block = gate, plain statements = do -- so a section comment
+    # would never point at anything a reader couldn't already tell at a
+    # glance.
     body_lines.extend(raw_trigger_stmts)
 
-    # Conditions (item 1, ``ux/dsl-ergonomics``): whenever this automation has
-    # ANY conditions, the block form (`with only_if(...): <every action>`) is
-    # now the canonical decompiled shape -- it's the compiled IR's only
-    # accurate rendering, since HA's automation-level conditions gate every
-    # action regardless of where in the body they're textually written; the
-    # block form makes that visually true instead of misleading (owner
-    # feedback: a bare `only_if(...)` call above a flat action list "looks
-    # like an empty if"). No conditions -> no block at all, actions are plain
-    # top-level statements exactly as before this feature existed.
+    # Whenever this automation has ANY conditions, the block form
+    # (`with only_if(...): <every action>`) is the canonical decompiled
+    # shape -- it's the compiled IR's only accurate rendering, since HA's
+    # automation-level conditions gate every action regardless of where in
+    # the body they're textually written; the block form makes that visually
+    # true instead of a bare `only_if(...)` call above a flat action list,
+    # which reads like an empty `if`. No conditions -> no block at all,
+    # actions are plain top-level statements.
     typed_conditions: list[str] = []
     raw_condition_stmts: list[str] = []
     for cond in conditions:
@@ -432,17 +414,16 @@ def _automation_source(
     return "\n".join(lines) + "\n"
 
 
-# A script `fields` entry is *terse-signature*-expressible (the ORIGINAL,
-# narrower rule: DESIGN §5.6/§5.7 parity with
-# `hassle.compiler.scripts._fields_from_signature`) only if its own dict has
-# EXACTLY the key `default` (never more, never fewer) -- in which case the
-# decompiler can omit an explicit `fields=` kwarg entirely: the signature
-# alone reproduces it. Any other shape (rich metadata, or no `default` at
-# all) still decompiles to `@shared_script`, now via the WIDENED rule below
-# (`ux/shared-script-rich-fields`, owner feedback: real HA-UI-authored
-# scripts carry `name`/`description`/`selector`/... on every field, making
-# the terse form rare in practice on real bundles) -- `fields=` is emitted
-# verbatim and every field still becomes a `None`-defaulted parameter.
+# A script `fields` entry is *terse-signature*-expressible (the narrower rule:
+# DESIGN §5.6/§5.7 parity with `hassle.compiler.scripts._fields_from_signature`)
+# only if its own dict has EXACTLY the key `default` (never more, never fewer)
+# -- in which case the decompiler can omit an explicit `fields=` kwarg
+# entirely: the signature alone reproduces it. Any other shape (rich metadata,
+# or no `default` at all) still decompiles to `@shared_script` via the wider
+# rule below (real HA-UI-authored scripts carry `name`/`description`/
+# `selector`/... on every field, making the terse form rare in practice on
+# real bundles) -- `fields=` is emitted verbatim and every field still
+# becomes a `None`-defaulted parameter.
 _SIGNATURE_EXPRESSIBLE_FIELD_KEYS = frozenset({"default"})
 
 
@@ -461,24 +442,22 @@ def _fields_terse_signature_expressible(fields: Any) -> bool:
 
 def fields_signature_expressible(fields: Any) -> bool:
     """Whether a script's ``fields`` block can become a ``@shared_script``
-    at all (widened, ``ux/shared-script-rich-fields``) -- the ONLY remaining
-    ``@script`` fallback triggers are a field name that isn't a valid Python
-    identifier (can't become a matching parameter name at all) or a
-    malformed ``fields`` value (not a dict of dicts) -- HA's UI never
-    produces either, so the ``@script`` fallback is now rare in practice on
-    real bundles, exactly the owner's ask.
+    at all -- the ONLY remaining ``@script`` fallback triggers are a field
+    name that isn't a valid Python identifier (can't become a matching
+    parameter name at all) or a malformed ``fields`` value (not a dict of
+    dicts) -- HA's UI never produces either, so the ``@script`` fallback is
+    rare in practice on real bundles.
 
-    Public (``ux/shared-script-calls-fix``, widened here): this is THE
-    shared_script-vs-``@script``-fallback emit decision, and it must be the
-    single source of truth for every caller that needs to know which one a
-    given script decompiled to -- both same-batch (:func:`_build_resolver`
-    below) and cross-file (`hassle_cli.bundle_ops.build_script_refs`) MUST
-    gate `CallTarget`/`ScriptRef` creation on this, not just consult the raw
-    field names, or a caller can be rewritten to call a function that was
-    actually emitted with zero parameters (the field failure this function
-    was made public to fix: a script whose fields forced the ``@script``
-    fallback has NO call-site kwargs at all, regardless of what its stored
-    ``fields`` names are).
+    Public: this is THE shared_script-vs-``@script``-fallback emit decision,
+    and it must be the single source of truth for every caller that needs to
+    know which one a given script decompiled to -- both same-batch
+    (:func:`_build_resolver` below) and cross-file
+    (`hassle_cli.bundle_ops.build_script_refs`) MUST gate `CallTarget`/
+    `ScriptRef` creation on this, not just consult the raw field names, or a
+    caller can be rewritten to call a function that was actually emitted with
+    zero parameters -- a script whose fields forced the ``@script`` fallback
+    has NO call-site kwargs at all, regardless of what its stored ``fields``
+    names are.
     """
     if fields is None:
         return True  # no fields at all -- trivially expressible (empty signature)
@@ -496,54 +475,23 @@ def fields_signature_expressible(fields: Any) -> bool:
 def script_is_shared_script(obj: ScriptConfig) -> bool:
     """Whether ``obj`` decompiles to ``@shared_script`` (vs. the ``@script``
     fallback) -- the single source of truth for the emit decision, from the
-    IR object directly (``ux/shared-script-calls-fix``)."""
+    IR object directly."""
     fields = obj.to_ha().get("fields")
     return fields_signature_expressible(fields)
 
 
 def _shared_script_signature(fields: Any) -> str:
     """Build the parameter list for a ``@shared_script`` function definition
-    from its ``fields`` block: ``name: TemplateExpr`` (MILESTONES M19, owner-
-    directed typing resolution) for a field with no declared default (a
-    required field -- no ``=...`` at all, since the compiler always binds it
-    to its ``param(name)`` marker before the body runs regardless), else
-    ``name: TemplateExpr = field_default(<default>)``.
-
-    ``TemplateExpr`` -- not a builtin type inferred from the default's Python
-    type -- is the BODY-TRUE annotation: every field-named parameter is
-    ALWAYS a runtime template marker inside the body (M19's whole point),
-    never its declared Python default's type, so annotating e.g. ``times:
-    int`` would let `sun_angle / 2`-style body composition type-check as
-    real arithmetic when it's actually building Jinja text (verified
-    empirically: pyright raises no error for this "int-field lie" under a
-    plain-type annotation, since it trusts the annotation over the actual
-    runtime type). ``field_default(...)`` (F3-additive) is the identity
-    function AT RUNTIME -- ``inspect.signature(...)``'s introspected default
-    (what ``_fields_from_signature``/the generated HA ``fields`` block
-    actually read) sees the real declared value unchanged -- but is TYPED as
-    returning ``TemplateExpr``, so a field's own default expression
-    type-checks against its ``TemplateExpr`` annotation without the
-    self-inconsistent ``tag: TemplateExpr = ""`` a bare literal default would
-    be. Caller-side typing is UNAFFECTED by any of this (verified
-    empirically, MILESTONES M19 typing investigation): ``@shared_script``'s
-    returned caller wrapper's signature is ``(*args: Any, **kwargs: Any) ->
-    None``, completely decoupled from the decorated function's own
-    annotations.
+    from its ``fields`` block: ``name: TemplateExpr`` for a field with no
+    declared default (a required field -- no ``=...`` at all, since the
+    compiler always binds it to its ``param(name)`` marker before the body
+    runs regardless), else ``name: TemplateExpr = field_default(<default>)``.
 
     Every parameter is emitted KEYWORD-ONLY (a leading ``*,``): a required
-    field (no default, bare ``TemplateExpr``) can legally follow a defaulted
-    one in the STORED ``fields`` dict's own order (HA imposes no ordering
-    constraint there, e.g. `fixtures/configs/script_with_fields.json`'s
-    `light_entity` (no default) / `brightness` (has one) / `delay_seconds`
-    (no default) again) -- but plain positional-or-keyword Python parameters
-    do (``SyntaxError: parameter without a default follows parameter with a
-    default``), a regression this fixture caught (M19: previously EVERY
-    field was ``None``-defaulted regardless, so order never mattered; the
-    body-true bare-``TemplateExpr``-for-no-default form reintroduced the
-    ordering constraint unless keyword-only). Harmless for callers: the
-    compiler always invokes a shared-script body with zero positional
-    arguments to build its sequence (DESIGN §5.6) -- nothing ever called
-    these parameters positionally to begin with.
+    field (no default) can legally follow a defaulted one in the stored
+    ``fields`` dict's own order, but plain positional-or-keyword Python
+    parameters cannot. See docs/internals/decompiler.md for the full
+    rationale on ``TemplateExpr`` typing and keyword-only parameters.
 
     Only ever called when :func:`fields_signature_expressible` accepted
     ``fields``.
@@ -574,9 +522,9 @@ def _script_source(obj: ScriptConfig, ident: str, resolver: CallResolver | None)
     # The TERSE form (no explicit fields= kwarg -- DESIGN §5.6/§5.7 parity)
     # only for the narrow original shape (every field spec is exactly
     # {"default": ...}); any other shared_script-expressible shape (rich
-    # metadata, or a field with no default) emits fields= verbatim
-    # (`ux/shared-script-rich-fields`) so recompiling reproduces the exact
-    # stored metadata, not just its inferred defaults.
+    # metadata, or a field with no default) emits fields= verbatim so
+    # recompiling reproduces the exact stored metadata, not just its
+    # inferred defaults.
     terse = as_shared_script and _fields_terse_signature_expressible(fields)
 
     decorator_kwargs: list[str] = []
@@ -606,21 +554,20 @@ def _script_source(obj: ScriptConfig, ident: str, resolver: CallResolver | None)
     signature = _shared_script_signature(fields) if as_shared_script else ""
     lines = [f"@{decorator_name}({', '.join(decorator_kwargs)})", f"def {ident}({signature}):"]
     body_lines: list[str] = []
-    # M19: a `@shared_script`'s own field names are active while decompiling
-    # ITS sequence -- a data value that's exactly a field read (or a larger
+    # A `@shared_script`'s own field names are active while decompiling ITS
+    # sequence -- a data value that's exactly a field read (or a larger
     # invertible expression over fields) decompiles to the bare parameter
-    # form instead of the raw `"{{ ... }}"` string (test 3). `None` for the
-    # `@script` fallback (no signature-bound fields to speak of) -- the
-    # bare-parameter rewrite only ever makes sense for an actual
-    # `@shared_script`.
+    # form instead of the raw `"{{ ... }}"` string. `None` for the `@script`
+    # fallback (no signature-bound fields to speak of) -- the bare-parameter
+    # rewrite only ever makes sense for an actual `@shared_script`.
     field_names: frozenset[str] | None = (
         frozenset(cast("dict[str, Any]", fields))
         if as_shared_script and isinstance(fields, dict)
         else None
     )
-    # No `# --- sequence ---` header (owner amendment, ``ux/dsl-ergonomics`` --
-    # see `_automation_source`'s matching note): a script's body is just its
-    # sequence, nothing else, so the comment never disambiguated anything.
+    # No `# --- sequence ---` header (see `_automation_source`'s matching
+    # note): a script's body is just its sequence, nothing else, so the
+    # comment never disambiguated anything.
     with shared_script_field_context(field_names):
         for action in sequence:
             if isinstance(action, dict):
@@ -648,17 +595,17 @@ def _helper_source(obj: HelperConfig, ident: str) -> str:
 
 
 def _group_helper_source(obj: GroupHelperConfig, ident: str) -> str:
-    """A group helper decompiles to the plain assignment call form (M21),
-    like the nine storage-collection helpers (:func:`_helper_source`) --
-    unlike template helpers, there is no Jinja `state=` field to defer into a
+    """A group helper decompiles to the plain assignment call form, like the
+    nine storage-collection helpers (:func:`_helper_source`) -- unlike
+    template helpers, there is no Jinja `state=` field to defer into a
     decorator body, so no decorator form exists here at all.
 
     ``entities``'s member entity ids (which may themselves be another
     group's entity id -- nested groups, docs/ha-api-notes.md §38.1) decompile
     as PLAIN string literals via ``render_literal``, never the `e.<domain>.
     <id>` cosmetic entity-reference form (`hassle.decompiler.exprs.
-    render_entity_position`) -- the milestone's "plain entity references, no
-    ordering games" contract, list order preserved verbatim (I3).
+    render_entity_position`): plain entity references, no ordering games,
+    list order preserved verbatim (compile(decompile(x)) == x).
     """
     body = dict(obj.to_ha())
     domain = obj.kind()
@@ -668,15 +615,15 @@ def _group_helper_source(obj: GroupHelperConfig, ident: str) -> str:
 
 
 def _template_helper_call_form_source(obj: TemplateHelperConfig, ident: str) -> str:
-    """The pre-M13 call form: ``ident = builder(name=..., state=..., ...)``.
+    """The plain call form: ``ident = builder(name=..., state=..., ...)``.
 
-    No longer the decompiler's own fallback output (MILESTONES M14: both
-    branches emit the decorator form now) -- kept because the call form
-    stays valid DSL input (F3 additions only; nothing is removed from the
-    surface). There is no identity kwarg to rename, ``TemplateHelperConfig``
-    has no ``id``/``unique_id`` field at all (docs/ha-api-notes.md §26.6).
-    Identity is derived from ``name`` (slugified) at both compile and
-    decompile time."""
+    No longer the decompiler's own output for a template helper (both
+    branches of :func:`_template_helper_source` emit the decorator form now)
+    -- kept because the call form stays valid DSL input (the frozen DSL
+    surface only ever grows; nothing is removed from it). There is no
+    identity kwarg to rename, ``TemplateHelperConfig`` has no ``id``/
+    ``unique_id`` field at all (docs/ha-api-notes.md §26.6). Identity is
+    derived from ``name`` (slugified) at both compile and decompile time."""
     body = dict(obj.to_ha())
     domain = obj.kind()
     builder = _TEMPLATE_HELPER_BUILDER_NAMES[domain]
@@ -687,39 +634,14 @@ def _template_helper_call_form_source(obj: TemplateHelperConfig, ident: str) -> 
 def _raw_template_return_source(text: str) -> str:
     """Render ``text`` (a stored ``state=``/``options=`` Jinja string) as a
     Python string literal suitable for a decorator body's ``return`` -- the
-    M14 fallback branch's raw-string body (MILESTONES M14: "hand-converting a
-    helper to Python later means rewriting only the ``return`` expression").
+    fallback branch's raw-string body, so hand-converting a helper to Python
+    later means rewriting only the ``return`` expression.
 
-    Byte-exact (I3): the literal must parse back to EXACTLY ``text``,
-    whatever it contains -- embedded single/double/triple quote runs,
-    backslashes, leading or trailing newlines, CR bytes. Two mechanical
-    cases, chosen by
-    whether ``text`` is multi-line (the common case for a hand-written
-    template -- triple-quoted is far more hand-editable than a single
-    ``\\n``-escaped line):
-
-    - Single-line (no ``\\n``): a plain ``repr(text)`` -- ``ruff format``
-      already normalizes quote-character choice/escaping deterministically
-      for any string content (verified empirically: idempotent after one
-      format pass for arbitrary content, including embedded quotes of both
-      kinds, backslashes, and the empty string), so there is nothing this
-      function needs to special-case here.
-    - Multi-line (contains ``\\n``): a triple-double-quoted string, escaping
-      ONLY backslash, the double-quote character, and ``\\r``
-      character-by-character (never a whole-string ``.replace`` -- that can
-      corrupt overlapping matches, e.g. a text ending in a double-quote
-      character, N15 finding during M14 implementation). Escaping every
-      double-quote character individually means a run of them (three in a
-      row inside the text, or a single trailing one that would otherwise
-      collide with the closing delimiter) can never produce an unescaped
-      close-delimiter sequence anywhere in the body. ``\\r`` is escaped
-      rather than emitted literally because `ruff format`'s own line-ending
-      normalization silently rewrites a bare CR byte inside a multi-line
-      string, which would break byte-exactness (I3) -- verified empirically.
-      Every other character (including the literal ``\\n``s that make this
-      the multi-line branch) is emitted as-is, which is what makes the
-      output actually multi-line and hand-editable rather than one long
-      escaped line.
+    Byte-exact: the literal must parse back to EXACTLY ``text`` (compile(
+    decompile(x)) == x), whatever it contains. Single-line text uses a plain
+    ``repr()``; multi-line text uses a triple-double-quoted string with
+    manual escaping. See docs/internals/decompiler.md for why each case is
+    handled the way it is.
     """
     if "\n" not in text:
         return repr(text)
@@ -737,33 +659,25 @@ def _raw_template_return_source(text: str) -> str:
 
 
 def _template_helper_source(obj: TemplateHelperConfig, ident: str) -> str:
-    """M13 + M14: the decorator form is canonical output for BOTH branches
-    (MILESTONES M14, owner feedback on M13) -- try the bounded Jinja inverter
-    first (``hassle.decompiler.template_invert``); when it can't invert
-    ``state`` byte-for-byte, fall back to a decorator whose body is
-    ``return "<verbatim Jinja>"`` (:func:`_raw_template_return_source`)
-    instead of the pre-M14 call form. Both branches share the exact same
-    decorator-kwargs rendering (every field but ``state`` is unaffected
+    """The decorator form is canonical output for both branches: try the
+    bounded Jinja inverter first (``hassle.decompiler.template_invert``);
+    when it can't invert ``state`` byte-for-byte, fall back to a decorator
+    whose body is ``return "<verbatim Jinja>"``
+    (:func:`_raw_template_return_source`). Both branches share the exact
+    same decorator-kwargs rendering (every field but ``state`` is unaffected
     either way) and the same ``ident`` (computed once, before this function
-    is even called -- MILESTONES M14: "a helper flipping between branches
-    keeps its function name").
+    is even called), so a helper flipping between branches keeps its
+    function name.
 
     ``state``/``options``'s value is the only field ever spelled as a
     decorated function body -- every other kwarg (``set_value``,
     ``min``/``max``/``step``, ``unit_of_measurement``, ...) is unaffected and
     still rendered exactly as the call form renders it, just moved into the
     decorator's argument list. ``template_select.options=`` (the second
-    template) stays a kwarg, unchanged (MILESTONES M14).
+    template) stays a kwarg, unchanged.
 
-    The acceptance rule (MILESTONES M13) is enforced by
-    :func:`~hassle.decompiler.template_invert.invert_template` itself: it
-    returns ``None`` (never partial output) unless
-    ``render(invert(state)) == state`` byte-for-byte, so choosing the
-    invertible branch here is safe by construction -- there is no separate
-    "trust the inverter" step. The fallback branch is safe by construction
-    too: it never re-renders or normalizes ``state``, just embeds it
-    verbatim as a string literal, so I3 holds trivially (the raw escape
-    hatch, DESIGN §2 I3, never drops data).
+    See docs/internals/decompiler.md for why the inversion/fallback split is
+    safe by construction with respect to `compile(decompile(x)) == x`.
     """
     from hassle.decompiler.template_invert import invert_template
 
@@ -822,14 +736,14 @@ def decompile_object(
     builder verb inside its own body regardless of what else it's decompiled
     alongside.
 
-    ``resolver`` (``ux/shared-script-calls``): resolves a caller action's
-    direct ``script.<id>`` call to a real function call -- see
-    :func:`decompile_bundle`'s docstring for how it's built.
+    ``resolver`` resolves a caller action's direct ``script.<id>`` call to a
+    real function call -- see :func:`decompile_bundle`'s docstring for how
+    it's built.
 
-    ``_ident`` (internal, ``ux/shared-script-calls``): the precomputed
-    function/variable name, when :func:`decompile_bundle`'s naming pre-pass
-    already derived it (so the resolver and the emitted source are
-    guaranteed to agree) -- computed fresh from ``used_names`` otherwise.
+    ``_ident`` (internal): the precomputed function/variable name, when
+    :func:`decompile_bundle`'s naming pre-pass already derived it (so the
+    resolver and the emitted source are guaranteed to agree) -- computed
+    fresh from ``used_names`` otherwise.
     """
     names = used_names if used_names is not None else _reserved_names()
     ident = _ident if _ident is not None else _object_function_name(object_key, obj, names)
@@ -854,8 +768,7 @@ class RuffNotFoundError(RuntimeError):
 def _resolve_ruff_executable() -> str | None:
     """Locate the `ruff` binary: the running interpreter's own bin directory
     first (the venv / `uv tool install` case, where ruff is a dependency of
-    this package but the venv's bin is NOT on PATH -- the 2026-07-06 field
-    failure), then PATH."""
+    this package but the venv's bin is NOT on PATH), then PATH."""
     import shutil
     import sys
 
@@ -893,8 +806,8 @@ def _format_with_ruff(source: str) -> str:
 
 
 def _script_known_fields(obj: ScriptConfig) -> frozenset[str]:
-    """The declared field names a caller's ``data`` may legally supply (task
-    spec: "every data key is a declared field")."""
+    """The declared field names a caller's ``data`` may legally supply --
+    every data key must be a declared field."""
     body = obj.to_ha()
     fields = body.get("fields")
     if not isinstance(fields, dict):
@@ -912,7 +825,7 @@ def called_script_ids(node: Any) -> set[str]:
     ``if``/``choose``/``repeat``/``parallel``/``wait_for_trigger`` bodies too)
     -- used to decide which ``script_refs`` entries are actually needed, so an
     UNUSED cross-reference-table entry never contributes a dangling unused
-    import (``ux/shared-script-calls``)."""
+    import."""
     found: set[str] = set()
     if isinstance(node, dict):
         node_dict = cast("dict[str, Any]", node)
@@ -940,28 +853,27 @@ def _build_resolver(
     externally-supplied ``script_refs`` table -- they need no import at all,
     being plain functions in the SAME module. A ``script_refs`` entry for a
     script NOT in this batch resolves to a cross-file call, contributing one
-    import line (deduplicated, sorted for determinism, R8).
+    import line (deduplicated, sorted for determinism).
 
-    Cross-file cycle guard (task spec): if the target script's own
-    ``ScriptRef.calls`` set names an object_id THIS decompile batch is
-    scripting (i.e., the callee calls back into a script defined here), that
-    would require a circular import between the two files -- the edge is
-    dropped from the resolver (falls back to `service()`) rather than ever
-    emitting a mutually-importing pair of generated files.
+    Cross-file cycle guard: if the target script's own ``ScriptRef.calls``
+    set names an object_id THIS decompile batch is scripting (i.e., the
+    callee calls back into a script defined here), that would require a
+    circular import between the two files -- the edge is dropped from the
+    resolver (falls back to `service()`) rather than ever emitting a
+    mutually-importing pair of generated files.
 
     Only ``script_refs`` entries actually referenced by an object in
     ``objects`` (:func:`called_script_ids`) ever contribute a target/import
     -- an unused table entry must never surface as a dangling unused import.
 
-    **Field-failure fix (``ux/shared-script-calls-fix``):** a script that
-    fell back to plain ``@script`` (DESIGN §7.3's fallback rule -- rich field
-    metadata, or a field with no ``default`` at all) has NO call-site
-    parameters, whatever its ``fields`` block's key NAMES are -- it must
-    never get a ``CallTarget`` at all, same-batch or cross-file, or a caller
-    can be rewritten to invoke a function with kwargs it does not accept
-    (``TypeError`` at compile time; the exact bug reported from the owner's
-    real bundle: ``adjust_tdbu_blind`` fell back to ``@script``, but its
-    caller was still rewritten to ``adjust_tdbu_blind(cover_top=...)``).
+    A script that fell back to plain ``@script`` (DESIGN §7.3's fallback rule
+    -- rich field metadata, or a field with no ``default`` at all) has NO
+    call-site parameters, whatever its ``fields`` block's key NAMES are -- it
+    must never get a ``CallTarget`` at all, same-batch or cross-file, or a
+    caller can be rewritten to invoke a function with kwargs it does not
+    accept (``TypeError`` at compile time -- this is a real regression a
+    script can hit: a script whose fields forced the ``@script`` fallback,
+    with a caller still rewritten to pass it kwargs it can't accept).
     :func:`script_is_shared_script` (same-batch) / ``ScriptRef.
     is_shared_script`` (cross-file, since the callee isn't actually parsed in
     THIS call) gate target creation -- checked before ``known_fields``, which
@@ -1017,39 +929,37 @@ def decompile_bundle(
 ) -> str:
     """Decompile every object in ``objects`` into one ruff-formatted module.
 
-    Deterministic (R8): objects are emitted in sorted-key order regardless of
-    the input mapping's iteration order, so the same IR always produces
+    Deterministic: objects are emitted in sorted-key order regardless of the
+    input mapping's iteration order, so the same IR always produces
     byte-identical source -- including alias-collision suffixing, which walks
     objects in that same sorted-key order (never input/dict-iteration order)
     so two aliases that collide always get the same `_2`/`_3` assignment
     regardless of how the caller's mapping happened to be built.
 
-    ``script_refs`` (``ux/shared-script-calls``, owner feedback): a
-    ``{script_object_id: ScriptRef}`` cross-reference table -- supplied by the
-    pull layer (``hassle_cli.bundle_ops``), which already knows every managed
-    script's destination file -- for scripts NOT in ``objects`` (i.e. a
-    different destination file than whatever's being decompiled here). A
-    caller's direct ``{"action": "script.<id>", ...}`` action decompiles to a
-    real function call (with a ``from <module> import <fn>`` import, deduped
-    and sorted) when ``<id>`` resolves via ``objects`` (same file, no import)
-    or ``script_refs`` (cross-file); otherwise it stays ``service()`` (task
-    spec: "unknown scripts stay service()", never ``raw``).
+    ``script_refs``: a ``{script_object_id: ScriptRef}`` cross-reference
+    table -- supplied by the pull layer (``hassle_cli.bundle_ops``), which
+    already knows every managed script's destination file -- for scripts NOT
+    in ``objects`` (i.e. a different destination file than whatever's being
+    decompiled here). A caller's direct ``{"action": "script.<id>", ...}``
+    action decompiles to a real function call (with a
+    ``from <module> import <fn>`` import, deduped and sorted) when ``<id>``
+    resolves via ``objects`` (same file, no import) or ``script_refs``
+    (cross-file); otherwise it stays ``service()`` -- an unknown script id
+    never decompiles to ``raw``.
 
-    ``snapshot`` (MILESTONES M18): when supplied, a plain service-call action
-    whose literal ``"domain.service"`` exists in the snapshot and whose data
-    is kwarg-expressible decompiles to the typed namespace form
+    ``snapshot``: when supplied, a plain service-call action whose literal
+    ``"domain.service"`` exists in the snapshot and whose data is
+    kwarg-expressible decompiles to the typed namespace form
     (``light.turn_on(target=..., **fields)``) with a per-file
     ``from hassle.services import <domains>`` import line (domains sorted,
     deduplicated, and only ever the ones actually used -- never a dangling
-    unused import). ``None`` (the default -- e.g. the M2 corpus round-trip
-    test, which never had a snapshot to give) means every service call stays
-    ``service(...)``, unchanged from pre-M18 behavior.
+    unused import). ``None`` (the default) means every service call stays
+    ``service(...)``.
     """
     # Naming pre-pass: derive every object's function/variable name ONCE, in
     # the same sorted-key order `decompile_object` itself would use, so the
     # call resolver (built from these names) can never disagree with what
-    # actually gets emitted below -- a single shared `used_names` tracker,
-    # exactly matching the pre-existing (pre-resolver) collision ordering.
+    # actually gets emitted below -- a single shared `used_names` tracker.
     used_names: dict[str, int] = _reserved_names()
     idents: dict[str, str] = {}
     script_names: dict[str, str] = {}
@@ -1065,33 +975,32 @@ def decompile_bundle(
     # Object bodies are decompiled BEFORE the import header is assembled: the
     # services-namespace import line depends on `resolver.used_service_domains`,
     # which is only known once every action has actually been decompiled
-    # (a side effect of `decompile_action`, MILESTONES M18).
+    # (a side effect of `decompile_action`).
     object_sources = [
         decompile_object(key, objects[key], resolver=resolver, _ident=idents[key])
         for key in sorted(objects)
     ]
 
     parts = [_STAR_IMPORT_LINE, _ENTITIES_IMPORT_LINE]
-    # MILESTONES M19: a decompiled `@shared_script` signature annotates every
-    # field parameter `TemplateExpr` (body-true typing, `_shared_script_
-    # signature`'s own docstring) -- `TemplateExpr` is not on the `hassle`
-    # star-import surface (it's compiler-internal, exposed only via
-    # `hassle.compiler`/`hassle.compiler.templates`), so an explicit import is
-    # needed whenever at least one signature actually used it. `field_default`
-    # itself needs no separate import -- it IS on the star-import surface
-    # (`hassle.__all__`, F3-additive). A plain string check on the already-
-    # assembled object sources is simpler and just as deterministic as
-    # threading a "did I emit a signature" flag back out of `_script_source`
-    # through `decompile_object`.
+    # A decompiled `@shared_script` signature annotates every field parameter
+    # `TemplateExpr` (body-true typing, `_shared_script_signature`'s own
+    # docstring) -- `TemplateExpr` is not on the `hassle` star-import surface
+    # (it's compiler-internal, exposed only via `hassle.compiler`/
+    # `hassle.compiler.templates`), so an explicit import is needed whenever
+    # at least one signature actually used it. `field_default` itself needs
+    # no separate import -- it IS on the star-import surface (`hassle.__all__`).
+    # A plain string check on the already-assembled object sources is simpler
+    # and just as deterministic as threading a "did I emit a signature" flag
+    # back out of `_script_source` through `decompile_object`.
     if any(": TemplateExpr" in source for source in object_sources):
         parts.append("from hassle.compiler.templates import TemplateExpr\n")
     if resolver.used_service_domains:
         # Each entry renders as `domain` (the common case) or `domain as
         # svc_domain` when `service_domain_name` aliased it to avoid
-        # shadowing a star-imported name (MILESTONES M18 regression fix,
-        # e.g. `automation`/`script`/`zone` collide with real DSL names) --
-        # sorted by the DOMAIN (not the possibly-aliased local name) for
-        # determinism independent of which names happened to need aliasing.
+        # shadowing a star-imported name (e.g. `automation`/`script`/`zone`
+        # collide with real DSL names) -- sorted by the DOMAIN (not the
+        # possibly-aliased local name) for determinism independent of which
+        # names happened to need aliasing.
         import_names = [
             domain if local_name == domain else f"{domain} as {local_name}"
             for domain, local_name in sorted(resolver.used_service_domains.items())

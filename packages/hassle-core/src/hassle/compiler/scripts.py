@@ -1,52 +1,40 @@
-"""``@shared_script`` + ``param()`` (DESIGN §5.6/§5.7, MILESTONES M1 test 3).
+"""``@shared_script`` + ``param()`` (DESIGN §5.6/§5.7).
 
 ``@shared_script`` builds on the core's existing ``script()`` registration
-(``hassle.compiler.registry.script`` -- already handled end-to-end by
-``compile_registered``/``compile_bundle``, docs/compiler-api.md's table does
-not list ``registry.py`` as off-limits and ``script()`` is exactly the seam:
-"a new builder family is just ... expose thin constructor functions"). It adds:
+(``hassle.compiler.registry.script``, already handled end-to-end by
+``compile_registered``/``compile_bundle``). It adds:
 
 - **fields from the signature**: a shared script's Python parameters become the
   script's ``fields`` block (HA's typed-input UI), with Python defaults mapped
   to field ``default``.
-- **the function's own parameters ARE real runtime field references**
-  (MILESTONES M19): compiling a shared-script body binds EACH signature
-  parameter whose name is a declared field to its ``param(name)`` marker (a
-  ``TemplateExpr``) -- regardless of its declared Python default -- so
-  ``tag=tag`` inside the body means exactly the same thing as
-  ``tag=param("tag")`` (M19 test 1/4: byte-identical IR, both forms stay
-  valid). ``param(name)`` remains the explicit spelling (back-compat, F3) and
-  is what the bound parameter is *set to*; the bound marker is a
-  :class:`_BoundParamMarker` (a ``TemplateExpr`` subclass) so
-  ``range()``/``bool()``/``int()`` misuse on it raises the specialized
-  :class:`SharedScriptParamMisuseError` (M19 test 2), rather than the generic
+- **the function's own parameters ARE real runtime field references**:
+  compiling a shared-script body binds EACH signature parameter whose name is
+  a declared field to its ``param(name)`` marker (a ``TemplateExpr``) --
+  regardless of its declared Python default -- so ``tag=tag`` inside the body
+  means exactly the same thing as ``tag=param("tag")``. ``param(name)``
+  remains the explicit spelling and is what the bound parameter is *set to*;
+  the bound marker is a :class:`_BoundParamMarker` (a ``TemplateExpr``
+  subclass) so ``range()``/``bool()``/``int()`` misuse on it raises the
+  specialized :class:`SharedScriptParamMisuseError`, rather than the generic
   ``PythonMathMisuseError``/``CompileTimeBranchError``/bare ``TypeError`` a
   plain ``TemplateExpr`` would raise for the same misuse anywhere else --
-  teaching the HONEST alternatives instead of an escape hatch that would bake
-  a stale value in (owner amendment, MILESTONES M19: a rejected
-  ``param_default()`` design that returned the field's compile-time default
-  would silently ignore whatever the caller actually passed at runtime,
-  making the HA field a lie): a genuinely runtime count belongs in
-  ``repeat_count(times)`` (HA's native runtime repeat -- accepts the marker
-  directly, since ``TemplateExpr`` is a ``str`` subclass with no special
-  handling needed, and renders ``{"count": "{{ times }}"}``, honoring the
-  caller); a genuinely compile-time value was never a real HA-side field to
-  begin with, and belongs in a module constant or a ``@macro`` argument
-  instead. ``param()`` outside an active shared-script body, or naming a
-  parameter absent from the signature, raises a what/where/fix error (R6,
-  unchanged). A signature parameter that is NOT one of the declared fields
-  (e.g. a body helper arg, only possible when ``fields=`` was given
-  explicitly and is a strict subset of the signature) is left to its
+  teaching the honest alternatives instead of an escape hatch that would bake
+  a stale value in. See docs/internals/compiler.md for why a
+  compile-time-default helper was rejected here and what the honest runtime
+  and compile-time alternatives are. ``param()`` outside an active
+  shared-script body, or naming a parameter absent from the signature, raises
+  a what/where/fix error. A signature parameter that is NOT one of the
+  declared fields (e.g. a body helper arg, only possible when ``fields=`` was
+  given explicitly and is a strict subset of the signature) is left to its
   ordinary Python default -- only field-named parameters are bound.
 - **the caller side**: the name bound to ``flash_lights`` after decoration is
   *not* the original function (which the compiler already invokes once via the
   ``script()`` registration to build the ``ScriptConfig``) -- it is a wrapper
   that, when called from inside another automation/script body, records a
-  ``script.turn_on``-style call action (matching the corpus script fixtures'
-  stored shape: a plain service-call action, ``fixtures/configs/script_*.json``
-  are invoked as ``{"action": "script.<object_id>"}`` shorthand -- see
-  ``automation_parallel_action.json``) instead of re-running the body. Compile-
-  time Python values passed at the call site become the call's ``data``.
+  ``script.turn_on``-style call action (a plain service-call action targeting
+  ``script.<object_id>``, matching how a UI-saved automation calls a script)
+  instead of re-running the body. Compile-time Python values passed at the
+  call site become the call's ``data``.
 """
 
 from __future__ import annotations
@@ -76,36 +64,23 @@ _ACTIVE_FIELDS: ContextVar[frozenset[str] | None] = ContextVar(
 
 class SharedScriptParamMisuseError(CompileError):
     """Python control flow / numeric coercion / container introspection was
-    used on a bound shared-script parameter (MILESTONES M19 test 2).
+    used on a bound shared-script parameter.
 
-    Since M19, EVERY signature parameter that names a declared field is
-    bound to its ``param(name)`` marker when the compiler invokes a
-    ``@shared_script`` body -- not the Python default -- so ``range(times)``,
-    ``if tag:``, ``int(times)``, ``for x in items:``, ``"a" in tag``,
-    ``len(tag)``, ``tag[0]``, etc. on a bound parameter can't honestly work
-    at compile time (the marker has no runtime value until it renders inside
-    Home Assistant -- and, being a ``str`` subclass, would otherwise SILENTLY
-    do the wrong thing: iterate/index/measure the literal ``"{{ name }}"``
-    Jinja text instead of raising at all, reviewer finding on the M19 PR).
-    This is the SAME class of trap ``CompileTimeBranchError``/
-    ``PythonMathMisuseError`` set for a raw ``TemplateExpr`` elsewhere in the
-    DSL (DESIGN §5.5), specialized here to teach the HONEST alternatives
-    instead of naming an escape hatch that would bake a stale compile-time
-    value into the compiled sequence while the HA field still exists (a
-    rejected ``param_default()`` design, owner amendment, MILESTONES M19:
-    "the field becomes a lie" -- a `range(param_default("times"))` unroll
-    would silently ignore whatever the caller actually passed, forever): a
-    genuinely RUNTIME repeat count belongs in ``with repeat_count(times):``
-    (accepts the marker directly, renders ``{"count": "{{ times }}"}``,
-    honoring the caller); a genuinely RUNTIME iteration belongs in
-    ``with repeat_for_each(items):`` (same acceptance -- a bare template
-    string passes through verbatim, DESIGN's ``ux/dsl-ergonomics`` fix); a
-    genuinely RUNTIME membership/length check belongs in a runtime
-    condition/template (``.eq()``/``.in_()``/a ``template(...)`` expression)
-    evaluated inside Home Assistant, not Python; a genuinely COMPILE-TIME
-    value was never an honest HA field to begin with -- use a module-level
-    constant or a ``@macro`` argument instead (both resolved at compile time
-    by construction, no marker involved).
+    Every signature parameter that names a declared field is bound to its
+    ``param(name)`` marker when the compiler invokes a ``@shared_script``
+    body -- not the Python default -- so ``range(times)``, ``if tag:``,
+    ``int(times)``, ``for x in items:``, ``"a" in tag``, ``len(tag)``,
+    ``tag[0]``, etc. on a bound parameter can't honestly work at compile time
+    (the marker has no runtime value until it renders inside Home Assistant
+    -- and, being a ``str`` subclass, would otherwise silently do the wrong
+    thing: iterate/index/measure the literal ``"{{ name }}"`` Jinja text
+    instead of raising at all). This is the same class of trap
+    ``CompileTimeBranchError``/``PythonMathMisuseError`` set for a raw
+    ``TemplateExpr`` elsewhere in the DSL (DESIGN §5.5), specialized here to
+    teach the honest alternatives instead of naming an escape hatch that
+    would bake a stale compile-time value into the compiled sequence while
+    the HA field still exists. See docs/internals/compiler.md for the
+    rejected compile-time-default design and the full rationale.
     """
 
     def __init__(self, name: str, python_op: str, fix: str, span: SourceSpan | None) -> None:
@@ -113,7 +88,7 @@ class SharedScriptParamMisuseError(CompileError):
         where = f" at {span.file}:{span.line}" if span is not None else ""
         super().__init__(
             f"You used Python's `{python_op}` on the shared-script parameter `{name}`"
-            f"{where}. Since M19, `{name}` inside this body is bound to its runtime "
+            f"{where}. Inside a `@shared_script` body, `{name}` is bound to its runtime "
             f"`param({name!r})` marker (regardless of its declared default), so it has "
             f"no compile-time value to give `{python_op}` -- it is Jinja text under "
             f"construction, not a real number/boolean/container, until it renders "
@@ -121,11 +96,11 @@ class SharedScriptParamMisuseError(CompileError):
         )
 
 
-# Per-operation-family fix text (MILESTONES M19, reviewer finding: the
-# blessed runtime alternative differs by WHAT the misuse was trying to do --
-# `range()`/`bool()`/numeric coercion wants a runtime count/condition,
-# `for`/`in`/`len`/indexing wants a runtime iteration/membership check).
-# `{name}` is substituted with the actual parameter name at raise time.
+# Per-operation-family fix text -- the blessed runtime alternative differs by
+# WHAT the misuse was trying to do: `range()`/`bool()`/numeric coercion wants
+# a runtime count/condition, `for`/`in`/`len`/indexing wants a runtime
+# iteration/membership check. `{name}` is substituted with the actual
+# parameter name at raise time.
 _FIX_NUMERIC_OR_BOOLEAN = (
     "if you need a runtime count/condition, use a runtime construct HA itself "
     "supports, e.g. `with repeat_count({name}):` (accepts the marker directly "
@@ -146,34 +121,33 @@ _FIX_ITERATION_OR_CONTAINER = (
 
 class _BoundParamMarker(TemplateExpr):
     """A ``param(name)`` marker bound to a shared-script body's OWN signature
-    parameter (MILESTONES M19) -- a ``TemplateExpr`` subclass so it composes
-    with the whole expression surface exactly like :func:`param`'s return
-    value, but with ``range()``/``bool()``/``int()`` misuse (and, since the
-    M19 PR review, ``for``/``in``/``len``/indexing container misuse -- a
-    ``str`` subclass sails those through SILENTLY WRONG otherwise, e.g.
+    parameter -- a ``TemplateExpr`` subclass so it composes with the whole
+    expression surface exactly like :func:`param`'s return value, but with
+    ``range()``/``bool()``/``int()`` misuse (and container misuse:
+    ``for``/``in``/``len``/indexing) raising the specialized
+    :class:`SharedScriptParamMisuseError` (teaching the honest
+    runtime-construct/compile-time-constant alternatives) instead of the
+    generic ``CompileTimeBranchError``/``PythonMathMisuseError`` a plain
+    :class:`TemplateExpr` raises for the numeric/boolean misuse everywhere
+    else in the DSL. The container misuse is untrapped on a plain
+    ``TemplateExpr``/``param()`` result used outside a shared-script body --
+    a str subclass sails those through silently wrong (e.g.
     ``for x in items:`` would iterate the literal ``"{{ items }}"``
-    characters) raising the specialized :class:`SharedScriptParamMisuseError`
-    (teaching the honest runtime-construct/compile-time-constant
-    alternatives) instead of the generic ``CompileTimeBranchError``/
-    ``PythonMathMisuseError`` a plain :class:`TemplateExpr` raises for the
-    numeric/boolean misuse everywhere else in the DSL (the container misuse
-    is UNTRAPPED on a plain ``TemplateExpr``/``param()`` result -- pre-
-    existing on ``main``, out of scope to fix everywhere; M19 only widens
-    exposure since a shared-script BODY now always holds a marker). Never
-    constructed directly by DSL authors -- :func:`param` returns one of
-    these too (M19 test 4: back-compat, same traps apply); only
-    :func:`shared_script`'s own ``compiled_body`` wrapper creates one when
-    binding the signature, and :func:`param` itself.
+    characters); that gap is pre-existing and out of scope here. Never
+    constructed directly by DSL authors -- :func:`param` returns one of these
+    too (same traps apply); only :func:`shared_script`'s own
+    ``compiled_body`` wrapper creates one when binding the signature, and
+    :func:`param` itself.
 
     ``__str__``/``__repr__``/``_as_operand``/composition (``+``, ``.eq()``,
     ``concat(...)``, ...) are deliberately NOT trapped -- string rendering
     and the whole template-builder operator surface must keep working
-    exactly like a plain :class:`TemplateExpr` (verified: no internal
-    codegen/rendering path calls ``len()``/``iter()``/``in``/indexing on a
-    compiler-side template value -- every consumer uses ``str()``/
-    ``.to_template()``/``._as_operand()``, JSON serialization treats a
-    ``str`` as an opaque leaf, and f-string interpolation goes through
-    ``__str__``, untouched here).
+    exactly like a plain :class:`TemplateExpr` (no internal codegen/rendering
+    path calls ``len()``/``iter()``/``in``/indexing on a compiler-side
+    template value -- every consumer uses ``str()``/``.to_template()``/
+    ``._as_operand()``, JSON serialization treats a ``str`` as an opaque
+    leaf, and f-string interpolation goes through ``__str__``, untouched
+    here).
     """
 
     _param_name: str
@@ -197,9 +171,8 @@ class _BoundParamMarker(TemplateExpr):
     def __index__(self) -> int:
         # `range(x)`/`list[x]`/... call `__index__`, not `__int__` -- Python's
         # own error for a plain TemplateExpr here ("cannot be interpreted as
-        # an integer") never names file:line or a fix (see the module-level
-        # deviation note in the class docstring); this is the shared-script
-        # boundary specialization the R6 error hooks.
+        # an integer") never names file:line or a fix; this is the
+        # shared-script boundary specialization of the what/where/fix error.
         raise self._numeric_or_boolean_misuse("range()/int()")
 
     def __int__(self) -> int:
@@ -214,12 +187,12 @@ class _BoundParamMarker(TemplateExpr):
     def __trunc__(self) -> int:
         raise self._numeric_or_boolean_misuse("math.trunc()")
 
-    # -- container dunders (M19 PR review finding): a `str` subclass sails
-    # `for x in marker:` / `"a" in marker` / `len(marker)` / `marker[0]`
-    # through SILENTLY WRONG (iterating/indexing/measuring the literal Jinja
-    # text) rather than raising at all -- trapped here the same way the
-    # numeric/boolean dunders are, teaching the runtime-iteration
-    # (`repeat_for_each`) / runtime-condition alternative instead.
+    # -- container dunders: a `str` subclass sails `for x in marker:` /
+    # `"a" in marker` / `len(marker)` / `marker[0]` through silently wrong
+    # (iterating/indexing/measuring the literal Jinja text) rather than
+    # raising at all -- trapped here the same way the numeric/boolean dunders
+    # are, teaching the runtime-iteration (`repeat_for_each`) / runtime-
+    # condition alternative instead.
     def __iter__(self) -> Any:
         raise self._container_misuse("for ... in")
 
@@ -266,15 +239,15 @@ def param(name: str) -> TemplateExpr:
 
     Valid only inside the function body of a ``@shared_script`` (while the
     compiler is building its sequence); the name must be one of the function's
-    parameters (M1 test 5: `param()` referencing an unknown name is a snapshot-
-    tested error).
+    parameters (``param()`` referencing an unknown name is a snapshot-tested
+    error).
 
-    Returns a :class:`_BoundParamMarker` (MILESTONES M19 test 4: back-compat
-    -- ``param(name)`` stays valid and is exactly equivalent to the bound
-    signature parameter of the same name), so ``range()``/``bool()``/``int()``
-    misuse on the RESULT of an explicit ``param(...)`` call gets the same
-    specialized :class:`SharedScriptParamMisuseError` a bound bare parameter
-    would -- teaching the honest runtime-construct (``repeat_count(...)``) or
+    Returns a :class:`_BoundParamMarker` (``param(name)`` stays valid and is
+    exactly equivalent to the bound signature parameter of the same name), so
+    ``range()``/``bool()``/``int()`` misuse on the RESULT of an explicit
+    ``param(...)`` call gets the same specialized
+    :class:`SharedScriptParamMisuseError` a bound bare parameter would --
+    teaching the honest runtime-construct (``repeat_count(...)``) or
     compile-time-constant (a module constant / ``@macro`` argument)
     alternatives.
     """
@@ -289,41 +262,16 @@ def param(name: str) -> TemplateExpr:
 
 def field_default(value: Any) -> TemplateExpr:
     """Typed default helper for a ``@shared_script`` signature parameter
-    annotated ``TemplateExpr`` (MILESTONES M19, owner-directed typing
-    resolution): ``def f(tag: TemplateExpr = field_default("")): ...``.
+    annotated ``TemplateExpr``: ``def f(tag: TemplateExpr = field_default("")): ...``.
 
     A shared-script body's own parameters are runtime template markers, not
-    their declared Python default's type (the compiler binds every
-    field-named parameter to ``param(name)`` before the body runs regardless
-    of what the signature says, DESIGN above) -- so the BODY-TRUE annotation
-    for any field is ``TemplateExpr``, letting the whole composable
-    expression surface (``tag.eq(...)``, ``sun_angle / 2``, ``concat(tag,
-    ...)``) type-check correctly instead of pyright inferring a plain
-    ``str``/``int``/``float`` that has no ``.eq()``/composes wrong (a real
-    "int-field lie": ``sun_angle: int`` makes ``sun_angle / 2`` type-check as
-    real division, silently hiding that it actually builds a Jinja
-    expression). Plainly declaring ``tag: TemplateExpr = ""`` is
-    self-inconsistent (``""`` is not a ``TemplateExpr``) and would itself be
-    a ``reportArgumentType`` error -- this helper is the identity function AT
-    RUNTIME (returns ``value`` completely unchanged, so
-    ``inspect.signature(...).parameters[...].default`` -- what
-    ``_fields_from_signature``/the generated HA ``fields`` block actually
-    read -- sees the real declared default value, e.g. the plain ``str``
-    ``""`` or the plain ``int``/``float`` ``0``, exactly as before this
-    helper existed), but is TYPED as returning ``TemplateExpr``, so the
-    parameter's own default expression type-checks against its
-    ``TemplateExpr`` annotation.
-
-    Caller-side typing is UNAFFECTED either way (verified empirically,
-    MILESTONES M19 typing investigation): ``@shared_script``'s returned
-    caller wrapper's signature is ``(*args: Any, **kwargs: Any) -> None``,
-    completely decoupled from the decorated function's own annotations (no
-    ``ParamSpec``/``functools.wraps`` type-level propagation happens or is
-    attempted) -- a caller passing a plain literal (``dismiss_notification
-    (tag="x")``) was, is, and remains unaffected by whatever the ``def``'s
-    parameters are annotated. The real call-site validation net is
-    unchanged: ``UnknownFieldError``/Python's own ``TypeError`` from
-    ``bind_partial``, at compile time, not pyright.
+    their declared Python default's type (see :func:`param` above), so the
+    body-true annotation for any field is ``TemplateExpr`` -- this helper is
+    the identity function at runtime (returns ``value`` unchanged, so the
+    generated HA ``fields`` block sees the real declared default) but is
+    typed as returning ``TemplateExpr``, so the parameter's default
+    expression type-checks against its annotation. See
+    docs/internals/compiler.md for the full typing rationale.
     """
     return value
 
@@ -348,7 +296,7 @@ def _fields_from_signature(func: Callable[..., Any]) -> dict[str, Any]:
 class UnknownFieldError(CompileError):
     """A caller passed a kwarg that is not one of the target script's
     declared field names (``fields=``'s keys are the superset source of
-    truth when supplied -- ``ux/shared-script-rich-fields``)."""
+    truth when supplied)."""
 
     def __init__(
         self, name: str, object_id: str, known: list[str], span: SourceSpan | None
@@ -366,22 +314,19 @@ class UnknownFieldError(CompileError):
 class ScriptCallAction:
     """A shared script invocation, recorded at the caller's DSL call site.
 
-    Matches the corpus's stored shape for calling a script (a plain
-    service-call action targeting ``script.<object_id>``; see
-    ``fixtures/configs/automation_parallel_action.json``'s
-    ``{"service": "script.greet_guest"}``, normalized to ``action:`` by
-    ``normalize_ha``). Compile-time call args become ``data`` so HA passes
-    them as the script's fields at runtime, matching the ``script.turn_on``
-    call-with-variables shape.
+    Matches how HA stores calling a script: a plain service-call action
+    targeting ``script.<object_id>``, normalized to ``action:``. Compile-time
+    call args become ``data`` so HA passes them as the script's fields at
+    runtime, matching the ``script.turn_on`` call-with-variables shape.
 
-    F3-additive (``ux/shared-script-calls``, owner feedback): also carries
-    the same ``metadata``/``alias``/``enabled`` step options every other
-    action shape accepts, so the decompiler's function-call rewrite (a
-    caller's ``{"action": "script.<id>", "metadata": {...}}`` action becomes
-    ``<fn_name>(<data kwargs>, metadata={...})``) recompiles to the exact
-    same stored shape -- a UI-saved action's ``metadata: {}`` (even empty,
-    docs/ha-api-notes.md §19.1) and any step ``alias``/``enabled`` must
-    round-trip through the call, not just ``data``.
+    Also carries the same ``metadata``/``alias``/``enabled`` step options
+    every other action shape accepts, so the decompiler's function-call
+    rewrite (a caller's ``{"action": "script.<id>", "metadata": {...}}``
+    action becomes ``<fn_name>(<data kwargs>, metadata={...})``) recompiles
+    to the exact same stored shape -- a UI-saved action's ``metadata: {}``
+    (even empty, docs/ha-api-notes.md §19.1) and any step
+    ``alias``/``enabled`` must round-trip through the call, not just
+    ``data``.
     """
 
     def __init__(
@@ -424,15 +369,14 @@ def _bind_call_args(
     """Bind a caller's compile-time args/kwargs against ``func``'s signature,
     applying declared defaults, and return the {field: value} data map.
 
-    ``known_field_names`` (``ux/shared-script-rich-fields``): when supplied
-    (a ``@shared_script(fields=...)`` was given explicitly), it is the
-    SUPERSET source of truth for which kwarg names are legal -- checked
-    before signature binding, so an author who added a Python parameter but
-    forgot to also list it in ``fields=`` gets a clear error naming the
-    script's actual declared fields, rather than an unrelated ``TypeError``
-    (or, worse, silently binding against a parameter HA never told the field
-    is real). ``None`` (no explicit ``fields=``) means the signature itself
-    is the only source of truth, exactly as before this widening.
+    ``known_field_names``: when supplied (a ``@shared_script(fields=...)``
+    was given explicitly), it is the superset source of truth for which
+    kwarg names are legal -- checked before signature binding, so an author
+    who added a Python parameter but forgot to also list it in ``fields=``
+    gets a clear error naming the script's actual declared fields, rather
+    than an unrelated ``TypeError`` (or, worse, silently binding against a
+    parameter HA never told the field is real). ``None`` (no explicit
+    ``fields=``) means the signature itself is the only source of truth.
     """
     if known_field_names is not None:
         for name in kwargs:
@@ -454,8 +398,7 @@ def shared_script(**options: Any) -> Callable[[Callable[..., Any]], Callable[...
       the compiler invokes ``func`` exactly once (like any other ``@script``)
       to build the sequence, with the active-fields context set so `param()`
       resolves inside it;
-    - **``fields=`` (F3-additive, ``ux/shared-script-rich-fields``, owner
-      feedback):** when supplied explicitly, it is stored VERBATIM as the
+    - **``fields=``:** when supplied explicitly, it is stored VERBATIM as the
       script's ``fields`` block instead of the signature-derived one --
       byte-stability by construction, since real HA-UI-authored scripts carry
       full field metadata (``name``/``description``/``selector``/...) the
@@ -492,14 +435,14 @@ def shared_script(**options: Any) -> Callable[[Callable[..., Any]], Callable[...
         else:
             active_field_names = frozenset()
 
-        # M19: every signature parameter whose name is a declared field is
-        # bound to its `param(name)` marker BEFORE the body runs, regardless
-        # of its declared Python default -- `tag=tag` inside the body means
-        # exactly `tag=param("tag")` (test 1/4). A signature parameter that
-        # is NOT a declared field (only possible when `fields=` was given
-        # explicitly and doesn't cover every Python parameter) is left
-        # unbound -- ordinary `bind_partial`/`apply_defaults` fills it from
-        # its own Python default, same as before M19.
+        # Every signature parameter whose name is a declared field is bound
+        # to its `param(name)` marker BEFORE the body runs, regardless of its
+        # declared Python default -- `tag=tag` inside the body means exactly
+        # `tag=param("tag")`. A signature parameter that is NOT a declared
+        # field (only possible when `fields=` was given explicitly and
+        # doesn't cover every Python parameter) is left unbound -- ordinary
+        # `bind_partial`/`apply_defaults` fills it from its own Python
+        # default.
         bound_param_names = tuple(
             name for name in inspect.signature(func).parameters if name in active_field_names
         )

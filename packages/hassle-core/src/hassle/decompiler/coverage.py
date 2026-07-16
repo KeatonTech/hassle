@@ -1,5 +1,5 @@
-"""DSL-coverage metric (MILESTONES M2 test 3): what fraction of objects decompile
-with zero ``raw_*`` nodes.
+"""DSL-coverage metric: what fraction of objects decompile with zero
+``raw_*`` nodes.
 
 Walks each object's *decompiled source* (not the JSON) counting occurrences of
 the granular raw escape hatches (``raw_trigger``/``raw_condition``/``raw_action``)
@@ -64,8 +64,8 @@ def _find_raw_nodes(source: str) -> list[tuple[str, str]]:
 
 
 # Justification strings, one per recognized raw-node shape, sourced verbatim
-# (paraphrased for brevity) from docs/ha-api-notes.md's M2 findings sections
-# and the builder-module comments that first noted each gap.
+# (paraphrased for brevity) from docs/ha-api-notes.md and the builder-module
+# comments that first noted each gap.
 _JUSTIFICATION_DEVICE_TRIGGER = (
     "device trigger: no stable cross-integration schema (DESIGN §5.4 -- "
     "hassle.compiler.triggers._trig_device), always raw by design, docs/ha-api-notes.md §5.4 note"
@@ -87,20 +87,20 @@ _JUSTIFICATION_TEMPLATED_DELAY = (
 )
 _JUSTIFICATION_UNKNOWN_TRIGGER = (
     "trigger shape not modeled by any typed builder or the 2026.7 purpose-trigger "
-    "vocabulary; falls back to raw_trigger so no data is dropped (DESIGN §5.8, I3)"
+    "vocabulary; falls back to raw_trigger so no data is dropped (DESIGN §5.8)"
 )
 _JUSTIFICATION_UNKNOWN_CONDITION = (
     "condition shape not modeled by any typed builder or the 2026.7 purpose-condition "
-    "vocabulary; falls back to raw_condition so no data is dropped (DESIGN §5.8, I3)"
+    "vocabulary; falls back to raw_condition so no data is dropped (DESIGN §5.8)"
 )
 _JUSTIFICATION_UNKNOWN_ACTION = (
     "action shape not modeled by any typed action/control-flow builder; falls back to "
-    "raw_action so no data is dropped (DESIGN §5.8, I3)"
+    "raw_action so no data is dropped (DESIGN §5.8)"
 )
 _JUSTIFICATION_UNKNOWN_AUTOMATION = (
     "whole-object shape not expressible as a typed @automation (fields outside its HA "
     "option set, or a use_blueprint shape the blueprint_automation() builder doesn't "
-    "recognize); falls back to raw_automation so no data is dropped (DESIGN §5.8, I3)"
+    "recognize); falls back to raw_automation so no data is dropped (DESIGN §5.8)"
 )
 
 

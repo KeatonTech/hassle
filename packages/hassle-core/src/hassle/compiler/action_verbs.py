@@ -1,4 +1,4 @@
-"""Action primitives beyond the M1-core ``service``/``delay`` pair.
+"""Action primitives beyond the core ``service``/``delay`` pair.
 
 Sibling verb module (docs/compiler-api.md §2: "Add sibling builder files;
 don't rewrite these"). Builds directly on ``record_action``/``capture_span``;

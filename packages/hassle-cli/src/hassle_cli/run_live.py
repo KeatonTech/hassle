@@ -2,12 +2,14 @@
 it as a shadow automation, trigger it, stream its trace, then clean up --
 always, on success or failure.
 
-Split for testability (MILESTONES M7 test 5: the ONE live test lives in
-`tests/integration/test_run_live.py`, env-gated like the M6 suite; everything
+Split for testability: the ONE live test lives in
+`tests/integration/test_run_live.py`, env-gated like the rest of the
+integration suite; everything
 here that doesn't require a real HA connection is unit-tested against
 `FakeBackend` in `tests/test_run_command.py`):
 
-- `shadow_automation_id` / `build_shadow_config` -- pure, deterministic (R8).
+- `shadow_automation_id` / `build_shadow_config` -- pure, deterministic
+  (byte-stable output; no wall clock in core logic).
 - `trigger_payload` -- the `skip_condition: false`-by-default payload (HA's
   own default is `true`; DESIGN §10.4 point 2/docs/ha-api-notes.md §10.6).
 - `run_shadow_session` -- the create -> trigger -> get-trace -> delete
@@ -33,15 +35,15 @@ from hassle.ir.canonical import canonical_json
 # `automation.trigger` while the trace is asynchronously persisted -- the
 # same class of async-settling race as the config-REST reload wait
 # (`DirectBackend._await_config_entity`, docs/ha-api-notes.md §17.7). This is
-# live-transport I/O, not core compiler/simulator logic, so R8's "no
-# wall-clock" does not apply; the bound keeps a slow/never-settling trace
-# from hanging the CLI forever.
+# live-transport I/O, not core compiler/simulator logic, so the "no
+# wall-clock in core logic" rule does not apply; the bound keeps a
+# slow/never-settling trace from hanging the CLI forever.
 DEFAULT_TRACE_POLL_TIMEOUT = 5.0
 DEFAULT_TRACE_POLL_INTERVAL = 0.25
 
 
 def shadow_automation_id(object_key: str) -> str:
-    """Deterministic shadow id (R8): same object key -> same shadow id, so a
+    """Deterministic shadow id: same object key -> same shadow id, so a
     crashed run's leftover shadow is recognizable/idempotent-ish across runs."""
     digest = hashlib.sha256(object_key.encode("utf-8")).hexdigest()[:16]
     return f"hassle_shadow_{digest}"
@@ -139,7 +141,7 @@ def run_shadow_session(
 ) -> LiveRunResult:
     """Create the shadow, trigger + fetch its trace, then delete the shadow --
     on success *and* on any exception during trigger/trace (cleanup always
-    runs; MILESTONES M7 test 5's "also on failure" requirement)."""
+    runs, also on failure)."""
     kind = object_key.partition(":")[0]
     shadow_config = build_shadow_config(object_key, body)
     shadow_id = shadow_config["id"]
@@ -198,7 +200,7 @@ def stream_trace(
     settling pattern.
 
     Also the seam tests monkeypatch (`monkeypatch.setattr(run_live,
-    "stream_trace", ...)`, MILESTONES M7 test 5) to inject a trace-stream
+    "stream_trace", ...)`) to inject a trace-stream
     failure -- unchanged.
     """
     deadline = monotonic_fn() + poll_timeout

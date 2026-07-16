@@ -1,9 +1,9 @@
-"""Runtime-math expression surface (MILESTONES M1.1, DESIGN §5.4 extension).
+"""Runtime-math expression surface (DESIGN §5.4 extension).
 
 Symbolic-expression extension of the template builder (SymPy-style: leaves
 return :class:`~hassle.compiler.templates.TemplateExpr` objects, operators
-compose, render to Jinja at compile time -- owner-confirmed direction, see
-MILESTONES M1.1). Everything here is an F3 ADDITION; no existing name changes.
+compose, render to Jinja at compile time). Everything here is additive to the
+frozen top-level DSL surface; no existing name changes.
 
 **Sibling builder module** (same convention as ``templates.py`` itself,
 docs/compiler-api.md's "may you edit" column): it does not modify
@@ -23,8 +23,8 @@ Jinja2 itself makes:
   ``max`` filters operate on an iterable, not varargs, so multiple operands
   are collected into a literal list first).
 
-This split is pinned by the ``shade_tracks_sun`` golden (MILESTONES M1.1 test
-4, ``fixtures/dsl/shade_tracks_sun``): ``cos``/``state_attr`` are bare function
+This split is pinned by the ``shade_tracks_sun`` golden
+(``fixtures/dsl/shade_tracks_sun``): ``cos``/``state_attr`` are bare function
 calls, ``round_`` is a trailing filter.
 
 Constants ``PI``/``E_``/``TAU`` are bare ``TemplateExpr`` leaves rendering to
@@ -32,8 +32,8 @@ Jinja's own global names (``pi``/``e``/``tau``) -- never folded to a Python
 float literal, so they stay symbolic and compose like any other expression.
 
 ``concat(...)`` is the explicit string-join helper for the documented
-"``+`` is not concat" decision (MILESTONES M1.1 deliverables): ``+`` is always
-arithmetic (Jinja raises at render time if you add incompatible types), so
+"``+`` is not concat" decision: ``+`` is always arithmetic (Jinja raises at
+render time if you add incompatible types), so
 string joining is spelled with Jinja's ``~`` operator via this helper instead
 of overloading ``+`` for two purposes.
 """
@@ -62,8 +62,8 @@ def _render_call_arg(value: Any) -> str:
 
 
 def _render_operand(value: Any) -> str:
-    """Render one plain operand (filter input, list element): the *original*
-    M1 always-parenthesize-if-compound rule, no precedence exception.
+    """Render one plain operand (filter input, list element): the original
+    always-parenthesize-if-compound rule, no precedence exception.
 
     Jinja's ``|`` (filter) binds *tighter* than every arithmetic operator, so
     -- unlike a call argument -- a filter's input operand must stay
@@ -240,8 +240,8 @@ def timedelta_(**units: Any) -> TemplateExpr:
 def concat(*parts: Any) -> TemplateExpr:
     """Explicit string concatenation via Jinja's ``~`` operator.
 
-    ``+`` on a :class:`TemplateExpr` is always arithmetic (MILESTONES M1.1
-    deliverables: "documented `+`-is-not-concat decision") -- Jinja itself
+    ``+`` on a :class:`TemplateExpr` is always arithmetic (the documented
+    "`+` is not concat" decision) -- Jinja itself
     raises at render time if you add incompatible types, matching Python's own
     "explicit is better than implicit" string-vs-number distinction. Joining
     text is spelled explicitly with this helper, which renders Jinja's ``~``
