@@ -7,7 +7,7 @@ M18, DESIGN §5.2/§5.3).
     cover.close_cover(target=e.cover.x, position=60)
 
 A **new, non-star module** (F3: NOT part of ``from hassle import *`` -- see
-docs/dsl-f3.md's "F3 non-star modules" section): domains are instance-dynamic
+docs/dsl-extensions.md's "F3 non-star modules" section): domains are instance-dynamic
 (this instance's registry snapshot decides what exists), the same reason
 ``hassle.registry.entities`` gets its own import rather than joining
 ``hassle.__all__``.

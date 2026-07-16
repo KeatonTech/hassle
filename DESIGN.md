@@ -642,7 +642,7 @@ for-byte, verified over the whole round-trip corpus):**
   `continue_on_error` beyond what the call reproduces — any of these falls back to today's
   `service()` form (never `raw`). `ScriptCallAction` (compiler-internal, `hassle.compiler.scripts`)
   widened additively to carry `metadata=`/`alias=`/`enabled=` so the rewritten call recompiles
-  byte-identical (docs/dsl-f3.md).
+  byte-identical (docs/dsl-extensions.md).
 - **Cross-file imports for the caller rewrite:** when the callee script lives in a different
   destination file than its caller (category-based placement routinely splits them), the
   decompiler emits `from scripts.<module> import <fn_name>` — built from a cross-reference table

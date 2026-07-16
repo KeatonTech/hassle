@@ -1,6 +1,6 @@
 """Action primitives beyond the M1-core ``service``/``delay`` pair.
 
-Sibling verb module (docs/m1-internal-api.md §2: "Add sibling builder files;
+Sibling verb module (docs/compiler-api.md §2: "Add sibling builder files;
 don't rewrite these"). Builds directly on ``record_action``/``capture_span``;
 never imports or edits ``hassle.compiler.builders``/``actions``/``recording``
 beyond their public seam.

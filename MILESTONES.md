@@ -45,7 +45,7 @@ the frozen IR (F1). M8 (VS Code) and M9 (docs) can start early in stub form but 
   M6 builds `DirectBackend` against the same protocol — independently.
 - **F3** (end of M1): DSL public API surface (`hassle.__all__`, 72 names, plus the
   `hassle.registry.entities` entry point) — additions allowed, changes are not.
-  Declared in [docs/dsl-f3.md](docs/dsl-f3.md).
+  Declared in [docs/dsl-extensions.md](docs/dsl-extensions.md).
 
 ---
 
@@ -118,7 +118,7 @@ registered objects, rejects duplicate ids); entity indexing form (`e.sensor["3d_
 **`normalize_ha`** — the singular→plural / `service:`→`action:` normalization HA itself applies
 on storage (docs/ha-api-notes.md §10.1), applied by the compiler to everything it emits,
 including legacy-form `raw_*` bodies (added to `hassle.ir` as an F1-compatible extension;
-module renamed from `hassle_core.ir` 2026-07-03, owner decision — see docs/ir-f1.md).
+module renamed from `hassle_core.ir` 2026-07-03, owner decision — see docs/ir-format.md).
 
 **Write these tests first**
 1. **Golden pairs** `fixtures/dsl/{case}/bundle/…py` → `expected_ir.json`: one case per DSL
@@ -847,7 +847,7 @@ stub/runtime mismatch this milestone closes).
 
 **Surfaces (F3: `hassle.services` is a new module, imported explicitly per domain — NOT
 part of the `from hassle import *` star surface, since domains are instance-dynamic; note
-in docs/dsl-f3.md):**
+in docs/dsl-extensions.md):**
 1. `from hassle.services import cover` → `cover.close_cover(target=..., **fields)` records
    byte-identical IR to the equivalent `service(...)` call. Module-level PEP 562
    `__getattr__` accepts any domain; domain objects accept any service name (offline

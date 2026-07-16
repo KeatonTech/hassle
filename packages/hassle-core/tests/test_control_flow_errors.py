@@ -3,7 +3,7 @@
 Covers `ElseWithoutIfError` -- `with else_then():`/`with else_if(...):` used
 where the immediately-preceding action in the current list is not an
 `if_then`/`choose` container. This is the actions/control-flow workstream's
-own error class (docs/m1-internal-api.md §5), added alongside the M1-core
+own error class (docs/compiler-api.md §5), added alongside the M1-core
 errors in `hassle/compiler/errors.py`.
 """
 

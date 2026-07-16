@@ -8,7 +8,7 @@ CI round 3 uncovered (docs/ha-api-notes.md §26.7):
   (`homeassistant/config_entries.py`). The round-2 code assumed
   `entry.get("options", {})` would have the submitted fields; it never does
   against real HA, producing `KeyError: 'name'` / `KeyError: 'state'` on
-  read-back (CI round 3, `test_m10_template_flow.py`).
+  read-back (CI round 3, `test_live_template_flow.py`).
 - The options-flow's first form step is the only place options ever appear
   on the wire, as `data_schema` entries' `description.suggested_value`
   (mirrors what the UI's edit dialog itself reads to pre-populate its form,
@@ -29,7 +29,7 @@ so every `_template_entry_ids` cache entry ever written held a flow_id, not
 the real entry_id -- invisible until M15's category write-back actually
 needed to cross-reference `entry_id` against a LIVE HA instance's entity
 registry (`test_helper_category_assign_and_readback_storage_and_template`,
-`packages/hassle-core/tests/integration/test_m11_category_writeback.py`),
+`packages/hassle-core/tests/integration/test_live_category_writeback.py`),
 which a flow_id can never match. `_FakeClient.rest_post`'s
 `/api/config/config_entries/flow/*` branches now model the REAL nested
 response shape (`test_create_template_helper_extracts_entry_id_from_nested_result_key`
@@ -41,7 +41,7 @@ This suite is unit-level (no network, R2): it monkeypatches
 `rest_post`/`rest_delete`, and calls the private async `_alist_template_
 helpers`/`_aupdate_template_helper` coroutines directly via `asyncio.run` --
 same pattern as `test_direct_backend_categories.py`. The end-to-end path
-against real HA is `test_m10_template_flow.py` (integration-only).
+against real HA is `test_live_template_flow.py` (integration-only).
 """
 
 from __future__ import annotations

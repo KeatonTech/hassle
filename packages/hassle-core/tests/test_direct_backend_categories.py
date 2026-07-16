@@ -5,7 +5,7 @@ Unit-tested (no network, R2) by monkeypatching `DirectBackend._client` with a
 fake object exposing an async `ws_command`, and calling the private async
 `_afetch_registry_snapshot` coroutine directly via `asyncio.run` -- this
 exercises the real dispatch logic without needing a live event-loop thread or
-a real HA instance (that end-to-end path is `test_m6_*` integration-only).
+a real HA instance (that end-to-end path is `test_live_*` integration-only).
 
 **M15 (docs/ha-api-notes.md §31.2/§31.6):** `_CATEGORY_SCOPES` widens to
 include the shared `"helpers"` scope alongside `automation`/`script` -- §31.5a

@@ -1,5 +1,5 @@
 """Sanity check: turning `hassle/registry.py` into a package must not disturb the
-F3-frozen `hassle.registry.entities` runtime shape (docs/dsl-f3.md).
+F3-frozen `hassle.registry.entities` runtime shape (docs/dsl-extensions.md).
 
 This is deliberately the first/simplest M3 test — if the registry-module ->
 registry-package refactor breaks this, nothing else in M3 matters.

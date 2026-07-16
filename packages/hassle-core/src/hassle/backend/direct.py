@@ -48,7 +48,7 @@ from hassle.registry.snapshot import PurposeVocabulary, RegistrySnapshot
 
 # The template integration's config-flow menu step_id per domain (M10,
 # docs/ha-api-notes.md §26.1) -- source-informed; the CI integration suite is
-# the authoritative verification (`test_m10_template_flow.py`).
+# the authoritative verification (`test_live_template_flow.py`).
 _TEMPLATE_FLOW_TYPE = {
     "template_number": "number",
     "template_sensor": "sensor",

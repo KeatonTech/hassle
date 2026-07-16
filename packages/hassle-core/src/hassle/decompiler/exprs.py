@@ -2,7 +2,7 @@
 
 Each ``decompile_*`` function returns a Python source snippet (a single
 expression, no trailing newline) that reproduces the given HA dict via the F3
-DSL surface (docs/dsl-f3.md), or returns ``None`` when the shape isn't modeled
+DSL surface (docs/dsl-extensions.md), or returns ``None`` when the shape isn't modeled
 -- the caller falls back to the granular ``raw_*`` escape hatch (DESIGN §5.8).
 
 Nothing here mutates its input, and nothing depends on wall-clock or randomness

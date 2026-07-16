@@ -316,7 +316,7 @@ def _automation_source(
     actions = body.pop("actions", [])
 
     # `triggers=` decorator metadata is the canonical decompiled form
-    # (ux/triggers-in-decorator, DESIGN §5.3/§5.5, docs/dsl-f3.md): subscription
+    # (ux/triggers-in-decorator, DESIGN §5.3/§5.5, docs/dsl-extensions.md): subscription
     # metadata lives in the decorator, Python-idiom style (cf. `@app.route`).
     # Only TYPED triggers can be nested as a kwarg's list-literal expression --
     # `raw_trigger(...)` is a recording *verb* (it calls `record_trigger` itself

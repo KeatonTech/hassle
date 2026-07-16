@@ -1,6 +1,6 @@
 """MILESTONES M21 test 6 -- the config-entry group-helper flow verified
 end-to-end against real Home Assistant (M6 pattern, mirrors
-`test_m10_template_flow.py`): this suite is the AUTHORITATIVE verification of
+`test_live_template_flow.py`): this suite is the AUTHORITATIVE verification of
 the flow shapes documented in docs/ha-api-notes.md §38; any mismatch found
 here supersedes the doc, updated in the same PR as the fix.
 

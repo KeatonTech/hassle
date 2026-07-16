@@ -243,7 +243,7 @@ def compile_registered(
             # the decorator's triggers were already built at decoration time --
             # record them first, before running the body, so they land ahead
             # of any `when()` calls inside the body (composition order, both
-            # docs/dsl-f3.md and this milestone's contract: "decorator list
+            # docs/dsl-extensions.md and this milestone's contract: "decorator list
             # first, when() appends").
             for trig in reg.decorator_triggers:
                 record_trigger(trig, span=reg.span)

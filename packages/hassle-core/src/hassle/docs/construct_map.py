@@ -22,7 +22,7 @@ from __future__ import annotations
 # the DSL<->YAML pair sense, so a golden pair doesn't make sense for them.
 # ---------------------------------------------------------------------------
 
-#: Compile-time trap/error classes (DESIGN §5.5, dsl-f3.md "Trap / error
+#: Compile-time trap/error classes (DESIGN §5.5, dsl-extensions.md "Trap / error
 #: surface"): these are exceptions a bundle *catches or reads the message
 #: of*, not something that compiles to an HA YAML shape. Documented in a
 #: dedicated "Trap / error surface" section instead (their own text IS the

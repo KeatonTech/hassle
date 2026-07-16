@@ -158,7 +158,7 @@ def test_plan_apply_create_then_noop_on_repush_with_fakebackend() -> None:
     # Regression for the exact CI failure: a DSL author writing the natural
     # int literals (`min=0, max=8, step=1`) must plan NOOP against the
     # FakeBackend remote after a create + repush, exactly mirroring
-    # test_m10_template_flow.py::test_template_helper_plan_apply_create_then_noop_on_repush.
+    # test_live_template_flow.py::test_template_helper_plan_apply_create_then_noop_on_repush.
     # `local_config` is the COMPILED IR (via the real builder, not a
     # hand-written dict) -- otherwise this test wouldn't exercise the
     # compile-time coercion fix at all.

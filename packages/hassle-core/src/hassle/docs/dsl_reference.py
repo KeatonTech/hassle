@@ -189,7 +189,7 @@ The template expression builder (`expr`/math builders/operators) is **one-way
 sugar**: the decompiler always reconstructs a compiled Jinja string as a raw
 `template("...")` string. It never re-derives the operator/builder call chain
 (`cos(...)`, `.attr(...)`, comparisons, ...) that produced it. This is a deliberate
-simplification (dsl-f3.md), not a bug — round-tripping still holds (I3) because
+simplification (dsl-extensions.md), not a bug — round-tripping still holds (I3) because
 `template(...)` is itself a first-class, fully-supported DSL construct.
 
 ## Scripts-as-functions: when a call rewrites vs. stays `service(...)`

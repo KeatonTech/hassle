@@ -7,7 +7,7 @@ compiles to the exact same HA value, byte-identical to the equivalent plain stri
 nothing to normalize: ``Mode.RESTART == "restart"`` and serializes as ``"restart"`` in JSON,
 since ``StrEnum`` members *are* their string value).
 
-Value sets verified against the fixture corpus (``fixtures/configs/*.json``, docs/dsl-f3.md)
+Value sets verified against the fixture corpus (``fixtures/configs/*.json``, docs/dsl-extensions.md)
 and HA's own schema (``homeassistant/helpers/script.py``'s ``CONF_MODE``/``CONF_MAX_EXCEEDED``
 option lists, docs/ha-api-notes.md): ``Mode`` is ``single``/``restart``/``queued``/``parallel``;
 ``MaxExceeded`` is ``silent``/``warning``/``error``. The corpus only contains ``silent``/

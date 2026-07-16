@@ -14,7 +14,7 @@ Covers the milestone's 7-test contract:
    `test_registry_stubs.py`.
 6. Simulator: namespace/entity-method calls execute identically to
    `service(...)` in the simulator (I5).
-7. Docs gate: covered by `hassle-dev docs` (docs/dsl-f3.md new section).
+7. Docs gate: covered by `hassle-dev docs` (docs/dsl-extensions.md new section).
 """
 
 from __future__ import annotations

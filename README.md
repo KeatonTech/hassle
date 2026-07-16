@@ -73,7 +73,7 @@ git add -A && git commit -m "push: <what you changed>"
 That's `init`, `login`, `pull`, `validate`, `test`, `push` — six `hassle` commands,
 one working bundle, fully round-trippable (a second `hassle pull` on a clean tree
 is a no-op). This exact loop is scripted as a CI-run regression test
-(`packages/hassle-cli/tests/test_done_gate_demo.py`), not just a README claim.
+(`packages/hassle-cli/tests/test_quickstart_demo.py`), not just a README claim.
 
 Get a long-lived access token from HA: **Profile → Security → Long-Lived Access
 Tokens**. It's stored in your OS keychain (`keyring`), never written into the

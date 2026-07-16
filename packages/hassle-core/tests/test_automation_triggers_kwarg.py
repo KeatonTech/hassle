@@ -1,5 +1,5 @@
 """``triggers=`` decorator metadata — the new canonical DSL form (DESIGN §5.3/§5.5,
-docs/dsl-f3.md, task #10, F3-additive).
+docs/dsl-extensions.md, task #10, F3-additive).
 
 ``@automation`` gains a ``triggers=`` keyword: a list of ``TriggerBuilder``
 objects (the same objects ``when()`` accepts), evaluated at decoration time

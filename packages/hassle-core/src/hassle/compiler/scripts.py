@@ -2,7 +2,7 @@
 
 ``@shared_script`` builds on the core's existing ``script()`` registration
 (``hassle.compiler.registry.script`` -- already handled end-to-end by
-``compile_registered``/``compile_bundle``, docs/m1-internal-api.md's table does
+``compile_registered``/``compile_bundle``, docs/compiler-api.md's table does
 not list ``registry.py`` as off-limits and ``script()`` is exactly the seam:
 "a new builder family is just ... expose thin constructor functions"). It adds:
 

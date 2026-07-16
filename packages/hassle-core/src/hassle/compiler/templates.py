@@ -6,11 +6,11 @@ operators on those build up a nested Jinja expression string. ``template(...)``
 is the raw-Jinja passthrough (validated later by tier-3 lint, §9 -- out of
 scope here).
 
-This is a **sibling builder module** (docs/m1-internal-api.md's "may you edit"
+This is a **sibling builder module** (docs/compiler-api.md's "may you edit"
 column): it does not modify ``hassle.compiler.builders``. It reuses the
 documented extension seam for the ``__bool__`` trap -- subclassing
 ``builders._NoBool`` and overriding ``_branch_repr`` is explicitly sanctioned by
-docs/m1-internal-api.md section 5. Comparison results (``TemplateExpr``
+docs/compiler-api.md section 5. Comparison results (``TemplateExpr``
 instances produced by ``>``, ``==``, ...) inherit that trap, so a native Python
 ``if`` on a template comparison fails loudly exactly like a state condition
 does (DESIGN §5.5).
@@ -73,7 +73,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# `_NoBool` is private to builders.py, but docs/m1-internal-api.md §5
+# `_NoBool` is private to builders.py, but docs/compiler-api.md §5
 # explicitly sanctions subclassing it for the `__bool__` trap ("subclass
 # `builders._NoBool`, override `_branch_repr`"): pyright's cross-module
 # private-access check is silenced here for that one documented reason.

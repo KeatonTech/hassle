@@ -144,7 +144,7 @@ def blueprint_automation(
     ``use_blueprint``, not inside it) -- no ``triggers/conditions/actions``
     (the blueprint is applied at runtime by HA). ``alias=``/``description=``
     are an F3 *addition* (M2, widening this signature with new optional
-    keywords, docs/dsl-f3.md's stability contract). Wired into
+    keywords, docs/dsl-extensions.md's stability contract). Wired into
     ``compile_bundle`` via the module docstring's Registration note
     (``Registry.add_object``).
     """

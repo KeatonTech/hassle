@@ -6,7 +6,7 @@ compose, render to Jinja at compile time -- owner-confirmed direction, see
 MILESTONES M1.1). Everything here is an F3 ADDITION; no existing name changes.
 
 **Sibling builder module** (same convention as ``templates.py`` itself,
-docs/m1-internal-api.md's "may you edit" column): it does not modify
+docs/compiler-api.md's "may you edit" column): it does not modify
 ``hassle.compiler.builders`` or ``hassle.compiler.templates``'s existing
 names, only imports :class:`TemplateExpr` and composes with it.
 

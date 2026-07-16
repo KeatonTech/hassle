@@ -3,7 +3,7 @@
 `with`-block's actions and splice them into an action container it builds itself
 (DESIGN §5.6 macro/lib pattern), without reaching into the internal
 `Recorder.push_actions`/`RecordedNode`/`_require_active` seam that `if_then`/`choose`
-are built on (docs/m1-internal-api.md §2).
+are built on (docs/compiler-api.md §2).
 
 `capture_actions()` is a context manager yielding a list of plain action-body dicts
 (the same shape `service(...)`/`if_then(...)`/etc. append to `rec.actions` today,

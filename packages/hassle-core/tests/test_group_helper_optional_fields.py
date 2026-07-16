@@ -15,7 +15,7 @@ the fix.
 Schema authority: the CI integration matrix (§0/§38.3) -- these unit tests
 pin Hassle's OWN compile/decompile behavior (kwargs accepted, body shape,
 round-trip byte-stability), never HA's acceptance of any particular field;
-`tests/integration/test_m21_group_flow.py` is where the live schema is
+`tests/integration/test_live_group_flow.py` is where the live schema is
 asserted.
 """
 

@@ -9,7 +9,7 @@ documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-f3.md "Runtime-math expression surface").
+extension; docs/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (

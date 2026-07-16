@@ -6,7 +6,7 @@ choosing the template type, then a form step -> `create_entry`) and
 options-flow (update: one form step -> `create_entry`, same `entry_id`)
 shapes (docs/ha-api-notes.md §26; the REAL transport was captured by the CI
 integration suite, `packages/hassle-core/tests/integration/
-test_m10_template_flow.py`, which is the authoritative verification per
+test_live_template_flow.py`, which is the authoritative verification per
 MILESTONES M10 — it found the flow/options-flow/removal operations are REST,
 not WebSocket, §26.0, AND that the form schema rejects `unique_id`/bookkeeping
 keys and requires domain-specific write-target fields, §26.6). This suite is

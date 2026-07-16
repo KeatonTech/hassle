@@ -3,11 +3,11 @@
 Python ``if``/``for`` run at compile time (DESIGN §5.5); *runtime* branching on a
 live HA state must go through these context managers, which compile to HA's
 ``if``/``choose``/``repeat``/``parallel`` action containers. Built entirely on the
-extension seam documented in docs/m1-internal-api.md §2
+extension seam documented in docs/compiler-api.md §2
 (``Recorder.push_actions``/``current_actions``/``record_action``) — this module
 never reaches into ``_CONTEXT_STACK`` and never edits ``recording.py``.
 
-Span depth note (docs/m1-internal-api.md §2 flagged this as unverified): every
+Span depth note (docs/compiler-api.md §2 flagged this as unverified): every
 construct here is a ``@contextlib.contextmanager``-decorated generator function.
 Empirically (see the depth probe run before writing this file), the frame chain
 at the point ``capture_span`` is called *inside* such a generator, walking
@@ -49,7 +49,7 @@ from hassle.compiler.spans import capture_span
 _CM_DEPTH = 2
 
 # ``_require_active`` is the extension seam's sanctioned cross-module name
-# (docs/m1-internal-api.md §2: "import it from hassle.compiler.recording"),
+# (docs/compiler-api.md §2: "import it from hassle.compiler.recording"),
 # underscore-prefixed by module-internal convention rather than by true
 # privacy; ``_RawAction`` is this workstream's own adapter, shared between its
 # two sibling modules. Both trip pyright's reportPrivateUsage in --strict

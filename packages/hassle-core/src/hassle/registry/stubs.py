@@ -1,7 +1,7 @@
 """The `.pyi` stub generator (DESIGN §5.2, MILESTONES M3 test 5).
 
 Generates typed domain classes + per-entity typed attributes matching the
-`hassle.registry.entities` attribute/index shape (docs/dsl-f3.md), so a bad
+`hassle.registry.entities` attribute/index shape (docs/dsl-extensions.md), so a bad
 attribute name becomes a pyright error, and typed service methods from
 `get_services` schemas.
 
@@ -35,7 +35,7 @@ device_registry's `name_by_user or name`), best-effort, in this order:
 **Deviation from DESIGN's illustrative snippet:** DESIGN §5.2 shows
 `LightEntity.turn_on(brightness_pct: int | Template = ..., transition: float =
 ...)`. There is no `Template` type anywhere in this codebase (verified: only
-`TemplateExpr`, an internal, non-public builder class per docs/dsl-f3.md) --
+`TemplateExpr`, an internal, non-public builder class per docs/dsl-extensions.md) --
 using it in a *public* generated stub would require exporting an internal
 name. This generator instead widens numeric/bool fields to also accept `str`
 (the shape a Jinja template string renders as at the type level, since HA
@@ -377,7 +377,7 @@ def _service_function(service_name: str, service_def: ServiceDef) -> list[str]:
     form (``hassle.services.<domain>.<service>(...)``) has NO implicit target
     at all: it delegates straight to ``hassle.compiler.actions.service``,
     whose ``target=`` is a real, commonly-passed keyword
-    (`docs/dsl-f3.md`/DESIGN §5.3's "target= also accepts the bare entity
+    (`docs/dsl-extensions.md`/DESIGN §5.3's "target= also accepts the bare entity
     target sugar"). The generated stub previously had no ``target`` parameter
     whatsoever, so every decompiled ``<domain>.<service>(target=..., ...)``
     call -- the decompiler's own canonical namespace-form output, MILESTONES

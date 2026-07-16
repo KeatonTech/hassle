@@ -7,7 +7,7 @@ distribution (``packages/hassle-core/src/hassle``), so there is exactly one whee
 to install and the public surface and its implementation version together.
 
 ``__all__`` here is the **F3 freeze candidate** declared at the end of M1: additions
-are allowed in later milestones, changes are not (R5). See ``docs/dsl-f3.md``.
+are allowed in later milestones, changes are not (R5). See ``docs/dsl-extensions.md``.
 """
 
 from __future__ import annotations

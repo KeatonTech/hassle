@@ -20,7 +20,7 @@ This suite is unit-level (no network, R2): it monkeypatches
 `DirectBackend._client` with a fake object exposing async `ws_command`/
 `rest_post`/`rest_delete`, and calls the private async `_alist_group_helpers`/
 `_aupdate_group_helper` coroutines directly via `asyncio.run`. The end-to-end
-path against real HA is `tests/integration/test_m21_group_flow.py`.
+path against real HA is `tests/integration/test_live_group_flow.py`.
 """
 
 from __future__ import annotations

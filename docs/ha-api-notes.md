@@ -491,7 +491,7 @@ so the mirror never targets the bare root.
   `alias`/`description` fields alongside `use_blueprint` (see
   `fixtures/configs/automation_blueprint_based.json`), which the M1
   `blueprint_automation(id=, use_blueprint=, inputs=)` builder had no kwargs
-  for. Fixed as an F3 *addition* (widening, not a break, per docs/dsl-f3.md's
+  for. Fixed as an F3 *addition* (widening, not a break, per docs/dsl-extensions.md's
   stability contract): `alias=`/`description=` optional kwargs added in M2 so
   the decompiler can round-trip a blueprint automation's alias/description
   without falling back to `raw_automation`.
@@ -553,15 +553,15 @@ not wired into `compile_bundle` (found by the templates/macros/object-types work
 > `hassle-core` distribution collapsed its two top-level import packages
 > (`hassle_core` + a thin `hassle` facade) into one, `hassle`. Every
 > `hassle_core.*` path in the retained report below is now `hassle.*`; see
-> docs/ir-f1.md and docs/dsl-f3.md for the full rename note.
+> docs/ir-format.md and docs/dsl-extensions.md for the full rename note.
 
 **Not an HA-behavior finding — an internal extension-contract gap in
-docs/m1-internal-api.md**, flagged here per CLAUDE.md's "if the internal-api
+docs/compiler-api.md**, flagged here per CLAUDE.md's "if the internal-api
 contract is insufficient, stop and report rather than modifying core."
 
 `compile_bundle`/`compile_registered` (`packages/hassle-core/src/hassle/compiler/bundle.py`
 -- path renamed 2026-07-03 from `hassle_core/compiler/bundle.py`, owner decision, see
-docs/ir-f1.md; frozen for follow-on M1 workstreams) only drain `registry.Registry` -- a list of
+docs/ir-format.md; frozen for follow-on M1 workstreams) only drain `registry.Registry` -- a list of
 `RegisteredObject`, each of which is compiled by opening a `Recorder` and calling
 `reg.func()` once, i.e. "run a function, record trigger/condition/action calls
 into it." That model fits automations, scripts, and (via a caller-side wrapper)
@@ -955,7 +955,7 @@ UI-authored action forever (I3) — this is not optional/cosmetic the way the
 `platform:`→`trigger:` or scalar-delay modernizations are (§16/§18), because HA
 itself never strips the key, so there is no "already canonical" case where it's
 absent from a live object. **Fix:** `service()`/`ServiceAction` gained an
-optional `metadata=` kwarg (F3-additive, docs/dsl-f3.md's "widening a signature
+optional `metadata=` kwarg (F3-additive, docs/dsl-extensions.md's "widening a signature
 with a new optional keyword is an addition, not a change"); the decompiler
 emits `metadata={...}` whenever the key is present in the stored action,
 including `metadata={}`, and omits the kwarg entirely when absent (so
@@ -1022,7 +1022,7 @@ versions, but the *storage* layer never migrates an already-saved config's key
 spelling on its own — only re-saving through the UI would). Folding it into
 `data` would drop the distinction and hash-drift on every recompile (I3), so
 it must round-trip as its own field. **Fix:** `service()`/`ServiceAction`
-gained an optional `data_template=` kwarg (F3-additive, docs/dsl-f3.md's
+gained an optional `data_template=` kwarg (F3-additive, docs/dsl-extensions.md's
 "widening a signature with a new optional keyword is an addition, not a
 change") — the least-surface option, mirroring `metadata=`'s existing
 treatment rather than inventing a new builder. The decompiler emits
@@ -1396,7 +1396,7 @@ operation (create/update/remove) modeled as a **WebSocket** command
 `config_entries/remove`).
 
 **CI found this wrong, on both `stable` and `dev`.** All five
-`test_m10_template_flow.py` integration tests failed identically:
+`test_live_template_flow.py` integration tests failed identically:
 
 ```
 HaApiError: WS command failed: Unknown command.
@@ -1439,7 +1439,7 @@ per the standing "record findings, flag to human" rule since it directly
 contradicts an assumption baked into the milestone text itself.
 
 The CI integration suite
-(`packages/hassle-core/tests/integration/test_m10_template_flow.py`) remains
+(`packages/hassle-core/tests/integration/test_live_template_flow.py`) remains
 the **authoritative verification**; the correction above is what made it
 pass (pending the orchestrator's next CI run to confirm).
 
@@ -1620,7 +1620,7 @@ becomes evidence, not silently erased" practice this doc follows throughout
 ### 26.6 Identity REDESIGNED (CI round 2 finding): no settable `unique_id` — identity derives from `name`
 
 **The CI failure, verbatim** (both HA `stable` and `dev`, all 5
-`test_m10_template_flow.py` tests, after the §26.0 REST-transport fix
+`test_live_template_flow.py` tests, after the §26.0 REST-transport fix
 unblocked flow step submission):
 
 ```
@@ -1692,7 +1692,7 @@ M10 updated in the same series, R5):**
   identity gets a fresh `entry_id`.
 - **DSL surface (`hassle.compiler.template_helpers`):** `id=`/`unique_id=`
   kwargs are REMOVED (F3-compatible: never shipped in a release, so this is
-  not a break of a frozen surface — see docs/dsl-f3.md). `template_number`
+  not a break of a frozen surface — see docs/dsl-extensions.md). `template_number`
   gained a required `set_value=` kwarg; `template_select` gained a required
   `select_option=` kwarg. `name=` became the sole identity-bearing kwarg.
 
@@ -2061,7 +2061,7 @@ branch). Neither is on `test_run_live`'s path:
   in `contextlib.suppress(Exception)` regardless. Even in the worst case
   (some other listing error), the suppress means `_wipe` cannot propagate a
   template-domain failure into this test.
-- `test_m10_template_flow.py` collects and runs BEFORE `test_run_live.py` in
+- `test_live_template_flow.py` collects and runs BEFORE `test_run_live.py` in
   the single shared-container CI invocation (`.github/workflows/ci.yml` runs
   one `pytest -m integration` over both directories). Its 5 tests failed
   inside `DirectBackend.create("template_number", ...)`, which raised
@@ -2349,7 +2349,7 @@ three rounds.
 > delete` exists; (d) one entity CAN carry categories in multiple scopes at once.
 
 > **Post-merge status (2026-07-06):** the caveats below were written before the integration
-> suite ran. PR #3's CI subsequently ran `tests/integration/test_m11_category_writeback.py`
+> suite ran. PR #3's CI subsequently ran `tests/integration/test_live_category_writeback.py`
 > green on BOTH HA images (stable + dev) on the first attempt, which live-confirms:
 > `config/category_registry/create`'s `{scope, name}` argument shape, the category assignment
 > landing in the entity-registry row's `categories` map, the slug-reuse (no-duplicate) path,
@@ -2438,7 +2438,7 @@ test_direct_backend_category_writeback.py` (WS payload shapes for `create_catego
 `assign_category`, monkeypatched `_client`, no network), `packages/hassle-cli/tests/
 test_push_category_writeback.py` (end-to-end `hassle push` against `FakeBackend`, including the
 warning text in `hassle push`'s stdout), and — added in the round below —
-`packages/hassle-core/tests/integration/test_m11_category_writeback.py` (real Docker HA, both
+`packages/hassle-core/tests/integration/test_live_category_writeback.py` (real Docker HA, both
 `stable`/`dev`).
 
 ### 30 addendum: integration coverage added, one settle-race fixed pre-emptively (round 2, same PR)
@@ -2451,7 +2451,7 @@ six CI rounds where source-inferred flow shapes turned out wrong), shipping M11 
 coverage of its own two newly-inferred WS commands would repeat exactly that mistake. Flagged by
 review before merge; fixed in this same PR/commit rather than a follow-up.
 
-**Added:** `test_m11_category_writeback.py`, four tests (module docstring has the full list) —
+**Added:** `test_live_category_writeback.py`, four tests (module docstring has the full list) —
 create-and-assign with no pre-existing category, reuse of an existing matching category (never
 duplicated), the script-scope variant (the specific worry: does a `script.<object_id>` entity's
 `unique_id` really equal the script's object id, the same way an automation's does?), and an
@@ -2758,7 +2758,7 @@ and silently cached `flow_id` — a real, truthy string, so nothing ever
 raised — as if it were the entry_id, for every template-helper CREATE this
 codebase has ever driven against real HA, since M10 first shipped. This was
 invisible until M15's category write-back needed `_template_entry_ids` to
-actually resolve a LIVE entity-registry row: `test_m10_template_flow.py`'s
+actually resolve a LIVE entity-registry row: `test_live_template_flow.py`'s
 own `entry_id_for(...) is not None` assertion is true for a flow_id just as
 much as a real entry_id, so it never caught this.
 
@@ -3507,7 +3507,7 @@ read-back shape for an unset optional selector) would decompile to
 `field=None` and then silently LOSE the field on recompile. Regression
 tests: `test_group_helper_optional_fields.py` (unit — committed failing
 first, R1/R4). The CI matrix remains the schema authority:
-`test_m21_group_flow.py::test_group_sensor_optional_fields_live` probes the
+`test_live_group_flow.py::test_group_sensor_optional_fields_live` probes the
 sensor flavor's live form schema and exercises whichever of the four fields
 the image actually advertises (skips with the observed schema when none
 are present, i.e. an owner-HA-era image). Only the sensor flavor is

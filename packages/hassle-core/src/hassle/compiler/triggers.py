@@ -1,7 +1,7 @@
 """Classic HA trigger builders (DESIGN §5.4) — the triggers/conditions M1 workstream.
 
 Every builder emits the canonical plural HA trigger dict directly
-(``{"trigger": "<type>", ...}``, per docs/m1-internal-api.md §1). Field shapes are
+(``{"trigger": "<type>", ...}``, per docs/compiler-api.md §1). Field shapes are
 pinned against the fixture corpus (``fixtures/configs/automation_*_trigger.json``).
 
 Common options shared by every classic trigger (DESIGN §5.4): ``for_=`` durations,

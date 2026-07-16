@@ -26,7 +26,7 @@ the bounded grammar (`state_of(...)`, DESIGN §5.4 extension) --
 `template_select:house_scene`'s state (`states('input_select.house_mode')`)
 inverts cleanly too, so three of the four objects invert now; only
 `template_binary_sensor:any_door_open`'s `is_state(...)` call form still
-falls back (documented one-time-canonicalization behavior, docs/dsl-f3.md).
+falls back (documented one-time-canonicalization behavior, docs/dsl-extensions.md).
 
 **M14 update:** the fallback branch is ALSO the decorator form now (owner
 feedback) -- the other three objects decompile to `@builder(...)` / `def
