@@ -25,8 +25,6 @@ like every other compile-time DSL error.
 
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
 
 import pytest
@@ -36,6 +34,7 @@ from hassle.compiler import DanglingTemplateHelperDeclarationError
 from hassle.compiler.bundle import compile_bundle
 from hassle.compiler.registry import fresh
 from hassle.compiler.template_helpers import reset_declared_template_helpers
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 FIXTURE = (
     Path(__file__).resolve().parents[3]
@@ -45,20 +44,16 @@ FIXTURE = (
     / "bundle"
 )
 
+
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 @pytest.fixture(autouse=True)

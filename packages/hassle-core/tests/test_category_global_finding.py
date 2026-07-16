@@ -10,8 +10,6 @@ milestone's test 2).
 
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
 
 import pytest
@@ -19,9 +17,11 @@ import pytest
 from hassle.compiler.bundle import compile_bundle
 from hassle.registry.snapshot import RegistrySnapshot
 from hassle.registry.validate import validate_bundle
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = REPO_ROOT / "fixtures" / "registry" / "home.json"
+
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "findings"
 
 
@@ -31,16 +31,11 @@ def snapshot() -> RegistrySnapshot:
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 def _write_bundle(tmp_path: Path, filename: str, code: str) -> Path:

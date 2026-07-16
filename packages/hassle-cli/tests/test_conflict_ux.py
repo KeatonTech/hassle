@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+from hassle_dev.snapshots import check_snapshot
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    actual = actual.rstrip("\n")
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def test_dsl_diff_list_literal_is_not_mangled_by_rich_markup() -> None:

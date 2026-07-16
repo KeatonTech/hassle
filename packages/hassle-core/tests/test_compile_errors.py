@@ -15,7 +15,6 @@ non-JSON case belongs to the templates/actions workstreams):
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
@@ -29,25 +28,17 @@ from hassle.compiler import (
     compile_bundle,
 )
 from hassle.compiler.recording import recording, when
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    """Compare against a stored snapshot; write it if HASSLE_UPDATE_SNAPSHOTS is set."""
-    import os
-
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    """Replace absolute paths with a stable basename so snapshots are portable."""
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 def test_compile_time_branch_error_message() -> None:
