@@ -98,8 +98,7 @@ def test_readme_documented_commands_exist(invocation: str) -> None:
             names = token.split("/")
             for name in names:
                 assert name in command.commands, (
-                    f"README documents `hassle {invocation}` but "
-                    f"`{name}` is not a real subcommand"
+                    f"README documents `hassle {invocation}` but `{name}` is not a real subcommand"
                 )
             if len(names) > 1:
                 return  # alternatives like status/push: existence checked above
