@@ -1,4 +1,4 @@
-"""M1 test 2 — `@macro` compile-time inlining (DESIGN §5.6).
+"""`@macro` compile-time inlining (DESIGN §5.6).
 
 A macro is an ordinary Python function decorated with `@macro`; calling it
 inside an `@automation`/`@script` body splices its recorded actions into the

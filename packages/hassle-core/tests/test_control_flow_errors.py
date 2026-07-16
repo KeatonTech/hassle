@@ -1,10 +1,10 @@
-"""M1 actions/control-flow error coverage (R6: what/where/fix, snapshot-tested).
+"""Actions/control-flow error coverage (what/where/fix, snapshot-tested).
 
 Covers `ElseWithoutIfError` -- `with else_then():`/`with else_if(...):` used
 where the immediately-preceding action in the current list is not an
-`if_then`/`choose` container. This is the actions/control-flow workstream's
-own error class (docs/compiler-api.md §5), added alongside the M1-core
-errors in `hassle/compiler/errors.py`.
+`if_then`/`choose` container. This is the actions/control-flow error class
+(docs/compiler-api.md §5), defined alongside the core-compiler errors in
+`hassle/compiler/errors.py`.
 """
 
 from __future__ import annotations

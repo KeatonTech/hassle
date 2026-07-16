@@ -1,7 +1,7 @@
 {
   "id": "choose_numeric_state_attribute_condition",
   "alias": "Choose Numeric State Attribute Condition",
-  "description": "Shape observed in a real 2026.7 UI-authored config: a choose branch's conditions carry a numeric_state condition with attribute (M2.1 covered the top-level automation-condition path; this fixture pins the nested-in-choose-conditions path through the same decompile_condition dispatcher)",
+  "description": "Shape observed in a real 2026.7 UI-authored config: a choose branch's conditions carry a numeric_state condition with attribute (the top-level automation-condition path is covered elsewhere; this fixture pins the nested-in-choose-conditions path through the same decompile_condition dispatcher)",
   "triggers": [
     {
       "trigger": "state",

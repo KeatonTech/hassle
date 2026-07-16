@@ -1,4 +1,4 @@
-"""M3 done-gate fixture: a synthetic bundle referencing ONLY entities/helpers
+"""Validator fixture: a synthetic bundle referencing ONLY entities/helpers
 that exist in `fixtures/registry/home.json` or are declared in this same
 bundle. Validating this must produce zero Findings.
 """

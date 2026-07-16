@@ -6,7 +6,7 @@
 > Per R5, changing anything frozen here requires updating MILESTONES.md in the
 > same PR. **Additions are allowed; changes and removals are not.**
 
-> **Renamed 2026-07-03 (owner decision):** the `hassle-core` distribution now
+> **Renamed 2026-07-03 (design decision):** the `hassle-core` distribution now
 > ships exactly one top-level import package, `hassle` (previously two:
 > `hassle_core` + a thin `hassle` facade). `hassle_core.dsl_builtins` — a
 > second re-export of this same surface, kept only so tools could import it
@@ -17,7 +17,7 @@
 > module paths below (`hassle_core.compiler.*`, `hassle_core.ir`, …) are now
 > `hassle.compiler.*` / `hassle.ir`; the frozen contract itself is unchanged.
 
-> **Widened 2026-07-05 (`ux/shared-script-calls`, owner feedback, F3-additive):**
+> **Widened 2026-07-05 (`ux/shared-script-calls`, design-review feedback, F3-additive):**
 > the module-internal `ScriptCallAction` (`hassle.compiler.scripts` — already
 > listed below as non-frozen tooling surface, not part of `hassle.__all__`)
 > gained three optional keyword-only constructor args, `metadata=`/`alias=`/
@@ -32,7 +32,7 @@
 > a way to round-trip a UI-saved action's `metadata: {}` / step `alias`/
 > `enabled` through the call site instead of falling back to `service()`.
 
-> **Widened 2026-07-05 (`ux/shared-script-rich-fields`, owner feedback,
+> **Widened 2026-07-05 (`ux/shared-script-rich-fields`, design-review feedback,
 > F3-additive):** `@shared_script` gained a `fields=` kwarg carrying full HA
 > field metadata (`name`/`description`/`selector`/`example`/...) VERBATIM —
 > when supplied it wins over the signature-derived `fields` dict (byte-
@@ -50,8 +50,8 @@
 > an author who added a Python parameter but forgot to also declare it as a
 > field. Purely additive; no existing name's meaning changed.
 
-> **Widened 2026-07-05 (`ux/triggers-in-decorator`, owner-approved DSL
-> evolution, task #10, F3-additive):** `@automation` gained a `triggers=`
+> **Widened 2026-07-05 (`ux/triggers-in-decorator`, approved DSL
+> evolution, F3-additive):** `@automation` gained a `triggers=`
 > keyword-only kwarg: a list of `TriggerBuilder` objects — the same objects
 > `when()` accepts — evaluated at decoration time (built when the
 > `@automation(...)` line itself runs, before the compiler invokes the
@@ -74,7 +74,7 @@
 > is untouched (`automation` was already frozen there; only its accepted
 > kwargs widened).
 
-> **Widened 2026-07-05 (`ux/dsl-ergonomics`, owner feedback, F3-additive,
+> **Widened 2026-07-05 (`ux/dsl-ergonomics`, design-review feedback, F3-additive,
 > surface count 98 → 101 — the doc's earlier "72"/"73" counts predate several
 > unrelated widenings and were never kept current; this note states the
 > actual delta this workstream makes, not a running total):** four DSL
@@ -110,7 +110,7 @@
 > `OnlyIfBlockCoverageError`) and `only_if`'s existing frozen entry is
 > untouched (only its usage — bare vs. `with` — widened).
 
-> **Widened 2026-07-06 (`m16/string-exprs`, owner-commissioned, F3-additive,
+> **Widened 2026-07-06 (`m16/string-exprs`, F3-additive,
 > surface count 105 → 106):** one new name, `state_of(entity_or_id)` — a
 > bare STRING-context template read (`states('x')`, no `| float`), mirroring
 > `expr()`'s argument handling exactly (accepts a plain entity id string, an
@@ -132,7 +132,7 @@
 > invert to `state_of(...)` forms; `is_state('x', 'y')` is NOT accepted by
 > the parser at all — it re-renders as `states('x') == 'y'`, which differs
 > textually from an `is_state(...)`-authored template, so the byte-exact
-> acceptance gate (already the enforced rule, MILESTONES M13) correctly
+> acceptance gate (already the enforced rule) correctly
 > rejects it and the caller falls back to the unchanged string form. This is
 > a one-time canonicalization: only after the user's own edit (or Hassle's
 > compiled re-render) replaces the stored template with the canonical
@@ -145,11 +145,11 @@
 > silently dropped a leading/trailing newline around a `{{ ... }}` block on
 > inversion, violating I3; now compares against the original text.
 
-> **Widened 2026-07-07 (M19, owner-commissioned, F3-additive, surface count
+> **Widened 2026-07-07 (M19, F3-additive, surface count
 > 106 → 108 relative to the pre-M19/pre-M20-PRs baseline this note and the
 > `ux/capture-notify-recipe` note below were both independently written
 > against — see the reconciliation note after both for the actual combined
-> total now that both have merged; AMENDED 2026-07-07, owner pre-merge design
+> total now that both have merged; AMENDED 2026-07-07, pre-merge design
 > feedback on the M19 PR — rewritten in place since the amended names were
 > never merged, no deprecation dance needed):** two new names.
 > `SharedScriptParamMisuseError` —
@@ -161,7 +161,7 @@
 > runtime value; a module constant or `@macro` argument for a genuinely
 > compile-time one) rather than naming an escape hatch. `field_default(value)`
 > — the typed-default helper for a `@shared_script` parameter annotated
-> `TemplateExpr` (owner-directed typing resolution, below): the identity
+> `TemplateExpr` (design-directed typing resolution, below): the identity
 > function AT RUNTIME (returns ``value`` unchanged, so the compiler's
 > `inspect.signature` introspection sees the real declared default), typed as
 > returning `TemplateExpr` so a field's default expression (`tag: TemplateExpr
@@ -172,7 +172,7 @@
 > would otherwise flag `field_default(...)` as a mutable-default-style
 > anti-pattern, since it can't know the call is a pure identity function).
 > An originally-planned third name, `param_default(name)` (plus its own
-> `NoDeclaredDefaultError`), was REJECTED by the owner before merge: it would
+> `NoDeclaredDefaultError`), was rejected during design review before merge: it would
 > have returned the field's DECLARED default to sidestep the binding for
 > deliberate compile-time metaprogramming (the `for _ in
 > range(param_default("times")):` unroll pattern) — but that bakes a stale
@@ -181,7 +181,7 @@
 > lie (a caller's actual `times=5` would be silently ignored forever by an
 > unroll that only ever saw the declared default). Neither name shipped.
 >
-> **Typing resolution (owner pre-merge design feedback, same round):** every
+> **Typing resolution (pre-merge design feedback, same round):** every
 > `@shared_script` signature parameter is now annotated `TemplateExpr` (body-
 > true — inside the body it's ALWAYS a runtime template marker, never its
 > declared Python default's type; a plain-type annotation like `times: int`
@@ -222,8 +222,8 @@
 > its `param(name)` marker BEFORE the body runs, regardless of its declared
 > Python default — so `tag=tag` inside the body is now exactly equivalent to
 > `tag=param("tag")` (previously, an unbound bare parameter held its literal
-> Python default — `None` if undeclared — a footgun the owner commissioned
-> this milestone to close). `param(name)` itself is unchanged in spelling and
+> Python default — `None` if undeclared — a footgun this milestone was
+> commissioned to close). `param(name)` itself is unchanged in spelling and
 > stays valid (back-compat); its return value is now a `_BoundParamMarker`
 > (module-internal `hassle.compiler.scripts` class, NOT added to
 > `hassle.__all__` — a `TemplateExpr` subclass, so nothing about the DSL
@@ -244,7 +244,7 @@
 > M13) still governs: anything the inverter can't accept keeps the unchanged
 > raw-string fallback (I3).
 
-> **Widened 2026-07-07 (`ux/capture-notify-recipe`, task #30, F3-additive,
+> **Widened 2026-07-07 (`ux/capture-notify-recipe`, F3-additive,
 > surface count 106 → 108 — independently of the M19 note above; both were
 > written against the same pre-both-merge 106 baseline, see the
 > reconciliation note below for the combined total):** two new names,
@@ -274,7 +274,7 @@
 > (`notify_mobile`/`action`, `fixtures/cookbook/bundle/lib/notify_actions.py`)
 > is built on; neither name changes the meaning of any existing construct.
 
-> **Widened 2026-07-07 (`m20/entity-conditions`, owner-commissioned,
+> **Widened 2026-07-07 (`m20/entity-conditions`,
 > F3-additive, `hassle.__all__` itself untouched — every addition below is a
 > METHOD/PROPERTY, not a module-level name):** entity-first conditions,
 > `entity.state != ""`.
@@ -369,7 +369,7 @@ The public surface is exactly `hassle.__all__` (module`packages/hassle-core/src/
 Current surface: **72 names**, plus TWO dedicated entry points that are
 deliberately *not* folded into `hassle.__all__`: `hassle.registry` (below;
 DESIGN §5.3 imports it under its own alias, `from hassle.registry import
-entities as e`) and `hassle.services` (MILESTONES M18, its own section
+entities as e`) and `hassle.services` (its own section
 below) — both are domain/instance-dynamic (their real shape depends on the
 bundle's own registry snapshot), which is exactly why neither is part of the
 star surface: `hassle.__all__` is a fixed, frozen contract, but which
@@ -400,7 +400,7 @@ stub classes with the identical attribute/index shape on top, so a bad
 attribute name becomes a pyright error in the editor without changing how
 bundles are written.
 
-### Typed service namespaces — `hassle.services`, and entity-method sugar (MILESTONES M18)
+### Typed service namespaces — `hassle.services`, and entity-method sugar
 
 ```python
 from hassle.services import cover, light
@@ -697,7 +697,7 @@ this is additive to `hassle.__all__`; nothing above changed.
 - `NoParamContextError` — `param()` outside a `@shared_script` body.
 - `UnknownParamError` — `param(name)` naming a field absent from the signature.
 - `PythonMathMisuseError` (M1.1 ADDITION) — Python's stdlib `math.*`/`float()`/
-  `int()` called on a runtime `TemplateExpr` (MILESTONES M1.1 test 3).
+  `int()` called on a runtime `TemplateExpr`.
 
 ## Stability contract
 
@@ -755,6 +755,6 @@ All M1 golden pairs green (`fixtures/dsl/`, checked by
 `test_dsl_golden_pairs.py` and `hassle-dev goldens`); every fixture-corpus
 construct expressible in the DSL with a backing golden (the M1 done-gate
 expressibility checklist, in the integration report); `test_entity_attr_and_
-index_equivalent` (MILESTONES M1 test 8, `test_entity_accessor.py`) green —
+index_equivalent` (`test_entity_accessor.py`) green —
 `e.sensor.hall_motion` and `e.sensor["hall_motion"]` compile to byte-identical
 IR.

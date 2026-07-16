@@ -1,12 +1,12 @@
-"""M3: entity/target reference extraction from compiled IR (DESIGN §9 tier 2).
+"""Entity/target reference extraction from compiled IR (DESIGN §9 tier 2).
 
-Reaches every position DESIGN and the milestone call out: classic trigger/
-condition/action `entity_id` (bare string and list forms), purpose-trigger
-`target:` blocks (all five keys), Jinja template strings, and `raw_*` blocks.
+Reaches every position DESIGN calls out: classic trigger/condition/action
+`entity_id` (bare string and list forms), purpose-trigger `target:` blocks
+(all five keys), Jinja template strings, and `raw_*` blocks.
 
 Uses `hassle.compiler.bundle.compile_bundle` against small inline bundles
 written to a tmp_path (no network; pure local files) plus a few of the
-existing M1 golden bundles that already exercise these shapes.
+existing golden bundles that already exercise these shapes.
 """
 
 from __future__ import annotations
@@ -175,12 +175,12 @@ def test_extract_from_kitchen_sink_golden_has_spans() -> None:
     assert len(refs) > 0
     # every extracted reference must carry enough to point back at a DSL line
     # (span may be None only for a handful of prebuilt/helper cases; most must
-    # have one so validation Findings can carry file:line, milestone item 7).
+    # have one so validation Findings can carry file:line).
     with_span = [r for r in refs if r.span is not None]
     assert len(with_span) > 0
 
 
-# --- reviewer B1: recursive descent into nested action containers ----------
+# --- recursive descent into nested action containers ------------------------
 # extract_references must reach entity/target references nested inside
 # if_then/else_then, choose branches + default, repeat, parallel, and
 # wait_for_trigger's inner trigger blocks -- not just the top-level
@@ -398,9 +398,9 @@ def a():
 
 def test_device_block_registry_uuid_entity_id_not_validated_as_entity_name(tmp_path) -> None:
     # Modern HA device triggers/actions store ENTITY REGISTRY UUIDs (32-hex) in
-    # their entity_id field, not domain.object_id names (owner field evidence:
-    # `d457ce94e8ab259e6867b4fc918d1106` flagged as unknown-entity). Those must
-    # not be validated as entity names.
+    # their entity_id field, not domain.object_id names (e.g.
+    # `d457ce94e8ab259e6867b4fc918d1106` was flagged as unknown-entity). Those
+    # must not be validated as entity names.
     from hassle.compiler.bundle import compile_bundle
     from hassle.registry.snapshot import RegistrySnapshot
     from hassle.registry.validate import validate_bundle

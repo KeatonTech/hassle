@@ -1,4 +1,4 @@
-"""R6 error snapshot for the M1.1 math-expression workstream's one new error
+"""Error snapshot for the math-expression surface's one new error
 class, PythonMathMisuseError: Python's stdlib `math.*`/`float()`/`int()`/
 `round()`/`math.trunc()` applied to a runtime TemplateExpr (the `__float__`/
 `__int__`/`__round__`/`__trunc__` traps). Same pattern as

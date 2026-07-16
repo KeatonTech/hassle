@@ -1,12 +1,12 @@
-"""M13 reviewer finding B1 (PR #8) -- dangling `state=`-omitted template-helper
-declaration guard.
+"""Dangling `state=`-omitted template-helper declaration guard.
 
 A `template_number`/`template_sensor`/`template_binary_sensor`/`template_select`
-call that omits `state=` (the M13 decorator-form signal) but is never applied
-as a decorator over a function builds and registers NOTHING. On the pre-M13
+call that omits `state=` (the decorator-form signal) but is never applied
+as a decorator over a function builds and registers NOTHING. On the older
 call form the same bare call registered a (degenerate, `state=None`) object;
-after M13 added decorator detection this became a silent no-op -- a behavior
-regression AND an I6 hazard: if the helper already exists in HA, its
+after decorator detection was added this became a silent no-op -- a behavior
+regression AND a hazard for the "no edit is silently lost" invariant: if the
+helper already exists in HA, its
 declaration vanishing from the compiled set schedules a DELETE of the live
 object on the next plan/push. `template_number`/`template_select` are
 accidentally protected already (the write-target guard,
@@ -160,20 +160,20 @@ def test_golden_fixture_compiles_via_compile_bundle_and_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
-# (c) regression test: the ON-MAIN behavior for a state-less call (silently
+# Regression test: the previous behavior for a state-less call (silently
 # registering a degenerate object for template_sensor/template_binary_sensor,
-# or -- pre-M13 -- being unreachable for template_number/template_select
+# or being unreachable for template_number/template_select
 # since a plain call always had `state=` as a real kwarg) is now an ERROR for
-# BOTH the "never decorated" call-form omission mistake. This is the new
+# the "never decorated" call-form omission mistake. This is the new
 # contract: omitting `state=` without either supplying it OR decorating a
 # function is always wrong, not silently accepted.
 # ---------------------------------------------------------------------------
 
 
 def test_state_less_never_decorated_call_no_longer_silently_registers(tmp_path: Path) -> None:
-    """Direct regression pin for the reviewer's B1 report: this exact
+    """Direct regression pin: this exact
     snippet used to compile clean (with the object silently absent from the
-    compiled set on this branch, or present-but-degenerate on main) -- it
+    compiled set, or present-but-degenerate) -- it
     must now raise, for every read-only template-helper domain."""
     bundle_dir = tmp_path / "bundle"
     bundle_dir.mkdir()

@@ -1,5 +1,5 @@
-"""M1.1 -- `.attr()` entity-attribute access, `var()` runtime-variable refs,
-and `param()` upgraded to a composable Expr (MILESTONES M1.1 deliverables).
+"""`.attr()` entity-attribute access, `var()` runtime-variable refs,
+and `param()` upgraded to a composable Expr.
 
 `.attr()` lives on entity references (EntityRef, hassle/compiler/helpers.py)
 and is exposed identically through `hassle.registry.entities` (registry.py's
@@ -67,7 +67,7 @@ def test_var_accepts_any_name_no_declaration_check() -> None:
 
 # ---------------------------------------------------------------------------
 # param() upgraded to a composable Expr (was previously usable but this pins
-# the composability contract explicitly, MILESTONES M1.1 deliverables).
+# the composability contract explicitly).
 # ---------------------------------------------------------------------------
 
 

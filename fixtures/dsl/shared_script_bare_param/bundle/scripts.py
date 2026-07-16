@@ -1,17 +1,17 @@
-"""Golden case (M19 test 1): a shared-script's own signature parameters ARE
+"""Golden case: a shared-script's own signature parameters ARE
 real runtime field references -- `tag=tag` instead of `tag=param("tag")` --
 composable with the whole expression surface (`concat(tag, "_x")`).
 
-`dismiss_tagged_notification`'s body mirrors the owner's real
+`dismiss_tagged_notification`'s body mirrors a real-world
 `dismiss_notification` shape (`fixtures/dsl/shared_script_call_metadata/`)
-but with the field named `tag` (the owner's own case, MILESTONES M19 test 3)
-and a second field consumed through `concat(...)` to prove composability with
-the rest of the template-builder operator surface, not just a bare read.
+but with the field named `tag`, and a second field consumed through
+`concat(...)` to prove composability with the rest of the template-builder
+operator surface, not just a bare read.
 
 Compiling this body must produce BYTE-IDENTICAL IR to the equivalent
 `param("tag")` spelling (see `shared_script_call_metadata`'s
-`notification_id=param("notification_id")` for the pre-M19 form of the same
-shape) -- proven directly in
+`notification_id=param("notification_id")` for that alternate form of the
+same shape) -- proven directly in
 `packages/hassle-core/tests/test_shared_script_real_params.py`, and pinned
 here as a golden so any regression in the binding machinery shows up as
 golden drift too.

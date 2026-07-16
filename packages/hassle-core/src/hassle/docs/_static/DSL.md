@@ -4,7 +4,8 @@
 fixtures under `fixtures/dsl/` — every section below is sourced directly from a real,
 compiler-verified DSL<->compiled-YAML pair, so this file can never drift from what
 `hassle` actually does. Do not hand-edit; regenerate via `hassle-dev docs --update`
-(mirrors `hassle-dev goldens --update`, R3).
+(golden files are regenerated, never hand-edited — same discipline as `hassle-dev
+goldens --update`).
 
 Agents and humans alike: pattern-match on the pair (DESIGN §12) — the Python on top,
 the exact compiled shape HA stores underneath.
@@ -33,7 +34,8 @@ The template expression builder (`expr`/math builders/operators) is **one-way
 sugar**: the decompiler always reconstructs a compiled Jinja string as a raw
 `template("...")` string. It never re-derives the operator/builder call chain
 (`cos(...)`, `.attr(...)`, comparisons, ...) that produced it. This is a deliberate
-simplification (dsl-extensions.md), not a bug — round-tripping still holds (I3) because
+simplification (dsl-extensions.md), not a bug — round-tripping still holds
+(compile(decompile(x)) == x) because
 `template(...)` is itself a first-class, fully-supported DSL construct.
 
 ## Scripts-as-functions: when a call rewrites vs. stays `service(...)`
@@ -45,7 +47,7 @@ Python call to the generated wrapper function) only applies when the call site's
 `metadata`/`alias`/`enabled`/field kwargs can be represented by that wrapper's
 accepted keywords; anything the wrapper doesn't understand falls back to a plain
 `service("script.<id>", ...)` action instead of a rewritten call, so no data is
-ever silently dropped (I3).
+ever silently dropped.
 
 ## Category-first file placement
 
@@ -93,7 +95,7 @@ by bundles and tests. These don't compile to an HA YAML shape — the error text
 Golden case: `fixtures/dsl/mode_enum_parity/`.
 
 ```python
-"""Golden case: `Mode`/`MaxExceeded` StrEnum form (`ux/dsl-ergonomics`, item 2) --
+"""Golden case: `Mode`/`MaxExceeded` StrEnum form --
 `StrEnum` IS a `str` subclass, so passing a member compiles byte-identical to the
 equivalent plain string. Paired with `mode_str_parity/`'s plain-string form to
 prove compile parity.
@@ -147,7 +149,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/mode_enum_parity/`.
 
 ```python
-"""Golden case: `Mode`/`MaxExceeded` StrEnum form (`ux/dsl-ergonomics`, item 2) --
+"""Golden case: `Mode`/`MaxExceeded` StrEnum form --
 `StrEnum` IS a `str` subclass, so passing a member compiles byte-identical to the
 equivalent plain string. Paired with `mode_str_parity/`'s plain-string form to
 prove compile parity.
@@ -201,7 +203,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/shade_tracks_sun/`.
 
 ```python
-"""Golden case: `shade_tracks_sun` (MILESTONES M1.1 test 4).
+"""Golden case: `shade_tracks_sun`.
 
 Mirrors fixtures/configs/automation_math_shade_sun.json byte-for-byte in its
 compiled `data.position` template -- this pins the math builder's exact
@@ -269,13 +271,13 @@ See also: `fixtures/dsl/math_expr_reference/`
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -379,13 +381,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -680,7 +682,7 @@ Golden case: `fixtures/dsl/shared_script_call/`.
 
 ```python
 """Golden case: @shared_script compiles to a script object AND a call action
-(M1 test 3, DESIGN §5.6).
+(DESIGN §5.6).
 
 `flash_lights` becomes a real HA script (fields derived from the signature,
 defaults -> field defaults) whose sequence references `param("times")` and
@@ -768,7 +770,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/macro_two_callers/`.
 
 ```python
-"""Golden case: one macro used by two automations (M1 test 2).
+"""Golden case: one macro used by two automations.
 
 Both automations' action lists must contain the macro's expansion.
 """
@@ -1828,8 +1830,8 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/template_helper_declarations/`.
 
 ```python
-"""Golden case: template-helper declarations (M10) for all four template
-domains. The owner's driving case is `template_number` (e.g.
+"""Golden case: template-helper declarations for all four template
+domains. The driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
 
 Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
@@ -1940,8 +1942,8 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/template_helper_declarations/`.
 
 ```python
-"""Golden case: template-helper declarations (M10) for all four template
-domains. The owner's driving case is `template_number` (e.g.
+"""Golden case: template-helper declarations for all four template
+domains. The driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
 
 Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
@@ -2052,8 +2054,8 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/template_helper_declarations/`.
 
 ```python
-"""Golden case: template-helper declarations (M10) for all four template
-domains. The owner's driving case is `template_number` (e.g.
+"""Golden case: template-helper declarations for all four template
+domains. The driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
 
 Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
@@ -2164,8 +2166,8 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/template_helper_declarations/`.
 
 ```python
-"""Golden case: template-helper declarations (M10) for all four template
-domains. The owner's driving case is `template_number` (e.g.
+"""Golden case: template-helper declarations for all four template
+domains. The driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
 
 Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
@@ -2276,7 +2278,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
-"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+"""Golden case: group-helper declarations for all twelve group flavors,
 covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
@@ -2291,9 +2293,9 @@ equal their default.
 
 Every `entities=` member below is a REAL entity id from
 `fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
-bundle's OWN nested group's entity -- the owner's own live example, §38.1:
-"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
-itself a group"), so this fixture is also exercised by
+bundle's OWN nested group's entity -- a real-world live example, §38.1:
+a `cover.entryway_top` group containing `cover.bay_window_top`,
+itself a group), so this fixture is also exercised by
 `test_registry_validate.py::test_no_false_positives_on_golden_corpus`
 (validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
 """
@@ -2315,7 +2317,7 @@ from hassle import (
 
 # Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
 # its produced entity (`cover.bay_window_top`) as a member -- a group whose
-# members are themselves a group, the owner's own live example (§38.1).
+# members are themselves a group, a real-world live example (§38.1).
 group_cover(
     name="Bay Window Top",
     entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
@@ -2479,7 +2481,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
-"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+"""Golden case: group-helper declarations for all twelve group flavors,
 covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
@@ -2494,9 +2496,9 @@ equal their default.
 
 Every `entities=` member below is a REAL entity id from
 `fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
-bundle's OWN nested group's entity -- the owner's own live example, §38.1:
-"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
-itself a group"), so this fixture is also exercised by
+bundle's OWN nested group's entity -- a real-world live example, §38.1:
+a `cover.entryway_top` group containing `cover.bay_window_top`,
+itself a group), so this fixture is also exercised by
 `test_registry_validate.py::test_no_false_positives_on_golden_corpus`
 (validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
 """
@@ -2518,7 +2520,7 @@ from hassle import (
 
 # Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
 # its produced entity (`cover.bay_window_top`) as a member -- a group whose
-# members are themselves a group, the owner's own live example (§38.1).
+# members are themselves a group, a real-world live example (§38.1).
 group_cover(
     name="Bay Window Top",
     entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
@@ -2682,7 +2684,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
-"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+"""Golden case: group-helper declarations for all twelve group flavors,
 covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
@@ -2697,9 +2699,9 @@ equal their default.
 
 Every `entities=` member below is a REAL entity id from
 `fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
-bundle's OWN nested group's entity -- the owner's own live example, §38.1:
-"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
-itself a group"), so this fixture is also exercised by
+bundle's OWN nested group's entity -- a real-world live example, §38.1:
+a `cover.entryway_top` group containing `cover.bay_window_top`,
+itself a group), so this fixture is also exercised by
 `test_registry_validate.py::test_no_false_positives_on_golden_corpus`
 (validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
 """
@@ -2721,7 +2723,7 @@ from hassle import (
 
 # Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
 # its produced entity (`cover.bay_window_top`) as a member -- a group whose
-# members are themselves a group, the owner's own live example (§38.1).
+# members are themselves a group, a real-world live example (§38.1).
 group_cover(
     name="Bay Window Top",
     entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
@@ -2885,7 +2887,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
-"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+"""Golden case: group-helper declarations for all twelve group flavors,
 covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
@@ -2900,9 +2902,9 @@ equal their default.
 
 Every `entities=` member below is a REAL entity id from
 `fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
-bundle's OWN nested group's entity -- the owner's own live example, §38.1:
-"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
-itself a group"), so this fixture is also exercised by
+bundle's OWN nested group's entity -- a real-world live example, §38.1:
+a `cover.entryway_top` group containing `cover.bay_window_top`,
+itself a group), so this fixture is also exercised by
 `test_registry_validate.py::test_no_false_positives_on_golden_corpus`
 (validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
 """
@@ -2924,7 +2926,7 @@ from hassle import (
 
 # Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
 # its produced entity (`cover.bay_window_top`) as a member -- a group whose
-# members are themselves a group, the owner's own live example (§38.1).
+# members are themselves a group, a real-world live example (§38.1).
 group_cover(
     name="Bay Window Top",
     entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
@@ -3088,7 +3090,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
-"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+"""Golden case: group-helper declarations for all twelve group flavors,
 covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
@@ -3103,9 +3105,9 @@ equal their default.
 
 Every `entities=` member below is a REAL entity id from
 `fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
-bundle's OWN nested group's entity -- the owner's own live example, §38.1:
-"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
-itself a group"), so this fixture is also exercised by
+bundle's OWN nested group's entity -- a real-world live example, §38.1:
+a `cover.entryway_top` group containing `cover.bay_window_top`,
+itself a group), so this fixture is also exercised by
 `test_registry_validate.py::test_no_false_positives_on_golden_corpus`
 (validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
 """
@@ -3127,7 +3129,7 @@ from hassle import (
 
 # Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
 # its produced entity (`cover.bay_window_top`) as a member -- a group whose
-# members are themselves a group, the owner's own live example (§38.1).
+# members are themselves a group, a real-world live example (§38.1).
 group_cover(
     name="Bay Window Top",
     entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
@@ -3291,7 +3293,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
-"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+"""Golden case: group-helper declarations for all twelve group flavors,
 covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
@@ -3306,9 +3308,9 @@ equal their default.
 
 Every `entities=` member below is a REAL entity id from
 `fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
-bundle's OWN nested group's entity -- the owner's own live example, §38.1:
-"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
-itself a group"), so this fixture is also exercised by
+bundle's OWN nested group's entity -- a real-world live example, §38.1:
+a `cover.entryway_top` group containing `cover.bay_window_top`,
+itself a group), so this fixture is also exercised by
 `test_registry_validate.py::test_no_false_positives_on_golden_corpus`
 (validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
 """
@@ -3330,7 +3332,7 @@ from hassle import (
 
 # Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
 # its produced entity (`cover.bay_window_top`) as a member -- a group whose
-# members are themselves a group, the owner's own live example (§38.1).
+# members are themselves a group, a real-world live example (§38.1).
 group_cover(
     name="Bay Window Top",
     entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
@@ -3494,7 +3496,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
-"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+"""Golden case: group-helper declarations for all twelve group flavors,
 covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
@@ -3509,9 +3511,9 @@ equal their default.
 
 Every `entities=` member below is a REAL entity id from
 `fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
-bundle's OWN nested group's entity -- the owner's own live example, §38.1:
-"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
-itself a group"), so this fixture is also exercised by
+bundle's OWN nested group's entity -- a real-world live example, §38.1:
+a `cover.entryway_top` group containing `cover.bay_window_top`,
+itself a group), so this fixture is also exercised by
 `test_registry_validate.py::test_no_false_positives_on_golden_corpus`
 (validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
 """
@@ -3533,7 +3535,7 @@ from hassle import (
 
 # Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
 # its produced entity (`cover.bay_window_top`) as a member -- a group whose
-# members are themselves a group, the owner's own live example (§38.1).
+# members are themselves a group, a real-world live example (§38.1).
 group_cover(
     name="Bay Window Top",
     entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
@@ -3697,7 +3699,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
-"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+"""Golden case: group-helper declarations for all twelve group flavors,
 covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
@@ -3712,9 +3714,9 @@ equal their default.
 
 Every `entities=` member below is a REAL entity id from
 `fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
-bundle's OWN nested group's entity -- the owner's own live example, §38.1:
-"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
-itself a group"), so this fixture is also exercised by
+bundle's OWN nested group's entity -- a real-world live example, §38.1:
+a `cover.entryway_top` group containing `cover.bay_window_top`,
+itself a group), so this fixture is also exercised by
 `test_registry_validate.py::test_no_false_positives_on_golden_corpus`
 (validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
 """
@@ -3736,7 +3738,7 @@ from hassle import (
 
 # Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
 # its produced entity (`cover.bay_window_top`) as a member -- a group whose
-# members are themselves a group, the owner's own live example (§38.1).
+# members are themselves a group, a real-world live example (§38.1).
 group_cover(
     name="Bay Window Top",
     entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
@@ -3900,7 +3902,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
-"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+"""Golden case: group-helper declarations for all twelve group flavors,
 covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
@@ -3915,9 +3917,9 @@ equal their default.
 
 Every `entities=` member below is a REAL entity id from
 `fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
-bundle's OWN nested group's entity -- the owner's own live example, §38.1:
-"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
-itself a group"), so this fixture is also exercised by
+bundle's OWN nested group's entity -- a real-world live example, §38.1:
+a `cover.entryway_top` group containing `cover.bay_window_top`,
+itself a group), so this fixture is also exercised by
 `test_registry_validate.py::test_no_false_positives_on_golden_corpus`
 (validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
 """
@@ -3939,7 +3941,7 @@ from hassle import (
 
 # Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
 # its produced entity (`cover.bay_window_top`) as a member -- a group whose
-# members are themselves a group, the owner's own live example (§38.1).
+# members are themselves a group, a real-world live example (§38.1).
 group_cover(
     name="Bay Window Top",
     entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
@@ -4103,7 +4105,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
-"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+"""Golden case: group-helper declarations for all twelve group flavors,
 covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
@@ -4118,9 +4120,9 @@ equal their default.
 
 Every `entities=` member below is a REAL entity id from
 `fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
-bundle's OWN nested group's entity -- the owner's own live example, §38.1:
-"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
-itself a group"), so this fixture is also exercised by
+bundle's OWN nested group's entity -- a real-world live example, §38.1:
+a `cover.entryway_top` group containing `cover.bay_window_top`,
+itself a group), so this fixture is also exercised by
 `test_registry_validate.py::test_no_false_positives_on_golden_corpus`
 (validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
 """
@@ -4142,7 +4144,7 @@ from hassle import (
 
 # Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
 # its produced entity (`cover.bay_window_top`) as a member -- a group whose
-# members are themselves a group, the owner's own live example (§38.1).
+# members are themselves a group, a real-world live example (§38.1).
 group_cover(
     name="Bay Window Top",
     entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
@@ -4306,7 +4308,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
-"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+"""Golden case: group-helper declarations for all twelve group flavors,
 covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
@@ -4321,9 +4323,9 @@ equal their default.
 
 Every `entities=` member below is a REAL entity id from
 `fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
-bundle's OWN nested group's entity -- the owner's own live example, §38.1:
-"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
-itself a group"), so this fixture is also exercised by
+bundle's OWN nested group's entity -- a real-world live example, §38.1:
+a `cover.entryway_top` group containing `cover.bay_window_top`,
+itself a group), so this fixture is also exercised by
 `test_registry_validate.py::test_no_false_positives_on_golden_corpus`
 (validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
 """
@@ -4345,7 +4347,7 @@ from hassle import (
 
 # Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
 # its produced entity (`cover.bay_window_top`) as a member -- a group whose
-# members are themselves a group, the owner's own live example (§38.1).
+# members are themselves a group, a real-world live example (§38.1).
 group_cover(
     name="Bay Window Top",
     entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
@@ -4509,7 +4511,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
-"""Golden case: group-helper declarations (M21) for all twelve group flavors,
+"""Golden case: group-helper declarations for all twelve group flavors,
 covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
@@ -4524,9 +4526,9 @@ equal their default.
 
 Every `entities=` member below is a REAL entity id from
 `fixtures/registry/home.json` (except `cover.bay_window_top`, which is this
-bundle's OWN nested group's entity -- the owner's own live example, §38.1:
-"the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
-itself a group"), so this fixture is also exercised by
+bundle's OWN nested group's entity -- a real-world live example, §38.1:
+a `cover.entryway_top` group containing `cover.bay_window_top`,
+itself a group), so this fixture is also exercised by
 `test_registry_validate.py::test_no_false_positives_on_golden_corpus`
 (validation-clean, no `_DELIBERATELY_NOT_CLEAN` escape hatch needed).
 """
@@ -4548,7 +4550,7 @@ from hassle import (
 
 # Nested: "Bay Window Top" is declared first so "Entryway Top" can reference
 # its produced entity (`cover.bay_window_top`) as a member -- a group whose
-# members are themselves a group, the owner's own live example (§38.1).
+# members are themselves a group, a real-world live example (§38.1).
 group_cover(
     name="Bay Window Top",
     entities=["cover.bedroom_blinds", "cover.living_room_blinds"],
@@ -4885,7 +4887,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/capture_emit_actions/`.
 
 ```python
-"""Golden case: `capture_actions()`/`emit_actions(...)` (task #30 public
+"""Golden case: `capture_actions()`/`emit_actions(...)` (the public
 capture seam) -- one captured action list spliced into two `choose()`
 branches inside a single automation.
 """
@@ -4903,8 +4905,8 @@ def doors_porch_light():
 
 """Shared capture/emit helper library (DESIGN §5.6-style `lib/` pattern).
 
-Demonstrates the public capture seam (task #30, `ux/capture-notify-recipe`):
-a `lib/` builder captures one block of actions once with `capture_actions()`
+Demonstrates the public capture seam: a `lib/` builder captures one block
+of actions once with `capture_actions()`
 and splices the SAME captured bodies into more than one place with
 `emit_actions(...)` -- here, a single "turn off the porch light" action
 reused across two `choose()` branches keyed on which door opened.
@@ -4988,7 +4990,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/capture_emit_actions/`.
 
 ```python
-"""Golden case: `capture_actions()`/`emit_actions(...)` (task #30 public
+"""Golden case: `capture_actions()`/`emit_actions(...)` (the public
 capture seam) -- one captured action list spliced into two `choose()`
 branches inside a single automation.
 """
@@ -5006,8 +5008,8 @@ def doors_porch_light():
 
 """Shared capture/emit helper library (DESIGN §5.6-style `lib/` pattern).
 
-Demonstrates the public capture seam (task #30, `ux/capture-notify-recipe`):
-a `lib/` builder captures one block of actions once with `capture_actions()`
+Demonstrates the public capture seam: a `lib/` builder captures one block
+of actions once with `capture_actions()`
 and splices the SAME captured bodies into more than one place with
 `emit_actions(...)` -- here, a single "turn off the porch light" action
 reused across two `choose()` branches keyed on which door opened.
@@ -6677,7 +6679,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/purpose_trigger_area_first/`.
 
 ```python
-"""Golden case: purpose-specific trigger, area target, behavior=first (M1 test 10).
+"""Golden case: purpose-specific trigger, area target, behavior=first.
 
 Mirrors fixtures/configs/automation_purpose_trigger_area_behavior_first.json.
 """
@@ -6725,7 +6727,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/purpose_condition/`.
 
 ```python
-"""Golden case: classic state trigger + purpose-specific condition (M1 test 10).
+"""Golden case: classic state trigger + purpose-specific condition.
 
 Mirrors fixtures/configs/automation_purpose_condition.json.
 """
@@ -6779,7 +6781,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/purpose_trigger_area_first/`.
 
 ```python
-"""Golden case: purpose-specific trigger, area target, behavior=first (M1 test 10).
+"""Golden case: purpose-specific trigger, area target, behavior=first.
 
 Mirrors fixtures/configs/automation_purpose_trigger_area_behavior_first.json.
 """
@@ -6827,7 +6829,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/purpose_trigger_floor_each/`.
 
 ```python
-"""Golden case: purpose-specific trigger, floor target, behavior=each (M1 test 10).
+"""Golden case: purpose-specific trigger, floor target, behavior=each.
 
 Mirrors fixtures/configs/automation_purpose_trigger_floor_device.json (first
 trigger only; the device-target trigger is covered by purpose_trigger_device).
@@ -6876,7 +6878,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/purpose_trigger_label_all/`.
 
 ```python
-"""Golden case: purpose-specific trigger, label target, behavior=all (M1 test 10).
+"""Golden case: purpose-specific trigger, label target, behavior=all.
 
 Mirrors fixtures/configs/automation_purpose_trigger_label_behavior_all.json.
 """
@@ -6924,7 +6926,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/purpose_trigger_device/`.
 
 ```python
-"""Golden case: purpose-specific trigger, device_id target (M1 test 10).
+"""Golden case: purpose-specific trigger, device_id target.
 
 Mirrors the second trigger of
 fixtures/configs/automation_purpose_trigger_floor_device.json.
@@ -7185,7 +7187,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/template_expr_golden/`.
 
 ```python
-"""Golden case: the template expression builder (DESIGN §5.4, M1 test 4).
+"""Golden case: the template expression builder (DESIGN §5.4).
 
 Exercises: `state(x).value` numeric coercion, comparisons/arithmetic/boolean ops
 building nested Jinja, `expr(entity_ref)` shorthand, and `template("{{ raw }}")`
@@ -7257,7 +7259,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/state_of_string_golden/`.
 
 ```python
-"""Golden case: `state_of(...)` string-state vocabulary (M16, DESIGN §5.4
+"""Golden case: `state_of(...)` string-state vocabulary (DESIGN §5.4
 extension). Exercises: bare string read, `.eq()`/`.ne()` string comparisons,
 `.in_([...])` membership, boolean composition (`&`/`|`/`~`), and both
 accepted argument shapes -- a plain entity id string and an `e.`-registry
@@ -7333,7 +7335,7 @@ Golden case: `fixtures/dsl/shared_script_call/`.
 
 ```python
 """Golden case: @shared_script compiles to a script object AND a call action
-(M1 test 3, DESIGN §5.6).
+(DESIGN §5.6).
 
 `flash_lights` becomes a real HA script (fields derived from the signature,
 defaults -> field defaults) whose sequence references `param("times")` and
@@ -7421,7 +7423,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/shared_script_field_default_typed/`.
 
 ```python
-"""Golden case (M19, owner-directed typing resolution): `field_default(...)`
+"""Golden case: `field_default(...)`
 is the typed-default helper for a `@shared_script` signature parameter
 annotated `TemplateExpr` -- the BODY-TRUE type (every field-named parameter
 is a runtime template marker inside the body, never its declared Python
@@ -7432,8 +7434,8 @@ is TYPED as returning `TemplateExpr`, so the parameter's own default
 expression type-checks against its `TemplateExpr` annotation without the
 self-inconsistent `tag: TemplateExpr = ""` a bare literal default would be.
 
-Caller-side typing is unaffected either way (verified empirically,
-MILESTONES M19 typing investigation): a caller passing a plain literal
+Caller-side typing is unaffected either way (verified empirically): a
+caller passing a plain literal
 (`dismiss_tagged_notification(tag="guest_reminder")`) is unaffected by
 whatever this signature's own annotations say -- `@shared_script`'s returned
 caller wrapper is `(*args: Any, **kwargs: Any) -> None`, fully decoupled.
@@ -7508,13 +7510,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -7618,7 +7620,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/shade_tracks_sun/`.
 
 ```python
-"""Golden case: `shade_tracks_sun` (MILESTONES M1.1 test 4).
+"""Golden case: `shade_tracks_sun`.
 
 Mirrors fixtures/configs/automation_math_shade_sun.json byte-for-byte in its
 compiled `data.position` template -- this pins the math builder's exact
@@ -7684,13 +7686,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -7794,13 +7796,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -7904,13 +7906,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -8014,13 +8016,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -8124,13 +8126,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -8234,13 +8236,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -8344,13 +8346,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -8454,7 +8456,7 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/shade_tracks_sun/`.
 
 ```python
-"""Golden case: `shade_tracks_sun` (MILESTONES M1.1 test 4).
+"""Golden case: `shade_tracks_sun`.
 
 Mirrors fixtures/configs/automation_math_shade_sun.json byte-for-byte in its
 compiled `data.position` template -- this pins the math builder's exact
@@ -8520,13 +8522,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -8630,13 +8632,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -8740,13 +8742,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -8850,13 +8852,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -8960,13 +8962,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -9070,13 +9072,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -9180,13 +9182,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -9290,13 +9292,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -9400,13 +9402,13 @@ Compiles to (canonical IR / stored HA shape):
 Golden case: `fixtures/dsl/math_expr_reference/`.
 
 ```python
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
@@ -10464,11 +10466,11 @@ Raised when a Python `if`/`bool()` is used on a runtime state expression (DESIGN
 
 ### `ConditionArgumentTypeError`
 
-Raised when a condition-accepting entry point (`only_if`, `if_then`, `else_if`, `choose().when_`, `repeat_while`, `repeat_until`, `any_of`/`all_of`/`not_`) receives a plain Python `bool` instead of a condition-builder object (M20) -- almost always the classic `==`/`!=`-on-a-plain-value mistake. Fix: build a real condition, e.g. `entity.state == "on"` or `state(entity_id).is_("on")`, and pass that instead.
+Raised when a condition-accepting entry point (`only_if`, `if_then`, `else_if`, `choose().when_`, `repeat_while`, `repeat_until`, `any_of`/`all_of`/`not_`) receives a plain Python `bool` instead of a condition-builder object -- almost always the classic `==`/`!=`-on-a-plain-value mistake. Fix: build a real condition, e.g. `entity.state == "on"` or `state(entity_id).is_("on")`, and pass that instead.
 
 ### `DanglingTemplateHelperDeclarationError`
 
-Raised when `template_number`/`template_sensor`/`template_binary_sensor`/`template_select` is called with no `state=` (the M13 decorator-form signal) but is never applied as a decorator over a function -- the call builds and registers nothing, so without this check it would compile clean with the object silently absent. Fix: either add `state=...` to make it a direct call-form declaration, or apply the call as `@template_number(...)` (etc.) over a zero-arg function that `return`s the state expression.
+Raised when `template_number`/`template_sensor`/`template_binary_sensor`/`template_select` is called with no `state=` (the decorator-form signal) but is never applied as a decorator over a function -- the call builds and registers nothing, so without this check it would compile clean with the object silently absent. Fix: either add `state=...` to make it a direct call-form declaration, or apply the call as `@template_number(...)` (etc.) over a zero-arg function that `return`s the state expression.
 
 ### `ElseWithoutIfError`
 
@@ -10476,11 +10478,11 @@ Raised when `template_number`/`template_sensor`/`template_binary_sensor`/`templa
 
 ### `InOperatorTrapError`
 
-Raised by `entity.state in [...]` (M20, entity-first conditions). Python's `in` always calls `bool()` on each element comparison to decide membership -- no overload can intercept this, so the natural `in` spelling can never build a real condition. Fix: use `entity.state.in_([...])` instead, which builds a real `state` condition with list (OR) membership.
+Raised by `entity.state in [...]` (entity-first conditions). Python's `in` always calls `bool()` on each element comparison to decide membership -- no overload can intercept this, so the natural `in` spelling can never build a real condition. Fix: use `entity.state.in_([...])` instead, which builds a real `state` condition with list (OR) membership.
 
 ### `InclusiveNumericBoundError`
 
-Raised by `entity.state >= v` / `entity.state <= v` (M20, entity-first conditions). Home Assistant's `numeric_state` condition only supports EXCLUSIVE bounds (`above`/`below`) -- there is no inclusive form to map `>=`/`<=` onto, so compiling one would silently produce a condition that is wrong right at the boundary value. Fix: use the exclusive `>`/`<` operator instead (the exact boundary value is excluded), or pick a value safely past it.
+Raised by `entity.state >= v` / `entity.state <= v` (entity-first conditions). Home Assistant's `numeric_state` condition only supports EXCLUSIVE bounds (`above`/`below`) -- there is no inclusive form to map `>=`/`<=` onto, so compiling one would silently produce a condition that is wrong right at the boundary value. Fix: use the exclusive `>`/`<` operator instead (the exact boundary value is excluded), or pick a value safely past it.
 
 ### `NoParamContextError`
 
@@ -10496,11 +10498,11 @@ Python's stdlib `math.*` (or a bare `float()`/`int()`) called on a runtime `Temp
 
 ### `SharedScriptParamMisuseError`
 
-Python control flow/numeric coercion (`if`/`bool()`/`range()`/`int()`/`float()`/`round()`/`math.trunc()`) used on a `@shared_script` signature parameter (MILESTONES M19: every field-named parameter is bound to its runtime `param(name)` marker when the body runs, regardless of its declared default). Fix: for a runtime count/value, use a runtime construct HA itself supports, e.g. `with repeat_count(times):` (accepts the marker directly, honoring whatever the caller passes); for a genuinely compile-time value, it was never a real HA field -- use a module-level constant or a `@macro` argument instead.
+Python control flow/numeric coercion (`if`/`bool()`/`range()`/`int()`/`float()`/`round()`/`math.trunc()`) used on a `@shared_script` signature parameter (every field-named parameter is bound to its runtime `param(name)` marker when the body runs, regardless of its declared default). Fix: for a runtime count/value, use a runtime construct HA itself supports, e.g. `with repeat_count(times):` (accepts the marker directly, honoring whatever the caller passes); for a genuinely compile-time value, it was never a real HA field -- use a module-level constant or a `@macro` argument instead.
 
 ### `TemplateHelperDecoratorBodyError`
 
-Raised when a `@template_number`/`@template_sensor`/`@template_binary_sensor`/`@template_select` decorator (M13) is applied to a function that doesn't fit the decorator-form contract: it must take zero parameters and `return` a `TemplateExpr`/`str` -- no declared parameters, no recording-verb calls (`service`/`when`/`only_if`/...), no other return type. Fix: remove the parameters, return a template expression built from the `hassle.compiler.templates`/`hassle.compiler.math_expr` surface (or a plain Jinja string), and do nothing else in the function body.
+Raised when a `@template_number`/`@template_sensor`/`@template_binary_sensor`/`@template_select` decorator is applied to a function that doesn't fit the decorator-form contract: it must take zero parameters and `return` a `TemplateExpr`/`str` -- no declared parameters, no recording-verb calls (`service`/`when`/`only_if`/...), no other return type. Fix: remove the parameters, return a template expression built from the `hassle.compiler.templates`/`hassle.compiler.math_expr` surface (or a plain Jinja string), and do nothing else in the function body.
 
 ### `UnknownFieldError`
 

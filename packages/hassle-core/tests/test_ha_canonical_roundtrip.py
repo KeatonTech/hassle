@@ -1,6 +1,6 @@
-"""M2 — the STRICT zero-transformation round-trip on already-HA-canonical input.
+"""The STRICT zero-transformation round-trip on already-HA-canonical input.
 
-``test_roundtrip_corpus.py`` proves the round-trip invariant (I3) holds over
+``test_roundtrip_corpus.py`` proves compile(decompile(x)) == x holds over
 the *whole* corpus, but most of that corpus is legacy-form (docs/ha-api-notes.md
 §15) and its expectation applies documented, narrow modernizations (id
 synthesis, `setdefault` for empty blocks, `platform:`->`trigger:`, scalar-delay

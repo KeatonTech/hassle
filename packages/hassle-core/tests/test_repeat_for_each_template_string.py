@@ -1,5 +1,4 @@
-"""``ux/dsl-ergonomics``, item 4 -- the `for_each` template-string bug (owner field bug,
-`scripts/misc.py`).
+"""The `for_each` template-string bug.
 
 HA's `repeat.for_each` may be stored as a Jinja template STRING that renders to a list at
 runtime, not just a literal list. `repeat_for_each()`'s `list(items)` call silently exploded a
@@ -87,9 +86,9 @@ def test_decompiler_emits_repeat_for_each_string_call() -> None:
 
 
 def test_repeat_for_each_string_roundtrips_byte_identical(tmp_path) -> None:
-    """Full round-trip (I3): decompile -> recompile of a template-string
-    `for_each` must be canonical-hash-identical to the original -- the exact
-    invariant that silently failed before this fix."""
+    """Full round-trip (compile(decompile(x)) == x): decompile -> recompile
+    of a template-string `for_each` must be canonical-hash-identical to the
+    original -- the exact invariant that silently failed before this fix."""
     config = {
         "id": "a1",
         "alias": "A1",

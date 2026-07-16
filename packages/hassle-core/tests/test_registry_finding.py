@@ -1,7 +1,7 @@
-"""M3: the `Finding` model (severity, file:line, message, fix) — DESIGN §9.
+"""The `Finding` model (severity, file:line, message, fix) — DESIGN §9.
 
-Findings are the validator's product surface (R6): every Finding renders as one
-what/where/fix paragraph, same rubric as compile errors (`tests/snapshots/errors/`),
+Findings are the validator's product surface: every Finding states what/where/fix in
+one paragraph, same rubric as compile errors (`tests/snapshots/errors/`),
 snapshot-tested under `tests/snapshots/findings/`.
 """
 

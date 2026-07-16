@@ -1,11 +1,11 @@
-"""M1 test 5 (core subset) — trap-catching + compile error snapshots (R6).
+"""Trap-catching + compile error snapshots.
 
 Error messages are product surface: each states *what*, *where* (file:line), and
 *the fix*, in one paragraph, and is snapshot-tested. Snapshots live under
 ``tests/snapshots/errors/`` and change only with a visible diff.
 
-Covered here (the M1-core subset — the full trap family incl. the `raw_automation`
-non-JSON case belongs to the templates/actions workstreams):
+Covered here (the core-compiler subset — the full trap family incl. the
+`raw_automation` non-JSON case belongs to the templates/actions builders):
   - `CompileTimeBranchError` from `__bool__` on a state/condition expression,
     naming file:line and showing the `with if_then(...)` rewrite hint.
   - duplicate id across a bundle.

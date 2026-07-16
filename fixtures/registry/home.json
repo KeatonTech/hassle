@@ -2878,7 +2878,7 @@
     }
   },
   "purpose_vocabulary": {
-    "_comment": "Enumerated purpose-specific trigger/condition types (HA 2026.7+). Shape provisional \u2014 M6 will capture the real WS API enumeration (MILESTONES M6 test 8). Contains all types used by M0.1 fixtures plus realistic extensions.",
+    "_comment": "Enumerated purpose-specific trigger/condition types (HA 2026.7+). Shape provisional \u2014 pending capture of the real WS API enumeration. Contains all types used by the corpus's purpose-vocabulary fixtures plus realistic extensions.",
     "triggers": [
       "motion.detected",
       "motion.cleared",

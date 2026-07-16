@@ -1,7 +1,7 @@
-"""M4 test 7 (I5): the simulator consumes compiled IR/HA-JSON only.
+"""The simulator consumes compiled IR/HA-JSON only, not DSL Python.
 
 Proof: run a corpus JSON automation that never existed as DSL Python at all --
-loaded straight from `fixtures/configs/`, parsed through the M0 IR
+loaded straight from `fixtures/configs/`, parsed through the IR
 (`hassle.ir.parse` + `normalize_ha`), and handed to the simulator as a
 `CompileResult`-shaped bundle built by hand (never touching `compile_bundle`,
 never importing a bundle directory, no DSL Python anywhere in this file).
@@ -45,8 +45,9 @@ def test_sim_runs_corpus_json_that_never_existed_as_dsl() -> None:
 def test_sim_input_is_ir_objects_not_dsl_source() -> None:
     """The `Simulator` constructor never receives a bundle directory, a
     module, or any Python source -- only the `CompileResult` produced from
-    parsed IR. This is the structural half of the I5 proof (the behavioral
-    half is the test above actually firing the automation)."""
+    parsed IR. This is the structural half of the proof that the simulator
+    executes compiled IR, not DSL Python (the behavioral half is the test
+    above actually firing the automation)."""
     result = _corpus_result()
     # This fixture is legacy-authored (`platform:`, not `trigger:` -- see
     # docs/ha-api-notes.md: normalize_ha rewrites the outer `trigger`->

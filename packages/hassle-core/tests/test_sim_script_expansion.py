@@ -1,10 +1,10 @@
-"""Simulator script-call expansion (owner request, task #35).
+"""Simulator script-call expansion.
 
 A direct ``script.<slug>`` service call in real HA runs the callee script and
 BLOCKS the caller until it finishes -- including when the callee's
 ``wait_for_trigger`` times out. The simulator previously recorded such calls
 as opaque service calls only (documented v1 scope, cookbook test 8), which
-made the owner's actual field bug -- "the notification timed out after 12h and
+made a real field bug -- "the notification timed out after 12h and
 the automation advanced the day phase as if I'd tapped the button" --
 inexpressible in a test. These tests pin the expanded semantics:
 
@@ -100,10 +100,10 @@ def test_templated_event_data_filter_matches_by_rendered_value(tmp_path: Path) -
 
 
 def test_callee_wait_timeout_releases_the_caller(tmp_path: Path) -> None:
-    """The HA-faithful semantics behind the owner's field bug: the callee's
-    wait times out (`continue_on_timeout` defaults true), the callee finishes
-    normally, and the CALLER's follow-up steps run -- exactly as if the
-    button had been tapped. Guarding against this is bundle logic
+    """The HA-faithful semantics behind the field bug this module documents:
+    the callee's wait times out (`continue_on_timeout` defaults true), the
+    callee finishes normally, and the CALLER's follow-up steps run -- exactly
+    as if the button had been tapped. Guarding against this is bundle logic
     (`stop(error=True)` on the timeout path), not simulator magic."""
     sim = build_sim(tmp_path, _WAITING_SCRIPT)
     sim.state_change("button.go", "off", "on")
@@ -242,8 +242,8 @@ def test_field_defaults_seed_callee_variables_when_omitted(tmp_path: Path) -> No
 
 
 def test_time_trigger_at_entity_resolves_the_entitys_state(tmp_path: Path) -> None:
-    """HA `time` triggers accept `at: <input_datetime/sensor entity>` (the
-    owner's guest-room wakeup automation). The simulator crashed trying to
+    """HA `time` triggers accept `at: <input_datetime/sensor entity>` (e.g. a
+    guest-room wakeup automation). The simulator crashed trying to
     parse the entity id as HH:MM; it must resolve the entity's state as the
     trigger time instead, and treat an unset/unparseable state as
     never-firing rather than erroring."""
@@ -272,9 +272,9 @@ def test_time_trigger_at_entity_resolves_the_entitys_state(tmp_path: Path) -> No
 
 def test_state_condition_with_list_of_states_matches_any(tmp_path: Path) -> None:
     """HA state conditions accept `state: [a, b]` (match any) -- exactly what
-    M20's `.state.in_([...])` and `state(x).is_([...])` compile to. The
+    `.state.in_([...])` and `state(x).is_([...])` compile to. The
     evaluator compared the current state to the LIST itself, silently false
-    forever (owner field report, task #35)."""
+    forever."""
     sim = build_sim(
         tmp_path,
         """
@@ -299,7 +299,7 @@ def test_state_condition_with_list_of_states_matches_any(tmp_path: Path) -> None
 def test_parallel_branch_error_stop_fails_the_step_and_plain_stop_stays_isolated(
     tmp_path: Path,
 ) -> None:
-    """PR #27 review finding: `parallel` shares the run ctx and discarded
+    """`parallel` shares the run ctx and discarded
     branch results, so (a) an error-stop in a branch never failed the caller
     (real HA fails the parallel step) and (b) the sticky flag could turn a
     later PLAIN stop into a spurious error abort."""
@@ -347,8 +347,8 @@ def test_parallel_branch_error_stop_fails_the_step_and_plain_stop_stays_isolated
 
 
 def test_recursion_error_message_has_what_where_fix() -> None:
-    """R6: the error surface is product surface -- pin the full wording, not
-    just a substring (PR #27 review finding)."""
+    """The error surface (what/where/fix) is product surface -- pin the full
+    wording, not just a substring."""
     from hassle.testing.errors import ScriptRecursionError
 
     message = str(ScriptRecursionError("ping", 10))
@@ -364,8 +364,7 @@ def test_recursion_error_message_has_what_where_fix() -> None:
 def test_state_trigger_with_list_from_to_filters_matches_any(tmp_path: Path) -> None:
     """Decompiled state triggers carry LIST from/to filters
     (`state([x]).is_(["off"]).to(["on"])`); the matcher compared the state
-    string to the list itself, so such automations never fired at all
-    (owner field report, task #35)."""
+    string to the list itself, so such automations never fired at all."""
     sim = build_sim(
         tmp_path,
         """

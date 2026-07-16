@@ -1,6 +1,6 @@
-"""M9 test 1: `docs/DSL.md` is generated from the M1 golden cases under
-``fixtures/dsl/`` and can never drift from reality -- the build fails if any
-name in ``hassle.__all__`` lacks a documented DSL<->compiled-YAML pair (or an
+"""`docs/DSL.md` is generated from the golden cases under ``fixtures/dsl/``
+and can never drift from reality -- the build fails if any name in
+``hassle.__all__`` lacks a documented DSL<->compiled-YAML pair (or an
 explicit, documented exemption).
 
 See ``hassle.docs.dsl_reference`` for the generator and

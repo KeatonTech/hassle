@@ -1,6 +1,5 @@
-"""M8 test 1 (milestone text: "Layer-1 proof (already in M3 CI, extend): fresh
-pulled bundle opened cold -> pyright finds a seeded entity typo with zero
-configuration").
+"""A fresh pulled bundle opened cold -> pyright finds a seeded entity typo
+with zero configuration.
 
 `test_registry_stubs_pyright.py` proves the *mechanism* works (a hand-built
 `typings/hassle/registry/__init__.pyi` + hand-built `pyrightconfig.json`).

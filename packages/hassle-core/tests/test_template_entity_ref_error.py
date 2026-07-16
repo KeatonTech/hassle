@@ -1,8 +1,8 @@
-"""M9 error-message audit finding: `expr()`/`state(...).value`'s entity-ref
+"""`expr()`/`state(...).value`'s entity-ref
 coercion previously raised a bare `TypeError` with no file:line (one variant
 had a fix hint, the other didn't) -- reachable from ordinary bundle
 authoring (`expr(state(["a", "b"]))` / `expr(123)`). Fixed by
-`TemplateEntityRefError` (what/where/fix, snapshot-tested per R6).
+`TemplateEntityRefError` (what/where/fix, snapshot-tested).
 """
 
 from __future__ import annotations

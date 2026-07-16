@@ -1,4 +1,4 @@
-"""M3 core validator tests (milestone items 1, 2, 2b, 3, 4) — DESIGN §9 tiers 1-3.
+"""Core validator tests — DESIGN §9 tiers 1-3.
 
 `validate_bundle(compile_result, snapshot)` returns `list[Finding]`, all offline
 against `fixtures/registry/home.json`. No network.
@@ -125,11 +125,11 @@ def a():
     assert not any("light.hallway" in f.message for f in findings if f.code == "unknown-entity")
 
 
-# --- reviewer B1: unknown entities inside nested control-flow containers ---
+# --- unknown entities inside nested control-flow containers ----------------
 # extraction reaching nested positions is necessary but validation must also
 # actually surface a Finding for an unknown entity buried inside if/choose/
 # repeat/parallel/wait_for_trigger -- a three-position probe (if_then body,
-# repeat_count body, parallel body) that the reviewer found silently missed.
+# repeat_count body, parallel body) that was previously silently missed.
 
 
 def test_unknown_entity_inside_if_then_body(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
@@ -312,9 +312,9 @@ def a():
     )
 
 
-# --- coordinator fix-forward: template-valued target strings must still be
-# scanned for embedded Jinja entity refs, not just exempted from literal-id
-# validation. `_is_template_string` correctly stops a placeholder like
+# --- template-valued target strings must still be scanned for embedded
+# Jinja entity refs, not just exempted from literal-id validation.
+# `_is_template_string` correctly stops a placeholder like
 # `{{ repeat.item }}` from being treated as a literal id, but a template
 # string that actually calls `states(...)` (e.g. inside a `target:` block)
 # must still reach `_extract_entity_ids_from_jinja` -- the same scan `data`/
@@ -619,10 +619,10 @@ def a():
     assert bad.line == 6
 
 
-# --- false-positive audit against the existing M0/M1/M2 golden corpus ------
+# --- false-positive audit against the existing golden corpus ---------------
 
 # `purpose_trigger_renamed_key` is deliberately NOT clean: it exists to exercise
-# the renamed-purpose-type Finding (M1's own docstring says as much, and
+# the renamed-purpose-type Finding (and
 # `test_renamed_purpose_key_finding_names_new_key` above asserts the Finding
 # appears) — excluding it here is a test-scope fix, not a validation weakening.
 _DELIBERATELY_NOT_CLEAN = {"purpose_trigger_renamed_key"}
@@ -649,7 +649,7 @@ def test_core_non_registry_entities_are_never_unknown(tmp_path: Path) -> None:
     """`sun.sun` exists in every HA instance but never appears in the entity
     REGISTRY (it predates the registry), so the registry snapshot can't
     contain it -- referencing it must not be an unknown-entity finding
-    (owner field report: a template reading state_attr('sun.sun',
+    (regression: a template reading state_attr('sun.sun',
     'elevation') failed validate on a real bundle)."""
     from hassle.registry.validate import _check_entity
 
@@ -666,7 +666,7 @@ def test_core_non_registry_entities_are_never_unknown(tmp_path: Path) -> None:
 def test_sun_template_validates_end_to_end(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
     """The exact field shape that failed: a condition template reading
     state_attr('sun.sun', 'elevation'), through the full compile -> template
-    extraction -> validate path (reviewer hardening on PR #28)."""
+    extraction -> validate path."""
     bundle = _write_bundle(
         tmp_path,
         """
@@ -690,8 +690,8 @@ def test_template_helper_entities_count_as_declared(
     """A template helper declared in THIS bundle produces a real entity
     (template_binary_sensor:x -> binary_sensor.x) that other templates --
     including self-referential hysteresis templates -- may reference before
-    the first push ever creates it (owner field case: presence-fusion
-    binary referencing itself for hysteresis)."""
+    the first push ever creates it (e.g. a presence-fusion binary sensor
+    referencing itself for hysteresis)."""
     bundle = _write_bundle(
         tmp_path,
         """
@@ -714,7 +714,7 @@ def a():
 
 
 def test_template_entity_domain_map_covers_every_template_domain() -> None:
-    """Drift guard (PR #32 review): a new template domain added to
+    """Drift guard: a new template domain added to
     TEMPLATE_DOMAINS without a _TEMPLATE_ENTITY_DOMAIN entry silently
     reintroduces the unknown-entity-before-first-push bug for that domain."""
     from hassle.ir.keys import TEMPLATE_DOMAINS

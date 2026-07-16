@@ -1,7 +1,6 @@
-"""M3: the known pre-2026.7 purpose-vocabulary renames table (DESIGN §4 quirks).
+"""The known pre-2026.7 purpose-vocabulary renames table (DESIGN §4 quirks).
 
-Kept as DATA (a dict), not scattered logic, per the milestone brief. Exact table
-from MILESTONES M3 test 2b.
+Kept as DATA (a dict), not scattered logic.
 """
 
 from __future__ import annotations
@@ -31,7 +30,7 @@ def test_renames_table_exact_entries() -> None:
 
 
 def test_every_rename_target_is_in_the_fixture_vocabulary() -> None:
-    """(reviewer N1) A user migrating `battery.low` -> `battery.became_low` (etc.)
+    """A user migrating `battery.low` -> `battery.became_low` (etc.)
     must land on a key the registry snapshot actually recognizes -- otherwise
     fixing the rename just trades one Finding (`renamed-purpose-type`) for
     another (`unknown-purpose-type`). Every RHS of `PURPOSE_RENAMES` must be

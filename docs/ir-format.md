@@ -3,7 +3,7 @@
 This is the frozen contract every downstream workstream (M1–M5) builds against.
 Per R5, changing anything here requires updating MILESTONES.md in the same PR.
 
-> **Module path renamed 2026-07-03 (owner decision):** `hassle_core.ir` is now
+> **Module path renamed 2026-07-03 (design decision):** `hassle_core.ir` is now
 > `hassle.ir` — the `hassle-core` distribution collapsed its two top-level
 > import packages (`hassle_core` + `hassle`) into one (`hassle`). This is a
 > pure rename; the frozen contract below is otherwise identical.

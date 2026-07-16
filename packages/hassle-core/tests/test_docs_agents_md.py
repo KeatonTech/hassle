@@ -1,4 +1,4 @@
-"""AGENTS.md generator (DESIGN §12, MILESTONES M9 deliverable 1).
+"""AGENTS.md generator (DESIGN §12).
 
 `generate_agents_md` produces the bundle-specific agent contract: the
 edit -> validate -> test -> plan workflow, hard rules (never change `id=`,
@@ -84,9 +84,9 @@ def test_points_into_docs_dir() -> None:
 
 
 def test_contains_toolchain_note() -> None:
-    """Polish-batch item 2: a short note on how the `hassle` CLI itself gets
-    onto PATH -- either a pre-PyPI `uv tool install -e` of the CLI package,
-    or (once M17 lands) the bundle's own uv project."""
+    """A short note on how the `hassle` CLI itself gets onto PATH -- either a
+    pre-PyPI `uv tool install -e` of the CLI package, or (once packaging
+    support lands) the bundle's own uv project."""
     text = generate_agents_md(bundle_name="my-home")
     assert "## Toolchain" in text
     lowered = text.lower()

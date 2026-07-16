@@ -1,14 +1,12 @@
-"""M1 INTEGRATION — the public DSL surface after the three workstreams merge.
-
-These tests lock in the integration decisions the merge forced (regression tests
-per R4, since each is a bug the merge surfaced):
+"""Integration tests for the public DSL surface: name collisions and API
+smoothing decisions that are regression tests because each was once a real bug.
 
 - The ``event`` name is the *trigger* builder (DESIGN §5.4). The fire-event
   *action* is a distinct name ``fire_event`` — the two must not collide.
 - The ``template`` name is a *single* builder usable both as a value (raw Jinja,
   DESIGN §5.4 "Raw Jinja is always available") and, inside ``when``/``only_if``,
   as a template trigger/condition. One name, one object.
-- API smoothing (pre-F3): ``state()`` absorbs the trigger options that lived in
+- API smoothing: ``state()`` absorbs the trigger options that lived in
   the ``with_trigger_options`` wrapper; ``service()`` absorbs
   ``response_variable`` / ``continue_on_error`` (no second way to do one thing).
 - ``StateExpr`` exposes a public ``entity_id`` accessor (no private-attr reach).

@@ -1,8 +1,7 @@
-"""Golden case: `@shared_script(fields=...)` carries full HA field metadata
-(`ux/shared-script-rich-fields`, owner feedback: real HA-UI-authored scripts
-carry `selector`/`name`/`description` on every field, mirroring
-`call_to_action_notification`'s shape -- title/message/action_button/
-action_button_icon/tag text selectors).
+"""Golden case: `@shared_script(fields=...)` carries full HA field metadata:
+real HA-UI-authored scripts carry `selector`/`name`/`description` on every
+field, mirroring `call_to_action_notification`'s shape -- title/message/
+action_button/action_button_icon/tag text selectors.
 
 `fields=` wins over the signature-derived defaults (byte-stability by
 construction): the stored `ScriptConfig.fields` is exactly this dict,

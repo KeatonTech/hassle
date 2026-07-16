@@ -1,11 +1,10 @@
-"""M9 error-message audit finding: `normalize_duration` (a `for_=` value that
-is neither a timedelta, an `HH:MM:SS` string, nor a units dict) previously
-raised a bare `ValueError`/`TypeError` with no file:line and no "Fix:" text
--- reachable from ordinary bundle authoring (e.g. `state(x).to("on",
-for_="5 minutes")`, a natural but wrong format), so it fails R6. Fixed by
-`InvalidDurationError` (what/where/fix, snapshot-tested per R6), raised by
-every trigger/condition/purpose builder that calls `normalize_duration` with
-a real call-site span.
+"""`normalize_duration` (a `for_=` value that is neither a timedelta, an
+`HH:MM:SS` string, nor a units dict) previously raised a bare
+`ValueError`/`TypeError` with no file:line and no "Fix:" text -- reachable
+from ordinary bundle authoring (e.g. `state(x).to("on", for_="5 minutes")`,
+a natural but wrong format). Fixed by `InvalidDurationError` (what/where/fix,
+snapshot-tested), raised by every trigger/condition/purpose builder that
+calls `normalize_duration` with a real call-site span.
 """
 
 from __future__ import annotations

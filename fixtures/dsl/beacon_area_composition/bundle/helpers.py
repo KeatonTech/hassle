@@ -1,8 +1,7 @@
-"""Golden case: `state_of(...)` string-state vocabulary (M16, DESIGN §5.4
-extension) composed through a plain custom function -- the owner's driving
-case (MILESTONES M16 test 2): a helper function returning a `state_of(...)
-.eq(...)` expression, composed with `|` across two sensors, used as a
-`@template_binary_sensor` body.
+"""Golden case: `state_of(...)` string-state vocabulary (DESIGN §5.4
+extension) composed through a plain custom function: a helper function
+returning a `state_of(...).eq(...)` expression, composed with `|` across two
+sensors, used as a `@template_binary_sensor` body.
 """
 
 from hassle import state_of, template_binary_sensor

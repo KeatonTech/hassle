@@ -1,4 +1,4 @@
-"""M4 test 6: template subset goldens + test_unsupported_template_raises.
+"""Template subset goldens + test_unsupported_template_raises.
 
 The simulator's Jinja environment must register HA's extension functions
 (`states`, `is_state`, `state_attr`, `now`, `today_at`, `as_timestamp`, `iif`,
@@ -8,7 +8,7 @@ pi/e/tau, round/min/max/abs), plus `variables:` scope resolution. Anything
 outside the supported subset raises `UnsupportedTemplateError` naming the
 construct and pointing at `hassle render --live` -- never silently wrong.
 
-M16 test 4 (bottom of this file): bare `states()`/string-equality templates
+Also covers (bottom of this file): bare `states()`/string-equality templates
 (the `state_of(...)` DSL surface's compiled output) evaluate correctly too --
 verified directly rather than assumed, since `states()` already returns a
 plain Python `str` and stock jinja2's own `==`/`in` operators need no HA-
@@ -287,10 +287,10 @@ def test_template_min_max_abs_round_builtins(tmp_path: Path) -> None:
 
 
 def test_template_sun_angle_math_expression(tmp_path: Path) -> None:
-    """DESIGN §5.4/M1.1 acceptance example: `param("sun_angle") / 360 * 2 * PI`
-    style math must actually evaluate in the simulator (M1.1 note: this is
+    """DESIGN §5.4 acceptance example: `param("sun_angle") / 360 * 2 * PI`
+    style math must actually evaluate in the simulator -- this is
     exactly the math-template class that would be untestable without the
-    HA math set registered)."""
+    HA math set registered."""
     sim = build_sim(
         tmp_path,
         """
@@ -421,7 +421,7 @@ def test_unsupported_template_raises_for_unknown_filter_names_the_filter(
     """An unknown filter (`| some_unregistered_filter`) is a
     TemplateAssertionError (a TemplateSyntaxError subclass) whose own message
     already names the filter -- the error must surface that name instead of
-    the generic "invalid template syntax" (F2 review finding)."""
+    the generic "invalid template syntax"."""
     sim = build_sim(
         tmp_path,
         """
@@ -464,7 +464,7 @@ def test_unsupported_template_names_the_construct(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# M16 test 4: bare states()/string-equality templates (state_of(...) surface)
+# Bare states()/string-equality templates (state_of(...) surface)
 # ---------------------------------------------------------------------------
 
 

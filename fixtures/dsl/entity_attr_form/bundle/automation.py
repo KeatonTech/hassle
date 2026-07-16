@@ -1,4 +1,4 @@
-"""Golden case: entity indexing form, attribute access (M1 test 8, DESIGN §5.2).
+"""Golden case: entity indexing form, attribute access (DESIGN §5.2).
 
 `e.sensor.hall_motion` must compile to the same entity_id as the index form
 (fixtures/dsl/entity_index_form).

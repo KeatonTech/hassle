@@ -1,6 +1,6 @@
-"""M9 "accumulated doc items" (field-hardening phase): things learned during
-M2-M7 that must be folded into generated docs where users/agents will see
-them, not left buried in code comments.
+"""Accumulated doc items: things learned during development that must be
+folded into generated docs where users/agents will see them, not left buried
+in code comments.
 
 - upgrade-can-surface-one-time-modernization-diffs (plan labeling context)
 - validator coverage boundaries (validate.py's docstring, verbatim intent)

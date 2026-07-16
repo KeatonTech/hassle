@@ -1,6 +1,6 @@
 # M1 internal API — the compiler-core contract for the follow-on workstreams
 
-> **Module paths renamed 2026-07-03 (owner decision):** the `hassle-core`
+> **Module paths renamed 2026-07-03 (design decision):** the `hassle-core`
 > distribution collapsed its two top-level import packages (`hassle_core` +
 > a thin `hassle` facade) into one, `hassle`. Every `hassle_core.*` path below
 > (written when the workstreams this doc addresses were active) is now

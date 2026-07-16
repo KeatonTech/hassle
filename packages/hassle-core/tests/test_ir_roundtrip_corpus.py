@@ -1,4 +1,5 @@
-"""M0 test 1 — `serialize(parse(x)) ≈ x` for every fixture (I3, key-order-insensitive)."""
+"""`serialize(parse(x)) ≈ x` for every fixture (compile(decompile(x)) == x,
+key-order-insensitive)."""
 
 from __future__ import annotations
 
@@ -24,9 +25,9 @@ def test_ir_roundtrip_corpus(fx: Fixture) -> None:
 
 
 def test_ir_roundtrips_non_string_id() -> None:
-    # Regression (reviewer nit, I3 "for ANY config"): a non-string id must
-    # round-trip verbatim, not raise. HA stores ids as strings, but the IR
-    # boundary must never mutate or reject data.
+    # Regression: a non-string id must round-trip verbatim, not raise
+    # (compile(decompile(x)) == x for any config). HA stores ids as strings,
+    # but the IR boundary must never mutate or reject data.
     config = {"id": 1687201958261, "alias": "numeric id", "trigger": [], "action": []}
     obj = parse(config, kind="automation")
     assert serialize(obj) == config

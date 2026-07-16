@@ -1,4 +1,4 @@
-"""Golden case: kitchen-sink-lite — every M1-core primitive in one automation.
+"""Golden case: kitchen-sink-lite — every core primitive in one automation.
 
 Exercises: full @automation option set (id/alias/mode/max/description), multiple
 triggers in one when(), from+to on a state trigger, multiple conditions in one

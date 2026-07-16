@@ -1,31 +1,30 @@
-"""M2 test 1 — the round-trip invariant (I3): ``compile(decompile(x)) ~ normalize_ha(x)``.
+"""The round-trip invariant (compile(decompile(x)) == x for any config):
+``compile(decompile(x)) ~ normalize_ha(x)``.
 
 For every fixture in ``fixtures/configs/``: parse it to IR, decompile the IR to a
 DSL bundle, recompile that bundle, and assert the recompiled IR's canonical hash
 equals the canonical hash of ``normalize_ha(x)`` (which is ``x`` itself for every
 fixture already in HA's stored plural form).
 
-**Correction to the milestone text (recorded in docs/ha-api-notes.md):** the
-milestone text singles out ``automation_legacy_platform_naming`` and
-``automation_service_call_longhand`` as "the" legacy-form fixtures exercising
-normalization. In fact the corpus (built pre-M0.1, before the 2026.7 purpose
-vocabulary made the plural form the UI default) is **48 of 55** automation
-fixtures in legacy singular form (`trigger`/`condition`/`action` + `service:`) --
-normalization is the common case here, not a two-fixture exception. This test
-exercises `normalize_ha` correctly regardless (it is fixture-shape-driven, not
-hardcoded to two names); only the *docs claim* was inaccurate.
+**Note on the corpus (recorded in docs/ha-api-notes.md):** the corpus (built
+before the 2026.7 purpose vocabulary made the plural form the UI default) is
+**48 of 55** automation fixtures in legacy singular form
+(`trigger`/`condition`/`action` + `service:`) -- normalization is the common
+case here, not an occasional exception. This test exercises `normalize_ha`
+correctly regardless (it is fixture-shape-driven, not hardcoded to specific
+fixture names).
 
 No exceptions: fixtures the decompiler doesn't yet model in the typed DSL still
 round-trip because the decompiler falls back to ``raw_automation``/``raw_trigger``/
-``raw_condition``/``raw_action`` rather than dropping data (DESIGN §5.8, I3).
+``raw_condition``/``raw_action`` rather than dropping data (DESIGN §5.8).
 
 Automations in the corpus have no ``id`` field (the fixtures are hand-authored
-docs examples; real HA always assigns one on creation) -- exactly like the M0
-corpus loader, a per-fixture ``key_hint`` (the filename stem) supplies the
+docs examples; real HA always assigns one on creation) -- a per-fixture
+``key_hint`` (the filename stem) supplies the
 identity needed to name the decompiled object and round-trip through
 ``object_key()``.
 
-**Recorded finding (docs/ha-api-notes.md):** the M1 compiler *always* materializes
+**Recorded finding (docs/ha-api-notes.md):** the compiler *always* materializes
 an explicit ``id`` in its output (``options.get("id") or reg.func.__name__``,
 ``bundle.py``'s ``_build_automation``) -- there is no DSL shape that omits it.
 So for the ~50 corpus fixtures missing ``id`` (an artifact of being hand-authored
@@ -47,18 +46,18 @@ product decision: a decompile+recompile cycle is expected to modernize a
 trigger's discriminator spelling, exactly as HA's own schema migrations do when
 a config is re-saved through a newer editor. This is cosmetic (the trigger's
 *meaning* is identical) and does not touch `normalize_ha` itself (which stays
-byte-faithful to real HA for the sync engine's actual hashing, M5+). The
+byte-faithful to real HA for the sync engine's actual hashing). The
 `_modernized` helper below is local to *this test's expectation*, not a change
-to the F1 `normalize_ha` surface.
+to the frozen IR schema's `normalize_ha` surface.
 
 **Recorded finding, ``delay:`` format modernization (docs/ha-api-notes.md §18):**
 HA accepts a ``delay`` action as a dict of units, an ``"HH:MM:SS"`` string, or a
 bare number of seconds -- all equivalent at runtime. The typed ``delay()``
-builder (frozen, F3) only emits the dict form. Same treatment as the trigger
-discriminator: the decompiler converts a string/numeric delay to the
-equivalent dict-kwarg call (cosmetic, cuts the DSL-coverage exception count
-roughly in half on this corpus), and `_modernized` applies the matching
-conversion to the test's expectation.
+builder (part of the frozen top-level DSL surface) only emits the dict form.
+Same treatment as the trigger discriminator: the decompiler converts a
+string/numeric delay to the equivalent dict-kwarg call (cosmetic, cuts the
+DSL-coverage exception count roughly in half on this corpus), and
+`_modernized` applies the matching conversion to the test's expectation.
 """
 
 from __future__ import annotations
@@ -187,7 +186,7 @@ def test_roundtrip_corpus(fx: Fixture, tmp_path_factory: pytest.TempPathFactory)
     expected = normalize_ha(expected_config, kind=fx.kind)
     # `@raw_automation`'s whole-object fallback (used when a config's top-level
     # shape can't be expressed as `@automation` at all -- e.g. the ancient
-    # inline single-trigger form, docs/ha-api-notes.md's M2 findings) and
+    # inline single-trigger form, see docs/ha-api-notes.md) and
     # `blueprint_automation` (which stores only `use_blueprint`, no
     # triggers/conditions/actions at all, DESIGN §5.8) both return the body
     # verbatim, unlike a typed `@automation`, which always materializes
@@ -198,7 +197,7 @@ def test_roundtrip_corpus(fx: Fixture, tmp_path_factory: pytest.TempPathFactory)
     went_through_typed_automation = "@automation(" in source
     if fx.kind == "automation" and went_through_typed_automation:
         # The compiler always materializes all three block keys, even empty
-        # (M1's own golden fixtures.dsl/minimal accepts this: `conditions: []`
+        # (the golden fixtures.dsl/minimal fixture accepts this: `conditions: []`
         # appears even when the DSL body calls no `only_if()` at all) -- a
         # fixture missing `conditions`/`triggers`/`actions` entirely gets the
         # empty list added to the expectation to match.

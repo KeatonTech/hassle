@@ -1,7 +1,7 @@
-"""M19 owner-blessed pattern: `repeat_count(times)` with a bound shared-script
-parameter marker -- HA's native runtime repeat, honoring whatever the caller
-actually passes (the honest alternative to the rejected `param_default()`
-escape hatch, see `test_shared_script_real_params.py`).
+"""`repeat_count(times)` with a bound shared-script parameter marker -- HA's
+native runtime repeat, honoring whatever the caller actually passes (the
+honest alternative to the rejected `param_default()` escape hatch, see
+`test_shared_script_real_params.py`).
 
 `repeat_count`/`_repeat_cm` never coerces its argument (stores it verbatim as
 ``{"repeat": {"count": value, ...}}``), so the marker -- a `TemplateExpr`/

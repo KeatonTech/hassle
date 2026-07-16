@@ -1,4 +1,4 @@
-"""Golden case: purpose-specific trigger, floor target, behavior=each (M1 test 10).
+"""Golden case: purpose-specific trigger, floor target, behavior=each.
 
 Mirrors fixtures/configs/automation_purpose_trigger_floor_device.json (first
 trigger only; the device-target trigger is covered by purpose_trigger_device).

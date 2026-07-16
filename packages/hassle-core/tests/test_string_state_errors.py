@@ -1,12 +1,12 @@
-"""M16 test 5 -- error surface for the string-state vocabulary (R6: what/where
-/fix, snapshot-tested).
+"""Error surface for the string-state vocabulary (what/where/fix,
+snapshot-tested).
 
 `.eq()`/`.ne()` against something that isn't a `TemplateExpr` or a bare
 Python literal (`int`/`float`/`str`/`bool`) -- e.g. a list/dict -- would
 otherwise silently `repr()` into nonsense Jinja; `state_of()` on a
 non-entity arg reuses the existing `TemplateEntityRefError` (same class
-`expr()` already raises for this, MILESTONES M16 design note: "mirroring
-expr()'s argument handling exactly").
+`expr()` already raises for this, mirroring expr()'s argument handling
+exactly).
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""MILESTONES M6 test 2 — the core edit loop, end to end against real HA.
+"""The core edit loop, end to end against real HA.
 
 pull → edit one automation + add one helper + delete one script (+ a local test
 file that is bundle-only) → plan shows **exactly 3** changes → push → HA state

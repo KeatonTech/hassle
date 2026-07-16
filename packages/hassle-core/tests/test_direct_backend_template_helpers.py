@@ -1,34 +1,33 @@
-"""MILESTONES M10 test 1 (round-3 CI regression) — `DirectBackend`'s
-config-entry template-helper read-back/update, verified at the unit level
-against a fake `_client` that faithfully reproduces the real HA wire shapes
-CI round 3 uncovered (docs/ha-api-notes.md §26.7):
+"""`DirectBackend`'s config-entry template-helper read-back/update, verified
+at the unit level against a fake `_client` that faithfully reproduces the
+real HA wire shapes (docs/ha-api-notes.md §26.7):
 
 - `config_entries/get` (WS) never carries an entry's options at all --
   `ConfigEntry.as_json_fragment` has no `options`/`data` key
-  (`homeassistant/config_entries.py`). The round-2 code assumed
-  `entry.get("options", {})` would have the submitted fields; it never does
-  against real HA, producing `KeyError: 'name'` / `KeyError: 'state'` on
-  read-back (CI round 3, `test_live_template_flow.py`).
+  (`homeassistant/config_entries.py`). Code that assumes
+  `entry.get("options", {})` would have the submitted fields is wrong: it
+  never does against real HA, producing `KeyError: 'name'` / `KeyError:
+  'state'` on read-back (`test_live_template_flow.py`).
 - The options-flow's first form step is the only place options ever appear
   on the wire, as `data_schema` entries' `description.suggested_value`
-  (mirrors what the UI's edit dialog itself reads to pre-populate its form,
-  I1).
+  (mirrors what the UI's edit dialog itself reads to pre-populate its form --
+  every HA write goes through the APIs the UI uses).
 - The options-flow schema never includes `name` for any template domain
   (`generate_schema(domain, flow_type="options")` never adds it) -- an
   UPDATE that resubmits `name` gets `400 {"errors": {"base": ["extra keys
-  not allowed @ data['name']"]}}` from real HA (CI round 3).
+  not allowed @ data['name']"]}}` from real HA.
 
-**MILESTONES M15 work item A, CI field failure on PR #10 (docs/ha-api-notes.md
-§31.8):** `_acreate_template_helper`'s create_entry response parsing read a
-top-level `entry_id` key that never existed on the wire --
-`_prepare_config_flow_result_json` (`homeassistant/components/config/
-config_entries.py`) nests the whole `ConfigEntry.as_json_fragment` under a
-`"result"` key. The old code's `result.get("entry_id", flow_id)` therefore
-ALWAYS silently fell back to `flow_id` (a truthy string -- nothing raised),
-so every `_template_entry_ids` cache entry ever written held a flow_id, not
-the real entry_id -- invisible until M15's category write-back actually
-needed to cross-reference `entry_id` against a LIVE HA instance's entity
-registry (`test_helper_category_assign_and_readback_storage_and_template`,
+**Regression (docs/ha-api-notes.md §31.8):** `_acreate_template_helper`'s
+create_entry response parsing read a top-level `entry_id` key that never
+existed on the wire -- `_prepare_config_flow_result_json`
+(`homeassistant/components/config/config_entries.py`) nests the whole
+`ConfigEntry.as_json_fragment` under a `"result"` key. Code written as
+`result.get("entry_id", flow_id)` therefore ALWAYS silently falls back to
+`flow_id` (a truthy string -- nothing raised), so every `_template_entry_ids`
+cache entry ever written held a flow_id, not the real entry_id -- invisible
+until category write-back needed to cross-reference `entry_id` against a LIVE
+HA instance's entity registry
+(`test_helper_category_assign_and_readback_storage_and_template`,
 `packages/hassle-core/tests/integration/test_live_category_writeback.py`),
 which a flow_id can never match. `_FakeClient.rest_post`'s
 `/api/config/config_entries/flow/*` branches now model the REAL nested
@@ -36,7 +35,7 @@ response shape (`test_create_template_helper_extracts_entry_id_from_nested_resul
 is the regression test that fails against the pre-fix `result.get("entry_id",
 flow_id)` lookup).
 
-This suite is unit-level (no network, R2): it monkeypatches
+This suite is unit-level (no network): it monkeypatches
 `DirectBackend._client` with a fake object exposing async `ws_command`/
 `rest_post`/`rest_delete`, and calls the private async `_alist_template_
 helpers`/`_aupdate_template_helper` coroutines directly via `asyncio.run` --
@@ -202,13 +201,12 @@ def _make_backend(client: _FakeClient) -> DirectBackend:
 
 
 def test_create_template_helper_extracts_entry_id_from_nested_result_key() -> None:
-    """MILESTONES M15, docs/ha-api-notes.md §31.8 -- CI field failure on
-    PR #10: `_acreate_template_helper` must read the JUST-created entry_id
+    """`_acreate_template_helper` must read the JUST-created entry_id
     from `response["result"]["entry_id"]`, NEVER a top-level `entry_id` key
-    (which the real wire shape never has -- `_FakeClient` here models that
-    nesting faithfully, unlike the pre-fix code's `result.get("entry_id",
-    flow_id)`, which would cache the WRONG value, a flow_id, and never raise
-    -- this test fails against that old lookup)."""
+    (which the real wire shape never has, docs/ha-api-notes.md §31.8 --
+    `_FakeClient` here models that nesting faithfully, unlike the buggy
+    `result.get("entry_id", flow_id)`, which would cache the WRONG value, a
+    flow_id, and never raise -- this test fails against that old lookup)."""
     client = _FakeClient(entries={}, entities=[])
     backend = _make_backend(client)
 
@@ -236,9 +234,9 @@ def test_create_template_helper_extracts_entry_id_from_nested_result_key() -> No
 class _MissingEntryIdClient(_FakeClient):
     """An unexpected create_entry envelope with no `result.entry_id` at all
     (e.g. a future HA change, or an abort/re-prompt this code doesn't
-    otherwise expect) -- reviewer finding on PR #10 round 2: the fixed code
-    must never silently cache a flow_id here (that is the EXACT bug class
-    §31.8 documents), it must raise a clear error instead."""
+    otherwise expect): the code must never silently cache a flow_id here
+    (that is the EXACT bug class §31.8 documents), it must raise a clear
+    error instead."""
 
     async def rest_post(self, path: str, json: Any = None, *, expect: str = "json") -> Any:
         if (
@@ -258,9 +256,9 @@ class _MissingEntryIdClient(_FakeClient):
 
 
 def test_create_template_helper_raises_when_result_entry_id_is_missing() -> None:
-    """Reviewer finding on PR #10 round 2: `entry_id = str(entry_json.get(
-    "entry_id") or flow_id)` recreated the exact silent-wrong-cache bug class
-    §31.8 describes -- if a future/unexpected create_entry envelope has no
+    """`entry_id = str(entry_json.get("entry_id") or flow_id)` recreates the
+    exact silent-wrong-cache bug class §31.8 describes -- if a
+    future/unexpected create_entry envelope has no
     nested `result.entry_id`, the OLD (still-buggy) fallback line would
     silently cache a flow_id again, only to surface confusingly as a
     category-assign `LookupError` much later. This must instead raise
@@ -288,7 +286,7 @@ def test_create_template_helper_raises_when_result_entry_id_is_missing() -> None
 
 
 def test_list_remote_reads_back_name_and_options_via_options_flow_suggested_values() -> None:
-    # Regression for CI round 3's `KeyError: 'name'` / `KeyError: 'state'`:
+    # Regression for `KeyError: 'name'` / `KeyError: 'state'`:
     # `config_entries/get` alone never has enough to reconstruct the stored
     # config (docs/ha-api-notes.md §26.7).
     client = _FakeClient(
@@ -341,9 +339,10 @@ def test_list_remote_ignores_entries_of_a_different_template_sub_kind() -> None:
 
 
 def test_update_strips_name_before_submitting_to_options_flow() -> None:
-    # Regression for CI round 3's 400: `"extra keys not allowed @
-    # data['name']"`. update() still takes a full config dict (F2 unchanged)
-    # but must never forward `name` to the options-flow submission.
+    # Regression for the 400: `"extra keys not allowed @
+    # data['name']"`. update() still takes a full config dict (the frozen
+    # SourceWriter/plan seam unchanged) but must never forward `name` to the
+    # options-flow submission.
     client = _FakeClient(
         entries={
             "entry_1": {

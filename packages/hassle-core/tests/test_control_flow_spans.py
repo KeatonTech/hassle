@@ -1,6 +1,5 @@
-"""M1 actions/control-flow work item, item 6: span tests pinning file:line for
-actions recorded inside nested contexts (if inside repeat inside choose, and
-if/then/else at one level).
+"""Span tests pinning file:line for actions recorded inside nested contexts
+(if inside repeat inside choose, and if/then/else at one level).
 
 `CompileResult.spans_for(obj, "actions")` returns the *top-level* action-list
 spans (per docs/compiler-api.md §2: "For M1-core, spans are tracked per

@@ -1,6 +1,5 @@
-"""``hassle.ir.modernize.modernize_for_comparison`` (``fix/self-check-value-compare``,
-coordinator field-failure fix): the bounded, context-free transform a
-decompile+recompile cycle is expected to apply -- promoted from
+"""``hassle.ir.modernize.modernize_for_comparison``: the bounded, context-free
+transform a decompile+recompile cycle is expected to apply -- promoted from
 `test_roundtrip_corpus.py`'s `_modernized` test-only helper to production code so
 the pull-side self-checks can do a canonical-JSON VALUE comparison instead of a
 decompiled-TEXT comparison (which false-positived on context-dependent rendering:

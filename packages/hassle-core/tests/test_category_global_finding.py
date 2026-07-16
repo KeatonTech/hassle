@@ -1,11 +1,9 @@
-"""M12 test 2 -- a `CATEGORY` module global that does not slugify to its
-file's stem produces a validation Finding (what/where/fix, snapshot-tested).
+"""A `CATEGORY` module global that does not slugify to its file's stem
+produces a validation Finding (what/where/fix, snapshot-tested).
 
-`slugify(CATEGORY)` MUST equal the file stem (MILESTONES M12's binding
-semantics block) -- mismatch is a distinct, additive Finding type
-(`category-slug-mismatch`), never a hard compile error (the object itself
-must still validate/apply fine; MILESTONES M11 test-3-style isolation, this
-milestone's test 2).
+`slugify(CATEGORY)` MUST equal the file stem -- mismatch is a distinct,
+additive Finding type (`category-slug-mismatch`), never a hard compile error:
+the object itself must still validate/apply fine, isolated from the mismatch.
 """
 
 from __future__ import annotations
@@ -39,8 +37,8 @@ def _normalize(msg: str) -> str:
 
 
 def _write_bundle(tmp_path: Path, filename: str, code: str) -> Path:
-    # MILESTONES M15 work item B: category-shaped files are root-level now
-    # (`<slug>.py`), not under a per-kind tree (`automations/<slug>.py`).
+    # Category-shaped files are root-level (`<slug>.py`), not under a
+    # per-kind tree (`automations/<slug>.py`).
     bundle = tmp_path / "bundle"
     bundle.mkdir(exist_ok=True)
     (bundle / filename).write_text(code, encoding="utf-8")
@@ -98,9 +96,9 @@ def auto_hvac_1():
 def test_mismatch_does_not_block_other_object_validation(
     tmp_path: Path, snapshot: RegistrySnapshot
 ) -> None:
-    """M11 test-3-style isolation: a CATEGORY mismatch is its own Finding but
-    never prevents the object itself from validating (no other findings for
-    the well-formed automation body)."""
+    """A CATEGORY mismatch is its own Finding but never prevents the object
+    itself from validating (no other findings for the well-formed automation
+    body)."""
     bundle = _write_bundle(
         tmp_path,
         "automatic_hvac.py",

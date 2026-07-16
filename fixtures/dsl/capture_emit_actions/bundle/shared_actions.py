@@ -1,7 +1,7 @@
 """Shared capture/emit helper library (DESIGN §5.6-style `lib/` pattern).
 
-Demonstrates the public capture seam (task #30, `ux/capture-notify-recipe`):
-a `lib/` builder captures one block of actions once with `capture_actions()`
+Demonstrates the public capture seam: a `lib/` builder captures one block
+of actions once with `capture_actions()`
 and splices the SAME captured bodies into more than one place with
 `emit_actions(...)` -- here, a single "turn off the porch light" action
 reused across two `choose()` branches keyed on which door opened.

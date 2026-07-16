@@ -1,17 +1,17 @@
-"""MILESTONES M6 test 1 — seed HA → pull → compile/validate/round-trip.
+"""Seed HA → pull → compile/validate/round-trip.
 
 Seed a variety of automations/scripts/helpers through HA's own API, then pull
 them back through `DirectBackend.list_remote`, decompile to DSL Python, recompile,
 and assert the recompiled config is byte-canonically identical to what real HA
-stores — the I3 round-trip invariant proven against a real instance (not a
+stores — compile(decompile(x)) == x proven against a real instance (not a
 fixture). The pulled bundle also compiles cleanly and the fetched registry
 snapshot drives validation without error.
 
-("decompiled sources match goldens" from the milestone text is realized here as
-round-trip stability against real-HA output: the decompiled source recompiles to
-exactly the normalized config HA returned. Matching the M2 *fixture* goldens
-byte-for-byte is an offline M2 concern; here the input is whatever this live HA
-normalizes to, which is the thing pull must handle.)
+(This is realized here as round-trip stability against real-HA output: the
+decompiled source recompiles to exactly the normalized config HA returned.
+Matching the offline *fixture* goldens byte-for-byte is a separate, offline
+concern; here the input is whatever this live HA normalizes to, which is the
+thing pull must handle.)
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ def _seed(ha: DirectBackend) -> None:
     # UI writes and what the compiler emits — so `compile(decompile(remote))` is
     # byte-exact. (A legacy `platform:`-form remote round-trips only up to the
     # decompiler's documented one-time modernization, docs/ha-api-notes.md §16;
-    # that is an offline M2 concern, exercised there.)
+    # that is a separate, offline concern, exercised there.)
     ha.create("input_boolean", {"id": "guest_mode", "name": "Guest Mode"})
     ha.create(
         "automation",
@@ -91,7 +91,8 @@ def test_pull_decompiles_compiles_and_roundtrips(ha: DirectBackend, tmp_path: Pa
     result = compile_bundle(bundle)
     compiled = {key: serialize(obj) for key, obj in result.objects.items()}
 
-    # Every pulled object recompiles to the exact config HA stored (I3, live).
+    # Every pulled object recompiles to the exact config HA stored
+    # (compile(decompile(x)) == x, live).
     for key, obj in remote_ir.items():
         assert key in compiled, f"{key} did not recompile"
         assert sha256_hash(compiled[key]) == sha256_hash(serialize(obj)), (

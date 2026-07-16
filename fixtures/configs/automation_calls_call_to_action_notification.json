@@ -1,7 +1,7 @@
 {
   "id": "garage_door_opened_notify",
   "alias": "Garage door opened notify",
-  "description": "Shape observed in a real UI-authored automation (ux/shared-script-rich-fields, owner feedback): calls a managed script whose every field carries selector/name/description metadata (companion fixture script_call_to_action_notification.json), with data matching every declared field and the metadata:{} every UI-saved action carries.",
+  "description": "Shape observed in a real UI-authored automation: calls a managed script whose every field carries selector/name/description metadata (companion fixture script_call_to_action_notification.json), with data matching every declared field and the metadata:{} every UI-saved action carries.",
   "triggers": [
     {
       "trigger": "state",

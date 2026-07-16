@@ -1,17 +1,16 @@
-"""MILESTONES M10 test 1 — capture-driven backend tests for the config-entry
-template-helper domain.
+"""Capture-driven backend tests for the config-entry template-helper domain.
 
 `FakeBackend` models the multi-step config-entry flow (create: menu step
 choosing the template type, then a form step -> `create_entry`) and
 options-flow (update: one form step -> `create_entry`, same `entry_id`)
 shapes (docs/ha-api-notes.md §26; the REAL transport was captured by the CI
 integration suite, `packages/hassle-core/tests/integration/
-test_live_template_flow.py`, which is the authoritative verification per
-MILESTONES M10 — it found the flow/options-flow/removal operations are REST,
-not WebSocket, §26.0, AND that the form schema rejects `unique_id`/bookkeeping
-keys and requires domain-specific write-target fields, §26.6). This suite is
-transport-agnostic: it exercises the SAME `Backend.create`/`update`/
-`delete`/`list_remote` methods every other kind uses (F2 untouched) while
+test_live_template_flow.py`, which is the authoritative verification -- it
+found the flow/options-flow/removal operations are REST, not WebSocket, §26.0,
+AND that the form schema rejects `unique_id`/bookkeeping keys and requires
+domain-specific write-target fields, §26.6). This suite is transport-agnostic:
+it exercises the SAME `Backend.create`/`update`/`delete`/`list_remote` methods
+every other kind uses (the frozen SourceWriter/plan seam untouched) while
 asserting on the internal flow-step log FakeBackend records for test
 visibility.
 
@@ -133,7 +132,8 @@ def test_template_number_update_drives_options_flow_same_entry_id() -> None:
     )
 
     entry_id_after = backend.entry_id_for("template_number", identity)
-    # I2 analog: the entry_id is UNCHANGED across an update (never a recreate).
+    # Analogous to never changing an existing object's HA id: the entry_id is
+    # UNCHANGED across an update (never a recreate).
     assert entry_id_after == entry_id_before
 
     stored = backend.list_remote("template_number")[identity]
@@ -154,7 +154,7 @@ def test_template_number_update_drives_options_flow_same_entry_id() -> None:
 
 
 def test_template_number_update_silently_strips_name_at_the_public_api_boundary() -> None:
-    # `update()` (F2, the `Backend`-protocol-facing method) still takes the
+    # `update()` (the `Backend`-protocol-facing method) still takes the
     # FULL local config, exactly like every other kind -- `name` is stripped
     # before it ever reaches the simulated options-flow submission, mirroring
     # `DirectBackend._aupdate_template_helper` protecting a caller from ever
@@ -230,8 +230,8 @@ def test_template_number_delete_is_entry_removal() -> None:
 
 
 def test_template_number_recreate_after_delete_gets_fresh_entry_id() -> None:
-    # Documents the entry_id-changes rollback caveat (MILESTONES M10 test 4):
-    # a DELETE then re-CREATE under the same name-derived identity is NOT the
+    # Documents the entry_id-changes rollback caveat: a DELETE then re-CREATE
+    # under the same name-derived identity is NOT the
     # same HA object from HA's point of view -- a fresh entry_id is assigned.
     backend = FakeBackend()
     identity = backend.create(

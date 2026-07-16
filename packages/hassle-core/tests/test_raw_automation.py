@@ -2,8 +2,8 @@
 
 These builders produce correct ``AutomationConfig`` IR objects
 (JSON-serializability checked, legacy singular keys normalized, the blueprint
-DSL->JSON key mapping applied). The §12 registration path (M1 integration pass,
-``Registry.add_object`` + ``compile_registered``'s prebuilt stream) wires them
+DSL->JSON key mapping applied). The registration path
+(``Registry.add_object`` + ``compile_registered``'s prebuilt stream) wires them
 into ``compile_bundle(...).objects``; see
 ``packages/hassle-core/tests/test_prebuilt_registration.py`` for the
 end-to-end golden coverage. These tests exercise the builder layer directly.

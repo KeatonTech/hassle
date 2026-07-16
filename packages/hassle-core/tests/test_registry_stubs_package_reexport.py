@@ -1,6 +1,6 @@
-"""Coordinator-flagged hardening (M18 round): a `typings/hassle/` stub
-directory containing ONLY submodule stubs (`registry/__init__.pyi`,
-`services.pyi`) with no top-level `typings/hassle/__init__.pyi` risks pyright
+"""A `typings/hassle/` stub directory containing ONLY submodule stubs
+(`registry/__init__.pyi`, `services.pyi`) with no top-level
+`typings/hassle/__init__.pyi` risks pyright
 treating `hassle` as a namespace/partial stub package for that dotted path --
 which can make the REAL package's own top-level surface (`hassle.__all__`:
 `automation`, `service`, `state`, `Mode`, ...) resolve as undefined in a
@@ -56,18 +56,18 @@ def _parse_import_lines(stub: str) -> list[tuple[str, str]]:
 
 
 def test_reexport_stub_every_import_is_actually_importable_and_correct() -> None:
-    """GROUND-TRUTH check (reviewer finding B2: the prior version of this
-    test derived its expectation the SAME WAY the generator computes it, so
-    it could never fail for a generator bug -- vacuous by construction).
+    """GROUND-TRUTH check: an earlier version of this test derived its
+    expectation the SAME WAY the generator computes it, so it could never
+    fail for a generator bug -- vacuous by construction.
 
     For every ``from M import N as N`` line the generator actually emits,
     real `importlib.import_module(M)` must succeed AND `getattr(mod, N)`
     must be the identical object `hassle.__all__` itself exposes -- this is
     independent of whatever module-resolution algorithm the generator uses
     internally, so it catches the exact `__module__`-vs-true-binding-module
-    bug (B1: `E_`/`PI`/`TAU` are `TemplateExpr` INSTANCES built in
+    bug: `E_`/`PI`/`TAU` are `TemplateExpr` INSTANCES built in
     `hassle.compiler.math_expr`, but `__module__` reports the CLASS's module,
-    `hassle.compiler.templates`, which does not define these names at all).
+    `hassle.compiler.templates`, which does not define these names at all.
     """
     import hassle
 
@@ -121,9 +121,9 @@ def test_reexport_stub_is_ruff_clean(tmp_path: Path) -> None:
 
 
 def test_reexport_stub_grouped_and_sorted_by_module() -> None:
-    """`from <module> import ...` lines must be sorted by module name (R8
-    determinism) so the generated file never depends on `hassle.__all__`'s
-    (or a dict's) iteration order."""
+    """`from <module> import ...` lines must be sorted by module name
+    (byte-stable/deterministic output) so the generated file never depends on
+    `hassle.__all__`'s (or a dict's) iteration order."""
     stub = generate_hassle_reexport_stub()
     import_lines = [line for line in stub.splitlines() if line.startswith("from hassle.")]
     modules = [line.split(" import ")[0].removeprefix("from ") for line in import_lines]

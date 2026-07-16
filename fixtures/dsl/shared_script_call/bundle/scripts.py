@@ -1,5 +1,5 @@
 """Golden case: @shared_script compiles to a script object AND a call action
-(M1 test 3, DESIGN §5.6).
+(DESIGN §5.6).
 
 `flash_lights` becomes a real HA script (fields derived from the signature,
 defaults -> field defaults) whose sequence references `param("times")` and

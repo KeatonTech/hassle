@@ -1,5 +1,5 @@
-"""Golden case: template-helper declarations (M10) for all four template
-domains. The owner's driving case is `template_number` (e.g.
+"""Golden case: template-helper declarations for all four template
+domains. The driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
 
 Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --

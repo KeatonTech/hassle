@@ -1,4 +1,4 @@
-"""HA version-range check (MILESTONES M6 deliverables; DESIGN §4, §15).
+"""HA version-range check (DESIGN §4, §15).
 
 `DirectBackend` reads `GET /api/config` (WS `get_config`) and warns when the
 instance's HA version falls outside the range Hassle has been tested against.

@@ -1,6 +1,6 @@
 """COOKBOOK.md recipe tests: one test per recipe, each proving the
-automation/script actually does what its docstring claims (DESIGN §12, M9
-deliverable 1: "each recipe = automation + passing test").
+automation/script actually does what its docstring claims (DESIGN §12:
+"each recipe = automation + passing test").
 
 Compiled and simulated the same way `test_sim_example_bundle.py` does
 (`hassle.testing.Simulator` directly over `compile_bundle(...)`) -- I5:
@@ -71,7 +71,7 @@ def test_thermostat_schedule_sets_night_setback() -> None:
     sim.assert_called("climate.set_temperature", entity_id="climate.living_room", temperature=18)
 
 
-# 4. actionable notification (task #30) ----------------------------------------
+# 4. actionable notification -----------------------------------------------
 
 
 def test_notify_with_actions_sends_actionable_notification_on_unlock() -> None:
@@ -91,7 +91,7 @@ def test_notify_with_actions_sends_actionable_notification_on_unlock() -> None:
 
 
 def test_notify_with_actions_open_blinds_branch_dispatches_on_matching_action() -> None:
-    """Full branch dispatch (task #32, closing docs/ha-api-notes.md §36.2's
+    """Full branch dispatch (closing docs/ha-api-notes.md §36.2's
     STOP): tapping the "Open Blinds" notification action fires
     `mobile_app_notification_action` with `action: OPEN_BLINDS`, which must
     resume the recipe's pending `wait_for(event(...))` and run ONLY the
@@ -200,9 +200,8 @@ def test_door_left_open_reminder_resets_on_flap() -> None:
 
 def test_good_morning_script_call_records_the_call_and_runs_the_callee() -> None:
     """A direct `script.<id>` call is recorded as a service call AND expands
-    the callee script's sequence inline, blocking, exactly like real HA
-    (task #35 -- superseding the v1 "opaque call only" scope this test used
-    to pin): the call's data becomes the callee's variables, so the
+    the callee script's sequence inline, blocking, exactly like real HA: the
+    call's data becomes the callee's variables, so the
     `param("brightness")` marker renders the caller's 180, not the field
     default."""
     sim = _sim()

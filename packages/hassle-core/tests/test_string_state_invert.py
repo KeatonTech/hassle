@@ -1,9 +1,9 @@
-"""M16 test 3 -- inverter coverage for the string-state vocabulary.
+"""Inverter coverage for the string-state vocabulary.
 
 Both real-world spellings normalize to the DSL, then render canonically:
 
 - `states('x') == 'y'` / `!=` / `in [...]` -> `state_of(...)` forms (byte-exact
-  round-trip, I3 nice branch).
+  round-trip, the compile(decompile(x)) == x nice branch).
 - `is_state('x', 'y')` -> `state_of('x').eq('y')` in Python source, but its
   RE-RENDER is `states('x') == 'y'`, which differs textually from the
   original `is_state(...)` call -- so the byte-exact acceptance gate
@@ -14,17 +14,18 @@ Both real-world spellings normalize to the DSL, then render canonically:
   re-render) replaces the source with the canonical `states('x') == 'y'`
   spelling does it invert cleanly forever after.
 
-The owner's real multi-line Bermuda template (`is_state(...) or
+A real multi-line Bermuda template (`is_state(...) or
 is_state(...)`) is the driving fallback case, verbatim.
 
 **Regression (bug found while adding this coverage):** `invert_template`
 compared its re-render against `jinja_text.strip()` instead of the original
 `jinja_text` -- a pre-existing bug (reachable via `expr(...)`'s `| float`
 grammar too, just never exercised by a torture case that combined
-surrounding whitespace with an otherwise-invertible template before M16
-added a bare `states(...)` case to that same test matrix), silently dropping
+surrounding whitespace with an otherwise-invertible template before a bare
+`states(...)` case was added to that same test matrix), silently dropping
 a leading/trailing newline around the `{{ ... }}` block on inversion and
-violating I3. Fixed by comparing against the unstripped original text.
+violating the compile(decompile(x)) == x invariant. Fixed by comparing
+against the unstripped original text.
 """
 
 from __future__ import annotations
@@ -84,7 +85,8 @@ def test_surrounding_whitespace_is_not_silently_dropped(jinja_text: str) -> None
     """`invert_template` must reject (fall back), not silently match, when
     the original text has padding around the `{{ ... }}` block that its own
     canonical re-render would never reproduce -- this would otherwise
-    violate I3 (a leading/trailing newline dropped on inversion)."""
+    violate the compile(decompile(x)) == x invariant (a leading/trailing
+    newline dropped on inversion)."""
     assert invert_template(jinja_text) is None
 
 
@@ -108,8 +110,9 @@ def test_exact_no_padding_form_still_inverts() -> None:
 def test_state_of_forms_round_trip_byte_exactly_through_decorator(
     jinja_text: str, tmp_path: Path
 ) -> None:
-    """I3 nice branch: the inverted source recompiles through the real
-    `template_sensor` decorator path to the identical `state=` text."""
+    """compile(decompile(x)) == x nice branch: the inverted source recompiles
+    through the real `template_sensor` decorator path to the identical
+    `state=` text."""
     result = invert_template(jinja_text)
     assert result is not None
     reset_declared_template_helpers()
@@ -133,7 +136,7 @@ def test_state_of_forms_round_trip_byte_exactly_through_decorator(
 # `is_state('x', 'y')` -> DOCUMENTED one-time-canonicalization fallback.
 # ---------------------------------------------------------------------------
 
-# The owner's real multi-line Bermuda template, verbatim (MILESTONES M16 test 3).
+# A real multi-line Bermuda template, verbatim.
 BERMUDA_IS_STATE_TEMPLATE = (
     "{{ is_state('sensor.kai_watch_beacon_area', 'Living Room') or \n"
     "             is_state('sensor.kai_phone_beacon_area', 'Living Room') }}"
@@ -149,7 +152,7 @@ def test_is_state_call_form_does_not_invert_cleanly() -> None:
 
 
 def test_owner_bermuda_template_falls_back_cleanly() -> None:
-    """The owner's real multi-line `is_state(...) or is_state(...)` template
+    """A real multi-line `is_state(...) or is_state(...)` template
     falls back (byte-exact gate holds) -- never raises, never silently
     produces a false-positive inversion."""
     assert invert_template(BERMUDA_IS_STATE_TEMPLATE) is None
@@ -160,7 +163,8 @@ def test_owner_bermuda_template_decompiles_to_decorator_fallback_and_round_trips
 ) -> None:
     """End-to-end: the gnarly (from this grammar's perspective) `is_state`
     Bermuda template decompiles to the decorator-with-raw-string fallback
-    form, never raises, and round-trips byte-for-byte (I3 through the
+    form, never raises, and round-trips byte-for-byte
+    (compile(decompile(x)) == x through the
     fallback branch) -- exactly like any other out-of-grammar template."""
     reset_declared_template_helpers()
     from hassle import template_sensor

@@ -1,7 +1,7 @@
 def test_slugify_matches_ha_unicode_transliteration() -> None:
     from hassle.ir.keys import slugify
 
-    """Owner field report: HA derives helper ids via python-slugify, which
+    """HA derives helper ids via python-slugify, which
     TRANSLITERATES unicode -- "°F" becomes "degf", not "_f". Our old rule
     collapsed it to an underscore, so validate blessed an id HA would never
     derive, and every push re-created the helper under a fresh `_degf_N`."""

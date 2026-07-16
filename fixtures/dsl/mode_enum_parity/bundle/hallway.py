@@ -1,4 +1,4 @@
-"""Golden case: `Mode`/`MaxExceeded` StrEnum form (`ux/dsl-ergonomics`, item 2) --
+"""Golden case: `Mode`/`MaxExceeded` StrEnum form --
 `StrEnum` IS a `str` subclass, so passing a member compiles byte-identical to the
 equivalent plain string. Paired with `mode_str_parity/`'s plain-string form to
 prove compile parity.

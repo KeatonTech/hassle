@@ -1,5 +1,4 @@
-"""M16 tests 1, 2, 5 -- string-state expression vocabulary (DESIGN §5.4
-extension, MILESTONES M16).
+"""String-state expression vocabulary (DESIGN §5.4 extension).
 
 `state_of(entity_or_id)` is a bare string-context template read (mirrors
 `expr()`'s numeric-context read exactly, minus the `| float` filter); string
@@ -97,14 +96,14 @@ def test_state_of_bare_read_is_a_str_and_serializes_natively() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 2: custom-function composition (owner's driving case) -> golden pair.
+# Custom-function composition -> golden pair.
 # ---------------------------------------------------------------------------
 
 
 def test_custom_function_composition_golden_bundle() -> None:
     """A plain Python function returning `state_of(...).eq(...)`, composed
     with `|`, used as a `@template_binary_sensor` body -- compiles to the
-    exact expected template (MILESTONES M16 test 2)."""
+    exact expected template."""
     result = compile_bundle(FIXTURES / "beacon_area_composition" / "bundle")
     obj = result.objects["template_binary_sensor:kai_home_beacon"].to_ha()
     assert obj["state"] == (
@@ -133,10 +132,11 @@ def test_state_of_string_golden_bundle() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 5: error surface -- `.eq()` against a non-literal/non-expr, or
-# `state_of()` on a non-entity arg -> R6 compile error, snapshot-tested
-# (see test_string_state_errors.py for the snapshot assertions themselves;
-# these confirm the raised type + reused TemplateEntityRefError class).
+# Error surface -- `.eq()` against a non-literal/non-expr, or
+# `state_of()` on a non-entity arg -> compile error stating what/where/fix,
+# snapshot-tested (see test_string_state_errors.py for the snapshot
+# assertions themselves; these confirm the raised type + reused
+# TemplateEntityRefError class).
 # ---------------------------------------------------------------------------
 
 

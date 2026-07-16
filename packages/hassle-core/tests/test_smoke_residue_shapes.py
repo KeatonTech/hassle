@@ -1,4 +1,4 @@
-"""Smoke-test task #8 -- residue coverage, round 2, from the owner's live bundle.
+"""Smoke test -- residue coverage, round 2.
 
 Round 1 (``test_smoke_real_world_shapes.py``, docs/ha-api-notes.md §19) fixed three
 mundane UI-authored shapes. A second live smoke test against a real 2026.7 Home
@@ -20,7 +20,8 @@ save:
 Each gap gets a builder-level unit test (this file) plus a new corpus fixture
 under ``fixtures/configs/`` that the existing parametrized round-trip
 (``test_roundtrip_corpus.py``) and coverage (``test_decompile_coverage.py``) tests
-pick up automatically. I3 (round-trip) requires ``data_template`` and list-valued
+pick up automatically. The round-trip invariant (compile(decompile(x)) == x)
+requires ``data_template`` and list-valued
 condition fields be preserved byte-stable -- never folded/normalized away.
 """
 

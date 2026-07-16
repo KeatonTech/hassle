@@ -1,10 +1,10 @@
-"""Golden case: template-helper declarations via the DECORATOR form (M13).
+"""Golden case: template-helper declarations via the DECORATOR form.
 
 For all four template domains, `state=` (and `template_select`'s `options=`)
 is spelled as a decorated zero-arg function returning a `TemplateExpr` (the
-M1.1 `hassle.compiler.math_expr`/`templates` python->Jinja surface) instead
+`hassle.compiler.math_expr`/`templates` python->Jinja surface) instead
 of a raw Jinja string. The decorator form compiles to the IDENTICAL IR body
-as the equivalent call form (M13 test 1) -- `state=`/`options=` become the
+as the equivalent call form -- `state=`/`options=` become the
 rendered Jinja, byte-identical to hand-writing the same Jinja string.
 
 Function names are cosmetic (derived from `slug(name)`, like automations'

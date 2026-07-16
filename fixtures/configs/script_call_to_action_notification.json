@@ -1,6 +1,6 @@
 {
   "alias": "Call to action notification",
-  "description": "Shape observed in a real UI-authored script (ux/shared-script-rich-fields, owner feedback): every field carries selector/name/description metadata, the way the HA UI's script field editor always saves them -- mirrors fixtures/configs/automation_parallel_multistep_branch_composite.json's script.notify_all caller shape (title/message/action_button/action_button_icon/tag).",
+  "description": "Shape observed in a real UI-authored script: every field carries selector/name/description metadata, the way the HA UI's script field editor always saves them -- mirrors fixtures/configs/automation_parallel_multistep_branch_composite.json's script.notify_all caller shape (title/message/action_button/action_button_icon/tag).",
   "fields": {
     "title": {
       "name": "Title",

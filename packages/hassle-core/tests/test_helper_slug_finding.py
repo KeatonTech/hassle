@@ -1,5 +1,5 @@
-"""M7 (owner UX, docs/ha-api-notes.md §17.5 finding): a helper declaration whose
-``id=`` does not match ``slugify(name)`` gets a validation Finding.
+"""A helper declaration whose ``id=`` does not match ``slugify(name)`` gets a
+validation Finding (docs/ha-api-notes.md §17.5).
 
 Real HA storage-collection ``create`` derives the item's identity by
 slugifying ``name`` and **ignores any caller-supplied id** (§17.5). So if a
@@ -7,17 +7,16 @@ bundle declares ``input_boolean(id="guest_mode", name="Guest Flag", ...)``,
 HA will actually assign the identity ``guest_flag`` -- silently breaking the
 id<->entity mapping the bundle (and the sync engine's object keys) assume.
 This is a distinct, additive Finding type (`helper-id-name-mismatch`),
-surfaced by `hassle validate` (M7), snapshot-tested per R6/the milestone's
-Finding rubric (what/where/fix).
+surfaced by `hassle validate`, snapshot-tested per the what/where/fix rubric.
 
-**Scoped to NEW declarations only** (smoke #7 field evidence; §17.5 amended
-2026-07-05): the slug-derivation rule only holds for the WS-API creation path
-that Hassle's own push uses. A live registry's ``.storage`` can legitimately
-hold helpers created some other way (e.g. an external integration writing
-``.storage`` directly) whose id does NOT equal ``slugify(name)`` -- those are
-adopted, already-live truth, and "fixing" them by changing the id would break
-the bundle's mapping to a real, pre-existing entity (I2). So the Finding fires
-only when the declared ``<domain>.<id>`` entity is NOT already present in the
+**Scoped to NEW declarations only:** the slug-derivation rule only holds for
+the WS-API creation path that Hassle's own push uses. A live registry's
+``.storage`` can legitimately hold helpers created some other way (e.g. an
+external integration writing ``.storage`` directly) whose id does NOT equal
+``slugify(name)`` -- those are adopted, already-live truth, and "fixing" them
+by changing the id would break the bundle's mapping to a real, pre-existing
+entity (never change an existing object's HA id). So the Finding fires only
+when the declared ``<domain>.<id>`` entity is NOT already present in the
 registry snapshot -- i.e. a genuinely new helper Hassle would create via the
 WS path, where the slug rule actually bites. An adopted helper whose id is
 already in the snapshot produces zero findings, regardless of name mismatch.
@@ -127,11 +126,10 @@ def a():
     assert not [f for f in findings if f.code == "helper-id-name-mismatch"]
 
 
-# Field evidence (owner's live registry): fixtures/registry/home.json seeds
-# `input_text.material_you_image_url_6814bc`, named "Material You Base Color
-# Source Image Path/URL Kai" -- an id that does NOT equal slugify(name),
-# adopted from an external integration that wrote `.storage` directly (not
-# via the WS-API create path Hassle's push uses).
+# fixtures/registry/home.json seeds `input_text.material_you_image_url_6814bc`,
+# named "Material You Base Color Source Image Path/URL Kai" -- an id that does
+# NOT equal slugify(name), adopted from an external integration that wrote
+# `.storage` directly (not via the WS-API create path Hassle's push uses).
 
 
 def test_adopted_helper_with_mismatched_id_present_in_snapshot_is_not_flagged(
@@ -224,9 +222,9 @@ def a():
 
 
 def test_adopted_helper_exempt_via_manifest_keys_even_when_entity_renamed(tmp_path) -> None:
-    # Field evidence (owner bundle): a helper's storage id can have NO matching
-    # entity in the registry (the entity was renamed -- "front_bedroom_occupied"
-    # became "Office Occupied" with a renamed entity_id). Entity-id inference
+    # A helper's storage id can have NO matching entity in the registry (the
+    # entity was renamed -- "front_bedroom_occupied" became "Office Occupied"
+    # with a renamed entity_id). Entity-id inference
     # cannot identify such adopted helpers; manifest membership can: if the key
     # was pulled, it is live truth.
     from hassle.registry.snapshot import RegistrySnapshot

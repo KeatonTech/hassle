@@ -1,9 +1,9 @@
-"""Regression (owner field failure, 2026-07-06): the decompiler shells out to
-the `ruff` BINARY at runtime to format its output, but resolved it via bare
-PATH lookup only. In the dev venv / CI that always works (ruff is a dev
-dependency), so nothing caught that a standalone `uv tool install`ed CLI has
-ruff inside its own venv bin — which is NOT on PATH — making every
-`hassle pull` crash with a raw FileNotFoundError.
+"""Regression: the decompiler shells out to the `ruff` BINARY at runtime to
+format its output, but resolved it via bare PATH lookup only. In the dev
+venv / CI that always works (ruff is a dev dependency), so nothing caught
+that a standalone `uv tool install`ed CLI has ruff inside its own venv bin —
+which is NOT on PATH — making every `hassle pull` crash with a raw
+FileNotFoundError.
 
 Contract pinned here:
 1. `_resolve_ruff_executable` prefers the running interpreter's own bin dir
@@ -73,11 +73,11 @@ def test_declared_as_runtime_dependency() -> None:
 
 
 def test_insert_category_global_uses_shared_resolver(tmp_path, monkeypatch) -> None:
-    """Regression (owner field failure #2, same day): `hassle.sync.pull_apply.
-    _insert_category_global` had its OWN bare `subprocess.run(["ruff", ...])`,
-    crashing standalone installs even after codegen's site was fixed. It must
-    go through the shared resolver: with PATH empty but a working ruff next to
-    the interpreter, insertion succeeds instead of raising FileNotFoundError."""
+    """Regression: `hassle.sync.pull_apply._insert_category_global` had its
+    OWN bare `subprocess.run(["ruff", ...])`, crashing standalone installs
+    even after codegen's site was fixed. It must go through the shared
+    resolver: with PATH empty but a working ruff next to the interpreter,
+    insertion succeeds instead of raising FileNotFoundError."""
     import sys
 
     from hassle.sync.pull_apply import _insert_category_global

@@ -1,8 +1,8 @@
-"""M11 -- `DirectBackend`'s category write-back surface: `create_category` /
-`assign_category` (additive, not part of the frozen `Backend` Protocol F2,
+"""`DirectBackend`'s category write-back surface: `create_category` /
+`assign_category` (additive, not part of the frozen `Backend` Protocol,
 same pattern as `entry_id_for`/`fetch_registry_snapshot`).
 
-Unit-tested (no network, R2) the same way `test_direct_backend_categories.py`
+Unit-tested (no network) the same way `test_direct_backend_categories.py`
 tests `_afetch_registry_snapshot`: monkeypatch `DirectBackend._client` with a
 fake exposing an async `ws_command`, and drive the private async coroutine
 directly via `asyncio.run`.
@@ -17,11 +17,11 @@ inference):
   entity-registry update handler merges `categories` per scope SERVER-SIDE
   (§31.3/§31.5b) -- it is not a wholesale replace, so `_aassign_category` no
   longer reads the entity's existing `categories` first before resubmitting a
-  client-side-merged dict (M11's original, more-defensive-than-necessary
+  client-side-merged dict (an earlier, more-defensive-than-necessary
   behavior); it just sends this call's own `{scope: category_id}`, and HA
   itself is responsible for leaving every other scope's assignment alone.
 
-**M15 (docs/ha-api-notes.md §31.6, corrected by §31.8):** identity lookup for
+**(docs/ha-api-notes.md §31.6, corrected by §31.8):** identity lookup for
 a TEMPLATE helper kind (`hassle.ir.keys.TEMPLATE_DOMAINS`) uses the SAME
 `unique_id`-keyed entity-registry lookup every other kind uses -- there is no
 CALLER-settable `unique_id` for these (§26.6), but `template/helpers.py`'s
@@ -29,7 +29,7 @@ CALLER-settable `unique_id` for these (§26.6), but `template/helpers.py`'s
 entry's own `entry_id` (source-verified, §31.8), so the match VALUE is the
 cached `entry_id` instead of the object-key identity, not a different lookup
 field. (An earlier revision of this anchor used `config_entry_id` instead --
-CI on PR #10 found `_acreate_template_helper` was caching the wrong value for
+`_acreate_template_helper` was found to be caching the wrong value for
 that field anyway, a separate bug fixed in `test_direct_backend_template_
 helpers.py`; switching to `unique_id` sidesteps the need for a second lookup
 field entirely.)
@@ -88,9 +88,9 @@ def test_create_category_sends_scope_and_name() -> None:
 
 
 def test_delete_category_sends_scope_and_category_id() -> None:
-    """MILESTONES M15 item 3: `config/category_registry/delete` is now
-    confirmed to exist (docs/ha-api-notes.md §31.5c) -- `delete_category` is
-    the additive surface integration teardown drives, no more suppressed."""
+    """`config/category_registry/delete` is confirmed to exist
+    (docs/ha-api-notes.md §31.5c) -- `delete_category` is the additive
+    surface integration teardown drives, no more suppressed."""
     client = _FakeClient()
     backend = _make_backend(client)
 
@@ -184,8 +184,8 @@ def test_assign_category_storage_helper_looks_up_by_unique_id() -> None:
 
 
 def test_assign_category_template_helper_looks_up_by_unique_id_equal_to_entry_id() -> None:
-    """MILESTONES M15/§31.6, corrected by §31.8 (CI field failure on PR #10):
-    a template config-entry helper's entity-registry row is found via the
+    """§31.6, corrected by §31.8: a template config-entry helper's
+    entity-registry row is found via the
     SAME `unique_id` lookup every other kind uses -- `template/helpers.py`'s
     `async_setup_template_entry` sets the entity's `unique_id` to the config
     entry's `entry_id` (source-verified), so the match VALUE is the cached

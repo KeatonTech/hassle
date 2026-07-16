@@ -1,9 +1,8 @@
-"""M18 milestone tests — typed service namespaces + entity-method sugar
-(MILESTONES "M18 — Typed service namespaces", DESIGN §5.2/§5.3).
+"""Typed service namespaces + entity-method sugar (DESIGN §5.2/§5.3).
 
-Covers the milestone's 7-test contract:
-1. Regression pin: today (pre-M18) calling a stub-promised entity method
-   raises (red against main); green = records the service action.
+Covers:
+1. Regression pin: calling a stub-promised entity method used to raise;
+   correct behavior is to record the service action.
 2. IR equivalence: `hassle.services` namespace call, entity-method call, and
    `service(...)` compile to byte-identical IR for the same inputs.
 3. Decompiler canonical-form tests live in `test_service_namespace_decompile.py`
@@ -13,7 +12,7 @@ Covers the milestone's 7-test contract:
    `test_registry_stubs_pyright.py` (extended); golden content test in
    `test_registry_stubs.py`.
 6. Simulator: namespace/entity-method calls execute identically to
-   `service(...)` in the simulator (I5).
+   `service(...)` in the simulator, which runs compiled IR, not DSL Python.
 7. Docs gate: covered by `hassle-dev docs` (docs/dsl-extensions.md new section).
 """
 
@@ -38,9 +37,8 @@ def _write_bundle(tmp_path: Path, source: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Test 1 — regression pin: entity-method call records (was AttributeError on
-# `main`, not the milestone text's "TypeError" -- verified against actual
-# `main` behavior; recorded in docs/ha-api-notes.md).
+# Regression pin: entity-method call records (was AttributeError on
+# `main`; recorded in docs/ha-api-notes.md).
 # ---------------------------------------------------------------------------
 
 
@@ -58,14 +56,14 @@ def test_entity_method_call_records_service_action() -> None:
 
 def test_entity_method_call_bare_attribute_access_stays_inert() -> None:
     # Bare attribute access (no call) must not record anything -- only CALLS
-    # record actions (milestone surface 2).
+    # record actions.
     with recording(kind="automation", id="x") as rec:
         _ = e.light.hallway.turn_on  # not called -- just attribute access
     assert rec.actions == []
 
 
 def test_entity_ref_attr_method_unaffected() -> None:
-    # `.attr("name")` is a real EntityRef method (pre-existing, M1.1) and must
+    # `.attr("name")` is a real, pre-existing EntityRef method and must
     # keep working exactly as before -- it must NOT be swallowed by whatever
     # machinery makes arbitrary attribute access call-able.
     from hassle.compiler.templates import TemplateExpr
@@ -259,8 +257,8 @@ def test_validate_unknown_service_via_plain_service_call_unaffected(tmp_path: Pa
 
 
 # ---------------------------------------------------------------------------
-# Test 6 — simulator: namespace/entity-method calls execute identically to
-# service() (I5: same compiled JSON either way, executed the same).
+# Simulator: namespace/entity-method calls execute identically to
+# service() (same compiled JSON either way, executed the same).
 # ---------------------------------------------------------------------------
 
 
@@ -298,7 +296,8 @@ def test_simulator_executes_namespace_and_entity_method_calls_identically() -> N
 @pytest.mark.parametrize("via", ["namespace", "entity_method", "service"])
 def test_compile_then_simulate_end_to_end_all_forms_match(tmp_path: Path, via: str) -> None:
     """Full compile -> IR path (mirrors what `hassle test` executes), proving
-    I5 for all three call forms end to end produce identical actions."""
+    that the simulator running compiled IR (not DSL Python) makes all three
+    call forms end to end produce identical actions."""
     if via == "namespace":
         imports = "from hassle import automation\nfrom hassle.services import light\n"
         body = "    light.turn_on(target={'entity_id': 'light.hallway'}, brightness_pct=60)\n"

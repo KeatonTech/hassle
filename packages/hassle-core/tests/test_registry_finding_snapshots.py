@@ -1,4 +1,4 @@
-"""M3 milestone test 6: error snapshots for the top 10 Finding types (R6).
+"""Error snapshots for the top 10 Finding types (what/where/fix format).
 
 Same pattern as `tests/test_compile_errors.py`: snapshot files under
 `tests/snapshots/findings/`, normalized to strip absolute directory prefixes,
@@ -224,9 +224,9 @@ def a():
 
 
 def test_snapshot_unknown_service(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
-    """MILESTONES M18 (N2, reviewer non-blocking note): the `unknown-service`
-    Finding, snapshot-tested like every other Finding here (R6) rather than
-    just substring-asserted in test_service_namespaces.py."""
+    """The `unknown-service` Finding, snapshot-tested like every other
+    Finding here rather than just substring-asserted in
+    test_service_namespaces.py."""
     text = _find_one(
         tmp_path,
         snapshot,

@@ -1,8 +1,8 @@
-"""M3 done-gate fixture: a purpose-built bundle with >= 25 DISTINCT seeded
-mistakes, one per numbered comment below, covering every Finding type the M3
-validator implements. Positions are varied deliberately: some in when(), some
-in only_if(), some in service() calls, some inside template(...) strings, some
-inside raw_trigger/raw_condition/raw_action.
+"""Validator fixture: a purpose-built bundle with >= 25 DISTINCT seeded
+mistakes, one per numbered comment below, covering every Finding type the
+registry validator implements. Positions are varied deliberately: some in
+when(), some in only_if(), some in service() calls, some inside
+template(...) strings, some inside raw_trigger/raw_condition/raw_action.
 
 This bundle must still COMPILE (the compiler doesn't know about the registry);
 only `hassle.registry.validate.validate_bundle` flags these.
@@ -235,7 +235,7 @@ def broken_mixed_positions():
 
 
 # --- automation 10: unknown entities nested inside control-flow containers -
-# (reviewer B1) extraction/validation must recurse into if/choose/repeat/
+# extraction/validation must recurse into if/choose/repeat/
 # parallel/wait_for_trigger bodies, not just the top-level trigger/condition/
 # action lists -- these seeds pin that blind spot shut for good.
 

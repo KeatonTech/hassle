@@ -1,6 +1,5 @@
-"""Task #30 (`ux/capture-notify-recipe`): the cookbook actionable-notification
-recipe's compiled IR shape, plus the round-trip honesty contract for BOTH new
-constructs the recipe is built on:
+"""The cookbook actionable-notification recipe's compiled IR shape, plus the
+round-trip honesty contract for BOTH constructs the recipe is built on:
 
 - `capture_actions()`/`emit_actions(...)` (the public capture seam,
   `hassle.compiler.recording`) -- proven by `fixtures/dsl/capture_emit_actions/`.
@@ -14,14 +13,14 @@ node for either, so the decompiler needs (and gets) ZERO changes. This test
 proves that directly: `decompile_object` on the compiled automation produces
 ordinary `wait_for`/`choose`/`service` source (no `notify_mobile`/`action`/
 `capture_actions`/`emit_actions` names anywhere in it), and re-compiling that
-decompiled source reproduces the identical IR (I3).
+decompiled source reproduces the identical IR (compile(decompile(x)) == x).
 
-Sim-test findings (docs/ha-api-notes.md §36.2, STOP per this task's explicit
-instruction): the simulator cannot yet resume a pending `wait_for_trigger` on
-an event, nor does it populate the `wait.trigger` template variable a
-satisfied wait's later conditions read -- so branch DISPATCH is untestable
-against the current simulator. This file is the IR-shape-level test the STOP
-instruction says may still land; `fixtures/cookbook/bundle/tests/
+Sim-test findings (docs/ha-api-notes.md §36.2): the simulator cannot yet
+resume a pending `wait_for_trigger` on an event, nor does it populate the
+`wait.trigger` template variable a satisfied wait's later conditions read --
+so branch DISPATCH is untestable against the current simulator. This file is
+the IR-shape-level test that can still land without that support;
+`fixtures/cookbook/bundle/tests/
 test_recipes.py::test_notify_with_actions_sends_actionable_notification_on_unlock`
 covers the always-true part (the notification itself firing) via the real
 simulator.
@@ -103,7 +102,7 @@ def test_notify_with_actions_compiles_to_wait_for_trigger_and_choose() -> None:
 
 
 def test_notify_with_actions_decompiles_to_plain_wait_for_and_choose() -> None:
-    """Round-trip honesty (I3): `notify_mobile`/`action` are authoring-only
+    """Round-trip honesty: `notify_mobile`/`action` are authoring-only
     sugar, like `@macro` -- the decompiler reconstructs the compiled shape as
     ordinary `wait_for(...)`/`choose(...)`/`service(...)` calls, never a
     `notify_mobile`/`action` call (those names are `lib/`-local to the
@@ -124,7 +123,7 @@ def test_notify_with_actions_decompiles_to_plain_wait_for_and_choose() -> None:
 def test_notify_with_actions_compile_decompile_recompile_reproduces_ir(
     tmp_path: Path,
 ) -> None:
-    """I3: `compile(decompile(x)) == x` for the recipe's compiled shape."""
+    """`compile(decompile(x)) == x` for the recipe's compiled shape."""
     first = compile_bundle(_COOKBOOK_BUNDLE)
     key = "automation:cookbook_notify_with_actions"
     obj = first.objects[key]

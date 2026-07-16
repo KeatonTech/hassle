@@ -1,4 +1,4 @@
-# Agent-acceptance run log (MILESTONES M9 test 3)
+# Agent-acceptance run log
 
 The M9 "real gate": fresh model sessions receive a generated sample bundle
 (`hassle-dev acceptance-bundle`) plus one task prompt from

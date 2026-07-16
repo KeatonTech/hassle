@@ -1,9 +1,8 @@
-"""Field failure regression (`ux/shared-script-calls-fix`, widened by
-`ux/shared-script-rich-fields`): the caller function-call rewrite must agree
-with the SAME emit decision that picked `@shared_script` vs. the `@script`
-fallback for the callee.
+"""Regression: the caller function-call rewrite must agree with the SAME
+emit decision that picked `@shared_script` vs. the `@script` fallback for
+the callee.
 
-The owner's real bundle hit this: a script fell back to `@script` -- so it
+A real-world bundle hit this: a script fell back to `@script` -- so it
 decompiled to a zero-parameter function -- but its caller still had its
 `{"action": "script.<id>", "data": {...}}` action rewritten to a call passing
 those kwargs, a call the zero-parameter function cannot accept. `TypeError`
@@ -18,11 +17,11 @@ stored `data` was). Fix: the shared_script-vs-fallback decision must be
 computed once and gate `CallTarget`/`ScriptRef` creation, not just used to
 pick a field allow-list.
 
-**Widened (`ux/shared-script-rich-fields`, owner feedback):** the original
-fix's example fallback shape (a field carrying `name`/`selector` metadata,
-no `default`) is now ITSELF `@shared_script`-expressible (`fields=` emitted
-verbatim, `None`-defaulted signature) -- real HA-UI-authored scripts always
-carry this shape, so the narrower rule made the whole feature inert on real
+**Widened:** the original fix's example fallback shape (a field carrying
+`name`/`selector` metadata, no `default`) is now ITSELF
+`@shared_script`-expressible (`fields=` emitted verbatim, `None`-defaulted
+signature) -- real HA-UI-authored scripts always carry this shape, so the
+narrower rule made the whole feature inert on real
 bundles. The tests below now use one of the two remaining genuine fallback
 triggers (a field spec that isn't a dict at all -- malformed metadata) to
 keep exercising the SAME coordination hazard the fix addresses, without
@@ -97,7 +96,7 @@ def test_decompiled_fallback_pair_actually_compiles() -> None:
     """The missing bundle-level check that would have caught the field
     failure directly: decompile the pair and RECOMPILE it. A coordination bug
     between the emit decision and the caller rewrite raises a TypeError here
-    (the exact failure mode reported from the owner's real bundle)."""
+    (the exact failure mode seen in a real-world bundle)."""
     objects = _fallback_script_and_caller()
     source = decompile_bundle(objects)
 

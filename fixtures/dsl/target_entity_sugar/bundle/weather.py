@@ -1,5 +1,5 @@
-"""Golden case: bare entity/area/floor/label target sugar (`ux/dsl-ergonomics`,
-item 3) -- `target=e.weather.home` compiles to `target={"entity_id": ...}`
+"""Golden case: bare entity/area/floor/label target sugar --
+`target=e.weather.home` compiles to `target={"entity_id": ...}`
 identically; `area()`/`floor()`/`label()` target helper objects also accepted
 directly as `target=`. Paired with `target_dict_parity/`'s explicit dict form
 to prove compile parity.

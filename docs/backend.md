@@ -112,7 +112,7 @@ class Plan(BaseModel):
 `remote_hash_at_plan` is the canonical hash (`hassle.ir.canonical.sha256_hash`)
 of the remote object *at the moment the plan was computed* — the apply engine
 re-verifies against this immediately before writing (DESIGN §8.2's "apply is
-transactional" paragraph; MILESTONES M5 test 3, `test_apply_reverifies_hashes`).
+transactional" paragraph; `test_apply_reverifies_hashes`).
 `source_path` is where the pull engine should route `SourceWriter` calls for
 this object key.
 

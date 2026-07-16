@@ -1,4 +1,4 @@
-"""Error case (M7.1): duplicate id declared in two different subdirectory
+"""Error case: duplicate id declared in two different subdirectory
 files -- the message must show both relative paths
 (automations/hallway.py and scripts/night_mode.py)."""
 

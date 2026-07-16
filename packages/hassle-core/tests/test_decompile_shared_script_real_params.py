@@ -1,12 +1,13 @@
-"""M19 test 3 -- decompiling a shared-script's own body reads its fields bare.
+"""Decompiling a shared-script's own body reads its fields bare.
 
 Inside a `@shared_script`'s own sequence, a `"{{ <field> }}"` data value whose
 name is exactly one of the script's own fields decompiles to the bare
-parameter name (the owner's real `dismiss_notification` shape); a larger
+parameter name (a real-world `dismiss_notification` shape); a larger
 invertible expression containing a field read decompiles through the
-M13/M16 inverter with fields bound as bare parameters too; anything the
-inverter can't invert keeps the raw string (I3 fallback). The shared-script
-field context must never leak into automation decompilation.
+bounded Jinja inverter with fields bound as bare parameters too; anything the
+inverter can't invert keeps the raw string (the raw escape hatch fallback).
+The shared-script field context must never leak into automation
+decompilation.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ def _recompile_sha(obj_config: dict[str, object], *, kind: str, key_hint: str) -
 
 
 def test_bare_field_read_decompiles_to_bare_parameter_owner_shape() -> None:
-    """The owner's real `dismiss_notification` shape: stored data
+    """A real-world `dismiss_notification` shape: stored data
     `{"notification_id": "{{ tag }}"}` with field `tag` decompiles to
     `tag=tag` and recompiles byte-identically."""
     config = {
@@ -48,9 +49,8 @@ def test_bare_field_read_decompiles_to_bare_parameter_owner_shape() -> None:
         ],
     }
     source, _ = _recompile_sha(config, kind="script", key_hint="dismiss_notification")
-    # M19 owner-directed typing resolution: TemplateExpr-annotated,
-    # field_default(...)-defaulted (body-true typing, see
-    # `_shared_script_signature`'s docstring) -- not `tag: str = ""`.
+    # TemplateExpr-annotated, field_default(...)-defaulted (body-true typing,
+    # see `_shared_script_signature`'s docstring) -- not `tag: str = ""`.
     assert 'def dismiss_notification(*, tag: TemplateExpr = field_default("")):' in source
     assert "notification_id=tag" in source
     assert "{{ tag }}" not in source  # not the raw-string fallback
@@ -58,8 +58,8 @@ def test_bare_field_read_decompiles_to_bare_parameter_owner_shape() -> None:
 
 def test_composed_field_expression_decompiles_through_inverter() -> None:
     """A larger invertible expression over a field (`concat`'s `~`-join)
-    decompiles through the M13/M16 inverter with the field bound as a bare
-    parameter, not just a single bare read."""
+    decompiles through the bounded Jinja inverter with the field bound as a
+    bare parameter, not just a single bare read."""
     config = {
         "alias": "Dismiss tagged",
         "fields": {"tag": {"default": ""}},
@@ -75,8 +75,8 @@ def test_composed_field_expression_decompiles_through_inverter() -> None:
 
 
 def test_non_invertible_template_keeps_raw_string_fallback() -> None:
-    """A template the bounded inverter can't parse at all (I3 fallback) keeps
-    the raw string -- never partial/incorrect output."""
+    """A template the bounded inverter can't parse at all keeps the raw
+    string (the raw escape hatch fallback) -- never partial/incorrect output."""
     config = {
         "alias": "Weird template",
         "fields": {"tag": {"default": ""}},

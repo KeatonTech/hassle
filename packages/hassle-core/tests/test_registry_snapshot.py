@@ -1,4 +1,4 @@
-"""M3: the registry snapshot model (DESIGN §9.2) — loads `fixtures/registry/home.json`
+"""The registry snapshot model (DESIGN §9.2) — loads `fixtures/registry/home.json`
 and exposes lookup surfaces the validator/stub-generator build on.
 
 No network: this only ever reads the committed fixture file.

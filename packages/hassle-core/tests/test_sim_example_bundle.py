@@ -1,7 +1,7 @@
-"""M4 test 8 (meta-test): the DESIGN §10.2 example tests run green verbatim
+"""Meta-test: the DESIGN §10.2 example tests run green verbatim
 against the example bundle (fixtures/sim/hallway_bundle).
 
-The seeded-logic-bug done-gate lives in a sibling bundle + test file
+The seeded-logic-bug coverage lives in a sibling bundle + test file
 (fixtures/sim/hallway_bundle_buggy/, test_sim_seeded_bug_caught.py) so this
 file stays a clean, green demonstration of the DESIGN §10.2 examples.
 """

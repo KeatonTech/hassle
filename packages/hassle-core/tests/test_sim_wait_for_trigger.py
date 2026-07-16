@@ -1,4 +1,4 @@
-"""M4 test 3: wait_for_trigger timeout vs satisfied paths; continue_on_timeout."""
+"""wait_for_trigger timeout vs satisfied paths; continue_on_timeout."""
 
 from __future__ import annotations
 
@@ -77,11 +77,11 @@ def test_wait_for_trigger_times_out_continue_false_stops_sequence(tmp_path: Path
 
 
 def test_wait_for_trigger_accepts_plain_string_timeout(tmp_path: Path) -> None:
-    """M9 regression: `wait_for(..., timeout="00:10:00")` -- a plain HH:MM:SS
+    """Regression: `wait_for(..., timeout="00:10:00")` -- a plain HH:MM:SS
     string, exactly what `fixtures/dsl/wait_for_trigger` golden-compiles and
     what `wait_for`'s own `timeout=` docstring passes through verbatim (no
     `normalize_duration`, unlike `for_=`) -- must simulate the same as the
-    equivalent `timeout=minutes(10)` dict form, not crash. Found via the M9
+    equivalent `timeout=minutes(10)` dict form, not crash. Found via the
     cookbook recipe `wait_then_lock_reminder` (`fixtures/cookbook/`).
     """
     sim = build_sim(

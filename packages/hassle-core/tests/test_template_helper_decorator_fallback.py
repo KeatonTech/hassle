@@ -1,19 +1,17 @@
-"""MILESTONES M14 -- decorator form is the canonical template-helper output,
-both decompile branches.
+"""Decorator form is the canonical template-helper output, both decompile
+branches.
 
-Owner feedback on M13: the non-invertible fallback branch should ALSO emit
+The non-invertible fallback branch also emits
 the decorator shape, with the raw Jinja template as the verbatim string body
-of the `return` statement -- same IR, same I3 guarantee, but hand-converting
-a helper to Python later means rewriting only the `return` expression. The
-call form stays valid DSL (F3, unchanged) -- it just stops being canonical
-decompiler OUTPUT.
+of the `return` statement -- same IR, same round-trip guarantee, but
+hand-converting a helper to Python later means rewriting only the `return`
+expression. The call form stays valid DSL (part of the frozen top-level DSL
+surface, unchanged) -- it just stops being canonical decompiler OUTPUT.
 
 Both decompile branches (`hassle.decompiler.codegen._template_helper_source`)
-now emit `@builder(...)` / `def <ident>(): return ...`; the only difference is
-the body -- an inverted `TemplateExpr` expression (M13's "nice" branch) vs. a
-verbatim raw-string `return "..."` (this milestone's fallback branch).
-
-Test numbering below matches MILESTONES.md's "Write these tests first" list.
+emit `@builder(...)` / `def <ident>(): return ...`; the only difference is
+the body -- an inverted `TemplateExpr` expression (the "nice" branch) vs. a
+verbatim raw-string `return "..."` (the fallback branch).
 """
 
 from __future__ import annotations

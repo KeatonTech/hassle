@@ -1,5 +1,5 @@
-"""M9 error-message audit finding: `MediaMirror`'s "never target the media
-root" guard previously lacked an explicit "Fix:" clause (R6)."""
+"""`MediaMirror`'s "never target the media root" guard previously lacked an
+explicit "Fix:" clause (error messages state what/where/fix)."""
 
 from __future__ import annotations
 

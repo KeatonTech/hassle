@@ -1,4 +1,4 @@
-"""M4 test 4: choose/if branch selection incl. default; repeat while/until/count/for_each."""
+"""Choose/if branch selection incl. default; repeat while/until/count/for_each."""
 
 from __future__ import annotations
 

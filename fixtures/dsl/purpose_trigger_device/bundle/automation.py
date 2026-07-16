@@ -1,4 +1,4 @@
-"""Golden case: purpose-specific trigger, device_id target (M1 test 10).
+"""Golden case: purpose-specific trigger, device_id target.
 
 Mirrors the second trigger of
 fixtures/configs/automation_purpose_trigger_floor_device.json.

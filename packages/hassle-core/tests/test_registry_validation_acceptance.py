@@ -1,8 +1,7 @@
-"""M3 done-gate: validation catches every seeded error in a purpose-built
-"broken bundle" fixture (>= 25 distinct seeded mistakes, milestone floor;
-this fixture carries 37 after the reviewer's B1 nested-control-flow fix) with
-ZERO false positives on (a) a synthetic clean bundle and (b) the existing
-M0/M1/M2 DSL golden corpus.
+"""Validation catches every seeded error in a purpose-built "broken bundle"
+fixture (37 distinct seeded mistakes, including nested-control-flow cases)
+with ZERO false positives on (a) a synthetic clean bundle and (b) the
+existing DSL golden corpus.
 """
 
 from __future__ import annotations
@@ -29,9 +28,8 @@ def snapshot() -> RegistrySnapshot:
 def test_broken_bundle_produces_at_least_25_findings(snapshot: RegistrySnapshot) -> None:
     result = compile_bundle(BROKEN_BUNDLE)
     findings = validate_bundle(result, snapshot)
-    # Milestone floor is 25; the fixture actually carries 37 (29 original +
-    # 8 nested-control-flow seeds added for reviewer finding B1) -- asserting
-    # >= 33 (not just >= 25) so a future regression back into the nested
+    # The fixture carries 37 seeded findings (29 original + 8 nested-control-flow
+    # seeds) -- asserting >= 33 so a future regression back into the nested
     # blind spot fails this test immediately rather than merely dipping
     # toward the historical floor.
     assert len(findings) >= 33, f"expected >= 33 findings, got {len(findings)}: {findings}"
@@ -40,7 +38,7 @@ def test_broken_bundle_produces_at_least_25_findings(snapshot: RegistrySnapshot)
 def test_broken_bundle_covers_nested_control_flow_positions(
     snapshot: RegistrySnapshot,
 ) -> None:
-    """(reviewer B1) Pin the nested-control-flow seeds (if/else, choose branch
+    """Pin the nested-control-flow seeds (if/else, choose branch
     + default, repeat, parallel, repeat-inside-choose, wait_for_trigger) so
     this fixture can never quietly lose that coverage again.
     """

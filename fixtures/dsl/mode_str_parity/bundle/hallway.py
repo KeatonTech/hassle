@@ -1,5 +1,5 @@
-"""Golden case: plain string `mode=`/`max_exceeded=` (`ux/dsl-ergonomics`, item 2) --
-the pre-existing behavior, unchanged. Paired with `mode_enum_parity/`'s `Mode`/
+"""Golden case: plain string `mode=`/`max_exceeded=` -- the pre-existing
+behavior, unchanged. Paired with `mode_enum_parity/`'s `Mode`/
 `MaxExceeded` enum form to prove compile parity: both must produce byte-identical IR.
 """
 

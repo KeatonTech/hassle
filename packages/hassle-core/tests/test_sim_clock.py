@@ -1,6 +1,6 @@
-"""M4 test 5: clock semantics -- advance() fires due time triggers in order;
-delays expire exactly once; every test here is asserted to be well under the
-1s wall-clock CI marker by construction (fake clock, no sleeps)."""
+"""Clock semantics -- advance() fires due time triggers in order;
+delays expire exactly once; every test here is asserted to be well under
+1s wall-clock time by construction (fake clock, no sleeps, deterministic)."""
 
 from __future__ import annotations
 
@@ -93,7 +93,7 @@ def test_advance_exactly_at_boundary_fires(tmp_path: Path) -> None:
 
 def test_no_wall_clock_sleep_used(tmp_path: Path) -> None:
     """Meta-test: advancing 1 full simulated day must take negligible wall-clock
-    time -- proves the clock never actually sleeps (R8/CI marker)."""
+    time -- proves the clock never actually sleeps."""
     sim = build_sim(
         tmp_path,
         """

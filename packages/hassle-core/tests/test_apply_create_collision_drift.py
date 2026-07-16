@@ -1,17 +1,16 @@
-"""CREATE-collision drift detection in the apply engine (M5 review finding).
+"""CREATE-collision drift detection in the apply engine.
 
 DESIGN §8.2's "apply is transactional" paragraph says apply re-verifies remote
-hashes immediately before writing and aborts on drift. M5's `apply_plan`
-implemented that for UPDATE/DELETE (which carry a `remote_hash_at_plan`), but a
+hashes immediately before writing and aborts on drift. `apply_plan`
+implements that for UPDATE/DELETE (which carry a `remote_hash_at_plan`), but a
 `CREATE` entry has no plan-time remote hash because, at plan time, nothing
-existed under that identity. The M5 review (surfaced again in MILESTONES M6
-test 5) flagged the gap: if some object appears under a planned-CREATE identity
-*between* plan and apply — a UI-created object, or a racing second client —
-blindly POSTing would silently overwrite it. That is drift too, and apply must
-abort before writing, exactly like the UPDATE/DELETE case.
+existed under that identity: if some object appears under a planned-CREATE
+identity *between* plan and apply — a UI-created object, or a racing second
+client — blindly POSTing would silently overwrite it. That is drift too, and
+apply must abort before writing, exactly like the UPDATE/DELETE case.
 
 These are pure-logic tests against `FakeBackend`; the live-HA analogue is
-MILESTONES M6 test 5 (`test_apply_aborts_on_drift_live`, CREATE-collision case).
+`test_apply_aborts_on_drift_live` (CREATE-collision case).
 """
 
 from __future__ import annotations

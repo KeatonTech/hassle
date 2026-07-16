@@ -1,11 +1,10 @@
-"""MILESTONES M15 work item B, test 4 (predicate half): `category_shaped_stem`
-learns the new root-level, cross-kind shape -- a mixed-kind category file lives
-directly at the bundle root (``<slug>.py``), not under a per-kind tree
-(``automations/<slug>.py`` etc, the RETIRED shape work item A still used).
+"""`category_shaped_stem`: a mixed-kind category file lives directly at the
+bundle root (``<slug>.py``), not under a per-kind tree
+(``automations/<slug>.py`` etc, the RETIRED per-kind-tree shape).
 
-Binding shape (MILESTONES M15 "CATEGORY global... now applying to root-level
-`<slug>.py` files; `category_shaped_stem` learns the new shape (root-level,
-stem != `misc`, excluding `lib/`/`tests/`/`docs/`/dot-dirs)"):
+Binding shape ("CATEGORY global... applies to root-level `<slug>.py` files;
+`category_shaped_stem` recognizes root-level, stem != `misc`, excluding
+`lib/`/`tests/`/`docs/`/dot-dirs"):
 
 - root-level ``<stem>.py``, ``stem != "misc"`` -> category-shaped, stem returned.
 - root-level ``misc.py`` -> not category-shaped (the uncategorized fallback).

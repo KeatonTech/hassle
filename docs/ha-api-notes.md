@@ -1,8 +1,8 @@
 # Home Assistant API notes — M0.V behavioral verification
 
 **Purpose.** DESIGN §4 ("How Home Assistant stores these objects") was source-verified against HA
-core in July 2026. MILESTONES M0.V requires it to be re-verified **behaviorally** against a live
-instance, with real request/response captures that become the M5 `FakeBackend` fixtures.
+core in July 2026. This document re-verifies it **behaviorally** against a live
+instance, with real request/response captures that become the `FakeBackend` fixtures.
 
 This document records that verification: every DESIGN §4 table row, the four named quirks
 (helper `{domain}_id` payload keys, `skip_condition` default, media-upload Content-Type gate,
@@ -424,7 +424,7 @@ signed path is clean. The subfolder must already exist on disk (the upload API d
 
 ## 10. Corrections / additions to DESIGN §4 (and §5.8, §8.5) — flagged loudly
 
-> These are behavioral facts that differ from the design text. M1/M2/M5/M6 owners must read them.
+> These are behavioral facts that differ from the design text. Anyone implementing against DESIGN §4 should read them.
 
 ### 10.1 Automation/script schema is **normalized to the plural, `2024.10+` form** on storage
 The single most important finding for the round-trip invariant (I3).
@@ -549,7 +549,7 @@ not wired into `compile_bundle` (found by the templates/macros/object-types work
 > `fixtures/dsl/{helper_declarations,raw_automation_legacy,blueprint_automation}`.
 > The rest of this section is retained as the original gap report.
 >
-> **Also renamed 2026-07-03 (owner decision, same integration pass):** the
+> **Also renamed 2026-07-03 (design decision, same integration pass):** the
 > `hassle-core` distribution collapsed its two top-level import packages
 > (`hassle_core` + a thin `hassle` facade) into one, `hassle`. Every
 > `hassle_core.*` path in the retained report below is now `hassle.*`; see
@@ -560,7 +560,7 @@ docs/compiler-api.md**, flagged here per CLAUDE.md's "if the internal-api
 contract is insufficient, stop and report rather than modifying core."
 
 `compile_bundle`/`compile_registered` (`packages/hassle-core/src/hassle/compiler/bundle.py`
--- path renamed 2026-07-03 from `hassle_core/compiler/bundle.py`, owner decision, see
+-- path renamed 2026-07-03 from `hassle_core/compiler/bundle.py`, design decision, see
 docs/ir-format.md; frozen for follow-on M1 workstreams) only drain `registry.Registry` -- a list of
 `RegisteredObject`, each of which is compiled by opening a `Recorder` and calling
 `reg.func()` once, i.e. "run a function, record trigger/condition/action calls
@@ -682,7 +682,7 @@ real corpus.
 
 ## 15. M2 correction: most of the corpus is legacy singular-form, not "two fixtures"
 
-MILESTONES M2 test 1 names ``automation_legacy_platform_naming`` and
+MILESTONES.md names ``automation_legacy_platform_naming`` and
 ``automation_service_call_longhand`` as "the cases where normalization
 applies," implying they are the exception. Checking the actual corpus:
 **48 of the 55 ``automation_*.json`` fixtures** use the legacy singular schema
@@ -756,7 +756,7 @@ before comparing).
 > are confirmed. Everything here exercises long-stable surface unless flagged.
 
 ### 17.1 Inner `platform:` is NOT rewritten to `trigger:` on storage (M4 finding) ✅
-The open M4 question (MILESTONES M6 test 5): does HA rewrite an inner legacy
+The open M4 question: does HA rewrite an inner legacy
 `platform:` discriminator to `trigger:` when it stores an automation? **No.**
 POSTing `triggers:[{"platform":"state",…}]` (or legacy `trigger:` outer) reads
 back with the inner key **unchanged** (`"platform":"state"`); only the *outer*
@@ -782,13 +782,13 @@ reads the first snapshot event of each and returns
 
 - On **2026.2.3 the snapshot is empty** (the purpose vocabulary is a 2026.7
   feature) — so `fetch_purpose_vocabulary()` returns empty lists there, and the
-  round-trip half of MILESTONES M6 test 8 skips locally and runs in CI on
+  round-trip half of the live-verification test skips locally and runs in CI on
   `stable`/`dev`.
 - **R5 note:** the provisional M0.1 fixture shape
   (`registry.purpose_vocabulary = {triggers: [str], conditions: [str]}`) is
   *derivable directly* from `sorted(payload.keys())`, so the shape does **not**
   differ — the fixture and `RegistrySnapshot.PurposeVocabulary` are kept
-  unchanged, and no MILESTONES update is required. (Only the *source* moved from
+  unchanged, and no MILESTONES.md update is required. (Only the *source* moved from
   "provisional" to "these two subscribe commands.")
 
 ### 17.3 Parallel-branch `stop` semantics (M4 finding) ✅
@@ -804,7 +804,7 @@ sequence *after* the `parallel:` block are skipped). Net for the M4 simulator:
 siblings.
 
 ### 17.4 Media mirror: two gates reconfirmed + folder IS auto-created (corrects §10.4) ✅
-Full flow reconfirmed on 2026.2.3 (MILESTONES M6 test 9): upload
+Full flow reconfirmed on 2026.2.3 (live-verification): upload
 `application/zip` → **400**, `image/png` → **200**; `resolve_media` → signed URL
 with `mime_type: audio/mpeg`; authenticated GET of the `.mp3` → **200**, bytes
 sha256-identical; `remove` → success. **Correction to §10.4:** the upload
@@ -828,7 +828,7 @@ assigned identity. Flagged for M7.
 
 **Amendment 2026-07-05 (smoke #7 field evidence): the slug rule only
 constrains the WS-API *creation* path — `.storage` contents themselves are
-unconstrained.** The owner's live registry has helpers whose id does **not**
+unconstrained.** A real live registry has helpers whose id does **not**
 equal `slugify(name)` — e.g. an `input_text` with id
 `material_you_image_url_6814bc` and name "Material You Base Color Source
 Image Path/URL Kai" (slug: `material_you_base_color_source_image_path_
@@ -902,7 +902,7 @@ frozen, heavily-tested M1 module with no M7 test-contract requirement forcing
 it); M7's own fixtures and the `hassle init` scaffold used the flat
 convention that matched actual `compile_bundle` behavior at the time.
 
-**Decision (owner, M7.1): DESIGN §6's tree layout wins — the loader
+**Decision (M7.1): DESIGN §6's tree layout wins — the loader
 recurses.** `compile_bundle` now walks the whole bundle tree
 (`hassle.compiler.bundle._iter_bundle_source_files`), skipping `tests/`,
 `.hassle/`, `stubs/`, any dot-directory, and `__pycache__` at every depth.
@@ -937,9 +937,9 @@ skipped, silently, whether it targets a directory or a file** — see
 plus a belt-and-suspenders resolve-under-`bundle_path` re-check immediately
 before import, to also catch a symlinked intermediate directory).
 
-## 19. Real-world smoke-test findings (task #5): three mundane UI-authored shapes DESIGN §5.4 missed
+## 19. Real-world smoke-test findings: three mundane UI-authored shapes DESIGN §5.4 missed
 
-> Source: the owner's first live smoke test against a real 2026.7 Home Assistant
+> Source: a live smoke test against a real 2026.7 Home Assistant
 > instance surfaced 118 granular `raw_*` decompiler fallbacks across 101 real
 > objects, tracing to three root causes below. All three are ordinary shapes the
 > HA UI writes on every save; none are exotic. Fixtures:
@@ -1001,9 +1001,9 @@ condition-only before); the decompiler's `_trig_time` accepts and emits
 `weekday` alongside `at`. `time(at="input_datetime.wakeup")` already worked and
 needed no code change, only this note.
 
-## 20. Residue coverage, round 2 (task #8): four more UI-authored shapes DESIGN §5.4/§5.5 missed
+## 20. Residue coverage, round 2: four more UI-authored shapes DESIGN §5.4/§5.5 missed
 
-> Source: a second live smoke test against the owner's real 2026.7 Home
+> Source: a second live smoke test against a real 2026.7 Home
 > Assistant bundle (101 objects) surfaced 12 more granular `raw_action`
 > decompiler fallbacks, tracing to four root causes below — extending the
 > round-1 pattern (§19) directly. All four are ordinary shapes the HA UI
@@ -1094,12 +1094,12 @@ carrying `data_template`/list-valued conditions no longer forces a fallback
 either — so a container is never raw'd merely because a descendant (at any
 nesting depth) carries one of these ordinary UI shapes.
 
-*Verified 2026-07-05 against the owner's real 2026.7 Home Assistant bundle
+*Verified 2026-07-05 against a real 2026.7 Home Assistant bundle
 (101 objects, 12 raw_action fallbacks traced to these four causes).*
 
-## 21. Residue coverage, round 3, final (task #8 cont'd): branch-level `alias`/`enabled` and multi-step `parallel` branches
+## 21. Residue coverage, round 3, final: branch-level `alias`/`enabled` and multi-step `parallel` branches
 
-> Source: field measurement of the owner's real 2026.7 bundle after round 2
+> Source: field measurement of a real 2026.7 bundle after round 2
 > (§20) landed: `raw_action` count dropped 14 → 7. Of the remaining 7, five
 > are fixable (traced to the two root causes below); two are device actions
 > that stay raw by design (no stable cross-integration schema, same rationale
@@ -1179,13 +1179,13 @@ needed** — `automation_choose_numeric_state_attribute_condition.json` is a
 regression/verification fixture only, pinning this so it never silently
 breaks if the nested-condition path is ever refactored.
 
-*Verified 2026-07-05 against the owner's real 2026.7 Home Assistant bundle
+*Verified 2026-07-05 against a real 2026.7 Home Assistant bundle
 (field measurement: 14 → 7 raw_action fallbacks after round 2, 5 of 7 traced
 to §21.1/§21.2 above and fixed; 2 remaining are device actions, out of scope).*
 
 ---
 
-## 22. Pull organization + ignore filtering (owner feedback after first real pull, `ux/pull-organization`)
+## 22. Pull organization + ignore filtering (feedback after a first real pull)
 
 > **Correction (2026-07-06):** this section's claim that HA's category registry
 > only covers `automation`/`script` scopes is wrong (and was wrong when written) —
@@ -1242,15 +1242,15 @@ was taken for the category registry itself — see the caveat below):
   TODO, not a gap in the required test contract.
 
 
-**Live-verified 2026-07-05:** the owner's real 2026.7 instance returned category
+**Live-verified 2026-07-05:** a real 2026.7 instance returned category
 registries for both scopes on pull; placement produced correct per-category files
 (automatic_blinds/automatic_hvac/plant_care/...). The inferred `scope` argument and
 row shape are confirmed behaviorally; the integration-test TODO stands for CI.
 
-### 22.2 `ignore` globs — DESIGN §8.2/§6 amendment (owner decision)
+### 22.2 `ignore` globs — DESIGN §8.2/§6 amendment (design decision)
 
 New `hassle.toml` field: `ignore = ["input_boolean:material_you_*", …]`, `fnmatch` globs matched
-against object keys. This is a deliberate, owner-approved exception to §8.2's "first-ever pull
+against object keys. This is a deliberate, approved exception to §8.2's "first-ever pull
 adopts everything; nothing is ever unmanaged" — DESIGN §6/§8.2 have been amended in place (this is
 not a silent workaround). Implementation lives in `hassle_cli.ignore_filter`
 (`apply_ignore_globs`/`migrate_manifest_for_ignores`), called from the CLI layer **before**
@@ -1273,7 +1273,7 @@ user has since edited. Test coverage: `packages/hassle-cli/tests/test_lib_readme
 
 A fresh `hassle pull` immediately followed by `hassle plan`, with zero edits on either side, must
 show every object as `noop` (or an `update` labeled `"modernization (one-time)"` — DESIGN §8.2's
-one-time legacy-schema exception, MILESTONES M7 test 4b). A owner real-bundle pull instead showed
+one-time legacy-schema exception). A real-bundle pull instead showed
 8 phantom `conflict`s alongside the (expected) 13 modernization entries. Root-caused to two
 distinct bugs, both now regression-tested (`packages/hassle-core/tests/test_pull_plan_noop_invariant.py`,
 `packages/hassle-cli/tests/test_pull_plan_noop_invariant_cli.py`):
@@ -1350,7 +1350,7 @@ pyright run to check it actually resolved.
 M8) builds a bundle using the real `hassle_cli.init_cmd.init_bundle` + the real
 `generate_entities_stub`/`stubs`-command code path (not a hand-rolled fixture, unlike the M3
 original) and runs pyright against exactly those files — this is the "layer-1 proof, extended"
-MILESTONES M8 asked for.
+this milestone asked for.
 
 **Fix (not a DESIGN.md change — DESIGN §11 already specified the right end state, it just was
 never wired up):**
@@ -1371,9 +1371,9 @@ No HA API behavior is involved in this finding (it's pure local tooling/editor-i
 it's recorded here per the standing instruction to log any DESIGN-vs-reality gap discovered while
 implementing a milestone.
 
-## 26. M10: config-entry template-helper flow shapes — DESIGN §13's plugin protocol exercised (source-informed, CI-verified)
+## 26. Config-entry template-helper flow shapes — DESIGN §13's plugin protocol exercised (source-informed, CI-verified)
 
-MILESTONES M10 builds the first config-entry `ObjectType` plugin (DESIGN §13:
+This milestone builds the first config-entry `ObjectType` plugin (DESIGN §13:
 "Config-entry helpers ... needs the config flow WS API; the plugin protocol
 already allows async multi-step applies"), scoped to the `template` domain
 (number/sensor/binary_sensor/select). Unlike every prior kind (automation/
@@ -1573,7 +1573,7 @@ declared identity, is what the wire protocol actually keys on):
 command, which does not exist — REST `DELETE`, per §26.0. `config_entries/get`,
 used for listing/enumeration, genuinely is a WS command and was unaffected.)
 
-**Rollback caveat (documented honestly, MILESTONES M10 test 4):** unlike a
+**Rollback caveat (documented honestly):** unlike a
 storage helper's delete (which the apply engine's rollback can undo by
 recreating with the same caller-chosen id — helpers' identity is
 caller/slug-derived, so a rollback recreate lands on the same identity), a
@@ -1659,8 +1659,8 @@ unblocked flow step submission):
    into a caller-visible `id`, §4/§17.5). This invalidates §26.5's identity
    scheme outright: there was never a `unique_id` to send.
 
-**Identity, REDESIGNED and RE-FROZEN in this PR (supersedes §26.5; MILESTONES
-M10 updated in the same series, R5):**
+**Identity, REDESIGNED and RE-FROZEN in this PR (supersedes §26.5; MILESTONES.md
+updated in the same series, R5):**
 
 - Object key: `"<template domain>:<slugify(name)>"` — e.g.
   `"template_number:active_hvac_zones"` for `name="Active HVAC Zones"`. This
@@ -1867,7 +1867,7 @@ entity_registry/list` WS calls. This is the unavoidable cost of there being
 no direct "read one entry's options" API (§26.7 finding 2) — real HA's own
 frontend pays the same cost every time its helpers-list page needs to show
 current values. Not optimized further in this milestone (no perf budget was
-set for `list_remote` in DESIGN or MILESTONES M10); flagged here in case a
+set for `list_remote` in DESIGN or in this milestone); flagged here in case a
 future milestone's `pull`/`plan` on a large template-helper population needs
 it addressed (e.g. batching, or caching options against `modified_at` from
 `config_entries/get`'s already-free listing).
@@ -2017,8 +2017,8 @@ call that then trips the new check.
 
 ## 25. M8 finding: `DiagnosticsManager.refresh()` race (fixed, regression-tested) — `vscode-extension/`
 
-While writing the `@vscode/test-electron` integration test for Problems-pane diagnostics
-(MILESTONES M8 test 2), a real race surfaced: `activate()` fires one `hassle validate --json`
+While writing the `@vscode/test-electron` integration test for Problems-pane diagnostics,
+a real race surfaced: `activate()` fires one `hassle validate --json`
 refresh immediately on startup (fire-and-forget), and a user-triggered `hassle.validate` command
 fires another. If the first (older) request's CLI subprocess happens to resolve *after* the
 second (newer) one — plausible any time the CLI is slow to spawn, e.g. `uv run`'s first-invocation
@@ -2154,7 +2154,7 @@ replaced the invalid `cwd=` kwarg with an `os.chdir()`-around-the-call helper
 `test_cli_runner_invoke_rejects_cwd_kwarg_regression` (no network, runs in the ordinary unit job),
 pins down the root cause directly against a trivial `click.command()` so this class of mistake
 gets caught immediately in the unit job next time instead of silently no-op'ing an integration
-test. No DESIGN.md or MILESTONES.md change needed — DESIGN §10.4 / MILESTONES M7 test 5's
+test. No DESIGN.md or MILESTONES.md change needed — DESIGN §10.4's
 intended behavior (shadow created, triggered, trace rendered, cleaned up) is unchanged; only the
 test's own Click API usage was wrong. Not independently re-verified against live HA in this PR (no
 Docker/HA access in this environment) — the orchestrator's CI run against both `stable` and `dev`
@@ -2286,7 +2286,7 @@ first time.
   `DirectBackend._alist_automations`'s own enumeration logic) before calling `automation.trigger` —
   replacing the naive, wrong `f"automation.{shadow_id}"`. `list_traces`/`get_trace`'s `item_id`
   usage was already correct (keyed by the bare config id, per §7/§10.2) and is unchanged.
-- DESIGN §10.4 point 1/2 and MILESTONES M7 test 5 updated in the same series to describe the
+- DESIGN §10.4 point 1/2 and MILESTONES.md updated in the same series to describe the
   enabled-shadow-with-never-fires-trigger design and the `entity_id`-resolution requirement (this
   revises a previously-designed mechanism with live evidence, per the standing instruction).
 - Integration test strengthened (coordinator ask): the shadow's action now also increments a
@@ -2341,7 +2341,7 @@ re-verified against live HA in this PR (no Docker/HA access here) — the orches
 the actual green signal, and is expected to be the first fully-green run of this test across all
 three rounds.
 
-## 30. M11: category write-back on push-create — WS shapes now live-verified by CI (`m11/category-writeback`)
+## 30. Category write-back on push-create — WS shapes now live-verified by CI (`m11/category-writeback`)
 
 > **Corrections (2026-07-06, source-verified in §31):** (b) `config/entity_registry/
 > update` merges `categories` per scope server-side (not wholesale replace) — the
@@ -2364,8 +2364,8 @@ brand-new automation/script whose source file matches the `automations/<slug>.py
 `scripts/<slug>.py` shape (and isn't the `misc.py` fallback), Hassle assigns the matching HA UI
 category to the new object — creating the category first if none exists yet. Implemented in
 `hassle.sync.category_writeback.attempt_category_writeback`, called from `hassle.sync.apply.
-apply_plan` immediately after a CREATE succeeds; never for UPDATE/DELETE/REFRESH/ADOPT (MILESTONES
-M11 test 4 — existing/adopted objects' categories are never retroactively touched, since this
+apply_plan` immediately after a CREATE succeeds; never for UPDATE/DELETE/REFRESH/ADOPT (
+existing/adopted objects' categories are never retroactively touched, since this
 module is only ever invoked from the CREATE branch).
 
 **Two new WS commands, neither previously used/captured anywhere in this codebase — inferred from
@@ -2391,7 +2391,7 @@ access in this sandbox):**
   server-side instead, the client-side merge here is harmless (idempotent) — only the "read first"
   round-trip would become unnecessary, not wrong.
 
-**New category naming.** MILESTONES M11 test 2 only specifies that a missing category is "created
+**New category naming.** MILESTONES.md only specifies that a missing category is "created
 ... then assigned" — not what name it gets (there's no way to recover a category's original
 mixed-case display name from a bundle filename's slug). Chosen: `hassle.ir.keys.humanize_slug`
 (`"automatic_hvac"` → `"Automatic Hvac"`), a best-effort display name, not a round-trip guarantee —
@@ -2402,7 +2402,7 @@ afterward with no ill effect: Hassle only ever looks it up by `category_id` once
 given object, and re-derives the slug match fresh on every push for any *other* file that might
 want the same category.
 
-**Failure isolation (MILESTONES M11 test 3).** `attempt_category_writeback` never raises past its
+**Failure isolation.** `attempt_category_writeback` never raises past its
 own boundary — any exception from `list_categories`/`create_category`/`assign_category` (backend
 unreachable, command rejected, older HA with no category registry, anything) becomes a warning
 string on `ApplyResult.category_warnings` (additive field), never an `ApplyOutcome.FAILED`/
@@ -2443,7 +2443,7 @@ warning text in `hassle push`'s stdout), and — added in the round below —
 
 ### 30 addendum: integration coverage added, one settle-race fixed pre-emptively (round 2, same PR)
 
-**Why this addendum exists.** MILESTONES M11 test 1's own text ends with "CI integration verifies
+**Why this addendum exists.** MILESTONES.md's own text ends with "CI integration verifies
 live" — the first round of this PR shipped only unit tests (`FakeBackend`-level and
 monkeypatched-`_client`-level), which never actually drives `config/category_registry/create` or
 `config/entity_registry/update` against a real instance. Given M10's own history (§26.0-§26.10:
@@ -2889,11 +2889,11 @@ implementer, recorded here per this doc's own convention:
   deletion — one predicate, two callers, never two slightly-different "is
   this file empty" implementations that could disagree.
 
-## 32. M17: bundle-as-uv-project scaffold — auto-detected toolchain path is
-machine-specific by design; acceptance-bundle determinism (`m17/bundle-uv-project`)
+## 32. Bundle-as-uv-project scaffold — auto-detected toolchain path is
+machine-specific by design; acceptance-bundle determinism
 
 `hassle init`/`hassle pull` scaffold `pyproject.toml` at the bundle root
-(MILESTONES M17, `hassle_cli.uv_project`), with a `[tool.uv.sources]`
+(`hassle_cli.uv_project`), with a `[tool.uv.sources]`
 `hassle-cli = { path = ..., editable = true }` entry when the running CLI is
 itself an editable install from a resolvable Hassle source checkout
 (auto-detected by walking up from `hassle_cli.__file__` to a directory whose
@@ -2906,7 +2906,7 @@ absolute paths get different `[tool.uv.sources]` entries in bundles they
 `init`/`pull` locally — this is intentional (the whole point is pointing at
 *this machine's* checkout) and not a bug to "fix" by normalizing it away in
 general. The one place this bites: `hassle-dev acceptance-bundle` drives the
-REAL `hassle pull` pipeline (`hassle_dev.bundle_gen`, MILESTONES M9 test 3)
+REAL `hassle pull` pipeline (`hassle_dev.bundle_gen`)
 from inside THIS repo's own dev checkout, so without intervention its output
 would embed the CI runner's/developer's own absolute checkout path — breaking
 the generator's byte-identical-across-machines determinism contract (R8).
@@ -2928,7 +2928,7 @@ stays usable and testable offline — it inspects the resolved
 `uv run hassle --help`, even though its text mentions that as the thing the
 resolved state should make possible.
 
-## 33. M18: typed service namespaces + entity-method sugar — two coordinator-flagged stub-generator hardenings
+## 33. Typed service namespaces + entity-method sugar — two coordinator-flagged stub-generator hardenings
 
 **Milestone text vs. observed `main` behavior (recorded per CLAUDE.md's rule):**
 MILESTONES.md's M18 write-up describes today's mismatch as "calling
@@ -2939,8 +2939,8 @@ before this milestone (only the unrelated `.attr()` method). The test list's
 item 1 ("Regression pinning today's mismatch") is written against the real
 observed exception type, not the milestone prose's.
 
-**Hardening 1 — partial-stub-package poisoning risk (owner-reported, field
-evidence on the owner's real bundle):** a `typings/hassle/` directory
+**Hardening 1 — partial-stub-package poisoning risk (reported, field
+evidence on a real bundle):** a `typings/hassle/` directory
 containing ONLY submodule stubs (`registry/__init__.pyi` from M3, and this
 milestone's new `services.pyi`) with no top-level `typings/hassle/__init__.pyi`
 risks pyright treating `hassle` as a namespace/partial stub package for that
@@ -2967,7 +2967,7 @@ pyright/Pylance version resolves the partial-stub-package fallback. Extended
 the FULL typings tree present) so this stays covered going forward even
 though the failure mode itself didn't reproduce here.
 
-**Hardening 2 — selector-typed service fields (owner-reported: `typings/hassle/
+**Hardening 2 — selector-typed service fields (reported: `typings/hassle/
 registry/__init__.pyi:67 "location" is not defined` on a real bundle):** real
 HA `get_services` field schemas mostly describe a field's shape via
 `selector: {<selector_type>: {...}}` (§6 above), not a flat `type:` string --
@@ -3095,7 +3095,7 @@ the same category-then-alphabetical sort.
 
 ## 35. Type-annotation truth pass (task #28, `fix/annotation-truth`): the DSL's own stub annotations rejected correct decompiled code
 
-**Field evidence** (owner's real bundle, Pylance *standard* mode — not an HA
+**Field evidence** (a real bundle, Pylance *standard* mode — not an HA
 API disagreement, a DSL-internal typing bug; recorded here anyway per this
 repo's established convention of tracking every real-world-bundle finding in
 this file): a decompiled bundle that compiles, validates, and runs correctly
@@ -3137,10 +3137,10 @@ was full of pyright errors, all traceable to two independent causes:
 **Incidental gap found while building the pyright gate test (not named in
 the field evidence, but the same class of bug and squarely in scope):** the
 generated `hassle.services` stub (`hassle.registry.stubs.
-generate_services_stub`, MILESTONES M18) never had a `target=` parameter on
+generate_services_stub`) never had a `target=` parameter on
 any generated service function at all — every decompiled namespace-form
 service call (`light.turn_on(target=e.light.hallway, ...)`, the decompiler's
-own canonical M18 output whenever a registry snapshot is supplied) was a hard
+own canonical namespace-form output whenever a registry snapshot is supplied) was a hard
 `reportCallIssue` ("No parameter named 'target'") in a real bundle, since
 `target=` is a real, always-available keyword on the underlying
 `hassle.compiler.actions.service` call every namespace method delegates to.
@@ -3167,7 +3167,7 @@ plus the new pyright-gate tests in
 **Context:** building the public `capture_actions()`/`emit_actions(...)`
 seam (`hassle.compiler.recording`) and a `notify_mobile`/`action` cookbook
 recipe (`fixtures/cookbook/bundle/lib/notify_actions.py`) for actionable
-mobile notifications, per the owner's target syntax:
+mobile notifications, per the target syntax below:
 
 ```python
 with notify_mobile(title="Title", message="Hello World"):
@@ -3402,7 +3402,7 @@ test_extract_does_not_false_positive_on_wait_trigger_event_data_dotted`,
 `..._still_finds_real_entity_id_looking_strings_in_entity_position`,
 `..._does_not_false_positive_on_trigger_rooted_dotted_paths`.
 
-**Not done (left for the recipe's/M19's own owner, deliberately, per this
+**Not done (left for a follow-on task, deliberately, per this
 task's file fence):** now that the dotted spelling (`wait.trigger.event.data.
 action`) passes `validate_bundle` cleanly, `fixtures/cookbook/bundle/lib/
 notify_actions.py`'s `_wait_action_id_var()` bracket-subscript workaround
@@ -3418,12 +3418,12 @@ spellings render identically, and both now validate cleanly) and would need
 to match, plus (if the compiled JSON fixture corpus embeds this recipe's
 output anywhere) a `hassle-dev goldens --update` regen.
 
-## 38. M21: group-helper config-entry flow shapes — captured live (owner HA, 2026-07-13)
+## 38. Group-helper config-entry flow shapes — captured live (a real HA instance, 2026-07-13)
 
 The `group` integration is the second config-entry helper family (M10 said
 "other config-entry helper domains (threshold, derivative, group, …) become
-mechanical follow-ons" — this is the group follow-on). Captured against the
-owner's live HA via the exact REST/WS endpoints §26.0 froze (flows opened
+mechanical follow-ons" — this is the group follow-on). Captured against a
+real live HA instance via the exact REST/WS endpoints §26.0 froze (flows opened
 read-only and DELETEd before any `create_entry`, the same thing the UI does
 when a dialog is opened and closed; ~25 real group entries enumerated and
 their options read via the options flow's suggested values).
@@ -3448,7 +3448,7 @@ Choosing a flavor (`{"next_step_id": "<flavor>"}`) yields a single form step
 | sensor | base three + `type` (min/max/mean/median/last/range/product/sum/stdev) |
 
 `entities` is a list of entity ids of the flavor's own domain (groups may
-nest: the owner's `cover.entryway_top` group contains `cover.bay_window_top`,
+nest: a real `cover.entryway_top` group contains `cover.bay_window_top`,
 itself a group). `hide_members`/`all` carry voluptuous defaults, so the form
 accepts omission on CREATE — but Hassle always submits them explicitly (the
 options read-back returns them explicitly, and I3 byte-stability wants one
@@ -3486,7 +3486,7 @@ extra call; the step_id is the fallback that provably works.
 
 ### 38.3 Version caveat
 
-Captured on the owner's HA (2026.6.x era). The sensor flavor's form showed
+Captured on a real HA instance (2026.6.x era). The sensor flavor's form showed
 ONLY `name`/`entities`/`hide_members`/`type` — HA core source has grown
 optional sensor-group fields (`ignore_non_numeric`, `unit_of_measurement`,
 `device_class`, `state_class`) in some versions; the CI integration matrix
@@ -3510,7 +3510,7 @@ first, R1/R4). The CI matrix remains the schema authority:
 `test_live_group_flow.py::test_group_sensor_optional_fields_live` probes the
 sensor flavor's live form schema and exercises whichever of the four fields
 the image actually advertises (skips with the observed schema when none
-are present, i.e. an owner-HA-era image). Only the sensor flavor is
+are present, i.e. an image from the same 2026.6.x era as the capture above). Only the sensor flavor is
 widened; if CI ever shows optional fields on OTHER flavors, the same
 `_UNSET` pattern extends kwarg-by-kwarg (the `**fields` catch-all already
 round-trips unknown fields, explicit nulls included, in the meantime).
@@ -3649,15 +3649,15 @@ and did NOT fail, #3 is not yet exercised by any integration test).
 
 **A fourth item, not a divergence but new work with no M10 analogue:** a
 group helper's own `entities=` list is validated for unknown member entities
-(MILESTONES M21 test 5) by a NEW function, `hassle.registry.validate.
+by a NEW function, `hassle.registry.validate.
 _validate_group_entities` — `hassle.registry.extract.extract_references`
 (the M3 walker `_validate_references` reuses for every other kind) only ever
 descends into an object's `triggers`/`conditions`/`actions` sections, and
 neither a template helper's nor a group helper's IR body has any of those.
 A template helper's `state=` Jinja string was therefore never checked for
 entity references either (nothing new there) — but a group helper's
-`entities=` field is a literal list of entity ids, exactly the shape M21
-test 5 asks to validate, so it needed its own small walker rather than
+`entities=` field is a literal list of entity ids, exactly the shape this
+milestone asks to validate, so it needed its own small walker rather than
 falling out of the existing one for free the way `_bundle_declared_keys`'s
 widening (a bundle's own group declares its produced entity, mirroring
 template) did.

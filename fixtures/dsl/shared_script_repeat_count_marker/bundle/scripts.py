@@ -1,4 +1,4 @@
-"""Golden case (M19, owner-blessed pattern): a runtime repeat count on a
+"""Golden case: a runtime repeat count on a
 shared-script parameter belongs in `repeat_count(...)`, HA's own native
 runtime repeat -- not compile-time metaprogramming (`range(...)`, rejected as
 an anti-pattern, see `shared_script_param_range_misuse`'s error case).

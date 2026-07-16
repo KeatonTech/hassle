@@ -1,11 +1,12 @@
-"""M1 test 10 — purpose-specific trigger/condition builder (DESIGN §5.4).
+"""Purpose-specific trigger/condition builder (DESIGN §5.4).
 
 ``on(type_string, target=..., behavior=..., for_=..., **options)`` and
 ``met(type_string, target=...)`` golden-compile to the stored 2026.7 shape
 (``trigger``/``condition`` type string, ``target``, ``behavior``, ``options``).
 Field shapes are pinned against ``fixtures/configs/automation_purpose_*.json``
 (ground truth). All five target forms (entity/area/floor/label/device) are
-covered. Type strings pass through unvalidated (vocabulary validation is M3).
+covered. Type strings pass through unvalidated (vocabulary validation is
+handled elsewhere, by the registry validator).
 """
 
 from __future__ import annotations
@@ -62,8 +63,8 @@ def test_purpose_trigger_label_target_behavior_all() -> None:
 
 
 def test_purpose_trigger_renamed_legacy_key_passes_through_unvalidated() -> None:
-    # The vocabulary is instance data (M3 validates); M1 must not reject or
-    # rewrite a renamed/unknown type string.
+    # The vocabulary is instance data (validated by the registry validator);
+    # this builder must not reject or rewrite a renamed/unknown type string.
     trig = on("battery.low", target="sensor.wireless_device_battery")
     assert trig.to_trigger() == {
         "trigger": "battery.low",

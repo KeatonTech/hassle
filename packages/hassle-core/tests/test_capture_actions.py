@@ -1,4 +1,4 @@
-"""Public capture seam (task #30, `ux/capture-notify-recipe`): `capture_actions()` /
+"""Public capture seam: `capture_actions()` /
 `emit_actions(...)` -- the minimal public pair that lets a `lib/` builder capture a
 `with`-block's actions and splice them into an action container it builds itself
 (DESIGN §5.6 macro/lib pattern), without reaching into the internal

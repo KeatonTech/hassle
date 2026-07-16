@@ -1,16 +1,15 @@
 """DirectBackend fetches the UI category registry for automations/scripts
 (DESIGN §7.3, docs/ha-api-notes.md new §22) as part of `fetch_registry_snapshot`.
 
-Unit-tested (no network, R2) by monkeypatching `DirectBackend._client` with a
+Unit-tested (no network) by monkeypatching `DirectBackend._client` with a
 fake object exposing an async `ws_command`, and calling the private async
 `_afetch_registry_snapshot` coroutine directly via `asyncio.run` -- this
 exercises the real dispatch logic without needing a live event-loop thread or
 a real HA instance (that end-to-end path is `test_live_*` integration-only).
 
-**M15 (docs/ha-api-notes.md §31.2/§31.6):** `_CATEGORY_SCOPES` widens to
-include the shared `"helpers"` scope alongside `automation`/`script` -- §31.5a
-source-corrects the earlier belief that HA's category registry only ever had
-two scopes at all.
+`_CATEGORY_SCOPES` includes the shared `"helpers"` scope alongside
+`automation`/`script` (docs/ha-api-notes.md §31.2/§31.6): HA's category
+registry has three scopes, not two.
 """
 
 from __future__ import annotations
@@ -74,17 +73,16 @@ def test_fetch_registry_snapshot_fetches_categories_for_automation_and_script() 
         for cmd, payload in client.calls
         if cmd == "config/category_registry/list"
     }
-    # M15 (docs/ha-api-notes.md §31.2/§31.6): the shared "helpers" scope is
-    # now fetched too, alongside the pre-existing automation/script scopes --
-    # §31.5a corrects the earlier (wrong) belief that HA's category registry
-    # only ever had two scopes.
+    # The shared "helpers" scope is fetched too, alongside the
+    # automation/script scopes (docs/ha-api-notes.md §31.2/§31.6): HA's
+    # category registry has three scopes, not two.
     assert scopes_requested == {"automation", "script", "helpers"}
 
 
 def test_fetch_registry_snapshot_fetches_helpers_scope_categories() -> None:
-    """MILESTONES M15 work item A test 1: the shared `"helpers"` scope
-    (§31.2) is fetched into the registry snapshot exactly like `automation`/
-    `script` -- this is the pull-side read path all 13 helper kinds share."""
+    """The shared `"helpers"` scope (§31.2) is fetched into the registry
+    snapshot exactly like `automation`/`script` -- this is the pull-side read
+    path all 13 helper kinds share."""
     client = _FakeClient(
         {
             "config/category_registry/list:helpers": [

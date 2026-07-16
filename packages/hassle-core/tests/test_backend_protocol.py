@@ -1,6 +1,6 @@
-"""F2 — the `Backend` Protocol shape (docs/backend.md) — DESIGN §8, §4.
+"""The frozen `Backend` Protocol shape (docs/backend.md) — DESIGN §8, §4.
 
-`Backend` is structural (typing.Protocol): both M5's `FakeBackend` and M6's
+`Backend` is structural (typing.Protocol): both `FakeBackend` and
 `DirectBackend` implement it independently. This test file only pins the
 Protocol's shape (it is satisfied by a minimal hand-written stub) — `FakeBackend`
 behavior itself is covered in test_fake_backend.py.
@@ -54,7 +54,7 @@ def test_backend_is_runtime_checkable_protocol() -> None:
 
 def test_backend_protocol_excludes_trace_and_template_ops() -> None:
     # Backend is scoped to what sync needs (list/create/update/delete); trace,
-    # template render, and media operations are M6 (DirectBackend-only) concerns
+    # template render, and media operations are DirectBackend-only concerns
     # and must not appear on the Protocol.
     import inspect
 

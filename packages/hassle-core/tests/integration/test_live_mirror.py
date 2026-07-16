@@ -1,11 +1,11 @@
-"""MILESTONES M6 test 9 — the optional media mirror (DESIGN §8.5, §4 quirks).
+"""The optional media mirror (DESIGN §8.5, §4 quirks).
 
 - Upload ZIP bytes under a media extension (both gates handled: upload
   Content-Type is `image/`, download name is a media extension), resolve +
   download bytes identical, remove works.
 - Target-folder creation: verified behaviorally that upload auto-creates the
   subfolder (`mkdir(parents=True, exist_ok=True)`, docs/ha-api-notes.md §17 —
-  correcting the M0.V §10.4 "upload does not mkdir" note). The mirror never
+  correcting the earlier §10.4 "upload does not mkdir" note). The mirror never
   targets the media root (its signed URLs are broken — §10.4).
 - A tightened/failed gate (a disallowed Content-Type → HTTP 400) surfaces as a
   `MirrorError` and leaves sync completely unaffected (the mirror is isolated).

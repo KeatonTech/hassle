@@ -1,4 +1,4 @@
-"""Golden case: `capture_actions()`/`emit_actions(...)` (task #30 public
+"""Golden case: `capture_actions()`/`emit_actions(...)` (the public
 capture seam) -- one captured action list spliced into two `choose()`
 branches inside a single automation.
 """

@@ -1,7 +1,7 @@
-"""M2 — Jinja template strings decompile to `template("...")` verbatim.
+"""Jinja template strings decompile to `template("...")` verbatim.
 
 The expression-sugar builder (`state(x).value > 25`, DESIGN §5.4) is one-way by
-design (docs the M1.1 note); the decompiler always emits the raw-Jinja spelling,
+design; the decompiler always emits the raw-Jinja spelling,
 never attempts to reverse-engineer the sugar from a rendered template string.
 
 The full hash-level round-trip for these exact fixtures (incl. the `id`

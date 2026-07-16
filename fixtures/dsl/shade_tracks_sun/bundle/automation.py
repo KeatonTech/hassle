@@ -1,4 +1,4 @@
-"""Golden case: `shade_tracks_sun` (MILESTONES M1.1 test 4).
+"""Golden case: `shade_tracks_sun`.
 
 Mirrors fixtures/configs/automation_math_shade_sun.json byte-for-byte in its
 compiled `data.position` template -- this pins the math builder's exact

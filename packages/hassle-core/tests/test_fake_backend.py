@@ -1,4 +1,4 @@
-"""FakeBackend — in-memory Backend for M5 (docs/ha-api-notes.md §11).
+"""FakeBackend — in-memory Backend for unit tests (docs/ha-api-notes.md §11).
 
 Seeded from shapes in docs/ha-api-captures/ (hand-written Python fixture data
 modeled on those captures, not parsed at runtime — see module docstring in

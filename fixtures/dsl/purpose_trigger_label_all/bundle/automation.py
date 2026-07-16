@@ -1,4 +1,4 @@
-"""Golden case: purpose-specific trigger, label target, behavior=all (M1 test 10).
+"""Golden case: purpose-specific trigger, label target, behavior=all.
 
 Mirrors fixtures/configs/automation_purpose_trigger_label_behavior_all.json.
 """
