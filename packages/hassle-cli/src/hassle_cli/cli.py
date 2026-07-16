@@ -868,28 +868,6 @@ def push(
         )
         raise SystemExit(1)
 
-    has_deletions = bool(the_plan.entries_with_action(PlanAction.DELETE))
-    if not yes and _interactive():
-        # Plan-then-confirm at the terminal: deletions default to NO (they
-        # need a deliberate yes), everything else defaults to YES.
-        if not plan_already_rendered:
-            render_plan(console, the_plan)
-        prompt = (
-            "This plan includes deletion(s). Apply it?"
-            if has_deletions
-            else f"Apply? ({plan_summary(the_plan)})"
-        )
-        if not click.confirm(prompt, default=not has_deletions):
-            console.print("[bold red]hassle push: declined, nothing applied.[/bold red]")
-            raise SystemExit(1)
-    elif has_deletions and not yes:
-        render_plan(console, the_plan)
-        console.print(
-            "[bold red]hassle push: this plan includes deletion(s), which require "
-            "explicit confirmation. Fix: re-run with --yes to apply.[/bold red]"
-        )
-        raise SystemExit(1)
-
     resolved_entries = []
     for entry in the_plan.entries:
         if entry.action is PlanAction.CONFLICT:
@@ -912,6 +890,33 @@ def push(
     from hassle.sync.models import Plan
 
     resolved_plan = Plan(entries=resolved_entries)
+
+    # Deletion gate over the RESOLVED plan (reviewer finding, PR #39): a
+    # keep-local conflict resolution can INTRODUCE a deletion, and DESIGN
+    # §8.2 says deletions always require the confirm step (or --yes) -- the
+    # gate must not consult the pre-resolution plan where that object was
+    # still a CONFLICT row.
+    has_deletions = bool(resolved_plan.entries_with_action(PlanAction.DELETE))
+    if not yes and _interactive():
+        # Plan-then-confirm at the terminal: deletions default to NO (they
+        # need a deliberate yes), everything else defaults to YES.
+        if not plan_already_rendered:
+            render_plan(console, the_plan)
+        prompt = (
+            "This plan includes deletion(s). Apply it?"
+            if has_deletions
+            else f"Apply? ({plan_summary(the_plan)})"
+        )
+        if not click.confirm(prompt, default=not has_deletions):
+            console.print("[bold red]hassle push: declined, nothing applied.[/bold red]")
+            raise SystemExit(1)
+    elif has_deletions and not yes:
+        render_plan(console, the_plan)
+        console.print(
+            "[bold red]hassle push: this plan includes deletion(s), which require "
+            "explicit confirmation. Fix: re-run with --yes to apply.[/bold red]"
+        )
+        raise SystemExit(1)
 
     ha_url, token = _require_backend_config(root)
     manifest = manifest_io.load_manifest(root)

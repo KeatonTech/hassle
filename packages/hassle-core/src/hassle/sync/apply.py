@@ -386,7 +386,14 @@ def _rollback(
     NOT be restored as ``(kind, identity, error)`` -- a failing step never
     aborts the remaining restores (field crash, BrandtCamp 2026-07-14: the
     first rollback step raised and every earlier object stayed un-restored,
-    with a raw traceback as the only output)."""
+    with a raw traceback as the only output).
+
+    Config-entry caveat (reviewer, PR #39): a recreate here gets a FRESH
+    entry_id from HA (docs/ha-api-notes.md §26.3) while the on-disk manifest
+    -- unchanged on a failed apply -- still records the old one. Not silent:
+    the next `hassle plan` (which the failure message directs the user to
+    run) re-reads entry ids from the live registry and surfaces any
+    divergence; slug-keyed kinds are unaffected (same identity, §17.5)."""
     failures: list[tuple[str, str, str]] = []
     for kind, identity, previous, action in reversed(snapshots):
         try:
