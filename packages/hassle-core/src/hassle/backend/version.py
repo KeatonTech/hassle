@@ -1,12 +1,12 @@
-"""HA version-range check (DESIGN §4, §15; MILESTONES M6).
+"""HA version-range check (DESIGN §4, §15).
 
 `DirectBackend` reads the instance's HA version from `get_config` and warns when
 it falls outside the range Hassle has been tested against — CI exercises the
-integration suite on HA `stable` and `dev` (MILESTONES M6 "Done when"), and this
-is the range those correspond to. The check is deliberately a *warning*, never a
-hard failure: Hassle should still function against an untested HA, it just can't
-promise it (DESIGN §15's "CLI checks HA version via get_config and warns outside
-the tested range").
+integration suite on HA `stable` and `dev`, and this is the range those
+correspond to. The check is deliberately a *warning*, never a hard failure:
+Hassle should still function against an untested HA, it just can't promise it
+(DESIGN §15's "CLI checks HA version via get_config and warns outside the
+tested range").
 
 Kept as pure logic (no I/O) so it is unit-testable without a live instance.
 """

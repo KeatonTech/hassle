@@ -1,4 +1,4 @@
-"""The `.pyi` stub generator (DESIGN §5.2, MILESTONES M3 test 5).
+"""The `.pyi` stub generator (DESIGN §5.2).
 
 Generates typed domain classes + per-entity typed attributes matching the
 `hassle.registry.entities` attribute/index shape (docs/dsl-extensions.md), so a bad
@@ -10,16 +10,16 @@ attribute name (`_3d_printer`) plus an attribute docstring naming the real
 entity_id, and every domain class also supports `__getitem__` indexing so
 `e.sensor["3d_printer"]` still works (the universal escape hatch, DESIGN §5.2).
 
-**ux/stub-docstrings:** each entity attribute's friendly name used to be a
-trailing `# comment` -- invisible to Pylance, which only surfaces docstrings
-on hover and in the completion documentation pane. It is now an attribute
-docstring: a string-literal statement immediately following the attribute
-declaration (`entity_name -- entity_id (area: Area Name)`), which pyright and
-Pylance both recognize as documentation for that attribute.
+**Attribute docstrings, not trailing comments:** each entity attribute's
+friendly name is an attribute docstring -- a string-literal statement
+immediately following the attribute declaration (`entity_name -- entity_id
+(area: Area Name)`) -- rather than a trailing `# comment`, since pyright and
+Pylance both recognize a docstring as hover/completion documentation for that
+attribute but never surface a trailing comment that way.
 
-**ux/stub-device-names:** `has_entity_name` integrations (Matter and others)
-routinely leave BOTH `entity.name` and `entity.original_name` null -- the
-friendly name lives on the DEVICE instead. `_entity_display_name` mirrors
+**Device-derived display names:** `has_entity_name` integrations (Matter and
+others) routinely leave BOTH `entity.name` and `entity.original_name` null --
+the friendly name lives on the DEVICE instead. `_entity_display_name` mirrors
 HA's own name composition (`homeassistant.helpers.entity.Entity.name`/
 device_registry's `name_by_user or name`), best-effort, in this order:
 1. `entity.name` (user override) -- unchanged;
@@ -30,7 +30,7 @@ device_registry's `name_by_user or name`), best-effort, in this order:
 3. else `entity.original_name`;
 4. else `entity.entity_id` -- and in that last case the docstring emits the
    entity_id ONCE (`"sensor.x"`), never the doubled `"sensor.x -- sensor.x"`
-   form (a pre-existing wart, fixed regardless of which fallback rung is hit).
+   form.
 
 **Deviation from DESIGN's illustrative snippet:** DESIGN §5.2 shows
 `LightEntity.turn_on(brightness_pct: int | Template = ..., transition: float =
@@ -40,25 +40,25 @@ using it in a *public* generated stub would require exporting an internal
 name. This generator instead widens numeric/bool fields to also accept `str`
 (the shape a Jinja template string renders as at the type level, since HA
 accepts a template string wherever it accepts the field's native type) --
-e.g. `brightness_pct: int | str = ...` -- documented here rather than
-introducing a new public type as part of an unrelated milestone.
+e.g. `brightness_pct: int | str = ...`.
 
-**Annotation-truth pass (task #28):** every generated ``<Domain>Entity`` class
-now inherits ``str`` -- matching the REAL runtime type (verified in
-``hassle/compiler/helpers.py``: every entity reference the DSL hands back,
-whether from a helper declaration or ``hassle.registry.entities``, is an
-:class:`~hassle.compiler.helpers.EntityRef`, itself a ``str`` subclass). Before
-this, a real decompiled bundle's ``state(e.binary_sensor.hall_motion)`` was a
-**pyright error** even though it is correct, runnable HA-equivalent code: the
-stub's ``BinarySensorEntity`` had no relationship to ``str`` at all, so it
-failed every ``str``-typed (or ``str | list[str]``-typed) parameter pyright
-checked it against. See ``hassle.compiler.builders``/``hassle.compiler.triggers``/
+**Annotation truth for generated entity classes:** every generated
+``<Domain>Entity`` class inherits ``str`` -- matching the REAL runtime type
+(verified in ``hassle/compiler/helpers.py``: every entity reference the DSL
+hands back, whether from a helper declaration or ``hassle.registry.entities``,
+is an :class:`~hassle.compiler.helpers.EntityRef`, itself a ``str`` subclass).
+Without this, a real decompiled bundle's ``state(e.binary_sensor.hall_motion)``
+would be a **pyright error** even though it is correct, runnable
+HA-equivalent code: a stub's ``BinarySensorEntity`` with no relationship to
+``str`` at all fails every ``str``-typed (or ``str | list[str]``-typed)
+parameter pyright checks it against. See
+``hassle.compiler.builders``/``hassle.compiler.triggers``/
 ``hassle.compiler.purpose`` for the matching ``Sequence[str]``/``Sequence[...]``
-widening this pass also applies to invariant ``list[...]``-typed parameters
-(a *second*, independent reason a decompiled bundle used to fail pyright: a
-list of ``EntityRef``/entity-class values is never assignable to an
-invariant ``list[str]``-typed parameter, even once every element type is
-itself ``str``-compatible).
+widening this generator's typing also relies on for invariant
+``list[...]``-typed parameters (a *second*, independent reason a decompiled
+bundle would otherwise fail pyright: a list of ``EntityRef``/entity-class
+values is never assignable to an invariant ``list[str]``-typed parameter,
+even once every element type is itself ``str``-compatible).
 """
 
 from __future__ import annotations
@@ -78,7 +78,7 @@ _PY_TYPE = {
     "bool": "bool",
 }
 
-# Selector-aware typing (coordinator hardening, M18 round): real HA
+# Selector-aware typing: real HA
 # `get_services` field schemas mostly describe a field's shape via
 # `selector: {<selector_type>: {...}}` (docs/ha-api-notes.md §6), not a flat
 # `type:` string -- `field.type` is `None` for most real captures. Mapping
@@ -136,12 +136,11 @@ def _format_str_literal(text: str) -> str:
     Matches `ruff format`'s (Black-derived) quote preference exactly: prefer
     double quotes; fall back to single quotes only when the text contains a
     `"` and no `'` (avoids an otherwise-unnecessary escape) -- verified
-    against real `ruff format` output in
-    `test_stub_is_ruff_format_clean`/the quote-preference experiments in this
-    branch's PR description. Names are user data (can contain quotes,
-    backslashes, newlines); this is a full literal-escaping pass, not a
-    sanitizer, so the docstring never drops data and the `.pyi` always
-    parses (I3-style "never drop data" applied to generated text).
+    against real `ruff format` output in `test_stub_is_ruff_format_clean`.
+    Names are user data (can contain quotes, backslashes, newlines); this is
+    a full literal-escaping pass, not a sanitizer, so the docstring never
+    drops data and the `.pyi` always parses (the same "never drop data" rule
+    applied to generated text).
     """
     has_double = '"' in text
     has_single = "'" in text
@@ -183,8 +182,7 @@ def _entity_display_name(snapshot: RegistrySnapshot, entity: EntityInfo) -> str 
     resolves, HA's `has_entity_name` composition (device display name,
     optionally suffixed with `original_name` when the entity is one of
     several sub-entities on that device); else `entity.original_name`; else
-    ``None`` (the caller falls back to the entity_id itself,
-    ux/stub-device-names)."""
+    ``None`` (the caller falls back to the entity_id itself)."""
     if entity.name:
         return entity.name
 
@@ -213,11 +211,12 @@ def _area_name(snapshot: RegistrySnapshot, entity: EntityInfo) -> str | None:
 def _entity_docstring_line(snapshot: RegistrySnapshot, entity: EntityInfo) -> str:
     """Build the attribute-docstring line (indented, quoted, format-clean)
     for ``entity``: display name -- entity_id (area: Area Name) -- or, when
-    no display name resolves at all (ux/stub-device-names), just the
-    entity_id ONCE (never the doubled ``"entity_id -- entity_id"`` form).
+    no display name resolves at all, just the entity_id ONCE (never the
+    doubled ``"entity_id -- entity_id"`` form).
 
-    R7's >100-char fallback rule, adapted for docstrings: truncate/drop the
-    area clause first, keeping the load-bearing display name + entity_id
+    The project's >100-char line-length fallback rule, adapted for
+    docstrings: truncate/drop the area clause first, keeping the load-bearing
+    display name + entity_id
     (needed for the digit-leading rule) intact; if the line is STILL over 100
     columns even without the area (an implausibly long display name -- device
     names can be long too), the display name itself is truncated with an
@@ -270,9 +269,9 @@ def _field_type(field_type: str | None, *, selector: dict[str, object] | None = 
     the selector's own key (``_SELECTOR_PY_TYPE``). Falls back to plain
     ``str`` for anything neither map recognizes -- NEVER the raw, unmapped
     type/selector-type word itself, which is not a real Python name and would
-    make the generated stub reference an undefined identifier (coordinator-
-    flagged regression, M18 round: a `location` selector previously leaked
-    through unmapped)."""
+    make the generated stub reference an undefined identifier (a regression
+    caught with a `location` selector, which previously leaked through
+    unmapped)."""
     py = _PY_TYPE.get(field_type or "")
     if py is not None:
         if py == "str":
@@ -290,9 +289,9 @@ def _field_type(field_type: str | None, *, selector: dict[str, object] | None = 
     return "str"
 
 
-#: HA's universal service-call envelope kwargs (owner field report,
-#: BrandtCamp prettify pass): every decompiled call carries `metadata={}`
-#: verbatim from stored config, and response-capable services take
+#: HA's universal service-call envelope kwargs: every decompiled call
+#: carries `metadata={}` verbatim from stored config, and response-capable
+#: services take
 #: `response_variable=`. These are call-envelope keys, not per-service
 #: fields, so the snapshot's field list never includes them -- without
 #: them here, every real decompiled bundle lights up with
@@ -338,10 +337,10 @@ def _service_method(service_name: str, service_def: ServiceDef) -> list[str]:
         py_type = _field_type(field.type, selector=field.selector)
         params.append(f"{field_name}: {py_type} = ...")
     params.extend(_envelope_params(service_def))
-    # Entity classes subclass str (task #28 annotation-truth), so a service
-    # named after a str method (`media_player.join`, owner field report
-    # round 3) is an incompatible override -- suppressed per-method with the
-    # targeted rule name, never file-wide.
+    # Entity classes subclass str (annotation truth: matches the real runtime
+    # type), so a service named after a str method (`media_player.join`) is
+    # an incompatible override -- suppressed per-method with the targeted
+    # rule name, never file-wide.
     suffix = ""
     if service_name in _STR_ATTRIBUTE_NAMES:
         suffix = "  # pyright: ignore[reportIncompatibleMethodOverride]"
@@ -349,11 +348,11 @@ def _service_method(service_name: str, service_def: ServiceDef) -> list[str]:
     one_line = f"    def {service_name}({joined}) -> None: ...{suffix}"
     if len(one_line) <= 100:
         return [one_line]
-    # Wrap one parameter per line (R7 line-length convention) rather than
-    # overflow -- a generated stub with many typed fields (e.g. `light.turn_on`)
-    # can easily exceed 100 columns on one line. The ignore suffix goes on
-    # the `def` line: that is where pyright reports the override error, so
-    # anywhere else it suppresses nothing (round-3 bug, verified live).
+    # Wrap one parameter per line (the project's 100-column line-length
+    # convention) rather than overflow -- a generated stub with many typed
+    # fields (e.g. `light.turn_on`) can easily exceed 100 columns on one
+    # line. The ignore suffix goes on the `def` line: that is where pyright
+    # reports the override error, so anywhere else it suppresses nothing.
     lines = [f"    def {service_name}({suffix}"]
     for param in params:
         lines.append(f"        {param},")
@@ -368,9 +367,9 @@ def _service_function(service_name: str, service_def: ServiceDef) -> list[str]:
     no instance at all at runtime, `hassle.services._ServiceDomain` -- the
     stub models the call signature pyright checks against, and a plain
     (non-static) method's first parameter would otherwise be mistaken for
-    ``self``, MILESTONES M18).
+    ``self``).
 
-    **Annotation-truth pass (task #28):** unlike the entity-bound form
+    Unlike the entity-bound form
     (:func:`_service_method`, called as ``e.<domain>.<id>.<service>(...)``,
     where the target entity is implicit -- see
     ``hassle.compiler.helpers._EntityServiceMethod.__call__``), the namespace
@@ -378,14 +377,13 @@ def _service_function(service_name: str, service_def: ServiceDef) -> list[str]:
     at all: it delegates straight to ``hassle.compiler.actions.service``,
     whose ``target=`` is a real, commonly-passed keyword
     (`docs/dsl-extensions.md`/DESIGN §5.3's "target= also accepts the bare entity
-    target sugar"). The generated stub previously had no ``target`` parameter
-    whatsoever, so every decompiled ``<domain>.<service>(target=..., ...)``
-    call -- the decompiler's own canonical namespace-form output, MILESTONES
-    M18 -- was a hard pyright ``reportCallIssue`` ("No parameter named
-    'target'") in a real bundle. Typed the same permissive way
-    ``normalize_target`` actually accepts, via the ``_TargetArg`` alias
-    emitted at the top of the generated module (round 2): a bare entity
-    ref/string, one of the public target helpers' return types
+    target sugar"). Without a ``target`` parameter, every decompiled
+    ``<domain>.<service>(target=..., ...)`` call -- the decompiler's own
+    canonical namespace-form output -- would be a hard pyright
+    ``reportCallIssue`` ("No parameter named 'target'") in a real bundle.
+    Typed the same permissive way ``normalize_target`` actually accepts, via
+    the ``_TargetArg`` alias emitted at the top of the generated module: a
+    bare entity ref/string, one of the public target helpers' return types
     (``area()``/``floor()``/``label()``/``device_id()`` --
     ``AreaTarget``/``FloorTarget``/``LabelTarget``/``DeviceIdTarget``,
     imported in the stub's header from their defining module,
@@ -453,8 +451,7 @@ def generate_services_stub(snapshot: RegistrySnapshot) -> str:
         # The target= helpers' return types (public functions `area()` etc.,
         # DESIGN §5.4) -- without them in the union, canonical decompiler
         # output like `light.turn_on(target=area("kitchen"))` is a
-        # reportArgumentType error in every real bundle (owner field
-        # report, round 2).
+        # reportArgumentType error in every real bundle.
         body.append(
             "type _SingleTarget = str | AreaTarget | DeviceIdTarget | FloorTarget | LabelTarget"
         )
@@ -720,9 +717,8 @@ def _resolve_binding_module(hassle_pkg: object, name: str) -> str:
 
 def generate_hassle_reexport_stub() -> str:
     """Generate ``typings/hassle/__init__.pyi``: a re-export of every
-    ``hassle.__all__`` name from its TRUE defining module (coordinator
-    hardening, M18 round; binding-module resolution fixed per reviewer
-    finding B1 -- see :func:`_resolve_binding_module`).
+    ``hassle.__all__`` name from its TRUE defining module (see
+    :func:`_resolve_binding_module`).
 
     A ``typings/hassle/`` stub directory containing ONLY submodule stubs
     (``registry/__init__.pyi``, ``services.pyi``) with no top-level
@@ -735,7 +731,7 @@ def generate_hassle_reexport_stub() -> str:
     partial-stub-package fallback for any given pyright version/configuration.
 
     Grouped and sorted by defining module (``hassle.compiler.*`` throughout)
-    so this is deterministic (R8) and immune to ``hassle.__all__``'s (or a
+    so this is deterministic and immune to ``hassle.__all__``'s (or a
     dict's) iteration order -- and immune to ``hassle.compiler.__init__`` and
     ``hassle.__all__`` ever drifting apart, since it reads each name's ACTUAL
     runtime-resolved binding module rather than assuming one.

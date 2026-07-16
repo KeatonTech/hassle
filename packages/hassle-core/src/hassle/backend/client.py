@@ -1,8 +1,8 @@
-"""`HaClient` — the async REST + WebSocket transport to Home Assistant Core (M6).
+"""`HaClient` — the async REST + WebSocket transport to Home Assistant Core.
 
 One long-lived access token, straight to HA's own APIs (DESIGN §4, §13). This is
 the low-level async layer; :class:`hassle.backend.direct.DirectBackend` wraps it
-in a synchronous facade that satisfies the F2 `Backend` protocol.
+in a synchronous facade that satisfies the frozen `Backend` protocol.
 
 Design points:
 
@@ -105,7 +105,7 @@ class HaClient:
     # -- retry -------------------------------------------------------------
 
     async def _sleep_backoff(self, attempt: int) -> None:
-        # 0.5s, 1s, 2s, 4s ... — deterministic (R8: no randomness/jitter).
+        # 0.5s, 1s, 2s, 4s ... — deterministic, no randomness/jitter.
         await asyncio.sleep(self._backoff_base * (2**attempt))
 
     # -- REST --------------------------------------------------------------
@@ -212,7 +212,7 @@ class HaClient:
             msg = await asyncio.wait_for(ws.receive(), timeout=self._timeout.total)
         except TimeoutError as err:
             # A wedged instance that accepted a command but never replies: surface
-            # a styled connection error (R6), not a bare TimeoutError.
+            # a what/where/fix connection error, not a bare TimeoutError.
             raise HaConnectionError(
                 f"Home Assistant did not respond on the WebSocket within "
                 f"{self._timeout.total}s. Fix: check that the instance is healthy "

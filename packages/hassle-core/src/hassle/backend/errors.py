@@ -1,8 +1,8 @@
-"""Error types for the real HA transport (M6).
+"""Error types for the real HA transport.
 
 These are the product-surface errors `DirectBackend`/`HaClient` raise. They
-follow the same what/where/fix rubric as the compiler's errors and the M3
-`Finding` (R6): one paragraph, actionable. `HaAuthError` in particular is the
+follow the same what/where/fix rubric as the compiler's errors and
+`Finding`: one paragraph, actionable. `HaAuthError` in particular is the
 `hassle login` failure surface (DESIGN §4: a 401 means the token is invalid).
 """
 

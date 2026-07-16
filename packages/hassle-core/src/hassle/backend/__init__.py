@@ -1,10 +1,10 @@
-"""The `Backend` seam (F2) and its implementations — DESIGN §8, §4.
+"""The frozen `Backend` seam and its implementations — DESIGN §8, §4.
 
-Freeze point **F2** (start of M5): the `Backend` Protocol declared here, plus
-the plan/apply data model in :mod:`hassle.sync`. M5 built the sync engine
-against `FakeBackend` (:mod:`hassle.backend.fake`); M6 adds `DirectBackend`
-(:mod:`hassle.backend.direct`) — the real REST/WebSocket transport to HA Core —
-as a sibling implementation of the same Protocol. See docs/backend.md.
+The `Backend` Protocol declared here, plus the plan/apply data model in
+:mod:`hassle.sync`, are frozen: the sync engine is built against
+`FakeBackend` (:mod:`hassle.backend.fake`, in-memory), and `DirectBackend`
+(:mod:`hassle.backend.direct`) — the real REST/WebSocket transport to HA Core
+— is a sibling implementation of the same Protocol. See docs/backend.md.
 """
 
 from __future__ import annotations

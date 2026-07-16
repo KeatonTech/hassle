@@ -1,4 +1,4 @@
-"""LibCST-based single-object splice (DESIGN §7.3, MILESTONES M2 test 4).
+"""LibCST-based single-object splice (DESIGN §7.3).
 
 ``splice_object`` replaces exactly one top-level object (a ``def`` -- an
 ``@automation``/``@script``-decorated function -- or a bare assignment, for
@@ -32,7 +32,7 @@ name": two defs may legally share a name while declaring different ids, and
 name-based targeting spliced over / removed both (the
 ``test_splicing_source_writer.py`` name-collision regressions).
 
-R8 (determinism / no wall-clock in core logic): ``updated_on`` is a parameter
+Deterministic, no wall-clock in core logic: ``updated_on`` is a parameter
 the caller passes explicitly -- this module never reads the system clock.
 """
 
@@ -96,8 +96,8 @@ def splice_object(
 
     ``new_source`` is the replacement statement's source (typically
     :func:`hassle.decompiler.decompile_object`'s output for the drifted
-    object). ``updated_on`` is an ISO date string supplied by the caller (R8:
-    never wall-clock) that becomes the ``# hassle: updated from UI on <date>``
+    object). ``updated_on`` is an ISO date string supplied by the caller
+    (never wall-clock) that becomes the ``# hassle: updated from UI on <date>``
     marker on the spliced-in replacement.
 
     The target is resolved by its declared ``(kind, identity)`` (same
@@ -156,10 +156,10 @@ def _id_kwarg(node: cst.BaseExpression) -> str | None:
     return None
 
 
-# Assignment-call kinds that ARE object declarations: every helper domain
-# (F1) plus `blueprint_automation`'s mapping above. Anything else on an
-# assignment's right-hand side (`state(...)`, an arbitrary local call) is not
-# a hassle object statement at all.
+# Assignment-call kinds that ARE object declarations: every helper domain (the
+# frozen IR schema) plus `blueprint_automation`'s mapping above. Anything else
+# on an assignment's right-hand side (`state(...)`, an arbitrary local call)
+# is not a hassle object statement at all.
 def _assign_object_kinds() -> frozenset[str]:
     from hassle.ir import HELPER_DOMAINS
 
@@ -347,7 +347,7 @@ def merge_missing_imports(file_source: str, import_sources: list[str]) -> str:
     """Insert whichever of ``import_sources`` (one import statement each)
     ``file_source`` doesn't already satisfy, right after its last top-level
     import (or before the first statement when it has none). Byte-identical
-    input order is preserved (R8: callers pass deterministic, sorted lines)."""
+    input order is preserved (callers pass deterministic, sorted lines)."""
     module = cst.parse_module(file_source)
     star_or_plain, names = _provided_imports(module)
     existing_codes = _import_codes(module)

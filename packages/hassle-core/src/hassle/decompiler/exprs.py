@@ -278,10 +278,10 @@ def decompile_trigger(body: dict[str, Any]) -> str | None:
 
 
 def _is_entity_id_shape(value: Any) -> bool:
-    """True for a bare entity-id string, or a list of them (real-world
-    smoke-test addition: the HA UI always stores entity_id as a list, even for
-    a single entity -- a singleton list must decompile back to a list, never
-    normalized to a scalar, I3)."""
+    """True for a bare entity-id string, or a list of them: the HA UI always
+    stores entity_id as a list, even for a single entity -- a singleton list
+    must decompile back to a list, never normalized to a scalar
+    (compile(decompile(x)) == x)."""
     if isinstance(value, str):
         return True
     if isinstance(value, list):
@@ -561,11 +561,11 @@ def _cond_state(body: dict[str, Any]) -> str | None:
     if not set(body) <= known or "entity_id" not in body:
         return None
     entity_id = body["entity_id"]
-    # `entity_id` (and `state`) accept a list too (residue-coverage round 2,
-    # docs/ha-api-notes.md §20): the HA UI stores a state CONDITION's fields as
-    # lists even for a single entity/value, mirroring round 1's trigger fix
-    # (`_is_entity_id_shape`) -- a singleton list must stay a list, never
-    # normalized to a scalar (I3).
+    # `entity_id` (and `state`) accept a list too (docs/ha-api-notes.md §20):
+    # the HA UI stores a state CONDITION's fields as lists even for a single
+    # entity/value, mirroring the trigger fix (`_is_entity_id_shape`) -- a
+    # singleton list must stay a list, never normalized to a scalar
+    # (compile(decompile(x)) == x).
     if not _is_entity_id_shape(entity_id):
         return None
     call = f"state({render_entity_position(entity_id)})"

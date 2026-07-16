@@ -1,4 +1,4 @@
-"""The optional in-HA media mirror (DESIGN §8.5, §4 quirks; MILESTONES M6 test 9).
+"""The optional in-HA media mirror (DESIGN §8.5, §4 quirks).
 
 `hassle mirror push/pull` stashes the bundle ZIP inside HA's local media storage
 so a copy of sources+tests lives *inside* HA (and its backups, if the user
@@ -17,9 +17,9 @@ The mechanism rides two incidental HA gates (docs/ha-api-notes.md §9, §10.3, �
 
 Both must pass for a round-trip. The target subfolder is auto-created by the
 upload endpoint (``mkdir(parents=True, exist_ok=True)`` — docs/ha-api-notes.md
-§17, correcting the M0.V §10.4 "upload does not mkdir" note), so the mirror does
-not need to pre-create it. The mirror never targets the media root (its signed
-URLs are broken — §10.4); an empty or ``.`` folder is rejected up front.
+§17), so the mirror does not need to pre-create it. The mirror never targets
+the media root (its signed URLs are broken — §10.4); an empty or ``.`` folder
+is rejected up front.
 """
 
 from __future__ import annotations
