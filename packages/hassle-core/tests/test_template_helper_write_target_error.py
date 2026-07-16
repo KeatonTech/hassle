@@ -1,4 +1,4 @@
-"""Reviewer follow-up (M10 merge): `template_number`/`template_select` missing
+"""`template_number`/`template_select` missing
 their required write-target kwarg (`set_value=`/`select_option=`) used to only
 fail at APPLY time with a bare backend `ValueError` (`_check_required_fields`
 in `hassle.backend.direct`/`hassle.backend.fake`) -- `hassle validate` would
@@ -7,7 +7,7 @@ pass a bundle guaranteed to fail on push. `MissingTemplateHelperWriteTargetError
 builder itself (`hassle.compiler.template_helpers._declare_template_helper`),
 so it is caught the moment the bundle is compiled -- by `hassle validate`,
 `hassle plan`, and `hassle push` alike, all of which compile before anything
-else. Snapshot-tested per R6 (what/where/fix, one paragraph).
+else. Snapshot-tested (what/where/fix, one paragraph).
 
 The backend-side `_check_required_fields` checks are UNCHANGED and remain a
 second line of defense (they guard any non-DSL path that builds a

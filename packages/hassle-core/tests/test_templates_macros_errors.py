@@ -1,4 +1,4 @@
-"""R6 error snapshots for the templates/macros/scripts workstream.
+"""Error snapshots for templates/macros/scripts.
 
 Same pattern as test_compile_errors.py: each user-facing error states *what*,
 *where* (file:line), and *the fix*, in one paragraph, snapshot-tested under
@@ -91,7 +91,7 @@ def test_shared_script_param_if_misuse_error_message() -> None:
 
 
 def test_shared_script_param_iteration_misuse_error_message() -> None:
-    # Reviewer finding (M19 PR review): container dunders (`for`/`in`/`len`/
+    # Container dunders (`for`/`in`/`len`/
     # indexing) get the same specialized error, with the iteration-flavored
     # fix text (`repeat_for_each`), not the numeric/boolean one.
     from hassle.compiler import SharedScriptParamMisuseError

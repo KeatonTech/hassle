@@ -155,8 +155,7 @@ class ApplyResult(BaseModel):
 ```
 
 `manifest` is only populated when `succeeded` is `True` — on any failure the
-caller keeps its old manifest (MILESTONES M5 test 6,
-`test_manifest_updates_only_on_success`).
+caller keeps its old manifest (`test_manifest_updates_only_on_success`).
 
 ## 3. The `SourceWriter` seam
 
@@ -213,7 +212,7 @@ of a conflict from M5's output today.
 
 ## 3.1. Config-entry template-helper addendum (M10, additive — `Backend` unchanged)
 
-MILESTONES M10 adds the first config-entry `ObjectType` plugin (DESIGN §13),
+This milestone adds the first config-entry `ObjectType` plugin (DESIGN §13),
 scoped to the `template` domain (`hassle.ir.TEMPLATE_DOMAINS`:
 `template_number`/`template_sensor`/`template_binary_sensor`/
 `template_select`). This needed **zero changes to the `Backend` Protocol**:
@@ -317,8 +316,8 @@ design work. Concretely, a new domain (e.g. `threshold`) needs:
    at all (there's no identity kwarg to rename, §26.6) — the stored body's
    keys map straight onto the builder's kwargs, generic per-domain (keyed
    off `TEMPLATE_DOMAINS` membership, not a hardcoded domain name);
-   `default_source_path`'s shared root-level `misc.py` rule (MILESTONES M15:
-   category-first layout, superseding the earlier per-kind `helpers/misc.py`)
+   `default_source_path`'s shared root-level `misc.py` rule (category-first
+   layout, superseding the earlier per-kind `helpers/misc.py`)
    already covers `TEMPLATE_DOMAINS` as a set via `_SCOPE_FOR_KIND`'s shared
    `"helpers"` scope, so a domain added to that set needs no placement-code
    change at all.
@@ -329,7 +328,7 @@ design work. Concretely, a new domain (e.g. `threshold`) needs:
 In short: steps 1-2 are the only places that see genuinely new code per
 domain (an IR shape + a DSL builder); steps 3-6 are membership-set additions
 into machinery this milestone already built generically. This is the
-concrete evidence for MILESTONES M10's "mechanical follow-ons" framing.
+concrete evidence for this milestone's "mechanical follow-ons" framing.
 
 **M21 update (the `group` follow-on, docs/ha-api-notes.md §38): this
 prediction held for steps 1-5, almost exactly as written**, with the
@@ -356,7 +355,7 @@ building the follow-on:
   same way.
 - **Validation is NOT always "zero code changes for a new domain."** A group
   helper's own `entities=` field is a literal list of member entity ids —
-  MILESTONES M21 test 5 wants a nonexistent member flagged, and nothing in
+  this milestone wants a nonexistent member flagged, and nothing in
   the existing validator walks a helper object's own body at all
   (`hassle.registry.extract.extract_references` only ever descends into an
   object's `triggers`/`conditions`/`actions`, and neither template nor group

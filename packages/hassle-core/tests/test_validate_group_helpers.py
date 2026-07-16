@@ -1,7 +1,7 @@
-"""MILESTONES M21 test 5 -- bundle-declared group helpers count as existing
+"""Bundle-declared group helpers count as existing
 in validation, AND a group referencing a nonexistent member entity surfaces
 the standard unknown-entity finding (file:line, fix) -- mirrors
-`test_validate_template_helpers.py` (M10 test 5), plus the group-specific
+`test_validate_template_helpers.py`, plus the group-specific
 "own entities= list is itself checked" half that has no template analogue
 (a template helper's own body has no list-of-entity-ids field to check).
 """

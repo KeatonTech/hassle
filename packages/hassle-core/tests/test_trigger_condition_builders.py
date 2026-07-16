@@ -1,4 +1,4 @@
-"""M1 triggers+conditions workstream — unit tests for the classic builder family.
+"""Unit tests for the classic trigger/condition builder family.
 
 Exercises the trigger/condition builders directly (not through a full bundle
 compile) against the exact field shapes captured in the fixture corpus
@@ -328,8 +328,8 @@ def test_not_compiles_to_not() -> None:
 
 
 def test_combinator_bool_trap() -> None:
-    # A combinator must keep the CompileTimeBranchError __bool__ trap (M1 scope
-    # item: "extend the core's pattern; add a trap test for a combinator").
+    # A combinator must keep the CompileTimeBranchError __bool__ trap,
+    # extending the core builders' pattern.
     combo = any_of(state("a").is_("on"), state("b").is_("on"))
     with pytest.raises(CompileTimeBranchError):
         bool(combo)
