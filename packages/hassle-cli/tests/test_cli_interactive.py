@@ -248,3 +248,125 @@ def test_push_explains_adopt_rows(git_repo: Path, cli, fake_backend, toml_writer
     assert result.exit_code == 0, result.output
     assert "not touched by push" in result.output
     assert "pull" in result.output
+
+
+def _make_local_deletion_conflict(git_repo: Path, cli, backend, token, toml_writer) -> None:
+    """Push once, rename remotely, then DELETE the automation locally."""
+    toml_writer(git_repo, backend_token=token)
+    assert cli(["push", "--yes"], cwd=git_repo).exit_code == 0
+    identity = next(iter(backend.list_remote("automation")))
+    remote = dict(backend.list_remote("automation")[identity])
+    remote["alias"] = "Renamed on the HA side"
+    backend.update("automation", identity, remote)
+    (git_repo / "hallway.py").unlink()
+
+
+def test_conflict_accept_local_deletion_pushes_the_delete(
+    interactive, git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """Field crash (BrandtCamp push, 2026-07-14): keep-local where local is
+    DELETED was hardcoded to UPDATE and died on `assert entry.local is not
+    None` deep in the apply engine, mid-push. It must push the deletion."""
+    backend, token = fake_backend
+    _make_local_deletion_conflict(git_repo, cli, backend, token, toml_writer)
+
+    # "l" at the conflict prompt, then "y" at the deletion confirm.
+    result = cli(["push"], cwd=git_repo, input="l\ny\n")
+    assert result.exit_code == 0, result.output
+    assert backend.list_remote("automation") == {}
+
+
+def test_conflict_accept_remote_keeps_a_locally_deleted_object(
+    interactive, git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    backend, token = fake_backend
+    _make_local_deletion_conflict(git_repo, cli, backend, token, toml_writer)
+
+    result = cli(["push"], cwd=git_repo, input="r\n\n")
+    assert result.exit_code == 0, result.output
+    identity = next(iter(backend.list_remote("automation")))
+    assert "Renamed on the HA side" in str(backend.list_remote("automation")[identity])
+
+
+def test_conflict_accept_local_recreates_a_remotely_deleted_object(
+    interactive, git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """The mirror image: remote deleted + local edited, keep-local must
+    CREATE (an UPDATE against a missing object fails)."""
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    assert cli(["push", "--yes"], cwd=git_repo).exit_code == 0
+    identity = next(iter(backend.list_remote("automation")))
+    backend.delete("automation", identity)
+    src = (git_repo / "hallway.py").read_text(encoding="utf-8")
+    (git_repo / "hallway.py").write_text(
+        src.replace('"light.hallway"', '"light.hallway_2"'), encoding="utf-8"
+    )
+
+    result = cli(["push"], cwd=git_repo, input="l\n\n")
+    assert result.exit_code == 0, result.output
+    stored = str(backend.list_remote("automation"))
+    assert "light.hallway_2" in stored
+
+
+def test_conflict_accept_local_recreates_a_remotely_deleted_helper(
+    interactive, git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """Reviewer finding (PR #39): the automation variant of this test was
+    vacuous -- automations upsert on update, storage helpers do NOT. A
+    locally-edited input_boolean whose remote was UI-deleted must resolve
+    keep-local to a CREATE (an UPDATE against the missing id errors on real
+    HA's WS command, and now on FakeBackend too)."""
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    (git_repo / "helpers.py").write_text(
+        'from hassle import *\n\ninput_boolean(id="test_flag", name="Test Flag")\n',
+        encoding="utf-8",
+    )
+    assert cli(["push", "--yes"], cwd=git_repo).exit_code == 0
+    backend.delete("input_boolean", "test_flag")
+    (git_repo / "helpers.py").write_text(
+        "from hassle import *\n\n"
+        'input_boolean(id="test_flag", name="Test Flag", icon="mdi:flag")\n',
+        encoding="utf-8",
+    )
+
+    result = cli(["push"], cwd=git_repo, input="l\n\n")
+    assert result.exit_code == 0, result.output
+    assert backend.list_remote("input_boolean")["test_flag"]["icon"] == "mdi:flag"
+
+
+def test_accept_local_deletion_flag_requires_yes(
+    git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """Reviewer finding (PR #39): a keep-local resolution can INTRODUCE a
+    deletion, and DESIGN §8.2's gate must consult the RESOLVED plan --
+    non-interactive --accept-local on a locally-deleted object refuses
+    without --yes, and deletes with it."""
+    backend, token = fake_backend
+    _make_local_deletion_conflict(git_repo, cli, backend, token, toml_writer)
+    identity = next(iter(backend.list_remote("automation")))
+
+    result = cli(["push", "--accept-local", f"automation:{identity}"], cwd=git_repo)
+    assert result.exit_code != 0
+    assert "deletion" in result.output.lower()
+    assert identity in backend.list_remote("automation")  # untouched
+
+    result2 = cli(["push", "--accept-local", f"automation:{identity}", "--yes"], cwd=git_repo)
+    assert result2.exit_code == 0, result2.output
+    assert backend.list_remote("automation") == {}
+
+
+def test_interactive_resolved_deletion_gets_the_stern_confirm(
+    interactive, git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """The interactive twin: once keep-local resolves to a deletion, the
+    confirm is the deletion-flavored default-NO prompt -- a bare Enter
+    declines instead of applying."""
+    backend, token = fake_backend
+    _make_local_deletion_conflict(git_repo, cli, backend, token, toml_writer)
+    identity = next(iter(backend.list_remote("automation")))
+
+    result = cli(["push"], cwd=git_repo, input="l\n\n")  # Enter = default
+    assert result.exit_code != 0
+    assert identity in backend.list_remote("automation")  # declined, untouched

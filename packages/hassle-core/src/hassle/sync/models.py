@@ -179,6 +179,10 @@ class ApplyOutcome(StrEnum):
     FAILED = "failed"
     ROLLED_BACK = "rolled_back"
     ABORTED = "aborted"  # never attempted because an earlier hash re-verify failed
+    #: Applied, then the rollback attempt itself failed: the remote still
+    #: holds this object's NEW state while the run as a whole failed. The
+    #: apply's failure_message names these objects (what/where/fix).
+    ROLLBACK_FAILED = "rollback_failed"
 
 
 class ApplyResult(BaseModel):

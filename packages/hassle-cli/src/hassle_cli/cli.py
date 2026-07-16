@@ -868,7 +868,35 @@ def push(
         )
         raise SystemExit(1)
 
-    has_deletions = bool(the_plan.entries_with_action(PlanAction.DELETE))
+    resolved_entries = []
+    for entry in the_plan.entries:
+        if entry.action is PlanAction.CONFLICT:
+            if entry.object_key in accept_local:
+                # "Keep local" means push whatever the LOCAL side of the
+                # conflict is -- which may be a deletion (local is None) or a
+                # recreate (remote is None), not only an edit. Hardcoding
+                # UPDATE here crashed mid-apply on `entry.local is not None`
+                # for a locally-deleted object (field crash, 2026-07-14).
+                if entry.local is None:
+                    resolved_action = PlanAction.DELETE
+                elif entry.remote is None:
+                    resolved_action = PlanAction.CREATE
+                else:
+                    resolved_action = PlanAction.UPDATE
+                entry = entry.model_copy(update={"action": resolved_action})
+            elif entry.object_key in accept_remote:
+                continue  # keep remote as-is: nothing to push for this key
+        resolved_entries.append(entry)
+    from hassle.sync.models import Plan
+
+    resolved_plan = Plan(entries=resolved_entries)
+
+    # Deletion gate over the RESOLVED plan (reviewer finding, PR #39): a
+    # keep-local conflict resolution can INTRODUCE a deletion, and DESIGN
+    # §8.2 says deletions always require the confirm step (or --yes) -- the
+    # gate must not consult the pre-resolution plan where that object was
+    # still a CONFLICT row.
+    has_deletions = bool(resolved_plan.entries_with_action(PlanAction.DELETE))
     if not yes and _interactive():
         # Plan-then-confirm at the terminal: deletions default to NO (they
         # need a deliberate yes), everything else defaults to YES.
@@ -889,18 +917,6 @@ def push(
             "explicit confirmation. Fix: re-run with --yes to apply.[/bold red]"
         )
         raise SystemExit(1)
-
-    resolved_entries = []
-    for entry in the_plan.entries:
-        if entry.action is PlanAction.CONFLICT:
-            if entry.object_key in accept_local:
-                entry = entry.model_copy(update={"action": PlanAction.UPDATE})
-            elif entry.object_key in accept_remote:
-                continue  # keep remote as-is: nothing to push for this key
-        resolved_entries.append(entry)
-    from hassle.sync.models import Plan
-
-    resolved_plan = Plan(entries=resolved_entries)
 
     ha_url, token = _require_backend_config(root)
     manifest = manifest_io.load_manifest(root)

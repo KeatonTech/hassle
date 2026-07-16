@@ -318,6 +318,14 @@ class FakeBackend:
             payload = {k: v for k, v in config.items() if k != "name"}
             self._update_group_via_options_flow(kind, identity, payload)
             return
+        if kind in HELPER_DOMAINS and identity not in self._store[kind]:
+            # Fidelity with real HA (field crash, BrandtCamp 2026-07-14): the
+            # storage-collection WS `{kind}/update` command errors on an
+            # unknown id -- it never upserts. (Caller-keyed automations/
+            # scripts genuinely DO upsert via their config REST endpoint, so
+            # only the helper domains get this guard.) The lenient upsert
+            # here previously masked apply's rollback-of-a-DELETE bug.
+            raise ValueError(f"WS command failed: Unable to find {kind}_id {identity}")
         normalized = normalize_ha(config, kind=kind)
         normalized = self._stored_body(kind, identity, normalized)
         self._store[kind][identity] = normalized
