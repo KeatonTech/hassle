@@ -148,7 +148,7 @@ def apply_plan(
     outcomes: dict[str, ApplyOutcome] = {}
     # (kind, identity) -> snapshot of the pre-apply remote config (None if the
     # object didn't exist yet, e.g. a CREATE).
-    snapshots: list[tuple[str, str, dict[str, object] | None]] = []
+    snapshots: list[tuple[str, str, dict[str, object] | None, PlanAction]] = []
     applied: list[str] = []  # object_keys successfully applied, in apply order
     category_warnings: list[str] = []  # M11: never fails/rolls back apply (I6)
     category_conflicts: list[str] = []  # M15: never fails/rolls back apply (I6)
@@ -175,7 +175,7 @@ def apply_plan(
                 # Drift since plan time: abort before writing this or anything
                 # after it. Objects already applied this run are rolled back.
                 return _abort(backend, entry, push_entries, outcomes, snapshots, applied)
-            snapshots.append((entry.kind, identity, remote_now))
+            snapshots.append((entry.kind, identity, remote_now, entry.action))
         else:  # CREATE
             # CREATE-collision drift detection (M5 review finding, MILESTONES M6
             # test 5): at plan time nothing existed under this identity, so a
@@ -185,16 +185,18 @@ def apply_plan(
             # apply must abort before writing rather than clobber it.
             if identity in backend.list_remote(entry.kind):
                 return _abort(backend, entry, push_entries, outcomes, snapshots, applied)
-            snapshots.append((entry.kind, identity, None))
+            snapshots.append((entry.kind, identity, None, entry.action))
 
         try:
             _apply_one(backend, entry, identity)
         except BaseException as exc:
             outcomes[entry.object_key] = ApplyOutcome.FAILED
             _mark_remaining_aborted(push_entries, entry, outcomes, skip_first=True)
-            _rollback(backend, snapshots[:-1])
+            rollback_failures = _rollback(backend, snapshots[:-1])
             for key in applied:
                 outcomes[key] = ApplyOutcome.ROLLED_BACK
+            for kind, stuck_identity, _error in rollback_failures:
+                outcomes[f"{kind}:{stuck_identity}"] = ApplyOutcome.ROLLBACK_FAILED
             if not isinstance(exc, Exception):
                 # KeyboardInterrupt/SystemExit mid-apply (owner field report,
                 # 2026-07-14 false conflicts): roll back like any other
@@ -204,9 +206,16 @@ def apply_plan(
                 # plan then reports a false `both_edited` conflict against the
                 # owner's own pushed content once the local side is edited
                 # again. Rollback is best-effort (a second interrupt during
-                # the rollback's own backend calls still escapes).
+                # the rollback's own backend calls still escapes), and any
+                # objects it could NOT restore are reported by the next
+                # `hassle plan` rather than by this raise.
                 raise
             failure_message = str(exc) if isinstance(exc, CreatedIdentityDivergedError) else None
+            rollback_message = _rollback_failure_message(rollback_failures)
+            if rollback_message is not None:
+                failure_message = (
+                    f"{failure_message} {rollback_message}" if failure_message else rollback_message
+                )
             return ApplyResult(
                 outcomes=outcomes,
                 succeeded=False,
@@ -333,17 +342,24 @@ def _abort(
     entry: PlanEntry,
     push_entries: list[PlanEntry],
     outcomes: dict[str, ApplyOutcome],
-    snapshots: list[tuple[str, str, dict[str, object] | None]],
+    snapshots: list[tuple[str, str, dict[str, object] | None, PlanAction]],
     applied: list[str],
 ) -> ApplyResult:
     """Abort at ``entry`` (drift or CREATE-collision): nothing written past what
     was already applied, and everything applied this run is rolled back."""
     outcomes[entry.object_key] = ApplyOutcome.ABORTED
     _mark_remaining_aborted(push_entries, entry, outcomes)
-    _rollback(backend, snapshots)
+    rollback_failures = _rollback(backend, snapshots)
     for key in applied:
         outcomes[key] = ApplyOutcome.ROLLED_BACK
-    return ApplyResult(outcomes=outcomes, succeeded=False, manifest=None)
+    for kind, stuck_identity, _error in rollback_failures:
+        outcomes[f"{kind}:{stuck_identity}"] = ApplyOutcome.ROLLBACK_FAILED
+    return ApplyResult(
+        outcomes=outcomes,
+        succeeded=False,
+        manifest=None,
+        failure_message=_rollback_failure_message(rollback_failures),
+    )
 
 
 def _mark_remaining_aborted(
@@ -362,14 +378,45 @@ def _mark_remaining_aborted(
             outcomes[entry.object_key] = ApplyOutcome.ABORTED
 
 
-def _rollback(backend: Backend, snapshots: list[tuple[str, str, dict[str, object] | None]]) -> None:
-    # Restore in reverse order of application.
-    for kind, identity, previous in reversed(snapshots):
-        if previous is None:
-            # It didn't exist before (this was a CREATE) -> delete it back out.
-            backend.delete(kind, identity)
-        else:
-            backend.update(kind, identity, previous)
+def _rollback(
+    backend: Backend,
+    snapshots: list[tuple[str, str, dict[str, object] | None, PlanAction]],
+) -> list[tuple[str, str, str]]:
+    """Restore in reverse order of application. Returns the steps that could
+    NOT be restored as ``(kind, identity, error)`` -- a failing step never
+    aborts the remaining restores (field crash, BrandtCamp 2026-07-14: the
+    first rollback step raised and every earlier object stayed un-restored,
+    with a raw traceback as the only output)."""
+    failures: list[tuple[str, str, str]] = []
+    for kind, identity, previous, action in reversed(snapshots):
+        try:
+            if previous is None:
+                # It didn't exist before (this was a CREATE) -> delete it out.
+                backend.delete(kind, identity)
+            elif action is PlanAction.DELETE:
+                # The apply DELETED it: an update against a now-missing object
+                # errors on real HA -- restore by recreating. Slug-keyed kinds
+                # land back on the same identity (§17.5); config-entry kinds
+                # get a fresh entry_id (the documented rollback caveat,
+                # docs/ha-api-notes.md §26.3).
+                backend.create(kind, previous)  # type: ignore[arg-type]
+            else:
+                backend.update(kind, identity, previous)
+        except Exception as exc:
+            failures.append((kind, identity, str(exc)))
+    return failures
+
+
+def _rollback_failure_message(failures: list[tuple[str, str, str]]) -> str | None:
+    if not failures:
+        return None
+    stuck = "; ".join(f"{kind}:{identity} ({error})" for kind, identity, error in failures)
+    return (
+        f"rollback could not restore {stuck} -- Home Assistant may now hold a "
+        "partially applied plan for these objects. Fix: run `hassle plan` to "
+        "see the actual remote state, then re-run `hassle push` (resolving any "
+        "conflicts) once the underlying backend error is addressed."
+    )
 
 
 def _advance_manifest(

@@ -894,7 +894,18 @@ def push(
     for entry in the_plan.entries:
         if entry.action is PlanAction.CONFLICT:
             if entry.object_key in accept_local:
-                entry = entry.model_copy(update={"action": PlanAction.UPDATE})
+                # "Keep local" means push whatever the LOCAL side of the
+                # conflict is -- which may be a deletion (local is None) or a
+                # recreate (remote is None), not only an edit. Hardcoding
+                # UPDATE here crashed mid-apply on `entry.local is not None`
+                # for a locally-deleted object (field crash, 2026-07-14).
+                if entry.local is None:
+                    resolved_action = PlanAction.DELETE
+                elif entry.remote is None:
+                    resolved_action = PlanAction.CREATE
+                else:
+                    resolved_action = PlanAction.UPDATE
+                entry = entry.model_copy(update={"action": resolved_action})
             elif entry.object_key in accept_remote:
                 continue  # keep remote as-is: nothing to push for this key
         resolved_entries.append(entry)
