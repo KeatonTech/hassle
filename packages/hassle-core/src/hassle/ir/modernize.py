@@ -4,7 +4,7 @@ decompile+recompile cycle is EXPECTED to apply, promoted to production
 
 This is the exact transform `packages/hassle-core/tests/test_roundtrip_corpus.py`'s
 `_modernized` test helper already applied to its *expectation* before comparing —
-moved here so production code (the pull-side self-checks, `hassle_cli.pull_apply`/
+moved here so production code (the pull-side self-checks, `hassle.sync.pull_apply`/
 `hassle_cli.cli`) can perform the identical, context-free comparison a raw canonical-
 hash equality check cannot: `compile(decompile(x))` is expected to modernize two
 cosmetic shapes relative to `normalize_ha(x)`, never anything else --

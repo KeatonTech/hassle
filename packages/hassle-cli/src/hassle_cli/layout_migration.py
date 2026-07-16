@@ -20,7 +20,7 @@ those trees:**
    "remove one top-level statement" primitive `SplicingSourceWriter.
    delete_object` already uses for DROP) and **regenerate it** at the new
    destination (batched with every other object landing in that same new
-   file, exactly like a fresh ADOPT batch -- `hassle_cli.pull_apply.
+   file, exactly like a fresh ADOPT batch -- `hassle.sync.pull_apply.
    _adopt_batch_source`'s shape, reused here via `decompile_bundle`).
 3. **Old files are deleted ONLY when nothing but imports would remain**
    (I6 -- the exact same rule `remove_object`/`SplicingSourceWriter.

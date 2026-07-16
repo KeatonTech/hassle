@@ -39,12 +39,12 @@ from pathlib import Path
 import pytest
 
 from hassle.sync.models import Plan, PlanAction, PlanEntry
-from hassle.sync.source_writer import RecordingSourceWriter
-from hassle_cli.pull_apply import (
+from hassle.sync.pull_apply import (
     DecompiledBatchDoesNotCompileError,
     DecompiledValueMismatchError,
     apply_pull_with_decompiler,
 )
+from hassle.sync.source_writer import RecordingSourceWriter
 
 
 def _adopt_entry(object_key: str, kind: str, remote: dict, source_path: str) -> PlanEntry:
@@ -62,7 +62,7 @@ def _adopt_entry(object_key: str, kind: str, remote: dict, source_path: str) -> 
 
 
 def test_adopt_batch_self_check_catches_broken_decompile_before_writing(monkeypatch) -> None:
-    import hassle_cli.pull_apply as pull_apply_mod
+    from hassle.sync import pull_apply as pull_apply_mod
 
     def _broken_decompile_bundle(objects, *, script_refs=None, snapshot=None):
         return (
@@ -118,7 +118,7 @@ def test_adopt_batch_self_check_catches_value_mismatch_that_still_compiles(monke
     hash against the original stored config) against a hand-rolled fake decompiler
     that reproduces exactly that failure mode: valid Python, wrong meaning.
     """
-    import hassle_cli.pull_apply as pull_apply_mod
+    from hassle.sync import pull_apply as pull_apply_mod
 
     def _silently_wrong_decompile_bundle(objects, *, script_refs=None, snapshot=None):
         # Reproduces the shape of the real bug: a `repeat.for_each` that should be
@@ -185,7 +185,7 @@ def test_adopt_batch_self_check_does_not_false_positive_on_batch_context_text_di
     field failure: six objects refused, only one of which -- if any --
     was a real problem); the value-comparison self-check must not.
     """
-    import hassle_cli.pull_apply as pull_apply_mod
+    from hassle.sync import pull_apply as pull_apply_mod
 
     def _batch_context_name_collision_decompile_bundle(objects, *, script_refs=None, snapshot=None):
         # Simulates what a real batch compile would emit when a SIBLING

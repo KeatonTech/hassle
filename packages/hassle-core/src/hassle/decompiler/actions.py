@@ -80,7 +80,7 @@ def _reserved_top_level_names() -> frozenset[str]:
     return frozenset(hassle.__all__) | {"e"}
 
 
-def _indent_lines(lines: list[str], levels: int = 1) -> list[str]:
+def indent_lines(lines: list[str], levels: int = 1) -> list[str]:
     prefix = INDENT * levels
     return [f"{prefix}{line}" if line else line for line in lines]
 
@@ -557,18 +557,18 @@ def _if_then(body: dict[str, Any], resolver: CallResolver | None) -> list[str] |
     header_parts = [cond_src, *_step_option_kwargs_src(body)]
     out = [f"with if_then({', '.join(header_parts)}):"]
     if not then_lines:
-        out.extend(_indent_lines(["pass"]))
+        out.extend(indent_lines(["pass"]))
     else:
-        out.extend(_indent_lines(_flatten(then_lines)))
+        out.extend(indent_lines(_flatten(then_lines)))
     if "else" in body:
         else_lines = _actions_block(body["else"], resolver)
         if else_lines is None:
             return None
         out.append("with else_then():")
         if not else_lines:
-            out.extend(_indent_lines(["pass"]))
+            out.extend(indent_lines(["pass"]))
         else:
-            out.extend(_indent_lines(_flatten(else_lines)))
+            out.extend(indent_lines(_flatten(else_lines)))
     return out
 
 
@@ -615,21 +615,21 @@ def _choose(body: dict[str, Any], resolver: CallResolver | None) -> list[str] | 
     choose_header_parts = _step_option_kwargs_src(body)
     out = [f"with choose({', '.join(choose_header_parts)}) as c:"]
     for when_args, seq_lines in branch_srcs:
-        out.extend(_indent_lines([f"with c.when_({when_args}):"]))
+        out.extend(indent_lines([f"with c.when_({when_args}):"]))
         if not seq_lines:
-            out.extend(_indent_lines(["pass"], levels=2))
+            out.extend(indent_lines(["pass"], levels=2))
         else:
-            out.extend(_indent_lines(seq_lines, levels=2))
+            out.extend(indent_lines(seq_lines, levels=2))
     if "default" in body:
         default_lines = _actions_block(body["default"], resolver)
         if default_lines is None:
             return None
-        out.extend(_indent_lines(["with c.default():"]))
+        out.extend(indent_lines(["with c.default():"]))
         flat_default = _flatten(default_lines)
         if not flat_default:
-            out.extend(_indent_lines(["pass"], levels=2))
+            out.extend(indent_lines(["pass"], levels=2))
         else:
-            out.extend(_indent_lines(flat_default, levels=2))
+            out.extend(indent_lines(flat_default, levels=2))
     return out
 
 
@@ -680,9 +680,9 @@ def _repeat(body: dict[str, Any], resolver: CallResolver | None) -> list[str] | 
         return None
     out = [header]
     if not flat_seq:
-        out.extend(_indent_lines(["pass"]))
+        out.extend(indent_lines(["pass"]))
     else:
-        out.extend(_indent_lines(flat_seq))
+        out.extend(indent_lines(flat_seq))
     return out
 
 
@@ -732,23 +732,23 @@ def _parallel(body: dict[str, Any], resolver: CallResolver | None) -> list[str] 
         for _, _, seq_lines in branch_plans:
             flat.extend(seq_lines)
         if not flat:
-            out.extend(_indent_lines(["pass"]))
+            out.extend(indent_lines(["pass"]))
         else:
-            out.extend(_indent_lines(flat))
+            out.extend(indent_lines(flat))
         return out
 
     p_args = ", ".join(header_parts)
     out = [f"with parallel({p_args}) as p:"]
     for is_bare, branch_dict, seq_lines in branch_plans:
         if is_bare:
-            out.extend(_indent_lines(seq_lines))
+            out.extend(indent_lines(seq_lines))
             continue
         branch_kwargs = _step_option_kwargs_src(branch_dict)
-        out.extend(_indent_lines([f"with p.branch({', '.join(branch_kwargs)}):"]))
+        out.extend(indent_lines([f"with p.branch({', '.join(branch_kwargs)}):"]))
         if not seq_lines:
-            out.extend(_indent_lines(["pass"], levels=2))
+            out.extend(indent_lines(["pass"], levels=2))
         else:
-            out.extend(_indent_lines(seq_lines, levels=2))
+            out.extend(indent_lines(seq_lines, levels=2))
     return out
 
 

@@ -24,6 +24,7 @@ from hassle.decompiler.actions import (
     CallResolver,
     CallTarget,
     decompile_action,
+    indent_lines,
     shared_script_field_context,
 )
 from hassle.decompiler.exprs import decompile_condition, decompile_trigger, render_literal
@@ -246,14 +247,6 @@ def _blueprint_source(obj: AutomationConfig, ident: str) -> str | None:
     return f"{ident} = blueprint_automation({', '.join(kwargs)})\n"
 
 
-def _indent_lines(lines: list[str]) -> list[str]:
-    """Indent every non-empty line one level (mirrors
-    ``hassle.decompiler.actions._indent_lines``, kept local here since that one is
-    module-private to its own file -- used for the `with only_if(...):` block body,
-    item 1, ``ux/dsl-ergonomics``)."""
-    return [f"{INDENT}{line}" if line else line for line in lines]
-
-
 def _raw_automation_source(obj: AutomationConfig, ident: str) -> str:
     """Whole-object fallback: ``@raw_automation(id=...)`` over a function
     returning the verbatim (already-normalized) body (DESIGN §5.8)."""
@@ -427,7 +420,7 @@ def _automation_source(
             for src in typed_conditions:
                 body_lines.append(f"{INDENT}{src},")
             body_lines.append("):")
-        body_lines.extend(_indent_lines(action_lines))
+        body_lines.extend(indent_lines(action_lines))
     else:
         body_lines.extend(action_lines)
 

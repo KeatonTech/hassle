@@ -2,7 +2,7 @@
 (ux/triggers-in-decorator, task #10) -- the real end-to-end path the milestone
 text calls out ("spliced objects now emit decorator-form too").
 
-`hassle_cli.pull_apply._refresh` calls `decompile_bundle` (already covered by
+`hassle.sync.pull_apply._refresh` calls `decompile_bundle` (already covered by
 `packages/hassle-core/tests/test_decompile_triggers_in_decorator.py`) to build
 the replacement text, then `splice_object` (LibCST) swaps just that one
 top-level `def` in the existing file -- so this test is the belt-and-suspenders

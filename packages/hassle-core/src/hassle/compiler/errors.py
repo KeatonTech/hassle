@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from hassle._markers import UI_SPLICE_MARKER_PREFIX
 from hassle.compiler.spans import SourceSpan
 
 
@@ -67,18 +68,6 @@ class InOperatorTrapError(CompileError):
         )
 
 
-# The exact marker comment `hassle.decompiler.splice`/`hassle.sync.source_writer`
-# stamp onto a UI-edit appended by `SplicingSourceWriter.splice_object`'s
-# stale-manifest/metaprogrammed-object fallback (that module's docstring: a
-# compile-time loop's generated object has no single literal statement for the
-# splicer to target, so the refreshed definition is appended standalone
-# instead). Duplicated here (not imported from `hassle.decompiler.splice`)
-# because `hassle.compiler` sits below `hassle.decompiler` in the dependency
-# order -- this is a plain string match against the line just above a
-# declaration site, not a layering dependency.
-_UI_SPLICE_MARKER_PREFIX = "# hassle: updated from UI on"
-
-
 def _line_is_ui_splice_marker(file_path: str, line: int) -> bool:
     """True if the line immediately before ``line`` (1-based) in ``file_path``
     is the `# hassle: updated from UI on <date>` append marker -- i.e. this
@@ -95,7 +84,7 @@ def _line_is_ui_splice_marker(file_path: str, line: int) -> bool:
     marker_line_no = line - 1  # 1-based line -> 0-based index of the line before it
     if marker_line_no < 1 or marker_line_no > len(lines):
         return False
-    return lines[marker_line_no - 1].strip().startswith(_UI_SPLICE_MARKER_PREFIX)
+    return lines[marker_line_no - 1].strip().startswith(UI_SPLICE_MARKER_PREFIX)
 
 
 class DuplicateObjectError(CompileError):

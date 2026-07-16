@@ -40,6 +40,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from hassle._markers import UI_SPLICE_MARKER_PREFIX
+
 
 @runtime_checkable
 class SourceWriter(Protocol):
@@ -190,7 +192,7 @@ class SplicingSourceWriter(WholeFileSourceWriter):
                     "validate` (the bundle will not compile until the duplicate id is "
                     "resolved)."
                 )
-            marker = f"# hassle: updated from UI on {self._updated_on}\n"
+            marker = f"{UI_SPLICE_MARKER_PREFIX} {self._updated_on}\n"
             new_source = (
                 file_source.rstrip("\n") + "\n\n\n" + marker + object_source.strip("\n") + "\n"
             )

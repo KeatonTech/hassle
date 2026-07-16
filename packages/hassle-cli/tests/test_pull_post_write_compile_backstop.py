@@ -15,13 +15,13 @@ branch addresses, or any other coordination bug we haven't found yet),
 Two backstops now exist (coordinator task 4 adds the second, cheaper one):
 
 1. A pre-write, adopt-batches-only self-check
-   (`hassle_cli.pull_apply._self_check_adopt_batches`,
+   (`hassle.sync.pull_apply._self_check_adopt_batches`,
    `test_pull_adopt_batch_self_check.py`) that fires BEFORE any file is
    written, for a broken ADOPT batch considered in isolation.
 2. THIS module's post-write, whole-real-bundle-tree recompile
    (`hassle_cli.cli.pull`), which additionally covers anything the narrower
    pre-write check can't see -- in particular `_refresh`'s single-object
-   splice path (see `hassle_cli.pull_apply`'s module docstring for why that
+   splice path (see `hassle.sync.pull_apply`'s module docstring for why that
    path isn't pre-write-self-checked).
 
 Simulated here by monkeypatching the decompiler to emit deliberately broken
@@ -80,7 +80,7 @@ def test_pull_backstop_catches_noncompiling_refresh_output(
         },
     )
 
-    import hassle_cli.pull_apply as pull_apply_mod
+    from hassle.sync import pull_apply as pull_apply_mod
 
     def _broken_decompile_bundle(objects, *, script_refs=None):
         return (

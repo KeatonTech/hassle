@@ -2,7 +2,7 @@
 statement (M2's LibCST splicer, DESIGN §7.3), never unlink the whole file.
 
 Same class as the REFRESH clobber (`test_pull_refresh_splice.py`, found on
-main at 748b461): `hassle_cli.pull_apply._drop` calls
+main at 748b461): `hassle.sync.pull_apply._drop` calls
 `SourceWriter.delete_object`, and `WholeFileSourceWriter.delete_object` -- the
 writer `hassle_cli.cli.pull` handed it -- unlinked the ENTIRE file
 (`path.unlink()`), even when sibling objects and hand-written comments lived

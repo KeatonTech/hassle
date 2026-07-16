@@ -124,7 +124,7 @@ def category_display_names_for_paths(
     throw away, for `hassle pull` to emit as the new category file's
     `CATEGORY` global).
 
-    Only ever consulted by `hassle_cli.pull_apply.apply_pull_with_decompiler`
+    Only ever consulted by `hassle.sync.pull_apply.apply_pull_with_decompiler`
     for an ADOPT batch whose destination file does not already exist --
     i.e. this dict may (harmlessly) also contain paths for objects landing
     in an ALREADY-EXISTING category file; the caller is what decides whether
@@ -314,7 +314,7 @@ def build_script_refs(
     (for cross-file cycle detection). Naming collisions are resolved
     independently per destination file (a fresh ``used_names`` tracker per
     module path), matching how each file is actually decompiled on its own in
-    `hassle_cli.pull_apply` (one `decompile_bundle` call per destination).
+    `hassle.sync.pull_apply` (one `decompile_bundle` call per destination).
 
     **Field-failure fix (``ux/shared-script-calls-fix``):** every ``ScriptRef``
     also carries ``is_shared_script`` -- whether ``obj`` actually decompiles

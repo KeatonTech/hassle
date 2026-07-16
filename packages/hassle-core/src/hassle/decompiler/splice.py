@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import libcst as cst
 
-_MARKER_PREFIX = "# hassle: updated from UI on "
+from hassle._markers import UI_SPLICE_MARKER_PREFIX
 
 
 def _object_name(stmt: cst.CSTNode) -> str | None:
@@ -67,7 +67,7 @@ def _parse_replacement(new_source: str, *, updated_on: str) -> cst.BaseStatement
     line is stripped and replaced so there is never more than one.
     """
     lines = new_source.splitlines()
-    lines = [line for line in lines if not line.strip().startswith(_MARKER_PREFIX.strip())]
+    lines = [line for line in lines if not line.strip().startswith(UI_SPLICE_MARKER_PREFIX)]
     stripped_source = "\n".join(lines).strip("\n") + "\n"
 
     module = cst.parse_module(stripped_source)
@@ -78,7 +78,7 @@ def _parse_replacement(new_source: str, *, updated_on: str) -> cst.BaseStatement
         )
     (stmt,) = module.body
 
-    marker_comment = cst.Comment(f"{_MARKER_PREFIX}{updated_on}")
+    marker_comment = cst.Comment(f"{UI_SPLICE_MARKER_PREFIX} {updated_on}")
     marker_line = cst.EmptyLine(comment=marker_comment)
     existing_leading = list(stmt.leading_lines)
     return stmt.with_changes(leading_lines=[marker_line, *existing_leading])

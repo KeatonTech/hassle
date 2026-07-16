@@ -144,8 +144,8 @@ def test_apply_pull_adopt_splices_into_existing_file(tmp_path: Path, monkeypatch
     destination file, preserving every statement already there (including a
     hand-written comment), never overwrite it whole."""
     from hassle.sync.models import Plan, PlanAction, PlanEntry
+    from hassle.sync.pull_apply import apply_pull_with_decompiler
     from hassle.sync.source_writer import SplicingSourceWriter
-    from hassle_cli.pull_apply import apply_pull_with_decompiler
 
     monkeypatch.chdir(tmp_path)
     existing_source = """from hassle import automation, service, state, when

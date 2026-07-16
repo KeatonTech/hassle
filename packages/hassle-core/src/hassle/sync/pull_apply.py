@@ -313,7 +313,7 @@ def values_match(recompiled: IRObject, original: dict[str, Any]) -> bool:
 
     Neither adjustment mutates the caller's ``original``.
     """
-    comparable_original = original
+    comparable_original: dict[str, Any] = original
     if recompiled.kind() == "automation":
         if "id" not in comparable_original:
             comparable_original = {**comparable_original, "id": recompiled.identity}

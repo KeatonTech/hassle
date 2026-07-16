@@ -73,14 +73,14 @@ def test_declared_as_runtime_dependency() -> None:
 
 
 def test_insert_category_global_uses_shared_resolver(tmp_path, monkeypatch) -> None:
-    """Regression (owner field failure #2, same day): `hassle_cli.pull_apply.
+    """Regression (owner field failure #2, same day): `hassle.sync.pull_apply.
     _insert_category_global` had its OWN bare `subprocess.run(["ruff", ...])`,
     crashing standalone installs even after codegen's site was fixed. It must
     go through the shared resolver: with PATH empty but a working ruff next to
     the interpreter, insertion succeeds instead of raising FileNotFoundError."""
     import sys
 
-    from hassle_cli.pull_apply import _insert_category_global
+    from hassle.sync.pull_apply import _insert_category_global
 
     fake_bin = tmp_path / "venv-bin"
     fake_bin.mkdir()

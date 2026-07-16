@@ -248,15 +248,15 @@ def pull(allow_dirty: bool) -> None:
     """Merge UI-side edits into the working tree (never writes to HA)."""
     from hassle.ir.keys import OBJECT_KINDS
     from hassle.sync.plan import compute_plan
-    from hassle.sync.source_writer import SplicingSourceWriter
-    from hassle_cli import backend_factory
-    from hassle_cli.doctor import find_committed_tokens
-    from hassle_cli.git_support import commit_message_for_pull
-    from hassle_cli.pull_apply import (
+    from hassle.sync.pull_apply import (
         DecompiledBatchDoesNotCompileError,
         DecompiledValueMismatchError,
         apply_pull_with_decompiler,
     )
+    from hassle.sync.source_writer import SplicingSourceWriter
+    from hassle_cli import backend_factory
+    from hassle_cli.doctor import find_committed_tokens
+    from hassle_cli.git_support import commit_message_for_pull
 
     console = get_console()
     root = _bundle_root_or_fail()
@@ -482,7 +482,7 @@ def pull(allow_dirty: bool) -> None:
         else {}
     )
     # `apply_pull_with_decompiler` self-checks every ADOPT destination
-    # together BEFORE writing any of them (`hassle_cli.pull_apply` module
+    # together BEFORE writing any of them (`hassle.sync.pull_apply` module
     # docstring, coordinator task 4) -- a decompiler coordination bug here is
     # caught pre-write, so nothing from this pull's adopt set has touched
     # disk yet. Distinct from the post-write backstop below (which also
@@ -532,12 +532,12 @@ def pull(allow_dirty: bool) -> None:
     # is always just a `hassle pull --allow-dirty` once it lands.
     #
     # Widened to compare VALUES, not just "does it compile" (``ux/dsl-
-    # ergonomics``, item 4 investigation, `hassle_cli.pull_apply` module
+    # ergonomics``, item 4 investigation, `hassle.sync.pull_apply` module
     # docstring): "does it compile" alone cannot catch a decompiler bug that
     # compiles cleanly but silently changes an object's meaning. Every
     # REFRESH/ADOPT entry's original stored `remote` config is compared
     # against what the bundle just written recompiles to -- via
-    # `hassle_cli.pull_apply.values_match` (canonical-JSON value comparison,
+    # `hassle.sync.pull_apply.values_match` (canonical-JSON value comparison,
     # ``fix/self-check-value-compare``). This backstop used to call
     # `is_modernization_only_diff`, which decompiles both sides to DSL TEXT --
     # not context-free (the field failure `pull_apply`'s module docstring
@@ -575,14 +575,14 @@ def pull(allow_dirty: bool) -> None:
             "decompiler, not a mistake in your HA configuration -- the files just written "
             "are left in place for you to inspect. Fix: please report this (include the "
             "error above and, if possible, the object(s) involved) at "
-            "https://github.com/hassle-project/hassle/issues; once a fix lands, "
+            "https://github.com/KeatonTech/hassle/issues; once a fix lands, "
             "`hassle pull --allow-dirty` is safe to re-run and will overwrite the broken "
             "file(s).[/bold red]"
         )
         raise SystemExit(1) from exc
 
     from hassle.sync.models import ManifestEntry, PlanAction
-    from hassle_cli.pull_apply import values_match
+    from hassle.sync.pull_apply import values_match
 
     mismatched_keys = [
         entry.object_key
@@ -601,7 +601,7 @@ def pull(allow_dirty: bool) -> None:
             "Hassle's decompiler, not a mistake "
             "in your HA configuration -- the files just written are left in place for you to "
             "inspect. Fix: please report this (include the object(s) listed) at "
-            "https://github.com/hassle-project/hassle/issues; once a fix lands, "
+            "https://github.com/KeatonTech/hassle/issues; once a fix lands, "
             "`hassle pull --allow-dirty` is safe to re-run and will overwrite the broken "
             "file(s).[/bold red]"
         )
