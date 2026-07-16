@@ -73,7 +73,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the

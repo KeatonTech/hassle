@@ -15,4 +15,4 @@ def cookbook_wait_then_lock_reminder():
         timeout="00:05:00",
         continue_on_timeout=True,
     )
-    service("notify.mobile_app_keaton", message="Don't forget to lock the front door")
+    service("notify.mobile_app_kai", message="Don't forget to lock the front door")

@@ -12,8 +12,8 @@ def check_beacon(sensor: str, area: str):
     return state_of(sensor).eq(area)
 
 
-@template_binary_sensor(name="Keaton Home Beacon")
-def keaton_home_beacon():
-    return check_beacon("sensor.keaton_watch_beacon_area", "Living Room") | check_beacon(
-        "sensor.keaton_phone_beacon_area", "Living Room"
+@template_binary_sensor(name="Kai Home Beacon")
+def kai_home_beacon():
+    return check_beacon("sensor.kai_watch_beacon_area", "Living Room") | check_beacon(
+        "sensor.kai_phone_beacon_area", "Living Room"
     )

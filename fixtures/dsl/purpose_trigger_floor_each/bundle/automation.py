@@ -10,4 +10,4 @@ from hassle import automation, floor, on, service, when
 @automation(id="purpose_trigger_floor_each", alias="Purpose Trigger Floor Behavior Each")
 def purpose_trigger_floor_each():
     when(on("battery.became_low", target=floor("upstairs"), behavior="each"))
-    service("notify.mobile_app_keaton", message="Device event detected")
+    service("notify.mobile_app_kai", message="Device event detected")

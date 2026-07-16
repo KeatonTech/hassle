@@ -798,7 +798,7 @@ from hassle import macro, service
 
 @macro
 def notify_adults(message: str):
-    service("notify.mobile_app_keaton", message=message)
+    service("notify.mobile_app_kai", message=message)
     service("notify.mobile_app_spouse", message=message)
 ```
 
@@ -809,7 +809,7 @@ Compiles to (canonical IR / stored HA shape):
   "automation:back_door": {
     "actions": [
       {
-        "action": "notify.mobile_app_keaton",
+        "action": "notify.mobile_app_kai",
         "data": {
           "message": "Back door opened"
         }
@@ -841,7 +841,7 @@ Compiles to (canonical IR / stored HA shape):
   "automation:front_door": {
     "actions": [
       {
-        "action": "notify.mobile_app_keaton",
+        "action": "notify.mobile_app_kai",
         "data": {
           "message": "Front door opened"
         }
@@ -2351,7 +2351,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the
@@ -2440,7 +2440,7 @@ Compiles to (canonical IR / stored HA shape):
   },
   "group_notify:all_phones": {
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false,
@@ -2554,7 +2554,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the
@@ -2643,7 +2643,7 @@ Compiles to (canonical IR / stored HA shape):
   },
   "group_notify:all_phones": {
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false,
@@ -2757,7 +2757,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the
@@ -2846,7 +2846,7 @@ Compiles to (canonical IR / stored HA shape):
   },
   "group_notify:all_phones": {
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false,
@@ -2960,7 +2960,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the
@@ -3049,7 +3049,7 @@ Compiles to (canonical IR / stored HA shape):
   },
   "group_notify:all_phones": {
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false,
@@ -3163,7 +3163,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the
@@ -3252,7 +3252,7 @@ Compiles to (canonical IR / stored HA shape):
   },
   "group_notify:all_phones": {
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false,
@@ -3366,7 +3366,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the
@@ -3455,7 +3455,7 @@ Compiles to (canonical IR / stored HA shape):
   },
   "group_notify:all_phones": {
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false,
@@ -3569,7 +3569,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the
@@ -3658,7 +3658,7 @@ Compiles to (canonical IR / stored HA shape):
   },
   "group_notify:all_phones": {
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false,
@@ -3772,7 +3772,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the
@@ -3861,7 +3861,7 @@ Compiles to (canonical IR / stored HA shape):
   },
   "group_notify:all_phones": {
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false,
@@ -3975,7 +3975,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the
@@ -4064,7 +4064,7 @@ Compiles to (canonical IR / stored HA shape):
   },
   "group_notify:all_phones": {
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false,
@@ -4178,7 +4178,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the
@@ -4267,7 +4267,7 @@ Compiles to (canonical IR / stored HA shape):
   },
   "group_notify:all_phones": {
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false,
@@ -4381,7 +4381,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the
@@ -4470,7 +4470,7 @@ Compiles to (canonical IR / stored HA shape):
   },
   "group_notify:all_phones": {
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false,
@@ -4584,7 +4584,7 @@ group_media_player(
     name="Whole House Audio",
     entities=["media_player.living_room_speaker", "media_player.kitchen_speaker"],
 )
-group_notify(name="All Phones", entities=["notify.mobile_app_keaton", "notify.mobile_app_spouse"])
+group_notify(name="All Phones", entities=["notify.mobile_app_kai", "notify.mobile_app_spouse"])
 # No `valve` entities exist in fixtures/registry/home.json at all (its
 # registry snapshot has no valve domain coverage) -- validation only checks
 # that a referenced entity id EXISTS, not that its domain matches the
@@ -4673,7 +4673,7 @@ Compiles to (canonical IR / stored HA shape):
   },
   "group_notify:all_phones": {
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false,
@@ -6839,7 +6839,7 @@ from hassle import automation, floor, on, service, when
 @automation(id="purpose_trigger_floor_each", alias="Purpose Trigger Floor Behavior Each")
 def purpose_trigger_floor_each():
     when(on("battery.became_low", target=floor("upstairs"), behavior="each"))
-    service("notify.mobile_app_keaton", message="Device event detected")
+    service("notify.mobile_app_kai", message="Device event detected")
 ```
 
 Compiles to (canonical IR / stored HA shape):
@@ -6849,7 +6849,7 @@ Compiles to (canonical IR / stored HA shape):
   "automation:purpose_trigger_floor_each": {
     "actions": [
       {
-        "action": "notify.mobile_app_keaton",
+        "action": "notify.mobile_app_kai",
         "data": {
           "message": "Device event detected"
         }
@@ -6936,7 +6936,7 @@ from hassle import automation, device_id, on, service, when
 @automation(id="purpose_trigger_device", alias="Purpose Trigger Device Target")
 def purpose_trigger_device():
     when(on("vacuum.returned_to_dock", target=device_id("aaaabbbbccccdddd1111222233334444")))
-    service("notify.mobile_app_keaton", message="Device event detected")
+    service("notify.mobile_app_kai", message="Device event detected")
 ```
 
 Compiles to (canonical IR / stored HA shape):
@@ -6946,7 +6946,7 @@ Compiles to (canonical IR / stored HA shape):
   "automation:purpose_trigger_device": {
     "actions": [
       {
-        "action": "notify.mobile_app_keaton",
+        "action": "notify.mobile_app_kai",
         "data": {
           "message": "Device event detected"
         }

@@ -15,4 +15,4 @@ def cookbook_stop_if_armed():
     service("light.turn_on", target={"entity_id": "light.workshop"})
     with if_then(state("input_boolean.armed").is_("on")):
         stop("Workshop is armed -- skipping the rest of the sequence")
-    service("notify.mobile_app_keaton", message="Workshop door opened (unarmed)")
+    service("notify.mobile_app_kai", message="Workshop door opened (unarmed)")

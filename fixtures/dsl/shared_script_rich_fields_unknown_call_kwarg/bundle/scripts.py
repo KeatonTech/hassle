@@ -17,7 +17,7 @@ from hassle import automation, service, shared_script, state, when
     },
 )
 def notify_all(title=None, untracked=None):
-    service("notify.mobile_app_keaton", title=title)
+    service("notify.mobile_app_kai", title=title)
 
 
 @automation(id="garage_door_opened", alias="Garage door opened")

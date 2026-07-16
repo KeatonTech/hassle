@@ -67,8 +67,8 @@ def test_contains_helper_id_name_slug_rule() -> None:
 
 
 def test_contains_bundle_name() -> None:
-    text = generate_agents_md(bundle_name="chez-keaton")
-    assert "chez-keaton" in text
+    text = generate_agents_md(bundle_name="chez-kai")
+    assert "chez-kai" in text
 
 
 def test_is_deterministic() -> None:

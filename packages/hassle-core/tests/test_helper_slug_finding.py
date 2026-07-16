@@ -129,7 +129,7 @@ def a():
 
 # Field evidence (owner's live registry): fixtures/registry/home.json seeds
 # `input_text.material_you_image_url_6814bc`, named "Material You Base Color
-# Source Image Path/URL Keaton" -- an id that does NOT equal slugify(name),
+# Source Image Path/URL Kai" -- an id that does NOT equal slugify(name),
 # adopted from an external integration that wrote `.storage` directly (not
 # via the WS-API create path Hassle's push uses).
 
@@ -149,7 +149,7 @@ from hassle import automation, input_text, service
 
 img = input_text(
     id="material_you_image_url_6814bc",
-    name="Material You Base Color Source Image Path/URL Keaton",
+    name="Material You Base Color Source Image Path/URL Kai",
 )
 
 @automation(id="a", alias="A")
@@ -178,7 +178,7 @@ from hassle import automation, input_text, service
 
 img = input_text(
     id="material_you_image_url_6814bc",
-    name="Material You Base Color Source Image Path/URL Keaton",
+    name="Material You Base Color Source Image Path/URL Kai",
 )
 
 @automation(id="a", alias="A")

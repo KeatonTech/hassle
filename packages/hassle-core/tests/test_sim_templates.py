@@ -59,11 +59,11 @@ def test_template_is_state_function(tmp_path: Path) -> None:
             when(state("button.go").to("on"))
             service(
                 "notify.mobile_app",
-                message=template("{{ 'yes' if is_state('person.keaton', 'home') else 'no' }}"),
+                message=template("{{ 'yes' if is_state('person.kai', 'home') else 'no' }}"),
             )
         """,
     )
-    sim.set_state("person.keaton", "home")
+    sim.set_state("person.kai", "home")
     sim.state_change("button.go", "off", "on")
     sim.assert_called("notify.mobile_app", message="yes")
 
@@ -367,8 +367,8 @@ def test_template_trigger_variables_available_via_trigger_ctx(tmp_path: Path) ->
             service("notify.mobile_app", message=template("{{ trigger.event.data.who }}"))
         """,
     )
-    sim.fire("automation:a", trigger_ctx={"event": {"data": {"who": "keaton"}}})
-    sim.assert_called("notify.mobile_app", message="keaton")
+    sim.fire("automation:a", trigger_ctx={"event": {"data": {"who": "kai"}}})
+    sim.assert_called("notify.mobile_app", message="kai")
 
 
 # ---------------------------------------------------------------------------

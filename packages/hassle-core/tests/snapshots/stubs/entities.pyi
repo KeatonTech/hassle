@@ -510,8 +510,8 @@ class _DeviceTracker:
     "John -- device_tracker.john"
     john_phone: DeviceTrackerEntity
     "John's Phone -- device_tracker.john_phone"
-    keaton_phone: DeviceTrackerEntity
-    "Keaton's Phone -- device_tracker.keaton_phone"
+    kai_phone: DeviceTrackerEntity
+    "Kai's Phone -- device_tracker.kai_phone"
     def __getitem__(self, object_id: str) -> DeviceTrackerEntity: ...
 
 class _Event:
@@ -604,7 +604,7 @@ class _InputText:
     location: InputTextEntity
     "Location -- input_text.location"
     material_you_image_url_6814bc: InputTextEntity
-    "Material You Base Color Source Image Path/URL K... -- input_text.material_you_image_url_6814bc"
+    "Material You Base Color Source Image Path/URL Kai -- input_text.material_you_image_url_6814bc"
     vacation_note: InputTextEntity
     "Vacation Note -- input_text.vacation_note"
     def __getitem__(self, object_id: str) -> InputTextEntity: ...
@@ -701,8 +701,8 @@ class _MediaPlayer:
     def __getitem__(self, object_id: str) -> MediaPlayerEntity: ...
 
 class _Notify:
-    mobile_app_keaton: NotifyEntity
-    "Mobile App Keaton -- notify.mobile_app_keaton"
+    mobile_app_kai: NotifyEntity
+    "Mobile App Kai -- notify.mobile_app_kai"
     mobile_app_spouse: NotifyEntity
     "Mobile App Spouse -- notify.mobile_app_spouse"
     notify: NotifyEntity
@@ -723,8 +723,8 @@ class _Number:
 class _Person:
     john: PersonEntity
     "John -- person.john"
-    keaton: PersonEntity
-    "Keaton -- person.keaton"
+    kai: PersonEntity
+    "Kai -- person.kai"
     def __getitem__(self, object_id: str) -> PersonEntity: ...
 
 class _Scene:

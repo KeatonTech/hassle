@@ -110,7 +110,7 @@ def broken_renamed_purpose_key():
     when(
         on("battery.low", target="sensor.wireless_device_battery")
     )  # 15: renamed pre-2026.7 purpose key (battery.low -> battery.became_low)
-    service("notify.mobile_app_keaton", message="battery low")
+    service("notify.mobile_app_kai", message="battery low")
 
 
 # --- automation 6: unknown area / floor / label / device in purpose target --
@@ -130,7 +130,7 @@ def broken_purpose_label_device():
     when(on("motion.detected", target=label("not_a_real_label_15")))  # 18: unknown label
     only_if(state("input_boolean.armed").is_("on"))
     service(
-        "notify.mobile_app_keaton",
+        "notify.mobile_app_kai",
         message="event",
         # 19: unknown device target (purpose condition device target)
     )

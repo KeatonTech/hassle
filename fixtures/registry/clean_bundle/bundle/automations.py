@@ -31,7 +31,7 @@ def clean_hallway_motion():
 def clean_purpose_trigger():
     when(on("motion.detected", target=area("office"), behavior="first"))
     only_if(met("climate.is_target_temperature", target=label("work")))
-    service("notify.mobile_app_keaton", message="Office motion detected")
+    service("notify.mobile_app_kai", message="Office motion detected")
 
 
 @automation(id="clean_template_ref", alias="Clean: template reference")

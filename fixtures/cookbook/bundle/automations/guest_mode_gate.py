@@ -11,4 +11,4 @@ from hassle import automation, only_if, service, state, when
 def cookbook_guest_mode_gate():
     when(state("binary_sensor.back_door").to("open"))
     only_if(state("input_boolean.guest_mode").is_("off"))
-    service("notify.mobile_app_keaton", message="Back door opened")
+    service("notify.mobile_app_kai", message="Back door opened")

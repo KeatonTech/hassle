@@ -20,13 +20,13 @@ def test_if_then_true_branch(tmp_path: Path) -> None:
         @automation(id="a", alias="a")
         def a():
             when(state("button.go").to("on"))
-            with if_then(state("person.keaton").is_("home")):
+            with if_then(state("person.kai").is_("home")):
                 service("notify.mobile_app", message="welcome home")
             with else_then():
                 service("notify.mobile_app", message="away")
         """,
     )
-    sim.set_state("person.keaton", "home")
+    sim.set_state("person.kai", "home")
     sim.state_change("button.go", "off", "on")
     sim.assert_called("notify.mobile_app", message="welcome home")
     sim.assert_not_called("notify.mobile_app", message="away")
@@ -41,13 +41,13 @@ def test_if_then_else_branch(tmp_path: Path) -> None:
         @automation(id="a", alias="a")
         def a():
             when(state("button.go").to("on"))
-            with if_then(state("person.keaton").is_("home")):
+            with if_then(state("person.kai").is_("home")):
                 service("notify.mobile_app", message="welcome home")
             with else_then():
                 service("notify.mobile_app", message="away")
         """,
     )
-    sim.set_state("person.keaton", "not_home")
+    sim.set_state("person.kai", "not_home")
     sim.state_change("button.go", "off", "on")
     sim.assert_called("notify.mobile_app", message="away")
     sim.assert_not_called("notify.mobile_app", message="welcome home")

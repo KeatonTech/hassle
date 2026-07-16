@@ -135,8 +135,8 @@ def test_state_of_forms_round_trip_byte_exactly_through_decorator(
 
 # The owner's real multi-line Bermuda template, verbatim (MILESTONES M16 test 3).
 BERMUDA_IS_STATE_TEMPLATE = (
-    "{{ is_state('sensor.keaton_watch_beacon_area', 'Living Room') or \n"
-    "             is_state('sensor.keaton_phone_beacon_area', 'Living Room') }}"
+    "{{ is_state('sensor.kai_watch_beacon_area', 'Living Room') or \n"
+    "             is_state('sensor.kai_phone_beacon_area', 'Living Room') }}"
 )
 
 
@@ -197,12 +197,12 @@ def test_hand_converted_canonical_form_round_trips_as_python() -> None:
     edit) to the canonical `state_of(...).eq(...) | state_of(...).eq(...)`
     spelling, it inverts and re-renders byte-exactly forever after."""
     canonical = (
-        "{{ (states('sensor.keaton_watch_beacon_area') == 'Living Room') or "
-        "(states('sensor.keaton_phone_beacon_area') == 'Living Room') }}"
+        "{{ (states('sensor.kai_watch_beacon_area') == 'Living Room') or "
+        "(states('sensor.kai_phone_beacon_area') == 'Living Room') }}"
     )
     result = invert_template(canonical)
     assert result is not None
     assert result.source == (
-        "(state_of(e.sensor.keaton_watch_beacon_area).eq('Living Room') | "
-        "state_of(e.sensor.keaton_phone_beacon_area).eq('Living Room'))"
+        "(state_of(e.sensor.kai_watch_beacon_area).eq('Living Room') | "
+        "state_of(e.sensor.kai_phone_beacon_area).eq('Living Room'))"
     )

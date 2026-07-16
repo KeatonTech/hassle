@@ -17,4 +17,4 @@ from hassle import automation, on, service, when
 )
 def purpose_trigger_renamed_legacy_key():
     when(on("battery.low", target="sensor.wireless_device_battery"))
-    service("notify.mobile_app_keaton", message="Battery low warning")
+    service("notify.mobile_app_kai", message="Battery low warning")

@@ -328,7 +328,7 @@ Raw Jinja is always available: `template("{{ ... }}")` — validated by tier-3 l
   `repeat` / `parallel` / `wait`:
 
 ```python
-with if_then(state(e.person.keaton).is_("home")):
+with if_then(state(e.person.kai).is_("home")):
     notify_adults("Welcome home")
 with else_then():
     with repeat_count(3):
@@ -359,7 +359,7 @@ from hassle import macro, shared_script
 
 @macro                                # compile-time inlining: expands into each caller's
 def notify_adults(message: str):      # action list. Zero HA-side footprint.
-    e.notify.mobile_app_keaton(message=message)
+    e.notify.mobile_app_kai(message=message)
     e.notify.mobile_app_spouse(message=message)
 
 @shared_script(id="flash_lights", alias="Flash lights", icon="mdi:alarm-light")

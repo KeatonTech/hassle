@@ -10,4 +10,4 @@ from hassle import automation, device_id, on, service, when
 @automation(id="purpose_trigger_device", alias="Purpose Trigger Device Target")
 def purpose_trigger_device():
     when(on("vacuum.returned_to_dock", target=device_id("aaaabbbbccccdddd1111222233334444")))
-    service("notify.mobile_app_keaton", message="Device event detected")
+    service("notify.mobile_app_kai", message="Device event detected")

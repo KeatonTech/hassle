@@ -14,4 +14,4 @@ def cookbook_guest_arrival_parallel():
     with parallel():
         service("light.turn_on", target={"entity_id": "light.living_room"})
         service("light.turn_on", target={"entity_id": "light.hallway"})
-        service("notify.mobile_app_keaton", message="Guest mode enabled")
+        service("notify.mobile_app_kai", message="Guest mode enabled")

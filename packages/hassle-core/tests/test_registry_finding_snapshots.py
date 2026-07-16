@@ -146,7 +146,7 @@ from hassle import automation, on, service, when
 @automation(id="a", alias="A")
 def a():
     when(on("battery.low", target="sensor.wireless_device_battery"))
-    service("notify.mobile_app_keaton", message="low battery")
+    service("notify.mobile_app_kai", message="low battery")
 """,
     )
     _check_snapshot("renamed_purpose_type", text)

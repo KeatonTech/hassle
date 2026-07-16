@@ -716,7 +716,7 @@ through HA; it is NOT source-only metadata. DESIGN §7.3 must be amended in the 
 
 **Goal:** the `TemplateExpr` surface (M1.1) reads entity state ONLY numerically —
 `expr(x)` renders `states('x') | float` — so a string-state check like
-`is_state('sensor.keaton_watch_beacon_area', 'Living Room')` is inexpressible, and
+`is_state('sensor.kai_watch_beacon_area', 'Living Room')` is inexpressible, and
 (equivalently) `is_state`/bare-`states()` templates are not invertible. The owner wants
 custom helper functions like `check_beacon(sensor, area)` composing with `&`/`|`/`~`.
 Composition already works (plain Python functions returning `TemplateExpr`); the missing

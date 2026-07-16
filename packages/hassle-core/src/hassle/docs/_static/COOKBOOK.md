@@ -35,7 +35,7 @@ def cookbook_bedtime_lights_off():
             )
         with c.default():
             service(
-                "notify.mobile_app_keaton", message="Bedtime lights off (guest mode: alarm skipped)"
+                "notify.mobile_app_kai", message="Bedtime lights off (guest mode: alarm skipped)"
             )
 ```
 
@@ -56,7 +56,7 @@ from hassle import automation, minutes, service, state, when
 @automation(id="cookbook_door_left_open", alias="Cookbook: door left open")
 def cookbook_door_left_open():
     when(state("binary_sensor.laundry_door").to("open", for_=minutes(10)))
-    service("notify.mobile_app_keaton", message="Laundry door has been open for 10 minutes")
+    service("notify.mobile_app_kai", message="Laundry door has been open for 10 minutes")
 ```
 
 ## 3. template-based dynamic brightness
@@ -152,7 +152,7 @@ def cookbook_guest_arrival_parallel():
     with parallel():
         service("light.turn_on", target={"entity_id": "light.living_room"})
         service("light.turn_on", target={"entity_id": "light.hallway"})
-        service("notify.mobile_app_keaton", message="Guest mode enabled")
+        service("notify.mobile_app_kai", message="Guest mode enabled")
 ```
 
 ## 7. guest mode suppresses an automation
@@ -173,7 +173,7 @@ from hassle import automation, only_if, service, state, when
 def cookbook_guest_mode_gate():
     when(state("binary_sensor.back_door").to("open"))
     only_if(state("input_boolean.guest_mode").is_("off"))
-    service("notify.mobile_app_keaton", message="Back door opened")
+    service("notify.mobile_app_kai", message="Back door opened")
 ```
 
 ## 8. low-battery alert via a purpose-specific trigger
@@ -194,7 +194,7 @@ from hassle import automation, on, service, when
 @automation(id="cookbook_low_battery_alert", alias="Cookbook: low battery alert")
 def cookbook_low_battery_alert():
     when(on("battery.became_low", target="binary_sensor.laundry_door"))
-    service("notify.mobile_app_keaton", message="A sensor's battery is low")
+    service("notify.mobile_app_kai", message="A sensor's battery is low")
 ```
 
 ## 9. motion light, night-only
@@ -297,11 +297,11 @@ from hassle import all_of, automation, only_if, service, state, when
 
 @automation(id="cookbook_presence_away", alias="Cookbook: everyone left")
 def cookbook_presence_away():
-    when(state("device_tracker.keaton_phone").to("not_home"))
+    when(state("device_tracker.kai_phone").to("not_home"))
     when(state("device_tracker.john_phone").to("not_home"))
     only_if(
         all_of(
-            state("device_tracker.keaton_phone").is_("not_home"),
+            state("device_tracker.kai_phone").is_("not_home"),
             state("device_tracker.john_phone").is_("not_home"),
         )
     )
@@ -374,7 +374,7 @@ def cookbook_security_check_on_arm():
             state("lock.front_door").is_("locked"),
         )
     )
-    service("notify.mobile_app_keaton", message="Armed: all secure")
+    service("notify.mobile_app_kai", message="Armed: all secure")
 ```
 
 ## 16. stop the automation early if a condition isn't met
@@ -399,7 +399,7 @@ def cookbook_stop_if_armed():
     service("light.turn_on", target={"entity_id": "light.workshop"})
     with if_then(state("input_boolean.armed").is_("on")):
         stop("Workshop is armed -- skipping the rest of the sequence")
-    service("notify.mobile_app_keaton", message="Workshop door opened (unarmed)")
+    service("notify.mobile_app_kai", message="Workshop door opened (unarmed)")
 ```
 
 ## 17. sunset lights on
@@ -470,7 +470,7 @@ def cookbook_start_kitchen_timer():
 def cookbook_kitchen_timer_done():
     when(state("timer.kitchen").to("idle"))
     only_if(state("input_boolean.armed").is_("on"))
-    service("notify.mobile_app_keaton", message="Kitchen timer finished")
+    service("notify.mobile_app_kai", message="Kitchen timer finished")
 ```
 
 ## 20. daily vacuum run
@@ -516,7 +516,7 @@ def cookbook_wait_then_lock_reminder():
         timeout="00:05:00",
         continue_on_timeout=True,
     )
-    service("notify.mobile_app_keaton", message="Don't forget to lock the front door")
+    service("notify.mobile_app_kai", message="Don't forget to lock the front door")
 ```
 
 ## 22. washing-machine-done
@@ -537,5 +537,5 @@ from hassle import automation, numeric_state, service, when
 @automation(id="cookbook_washing_machine_done", alias="Cookbook: washing machine done")
 def cookbook_washing_machine_done():
     when(numeric_state("sensor.washing_machine_power", below=3))
-    service("notify.mobile_app_keaton", message="Washing machine finished")
+    service("notify.mobile_app_kai", message="Washing machine finished")
 ```

@@ -7,5 +7,5 @@ from hassle import automation, state, when
 
 @automation(id="arrival", alias="Arrival")
 def arrival():
-    when(state("person.keaton").to("home"))
+    when(state("person.kai").to("home"))
     welcome_home("Welcome home")

@@ -107,7 +107,7 @@ def notify_mobile(
     message: str,
     targets: list[str] | None = None,
     timeout: Any = DEFAULT_TIMEOUT,
-    notify_service: str = "notify.mobile_app_keaton",
+    notify_service: str = "notify.mobile_app_kai",
 ) -> Generator[None]:
     """``with notify_mobile(title=, message=, targets=, timeout=):`` -- send an
     actionable mobile notification and dispatch on whichever button (if any)
@@ -118,7 +118,7 @@ def notify_mobile(
     `notify.*` itself -- broadcasting to N phones is N service calls);
     ``None`` sends exactly one call to the ``notify_service`` given ("sensible
     default" -- the owner's target syntax names no targets at all).
-    ``notify_service=`` (default ``"notify.mobile_app_keaton"``, matching this
+    ``notify_service=`` (default ``"notify.mobile_app_kai"``, matching this
     cookbook's own registry snapshot/convention, `lib/notify.py`): the notify
     service to call. ``timeout=`` (default :data:`DEFAULT_TIMEOUT`): how long to wait
     for a button tap before giving up (the automation simply continues past

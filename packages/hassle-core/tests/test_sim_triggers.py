@@ -525,12 +525,12 @@ def test_zone_trigger_fires_on_enter(tmp_path: Path) -> None:
 
         @automation(id="a", alias="a")
         def a():
-            when(zone("person.keaton", zone="zone.home", event="enter"))
+            when(zone("person.kai", zone="zone.home", event="enter"))
             service("notify.mobile_app", message="welcome home")
         """,
     )
-    sim.set_state("person.keaton", "not_home")
-    sim.state_change("person.keaton", "not_home", "zone.home")
+    sim.set_state("person.kai", "not_home")
+    sim.state_change("person.kai", "not_home", "zone.home")
     sim.assert_called("notify.mobile_app")
 
 
@@ -542,10 +542,10 @@ def test_zone_trigger_ignores_leave_when_configured_for_enter(tmp_path: Path) ->
 
         @automation(id="a", alias="a")
         def a():
-            when(zone("person.keaton", zone="zone.home", event="enter"))
+            when(zone("person.kai", zone="zone.home", event="enter"))
             service("notify.mobile_app", message="welcome home")
         """,
     )
-    sim.set_state("person.keaton", "zone.home")
-    sim.state_change("person.keaton", "zone.home", "not_home")
+    sim.set_state("person.kai", "zone.home")
+    sim.state_change("person.kai", "zone.home", "not_home")
     sim.assert_not_called("notify.mobile_app")

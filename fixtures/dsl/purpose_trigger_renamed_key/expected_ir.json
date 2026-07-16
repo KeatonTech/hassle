@@ -15,7 +15,7 @@
     "conditions": [],
     "actions": [
       {
-        "action": "notify.mobile_app_keaton",
+        "action": "notify.mobile_app_kai",
         "data": {
           "message": "Battery low warning"
         }

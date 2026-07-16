@@ -12,4 +12,4 @@ def flash_porch():
 @macro
 def welcome_home(message: str):
     flash_porch()
-    service("notify.mobile_app_keaton", message=message)
+    service("notify.mobile_app_kai", message=message)

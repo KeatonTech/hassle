@@ -831,8 +831,8 @@ constrains the WS-API *creation* path — `.storage` contents themselves are
 unconstrained.** The owner's live registry has helpers whose id does **not**
 equal `slugify(name)` — e.g. an `input_text` with id
 `material_you_image_url_6814bc` and name "Material You Base Color Source
-Image Path/URL Keaton" (slug: `material_you_base_color_source_image_path_
-url_keaton`). These were created by an external integration writing HA's
+Image Path/URL Kai" (slug: `material_you_base_color_source_image_path_
+url_kai`). These were created by an external integration writing HA's
 `.storage/*` files directly, bypassing the WS `create` call entirely — so the
 id/name-slug relationship above never applied to them in the first place.
 Nothing in HA enforces id == slugify(name) as an invariant of storage

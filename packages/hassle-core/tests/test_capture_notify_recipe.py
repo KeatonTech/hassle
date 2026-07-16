@@ -61,7 +61,7 @@ def test_notify_with_actions_compiles_to_wait_for_trigger_and_choose() -> None:
     obj = result.objects[key]
     actions = obj.actions  # type: ignore[attr-defined]
 
-    assert actions[0]["action"] == "notify.mobile_app_keaton"
+    assert actions[0]["action"] == "notify.mobile_app_kai"
     assert actions[0]["data"]["actions"] == [
         {"action": "OPEN_BLINDS", "title": "Open Blinds", "icon": "mdi:blinds-open"},
         {"action": "CLOSE_BLINDS", "title": "Close Blinds"},

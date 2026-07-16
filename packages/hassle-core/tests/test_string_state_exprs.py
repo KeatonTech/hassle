@@ -106,10 +106,10 @@ def test_custom_function_composition_golden_bundle() -> None:
     with `|`, used as a `@template_binary_sensor` body -- compiles to the
     exact expected template (MILESTONES M16 test 2)."""
     result = compile_bundle(FIXTURES / "beacon_area_composition" / "bundle")
-    obj = result.objects["template_binary_sensor:keaton_home_beacon"].to_ha()
+    obj = result.objects["template_binary_sensor:kai_home_beacon"].to_ha()
     assert obj["state"] == (
-        "{{ (states('sensor.keaton_watch_beacon_area') == 'Living Room') or "
-        "(states('sensor.keaton_phone_beacon_area') == 'Living Room') }}"
+        "{{ (states('sensor.kai_watch_beacon_area') == 'Living Room') or "
+        "(states('sensor.kai_phone_beacon_area') == 'Living Room') }}"
     )
 
 

@@ -50,14 +50,14 @@ def test_motion_light_suppressed_by_guest_mode() -> None:
 def test_presence_away_arms_when_both_phones_leave() -> None:
     sim = _sim()
     sim.set_state("device_tracker.john_phone", "not_home")
-    sim.state_change("device_tracker.keaton_phone", "home", "not_home")
+    sim.state_change("device_tracker.kai_phone", "home", "not_home")
     sim.assert_called("input_boolean.turn_on", entity_id="input_boolean.armed")
 
 
 def test_presence_away_does_not_arm_when_one_phone_still_home() -> None:
     sim = _sim()
     sim.set_state("device_tracker.john_phone", "home")
-    sim.state_change("device_tracker.keaton_phone", "home", "not_home")
+    sim.state_change("device_tracker.kai_phone", "home", "not_home")
     sim.assert_not_called("input_boolean.turn_on")
 
 
@@ -80,7 +80,7 @@ def test_notify_with_actions_sends_actionable_notification_on_unlock() -> None:
     sim = _sim()
     sim.state_change("lock.front_door", "locked", "unlocked")
     sim.assert_called(
-        "notify.mobile_app_keaton",
+        "notify.mobile_app_kai",
         message="Adjust the upstairs blinds?",
         title="Front Door Unlocked",
         actions=[
@@ -147,14 +147,14 @@ def test_washing_machine_done_fires_on_cross_below_threshold() -> None:
     sim = _sim()
     sim.set_state("sensor.washing_machine_power", "45")
     sim.state_change("sensor.washing_machine_power", "45", "2")
-    sim.assert_called("notify.mobile_app_keaton", message="Washing machine finished")
+    sim.assert_called("notify.mobile_app_kai", message="Washing machine finished")
 
 
 def test_washing_machine_done_does_not_fire_while_still_running() -> None:
     sim = _sim()
     sim.set_state("sensor.washing_machine_power", "45")
     sim.state_change("sensor.washing_machine_power", "45", "40")
-    sim.assert_not_called("notify.mobile_app_keaton")
+    sim.assert_not_called("notify.mobile_app_kai")
 
 
 # 6. guest mode gate -----------------------------------------------------------
@@ -164,14 +164,14 @@ def test_guest_mode_gate_notifies_when_not_guest_mode() -> None:
     sim = _sim()
     sim.set_state("input_boolean.guest_mode", "off")
     sim.state_change("binary_sensor.back_door", "closed", "open")
-    sim.assert_called("notify.mobile_app_keaton", message="Back door opened")
+    sim.assert_called("notify.mobile_app_kai", message="Back door opened")
 
 
 def test_guest_mode_gate_suppressed_in_guest_mode() -> None:
     sim = _sim()
     sim.set_state("input_boolean.guest_mode", "on")
     sim.state_change("binary_sensor.back_door", "closed", "open")
-    sim.assert_not_called("notify.mobile_app_keaton")
+    sim.assert_not_called("notify.mobile_app_kai")
 
 
 # 7. door left open reminder --------------------------------------------------
@@ -182,7 +182,7 @@ def test_door_left_open_reminder_fires_after_holding_10_minutes() -> None:
     sim.state_change("binary_sensor.laundry_door", "closed", "open")
     sim.advance(minutes=10)
     sim.assert_called(
-        "notify.mobile_app_keaton", message="Laundry door has been open for 10 minutes"
+        "notify.mobile_app_kai", message="Laundry door has been open for 10 minutes"
     )
 
 
@@ -192,7 +192,7 @@ def test_door_left_open_reminder_resets_on_flap() -> None:
     sim.advance(minutes=5)
     sim.set_state("binary_sensor.laundry_door", "closed")
     sim.advance(minutes=10)
-    sim.assert_not_called("notify.mobile_app_keaton")
+    sim.assert_not_called("notify.mobile_app_kai")
 
 
 # 8. good morning shared script ------------------------------------------------
@@ -237,7 +237,7 @@ def test_vacuum_daily_skips_when_not_armed() -> None:
 def test_low_battery_alert_fires_via_manual_fire() -> None:
     sim = _sim()
     sim.fire("automation:cookbook_low_battery_alert")
-    sim.assert_called("notify.mobile_app_keaton", message="A sensor's battery is low")
+    sim.assert_called("notify.mobile_app_kai", message="A sensor's battery is low")
 
 
 # 11. fan on high temperature ---------------------------------------------------
@@ -271,7 +271,7 @@ def test_bedtime_lights_off_skips_alarm_in_guest_mode() -> None:
     sim.advance(minutes=1)
     sim.assert_not_called("alarm_control_panel.alarm_arm_home")
     sim.assert_called(
-        "notify.mobile_app_keaton",
+        "notify.mobile_app_kai",
         message="Bedtime lights off (guest mode: alarm skipped)",
     )
 
@@ -284,7 +284,7 @@ def test_security_check_reports_all_secure() -> None:
     sim.set_state("binary_sensor.back_door", "off")
     sim.set_state("lock.front_door", "locked")
     sim.state_change("input_boolean.armed", "off", "on")
-    sim.assert_called("notify.mobile_app_keaton", message="Armed: all secure")
+    sim.assert_called("notify.mobile_app_kai", message="Armed: all secure")
 
 
 def test_security_check_silent_when_door_open() -> None:
@@ -292,7 +292,7 @@ def test_security_check_silent_when_door_open() -> None:
     sim.set_state("binary_sensor.back_door", "on")
     sim.set_state("lock.front_door", "locked")
     sim.state_change("input_boolean.armed", "off", "on")
-    sim.assert_not_called("notify.mobile_app_keaton")
+    sim.assert_not_called("notify.mobile_app_kai")
 
 
 # 14. timer-based reminder ------------------------------------------------------
@@ -308,7 +308,7 @@ def test_timer_done_notifies_when_armed() -> None:
     sim = _sim()
     sim.set_state("input_boolean.armed", "on")
     sim.state_change("timer.kitchen", "active", "idle")
-    sim.assert_called("notify.mobile_app_keaton", message="Kitchen timer finished")
+    sim.assert_called("notify.mobile_app_kai", message="Kitchen timer finished")
 
 
 # 15. sunset lights on -----------------------------------------------------------
@@ -346,7 +346,7 @@ def test_wait_then_lock_reminder_fires_after_timeout() -> None:
     sim = _sim()
     sim.state_change("binary_sensor.front_door", "closed", "open")
     sim.advance(minutes=5)
-    sim.assert_called("notify.mobile_app_keaton", message="Don't forget to lock the front door")
+    sim.assert_called("notify.mobile_app_kai", message="Don't forget to lock the front door")
 
 
 # 20. purpose-trigger area target (fired directly, DESIGN §10.1) -------------------
@@ -366,7 +366,7 @@ def test_guest_arrival_parallel_runs_all_three_branches() -> None:
     sim.state_change("input_boolean.guest_mode", "off", "on")
     sim.assert_called("light.turn_on", entity_id="light.living_room")
     sim.assert_called("light.turn_on", entity_id="light.hallway")
-    sim.assert_called("notify.mobile_app_keaton", message="Guest mode enabled")
+    sim.assert_called("notify.mobile_app_kai", message="Guest mode enabled")
 
 
 # 22. multi-room motion lights (macro + compile-time loop) -------------------------
@@ -377,7 +377,7 @@ def test_multi_room_motion_lights_kitchen() -> None:
     sim.set_state("input_boolean.guest_mode", "off")
     sim.state_change("binary_sensor.kitchen_motion", "off", "on")
     sim.assert_called("light.turn_on", entity_id="light.kitchen")
-    sim.assert_called("notify.mobile_app_keaton", message="Motion detected in the kitchen")
+    sim.assert_called("notify.mobile_app_kai", message="Motion detected in the kitchen")
     sim.assert_called("notify.mobile_app_spouse", message="Motion detected in the kitchen")
 
 
@@ -415,7 +415,7 @@ def test_stop_if_armed_only_runs_first_action() -> None:
     sim.set_state("input_boolean.armed", "on")
     sim.state_change("binary_sensor.workshop_door", "closed", "open")
     sim.assert_called("light.turn_on", entity_id="light.workshop")
-    sim.assert_not_called("notify.mobile_app_keaton")
+    sim.assert_not_called("notify.mobile_app_kai")
 
 
 def test_stop_if_armed_runs_both_actions_when_unarmed() -> None:
@@ -423,4 +423,4 @@ def test_stop_if_armed_runs_both_actions_when_unarmed() -> None:
     sim.set_state("input_boolean.armed", "off")
     sim.state_change("binary_sensor.workshop_door", "closed", "open")
     sim.assert_called("light.turn_on", entity_id="light.workshop")
-    sim.assert_called("notify.mobile_app_keaton", message="Workshop door opened (unarmed)")
+    sim.assert_called("notify.mobile_app_kai", message="Workshop door opened (unarmed)")

@@ -48,7 +48,7 @@ from hassle import automation, param, service, shared_script, state, when
 )
 def notify_all(title=None, message=None, action_button=None, action_button_icon=None, tag=None):
     service(
-        "notify.mobile_app_keaton",
+        "notify.mobile_app_kai",
         title=param("title"),
         message=param("message"),
         data={

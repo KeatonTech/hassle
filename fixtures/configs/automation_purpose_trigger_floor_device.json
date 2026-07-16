@@ -18,7 +18,7 @@
   ],
   "actions": [
     {
-      "action": "notify.mobile_app_keaton",
+      "action": "notify.mobile_app_kai",
       "data": {
         "message": "Device event detected"
       }

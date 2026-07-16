@@ -5,7 +5,7 @@ from hassle import macro, service
 
 @macro
 def notify_all(message: str):
-    service("notify.mobile_app_keaton", message=message)
+    service("notify.mobile_app_kai", message=message)
 
 
 # Called at module scope -- no @automation/@script recording context is active.

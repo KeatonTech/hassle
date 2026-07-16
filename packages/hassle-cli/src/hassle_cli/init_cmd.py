@@ -75,7 +75,7 @@ Put here:
 
   @macro
   def notify_adults(message: str):
-      e.notify.mobile_app_keaton(message=message)
+      e.notify.mobile_app_kai(message=message)
       e.notify.mobile_app_spouse(message=message)
   ```
 

@@ -152,7 +152,7 @@ def test_pull_rewrites_rich_field_script_call_same_batch(
             },
             "sequence": [
                 {
-                    "service": "notify.mobile_app_keaton",
+                    "service": "notify.mobile_app_kai",
                     "data": {
                         "title": "{{ title }}",
                         "message": "{{ message }}",
