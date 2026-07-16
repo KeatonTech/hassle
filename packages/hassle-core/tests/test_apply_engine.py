@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 
 from hassle.backend.fake import FakeBackend
-from hassle.ir.canonical import sha256_hash
+from hassle.ir.canonical import sha256_hash, storage_canonical
 from hassle.sync import ApplyOutcome, Manifest, ManifestEntry, Plan, PlanAction, PlanEntry
 from hassle.sync.apply import apply_plan
 
@@ -368,3 +368,122 @@ def test_create_whose_backend_identity_diverges_fails_loud_and_rolls_back() -> N
     assert "real_name" in result.failure_message  # names the id HA derived
     assert "wrong_declared_id" in result.failure_message
     assert backend.list_remote("input_number") == {}  # rolled back, no orphan
+
+
+def test_rollback_recreates_a_rolled_back_delete() -> None:
+    """Field crash (BrandtCamp push, 2026-07-14): step 1 DELETEd a timer, a
+    later step failed, and rollback tried to UPDATE the already-deleted timer
+    -- HaApiError "Unable to find timer_id ..." escaped as a raw traceback
+    and the deletion was never restored. Rolling back a DELETE must recreate
+    the object (slug-keyed kinds land back on the same identity, §17.5)."""
+    backend = FakeBackend()
+    timer_id = backend.create("timer", {"name": "Nudge Timer", "duration": "03:00:00"})
+    automation_id = backend.create("automation", {"id": "a1", "alias": "Automation Original"})
+    initial_timers = dict(backend.list_remote("timer"))
+
+    timer_hash = sha256_hash(storage_canonical("timer", backend.list_remote("timer")[timer_id]))
+    automation_hash = sha256_hash(
+        storage_canonical("automation", backend.list_remote("automation")[automation_id])
+    )
+    plan = Plan(
+        entries=[
+            PlanEntry(
+                object_key=f"timer:{timer_id}",
+                kind="timer",
+                action=PlanAction.DELETE,
+                remote_hash_at_plan=timer_hash,
+            ),
+            PlanEntry(
+                object_key=f"automation:{automation_id}",
+                kind="automation",
+                action=PlanAction.UPDATE,
+                local={"id": automation_id, "alias": "FAIL_ME"},
+                remote_hash_at_plan=automation_hash,
+            ),
+        ]
+    )
+    manifest = Manifest(synced_at="t", ha_version="v", objects={})
+
+    original_update = backend.update
+
+    def failing_update(kind: str, identity: str, config: dict[str, Any]) -> None:
+        if config.get("alias") == "FAIL_ME":
+            raise RuntimeError("simulated backend failure")
+        original_update(kind, identity, config)
+
+    backend.update = failing_update  # type: ignore[method-assign]
+
+    result = apply_plan(plan, backend, manifest)
+
+    assert result.succeeded is False
+    assert result.outcomes[f"timer:{timer_id}"] is ApplyOutcome.ROLLED_BACK
+    assert result.outcomes[f"automation:{automation_id}"] is ApplyOutcome.FAILED
+    assert backend.list_remote("timer") == initial_timers  # recreated, same id
+
+
+def test_rollback_failures_are_contained_and_reported() -> None:
+    """A rollback step that itself fails must not escape as a raw traceback:
+    the remaining snapshots still roll back, the stuck object is reported
+    with its own outcome, and the failure message says what/where/fix."""
+    backend = FakeBackend()
+    timer_id = backend.create("timer", {"name": "Stuck Timer", "duration": "03:00:00"})
+    script_id = backend.create("script", {"alias": "Script Original"})
+    automation_id = backend.create("automation", {"id": "a1", "alias": "Automation Original"})
+    initial_scripts = dict(backend.list_remote("script"))
+
+    timer_hash = sha256_hash(storage_canonical("timer", backend.list_remote("timer")[timer_id]))
+    script_hash = sha256_hash(storage_canonical("script", backend.list_remote("script")[script_id]))
+    automation_hash = sha256_hash(
+        storage_canonical("automation", backend.list_remote("automation")[automation_id])
+    )
+    plan = Plan(
+        entries=[
+            PlanEntry(
+                object_key=f"timer:{timer_id}",
+                kind="timer",
+                action=PlanAction.DELETE,
+                remote_hash_at_plan=timer_hash,
+            ),
+            PlanEntry(
+                object_key=f"script:{script_id}",
+                kind="script",
+                action=PlanAction.UPDATE,
+                local={"alias": "Script Updated"},
+                remote_hash_at_plan=script_hash,
+            ),
+            PlanEntry(
+                object_key=f"automation:{automation_id}",
+                kind="automation",
+                action=PlanAction.UPDATE,
+                local={"id": automation_id, "alias": "FAIL_ME"},
+                remote_hash_at_plan=automation_hash,
+            ),
+        ]
+    )
+    manifest = Manifest(synced_at="t", ha_version="v", objects={})
+
+    original_update = backend.update
+    original_create = backend.create
+
+    def failing_update(kind: str, identity: str, config: dict[str, Any]) -> None:
+        if config.get("alias") == "FAIL_ME":
+            raise RuntimeError("simulated backend failure")
+        original_update(kind, identity, config)
+
+    def failing_create(kind: str, config: dict[str, Any]) -> str:
+        if kind == "timer":
+            raise RuntimeError("HA went away mid-rollback")
+        return original_create(kind, config)
+
+    backend.update = failing_update  # type: ignore[method-assign]
+    backend.create = failing_create  # type: ignore[method-assign]
+
+    result = apply_plan(plan, backend, manifest)  # must NOT raise
+
+    assert result.succeeded is False
+    assert result.outcomes[f"script:{script_id}"] is ApplyOutcome.ROLLED_BACK
+    assert result.outcomes[f"timer:{timer_id}"] is ApplyOutcome.ROLLBACK_FAILED
+    assert backend.list_remote("script") == initial_scripts  # others still restored
+    assert result.failure_message is not None
+    assert f"timer:{timer_id}" in result.failure_message
+    assert "hassle plan" in result.failure_message  # the fix hint

@@ -248,3 +248,62 @@ def test_push_explains_adopt_rows(git_repo: Path, cli, fake_backend, toml_writer
     assert result.exit_code == 0, result.output
     assert "not touched by push" in result.output
     assert "pull" in result.output
+
+
+def _make_local_deletion_conflict(git_repo: Path, cli, backend, token, toml_writer) -> None:
+    """Push once, rename remotely, then DELETE the automation locally."""
+    toml_writer(git_repo, backend_token=token)
+    assert cli(["push", "--yes"], cwd=git_repo).exit_code == 0
+    identity = next(iter(backend.list_remote("automation")))
+    remote = dict(backend.list_remote("automation")[identity])
+    remote["alias"] = "Renamed on the HA side"
+    backend.update("automation", identity, remote)
+    (git_repo / "hallway.py").unlink()
+
+
+def test_conflict_accept_local_deletion_pushes_the_delete(
+    interactive, git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """Field crash (BrandtCamp push, 2026-07-14): keep-local where local is
+    DELETED was hardcoded to UPDATE and died on `assert entry.local is not
+    None` deep in the apply engine, mid-push. It must push the deletion."""
+    backend, token = fake_backend
+    _make_local_deletion_conflict(git_repo, cli, backend, token, toml_writer)
+
+    # "l" at the conflict prompt, then "y" at the deletion confirm.
+    result = cli(["push"], cwd=git_repo, input="l\ny\n")
+    assert result.exit_code == 0, result.output
+    assert backend.list_remote("automation") == {}
+
+
+def test_conflict_accept_remote_keeps_a_locally_deleted_object(
+    interactive, git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    backend, token = fake_backend
+    _make_local_deletion_conflict(git_repo, cli, backend, token, toml_writer)
+
+    result = cli(["push"], cwd=git_repo, input="r\n\n")
+    assert result.exit_code == 0, result.output
+    identity = next(iter(backend.list_remote("automation")))
+    assert "Renamed on the HA side" in str(backend.list_remote("automation")[identity])
+
+
+def test_conflict_accept_local_recreates_a_remotely_deleted_object(
+    interactive, git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    """The mirror image: remote deleted + local edited, keep-local must
+    CREATE (an UPDATE against a missing object fails)."""
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    assert cli(["push", "--yes"], cwd=git_repo).exit_code == 0
+    identity = next(iter(backend.list_remote("automation")))
+    backend.delete("automation", identity)
+    src = (git_repo / "hallway.py").read_text(encoding="utf-8")
+    (git_repo / "hallway.py").write_text(
+        src.replace('"light.hallway"', '"light.hallway_2"'), encoding="utf-8"
+    )
+
+    result = cli(["push"], cwd=git_repo, input="l\n\n")
+    assert result.exit_code == 0, result.output
+    stored = str(backend.list_remote("automation"))
+    assert "light.hallway_2" in stored
