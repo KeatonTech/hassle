@@ -1,4 +1,4 @@
-"""Simulator-surface errors (R6: what / where / fix, one paragraph, snapshot-tested)."""
+"""Simulator-surface errors (what / where / fix, one paragraph, snapshot-tested)."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class UnsupportedTemplateError(Exception):
 
 
 class ScriptRecursionError(Exception):
-    """Script-call expansion exceeded the nesting cap (task #35).
+    """Script-call expansion exceeded the nesting cap.
 
     A direct ``script.<slug>`` call runs the callee inline (blocking, like
     real HA); scripts calling each other in a cycle would otherwise expand

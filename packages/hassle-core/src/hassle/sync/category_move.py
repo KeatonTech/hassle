@@ -1,19 +1,19 @@
-"""MILESTONES M15 work item A, item 2 — category-on-move sync (three-way).
+"""Category-on-move sync (three-way).
 
-M11's `hassle.sync.category_writeback` only ever fires on a freshly-succeeded
+`hassle.sync.category_writeback` only ever fires on a freshly-succeeded
 CREATE. This module is the UPDATE-side extension: moving an EXISTING object
 to a different category-shaped bundle file is now a category reassignment
 on push, three-way against `ManifestEntry.category` (the base category slug
-as of the last sync — the F2 amendment MILESTONES M15 authorizes).
+as of the last sync).
 
-**The rule** (MILESTONES M15 "Local moves sync back", binding):
+**The rule** ("Local moves sync back", binding):
 
 | local vs base | remote vs base | outcome                                    |
 |----------------|-----------------|--------------------------------------------|
 | same           | same            | noop — nothing to sync                     |
 | different      | same            | push wins: assign/unassign to match local  |
 | same           | different       | pull-only: base advances to remote         |
-| different      | different (values differ) | CONFLICT (I6) — never silently overwritten |
+| different      | different (values differ) | CONFLICT — never silently overwritten |
 
 This mirrors `compute_plan`'s own base/local/remote three-way table (DESIGN
 §8.2) but is evaluated independently, since an object's category is not part
@@ -23,16 +23,17 @@ untouched, or vice versa (only its category moved, config byte-identical).
 
 **Local category derivation is isolated behind one function**
 (`local_category_for_source_path`), reusing `category_writeback`'s existing
-`<tree>/<slug>.py` shape (the ONLY placement shape that exists as of M15 work
-item A — work item B changes bundle layout later, at which point only this
-one function needs to learn the new shape).
+`<tree>/<slug>.py` shape (the only placement shape that currently exists —
+if bundle layout changes later, only this one function needs to learn the
+new shape).
 
-**I6**: like `category_writeback`, this module never raises past its own
+Like `category_writeback`, this module never raises past its own
 boundary — `sync_category_on_move` always returns a result object. A
 CONFLICT is reported via `.conflict_message`, never as an exception, and
 `apply_plan` never advances `ManifestEntry.category` past a conflict (so the
 very next plan/push surfaces the identical conflict again rather than
-quietly resolving it in either direction).
+quietly resolving it in either direction) — no local or UI edit is ever
+silently lost.
 """
 
 from __future__ import annotations
@@ -53,12 +54,12 @@ def local_category_for_source_path(kind: str, source_path: str | None) -> str | 
     uncategorized (the `misc.py` fallback, no source path at all, or a path
     that isn't category-shaped for this kind).
 
-    The single derivation function MILESTONES M15 work item A calls for --
-    delegates entirely to `category_writeback`'s existing (CREATE-side)
-    predicate, since work item A does not change bundle placement at all
-    (work item B's job): the EXACT same `<tree>/<slug>.py` shape that decides
-    whether a freshly-CREATEd object gets a category also decides what an
-    UPDATEd object's *current* local category is.
+    The single derivation function this module calls for -- delegates
+    entirely to `category_writeback`'s existing (CREATE-side) predicate,
+    since move-sync does not change bundle placement itself: the EXACT same
+    `<tree>/<slug>.py` shape that decides whether a freshly-CREATEd object
+    gets a category also decides what an UPDATEd object's *current* local
+    category is.
     """
     return _category_slug_from_source_path(kind, source_path)
 
@@ -150,7 +151,7 @@ def sync_category_on_move(
                 f"hassle push: category conflict for {kind}:{identity} -- the bundle moved it "
                 f"to category {local_category or 'misc'!r} while HA's UI recategorized it to "
                 f"{remote_category or 'misc'!r} (both changed since the last sync). Neither side "
-                "was overwritten (I6). Fix: re-run with --accept-local/--accept-remote for this "
+                "was overwritten. Fix: re-run with --accept-local/--accept-remote for this "
                 "object key, or manually align one side with the other, then push again."
             ),
         )

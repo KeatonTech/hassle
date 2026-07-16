@@ -23,9 +23,8 @@ hassle = "hassle.testing.plugin"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# Exactly one top-level import package ships in this distribution: `hassle`
-# (owner decision, 2026-07-03 — previously two packages, `hassle_core` +
-# `hassle`; `hassle_core` was merged into `hassle` and deleted). The
-# distribution name stays `hassle-core`; only the import package changed.
+# Exactly one top-level import package ships in this distribution: `hassle`.
+# The distribution name stays `hassle-core`; only the import package name
+# differs from it.
 [tool.hatch.build.targets.wheel]
 packages = ["src/hassle"]

@@ -8,21 +8,20 @@ single value or list), Jinja template strings (AST-walked, with a regex
 fallback), and `raw_*` blocks (which are just plain dicts by this point, no
 different from any other trigger/condition/action body).
 
-**Recursive descent into nested action containers (reviewer B1 fix).** An
-action list is not flat: `if`/`choose`/`repeat`/`parallel` are themselves
-action-shaped dicts whose *own* fields hold further trigger/condition/action
-lists (`then`/`else`, `conditions`+`sequence`, `sequence`, `default`,
-`while`/`until`), and `wait_for_trigger` holds a nested trigger list. A block
-found only at the top of `actions`/`triggers`/`conditions` would silently miss
-every entity reference buried inside one of these containers -- exactly the
-gap the reviewer's three-position probe (if_then body, repeat_count body,
-parallel body) caught. `_walk_block` therefore recurses into every nested
-container key after processing the container's own fields, dispatching each
-nested list to the right *position* (condition-shaped lists validate their
-`condition`/`type` field against the condition vocabulary; action-shaped lists
-against nothing extra; `wait_for_trigger`'s list is trigger-shaped) so a
-purpose type nested inside, say, a `repeat.while` list is still checked
-against the right (`conditions`) vocabulary half.
+**Recursive descent into nested action containers.** An action list is not
+flat: `if`/`choose`/`repeat`/`parallel` are themselves action-shaped dicts
+whose *own* fields hold further trigger/condition/action lists (`then`/
+`else`, `conditions`+`sequence`, `sequence`, `default`, `while`/`until`), and
+`wait_for_trigger` holds a nested trigger list. A block found only at the top
+of `actions`/`triggers`/`conditions` would silently miss every entity
+reference buried inside one of these containers. `_walk_block` therefore
+recurses into every nested container key after processing the container's
+own fields, dispatching each nested list to the right *position*
+(condition-shaped lists validate their `condition`/`type` field against the
+condition vocabulary; action-shaped lists against nothing extra;
+`wait_for_trigger`'s list is trigger-shaped) so a purpose type nested inside,
+say, a `repeat.while` list is still checked against the right (`conditions`)
+vocabulary half.
 
 Nested blocks do not carry their own per-item span in `CompileResult` (the
 recording machinery gives the *container* action one span at its own
@@ -33,10 +32,11 @@ inherits the *container's* span. This is coarser than a top-level reference's
 span (it points at the `with if_then(...):` line, not the exact nested
 `service(...)` call), but it is still a real, correct file:line rather than
 none at all, and is the most precise span the current span-tracking
-architecture can give without changing the M1-frozen recording internals.
+architecture can give without changing how the frozen IR schema records
+things.
 
 Each `Reference` carries the file:line span of the DSL call that produced the
-block it came from (M1 spans, `CompileResult.spans_for`), so a Finding built
+block it came from (`CompileResult.spans_for`), so a Finding built
 from it can always point at a source line (subject to the source having a
 span at all — helper declarations and prebuilt objects may not).
 """
@@ -59,7 +59,7 @@ def as_dict_list(value: Any) -> list[dict[str, Any]]:
     """Narrow an ``Any``-typed ``to_ha()``-shaped value to a typed list of
     dicts (dropping any non-dict items), isolating the one trust boundary
     where compiled IR's deliberately untyped ``to_ha()`` output enters this
-    package's otherwise fully-typed code (pyright --strict, R7). Shared with
+    package's otherwise fully-typed code (pyright --strict). Shared with
     :mod:`hassle.registry.validate`, which walks the same IR shape.
     """
     if not isinstance(value, list):
@@ -218,9 +218,9 @@ def _target_refs(target: dict[str, Any]) -> list[tuple[str, str]]:
     """``target: {...}`` -> list of (key, value) pairs, list-values expanded.
 
     A template-valued entry (e.g. ``target={"entity_id": "{{ repeat.item }}"}``)
-    is never a literal id, so it is excluded here -- but (coordinator
-    fix-forward) it is not simply dropped: the caller still scans it for
-    embedded ``states(...)``-style calls via ``_literal_or_scanned_ids``.
+    is never a literal id, so it is excluded here -- but it is not simply
+    dropped: the caller still scans it for embedded ``states(...)``-style
+    calls via ``_literal_or_scanned_ids``.
     """
     out: list[tuple[str, str]] = []
     for key in _TARGET_KEYS:
@@ -234,7 +234,7 @@ def _target_refs(target: dict[str, Any]) -> list[tuple[str, str]]:
 
 def _target_template_strings(target: dict[str, Any]) -> list[str]:
     """The template-valued strings `_target_refs` excluded, for embedded-Jinja
-    scanning (coordinator fix-forward: uniform scan coverage across positions).
+    scanning (uniform scan coverage across positions).
     """
     out: list[str] = []
     for key in _TARGET_KEYS:
@@ -276,12 +276,11 @@ def _scanned_template_refs(
 ) -> list[Reference]:
     """Scan a template-valued string (one `_is_template_string` excluded from
     literal-id treatment) for embedded `states(...)`/`state_attr(...)`/
-    `is_state(...)` entity references (coordinator fix-forward: every
-    guard-skipped template string -- target values, top-level entity_id/
-    device_id/zone, repeat.for_each items -- gets the same scan coverage
-    `data`/`service_data` values and the generic any-other-field pass already
-    had; a placeholder with no embedded call, e.g. `{{ repeat.item }}`,
-    legitimately yields nothing here).
+    `is_state(...)` entity references: every guard-skipped template string --
+    target values, top-level entity_id/device_id/zone, repeat.for_each items
+    -- gets the same scan coverage `data`/`service_data` values and the
+    generic any-other-field pass already had; a placeholder with no embedded
+    call, e.g. `{{ repeat.item }}`, legitimately yields nothing here.
     """
     return [
         _make_ref(
@@ -397,8 +396,8 @@ def _walk_block(
                 )
             )
         # Template-valued target entries (e.g. `{"entity_id": "{{ states(...) }}"}`)
-        # were excluded above as literal ids -- scan them for embedded refs too
-        # (coordinator fix-forward), same as any other template-shaped string.
+        # were excluded above as literal ids -- scan them for embedded refs too,
+        # same as any other template-shaped string.
         for template_value in _target_template_strings(target_dict):
             refs.extend(
                 _scanned_template_refs(
@@ -476,8 +475,8 @@ def _walk_nested_containers(
     block: dict[str, Any], *, object_key: str, span: SourceSpan | None
 ) -> list[Reference]:
     """Recurse into `if`/`choose`/`repeat`/`parallel`/`wait_for_trigger`'s own
-    nested trigger/condition/action lists (reviewer B1). Every reference found
-    while recursing inherits the container's own span (see module docstring:
+    nested trigger/condition/action lists. Every reference found while
+    recursing inherits the container's own span (see module docstring:
     nested bodies have no separate per-item span of their own).
     """
     refs: list[Reference] = []
@@ -555,10 +554,9 @@ def extract_references(result: CompileResult) -> list[Reference]:
                 span = spans[i] if i < len(spans) else None
                 refs.extend(_walk_block(block, object_key=object_key, section=section, span=span))
     # Modern HA device triggers/actions store ENTITY REGISTRY UUIDs (32-hex)
-    # in their entity_id field, not domain.object_id names (owner field
-    # evidence, 2026-07-05). Those are not entity-name references; drop them
-    # here, at the single exit, rather than plumbing Optionals through every
-    # _make_ref call site.
+    # in their entity_id field, not domain.object_id names. Those are not
+    # entity-name references; drop them here, at the single exit, rather
+    # than plumbing Optionals through every _make_ref call site.
     return [
         r
         for r in refs
@@ -570,6 +568,6 @@ def _spans_for_object(
     result: CompileResult, obj: IRObject, section: str, *, block_count: int
 ) -> list[SourceSpan | None]:
     """Per-index span lookup (parallel to the block list) via the public
-    per-item accessor (``CompileResult.span_at``, M3 addition to bundle.py).
+    per-item accessor (``CompileResult.span_at``, in bundle.py).
     """
     return [result.span_at(obj, section, i) for i in range(block_count)]

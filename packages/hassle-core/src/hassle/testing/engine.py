@@ -7,7 +7,7 @@ automation object plus the shared clock/state/template machinery, and fans
 out every stimulus (state change, clock advance, event, explicit fire) to
 each engine in turn.
 
-Mode semantics (the heart of M4):
+Mode semantics:
 
 - ``single`` (default): a new trigger while a run is active is dropped.
 - ``restart``: a new trigger cancels the active run (including any pending
@@ -109,7 +109,7 @@ class AutomationEngine:
         self._clock_now = clock_now
         self._sun_times = sun_times
         # Bundle scripts by slug, threaded into every run's ActionContext so
-        # direct `script.<slug>` calls expand inline (task #35).
+        # direct `script.<slug>` calls expand inline.
         self._scripts = scripts if scripts is not None else {}
         self.mode = config.get("mode", "single")
         self.max = int(config.get("max", _DEFAULT_MAX))
@@ -125,7 +125,7 @@ class AutomationEngine:
         self._sun_past: dict[int, bool] = {}
 
     def _entity_state(self, entity_id: str) -> str | None:
-        """Entity-state lookup for `at: <entity>` time triggers (task #35)."""
+        """Entity-state lookup for `at: <entity>` time triggers."""
         state = self._states.get(entity_id)
         return state.state if state is not None else None
 
@@ -348,8 +348,8 @@ class AutomationEngine:
                 self._advance_run(run, resume_value=change)
 
     def _resume_waits_on_event(self, occurrence: EventOccurrence) -> None:
-        """The event-carrying counterpart of :meth:`_resume_waits_on_state`
-        (task #32). Only ``wait_for_trigger`` is resumable by an event --
+        """The event-carrying counterpart of :meth:`_resume_waits_on_state`.
+        Only ``wait_for_trigger`` is resumable by an event --
         ``wait_template`` has no event-shaped dependency to react to (it only
         ever re-renders on a *state* change, per DESIGN §10.1's template
         subset), so it is deliberately not woken here.

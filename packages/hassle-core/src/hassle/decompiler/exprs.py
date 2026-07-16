@@ -351,9 +351,9 @@ def _trig_time(body: dict[str, Any]) -> str | None:
         return None
     parts = [f"at={render_literal(body['at'])}"]
     if "weekday" in body:
-        # Real-world smoke-test finding: HA's `time` trigger schema also
-        # accepts `weekday` (docs/ha-api-notes.md), though it was originally
-        # documented condition-only.
+        # HA's `time` trigger schema also accepts `weekday`
+        # (docs/ha-api-notes.md), though it was originally documented
+        # condition-only.
         parts.append(f"weekday={render_literal(body['weekday'])}")
     call = f"time({', '.join(parts)})"
     suffix = _with_options_suffix(body)

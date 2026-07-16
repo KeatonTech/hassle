@@ -1,17 +1,18 @@
-"""IR pydantic models + parse/serialize (F1).
+"""IR pydantic models + parse/serialize -- part of the frozen IR schema.
 
 The IR mirrors Home Assistant's stored config for each managed object kind. Two
 hard requirements (DESIGN §7.1) drive the design:
 
-- **Unknown-field preservation (I3):** every model allows and preserves extra
+- **Unknown-field preservation** (compile(decompile(x)) must equal x for any
+  config): every model allows and preserves extra
   fields at every nesting level (``extra="allow"``), and serialization emits
   exactly the keys that were parsed (``exclude_unset=True``) — no defaults are
   ever materialized into the output, so ``serialize(parse(x)) == x``.
 - **Canonical serialization + hashing:** see :mod:`hassle.ir.canonical`.
 
 Structural blocks (``trigger``/``condition``/``action``/``sequence``/``fields``/…)
-pass through verbatim as native JSON in M0; the typed compiler that interprets
-them is built in M1. What is frozen here at F1 is the object-level model schema,
+pass through verbatim as native JSON; the typed compiler that interprets
+them is a separate layer. What is frozen here is the object-level model schema,
 the identity/key derivation, and the serialization contract.
 """
 
@@ -48,14 +49,14 @@ class IRObject(BaseModel):
         return self._key_id
 
     def object_key(self) -> str:
-        """``"<kind>:<identity>"`` — the stable manifest/plan key (F1)."""
+        """``"<kind>:<identity>"`` — the stable manifest/plan key."""
         ident = self.identity
         if ident is None:
             raise ValueError(f"{type(self).__name__} has no identity; pass key_hint= at parse time")
         return object_key(self.kind(), ident)
 
     def to_ha(self) -> dict[str, Any]:
-        """Serialize back to the exact HA config body (lossless, I3)."""
+        """Serialize back to the exact HA config body (lossless)."""
         return self.model_dump(mode="json", exclude_unset=True)
 
     def canonical_json(self) -> str:
@@ -69,7 +70,8 @@ class AutomationConfig(IRObject):
     """A single automation config (``automations.yaml`` entry, keyed by ``id``)."""
 
     # `id` is typed Any (not str) so that a non-string id round-trips verbatim
-    # rather than raising — I3 is "for ANY config". HA stores ids as strings.
+    # rather than raising — compile(decompile(x)) must hold for ANY config.
+    # HA stores ids as strings.
     id: Any = None
     alias: Any = None
     description: Any = None
@@ -101,7 +103,7 @@ class ScriptConfig(IRObject):
 class HelperConfig(IRObject):
     """A storage-collection helper item (one of the nine domains, keyed by ``id``)."""
 
-    # See AutomationConfig.id — typed Any to preserve any id value verbatim (I3).
+    # See AutomationConfig.id — typed Any to preserve any id value verbatim.
     id: Any = None
     name: Any = None
     icon: Any = None
@@ -124,12 +126,12 @@ class HelperConfig(IRObject):
 
 class TemplateHelperConfig(IRObject):
     """A template-helper config-entry subentry body (one of the four
-    ``TEMPLATE_DOMAINS``, M10) — the "options" a template number/sensor/
+    ``TEMPLATE_DOMAINS``) — the "options" a template number/sensor/
     binary_sensor/select config entry holds (DESIGN §13's config-entry helper
     plugin).
 
-    **Identity (redesigned 2026-07-05 after CI evidence, docs/ha-api-notes.md
-    §26.6): there is no ``unique_id`` field.** The `template` config flow's
+    **Identity: there is no ``unique_id`` field** (docs/ha-api-notes.md
+    §26.6). The `template` config flow's
     form schema rejects an unrecognized ``unique_id`` key outright (real HA
     returned ``400 {"errors": {"base": ["extra keys not allowed @
     data['unique_id']"]}}``) — a flow-created entry has no caller-settable
@@ -141,13 +143,14 @@ class TemplateHelperConfig(IRObject):
     is the entry's ``title`` (which the flow sets from the submitted
     ``name``). The HA-assigned config ``entry_id`` remains HA-side transport
     identity only, tracked in the manifest entry, never in this body or the
-    object key (I2 spirit unchanged: an update never changes the entry_id).
+    object key (an existing object's HA id is never changed: an update never
+    changes the entry_id).
 
     ``name``/``state`` (the Jinja template string) are the two fields every
     template domain shares; domain-specific fields (``min``/``max``/``step``/
     ``unit_of_measurement``/``set_value`` for number, ``options``/
     ``select_option`` for select) pass through via ``extra="allow"`` like
-    every other IR model (I3).
+    every other IR model.
     """
 
     name: Any = None
@@ -178,12 +181,12 @@ class TemplateHelperConfig(IRObject):
 
 class GroupHelperConfig(IRObject):
     """A group-helper config-entry subentry body (one of the twelve
-    ``GROUP_DOMAINS``, M21) -- the "options" a group config entry holds
-    (DESIGN §13's config-entry helper plugin, the mechanical follow-on M10
-    itself predicted for other config-entry domains).
+    ``GROUP_DOMAINS``) -- the "options" a group config entry holds
+    (DESIGN §13's config-entry helper plugin, a mechanical follow-on to the
+    template-helper config-entry domains).
 
     **Identity: there is no ``unique_id`` field**, exactly mirroring
-    ``TemplateHelperConfig`` (M10, docs/ha-api-notes.md §26.6): the `group`
+    ``TemplateHelperConfig`` (docs/ha-api-notes.md §26.6): the `group`
     config flow's form schema rejects an unrecognized ``unique_id`` key
     outright (docs/ha-api-notes.md §38.1) -- a flow-created entry has no
     caller-settable unique id at all. Identity is derived from ``name``
@@ -191,10 +194,10 @@ class GroupHelperConfig(IRObject):
     helpers; on the wire, HA's own correlator is the entry's ``title`` (set
     from the submitted ``name``). The HA-assigned config ``entry_id`` remains
     HA-side transport identity only, tracked in the manifest entry, never in
-    this body or the object key (I2 spirit unchanged).
+    this body or the object key (an existing object's HA id is never changed).
 
     ``name``/``entities`` (a list of member entity ids, order preserved
-    verbatim -- I3) are common to every flavor; ``hide_members`` (bool,
+    verbatim) are common to every flavor; ``hide_members`` (bool,
     always materialized) is common to every flavor too. ``all`` (bool, the
     three flavors that have it: binary_sensor/light/switch) and ``type`` (the
     aggregation kind, required for sensor) pass through via ``extra="allow"``
@@ -257,5 +260,5 @@ def parse(config: dict[str, Any], *, kind: str, key_hint: str | None = None) -> 
 
 
 def serialize(obj: IRObject) -> dict[str, Any]:
-    """Serialize an IR object back to its exact HA config body (lossless, I3)."""
+    """Serialize an IR object back to its exact HA config body (lossless)."""
     return obj.to_ha()

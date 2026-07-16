@@ -1,6 +1,6 @@
-"""M11 — category write-back on push-create (MILESTONES M11, DESIGN §7.3/§9.2).
+"""Category write-back on push-create (DESIGN §7.3/§9.2).
 
-Pull-side placement (`ux/pull-organization`, docs/ha-api-notes.md §22) maps an
+Pull-side placement (docs/ha-api-notes.md §22) maps an
 HA UI category onto a bundle file: ``automations/<slug(category name)>.py`` /
 ``scripts/<slug(category name)>.py``. This module is the reverse: when
 `hassle.sync.apply.apply_plan` successfully CREATEs a brand-new automation or
@@ -9,42 +9,39 @@ matching HA category to the new object — creating the category first
 (``config/category_registry/create``) if no existing category's name
 slugifies to the file's stem.
 
-**I1** (every HA write goes through the same API the UI uses): the category
+Every HA write goes through the same API the UI uses: the category
 registry/entity registry WS commands this drives are exactly what the HA
 frontend's own category-assignment UI calls (docs/ha-api-notes.md §22, §30).
 
-**I6** (never silently drop an edit): this module never raises past its own
-boundary — `attempt_category_writeback` always returns a result object; any
-backend-side failure (unsupported command, network error, anything) becomes a
-warning string, never an apply failure/rollback (MILESTONES M11 test 3 — the
-object itself was already created successfully by the time this runs).
+This module never raises past its own boundary (no local or UI edit is ever
+silently lost by way of an unhandled exception here) — `attempt_category_writeback`
+always returns a result object; any backend-side failure (unsupported
+command, network error, anything) becomes a warning string, never an apply
+failure/rollback, since the object itself was already created successfully
+by the time this runs.
 
-**Non-goal (MILESTONES M11 test 4):** this module is only ever invoked for a
-freshly-succeeded CREATE. It has no opinion about UPDATE/REFRESH/ADOPT and
-`apply_plan` never calls it for those actions — existing/adopted objects'
-categories are simply never touched by this code path at all.
+**Non-goal:** this module is only ever invoked for a freshly-succeeded
+CREATE. It has no opinion about UPDATE/REFRESH/ADOPT and `apply_plan` never
+calls it for those actions — existing/adopted objects' categories are simply
+never touched by this code path at all (the sibling module
+`hassle.sync.category_move` is where the UPDATE-side "moving an existing
+object" sync logic lives, reusing this module's scope map and
+slug-derivation helper).
 
-**MILESTONES M15 work item A (docs/ha-api-notes.md §31) widened the scope map
-this module owns (`_SCOPE_FOR_KIND`) to cover all 13 helper kinds under the
-shared `"helpers"` scope** — §31.5a source-corrects the earlier (wrong) belief
-that HA's category registry only ever had the `automation`/`script` scopes.
-This module's own CREATE-only behavior is otherwise unchanged; the sibling
-module `hassle.sync.category_move` is where M15's new UPDATE-side ("moving an
-existing object") sync logic lives, reusing this module's scope map and
-slug-derivation helper.
+The scope map this module owns (`_SCOPE_FOR_KIND`) covers all 13 helper
+kinds under the shared `"helpers"` scope (docs/ha-api-notes.md §31):
+real HA's category registry has no scope allowlist at all (§31.1), and the
+frontend's helpers page shares ONE scope, `"helpers"`, across all 25 helper
+kinds -- 9 storage-collection (`HELPER_DOMAINS`) + 4 template config-entry
+(`TEMPLATE_DOMAINS`) + 12 group config-entry (`GROUP_DOMAINS`).
 
-**MILESTONES M15 work item B (docs/ha-api-notes.md §31.6) retires the old
-per-kind tree shape this module's `_category_slug_from_source_path` checked
-(`automations/<slug>.py` / `scripts/<slug>.py` / -- never actually reachable
-for helpers -- `helpers/<slug>.py`) in favor of the root-level, cross-kind
-shape: every kind's category-shaped file is just `<slug>.py` at the bundle
-root. `_TREE_FOR_KIND` is retired along with it (kind no longer selects a
-tree at all -- `category_shaped_stem` alone decides path shape, kind-
-independently, exactly as `hassle.ir.keys.category_shaped_stem`'s own
-docstring already promised it would once a real category-shaped helper file
-existed).
+Bundle placement gives every kind a real root-level category-shaped file
+(`<slug>.py`) -- `category_shaped_stem` (docs/ha-api-notes.md §31.6)
+recognizes it kind-independently; there is no per-kind tree shape left to
+check (an earlier design had `automations/<slug>.py` / `scripts/<slug>.py`
+/ `helpers/<slug>.py`).
 
-Backend surface used (additive, NOT part of the frozen `Backend` Protocol F2 —
+Backend surface used (additive, NOT part of the frozen `Backend` Protocol —
 same `getattr`-probed pattern as `entry_id_for`/`fetch_registry_snapshot`,
 docs/backend.md §3.1):
 
@@ -52,7 +49,7 @@ docs/backend.md §3.1):
 - ``create_category(scope, name) -> category_id``
 - ``categories_for(kind, identity) -> dict[scope, category_id]``
 - ``assign_category(kind, identity, scope, category_id: str | None) -> None``
-  (M15: ``category_id=None`` unsets that scope entirely, §31.3)
+  (``category_id=None`` unsets that scope entirely, §31.3)
 
 `FakeBackend` and `DirectBackend` both implement all four (`hassle.backend.
 fake`, `hassle.backend.direct`); a hand-rolled test `Backend` stub that lacks
@@ -75,13 +72,7 @@ from hassle.ir.keys import (
 )
 
 # Every object kind's HA UI category-registry scope (docs/ha-api-notes.md
-# §31.2/§31.6, source-verified -- corrects §22/§30's belief that only
-# automations/scripts have a category-registry scope at all: real HA's
-# category registry has no scope allowlist whatsoever, §31.1, and the
-# frontend's helpers page shares ONE scope, `"helpers"`, across all 25 helper
-# kinds -- 9 storage-collection (`HELPER_DOMAINS`) + 4 template config-entry
-# (`TEMPLATE_DOMAINS`) + 12 group config-entry (`GROUP_DOMAINS`, M21)).
-# Bundle PLACEMENT (MILESTONES M15 work item B) now gives every kind a real
+# §31.2/§31.6, source-verified). Bundle PLACEMENT gives every kind a real
 # root-level category-shaped file (`<slug>.py`) -- `category_shaped_stem`
 # recognizes it kind-independently; this map is what lets
 # `_category_slug_from_source_path` additionally confirm a specific object's
@@ -104,22 +95,19 @@ class CategoryWritebackResult:
 def _category_slug_from_source_path(kind: str, source_path: str | None) -> str | None:
     """The category-name slug a CREATEd object's source file implies, or
     `None` if it doesn't have the root-level ``<slug>.py`` shape at all (a
-    nested path) or names the ``misc`` fallback file (MILESTONES M11 test 2:
-    `misc.py` -> no category action, exactly mirroring the pull-side
-    placement's own "uncategorized -> misc.py" fallback in `bundle_ops.
-    default_source_path`).
+    nested path) or names the ``misc`` fallback file (`misc.py` -> no
+    category action, exactly mirroring the pull-side placement's own
+    "uncategorized -> misc.py" fallback in `bundle_ops.default_source_path`).
 
-    Delegates entirely to :func:`hassle.ir.keys.category_shaped_stem`
-    (MILESTONES M12 reviewer finding: one shared, kind-independent predicate,
-    never duplicated across this module / the compiler's CATEGORY-global
-    capture / the validator). MILESTONES M15 work item B retired the
-    per-kind tree shape (`automations/<slug>.py` etc.) this wrapper used to
-    additionally check `kind` against -- the new root-level shape has no
-    per-kind tree left to check: every kind's category-shaped file is simply
-    `<slug>.py`, so `kind` is accepted only for interface symmetry with
-    every other call site in this module (`attempt_category_writeback`,
-    `hassle.sync.category_move.local_category_for_source_path`) and is no
-    longer consulted here at all."""
+    Delegates entirely to :func:`hassle.ir.keys.category_shaped_stem`: one
+    shared, kind-independent predicate, never duplicated across this module
+    / the compiler's CATEGORY-global capture / the validator. The root-level
+    shape has no per-kind tree to check: every kind's category-shaped file
+    is simply `<slug>.py`, so `kind` is accepted only for interface symmetry
+    with every other call site in this module
+    (`attempt_category_writeback`,
+    `hassle.sync.category_move.local_category_for_source_path`) and is not
+    consulted here at all."""
     del kind
     if source_path is None:
         return None
@@ -151,12 +139,11 @@ def attempt_category_writeback(
     succeeds — never for any other action, and never in a way that can affect
     the apply's own success/rollback bookkeeping: this function catches ALL
     exceptions internally and reports them as `.warning`, which the caller
-    only ever collects into `ApplyResult.category_warnings` (MILESTONES M11
-    test 3). The caller does NOT add its own try/except — the isolation
-    guarantee lives entirely here.
+    only ever collects into `ApplyResult.category_warnings`. The caller does
+    NOT add its own try/except — the isolation guarantee lives entirely here.
 
-    ``category_override`` (MILESTONES M12, additive): the exact display name
-    to use if a brand-new category has to be created, in place of M11's
+    ``category_override`` (additive): the exact display name to use if a
+    brand-new category has to be created, in place of the
     `humanize_slug(slug)` guess -- sourced from a bundle file's `CATEGORY`
     module global. Callers (`hassle.sync.apply.apply_plan` /
     `hassle_cli.cli`) are responsible for only ever passing an override whose
@@ -164,9 +151,9 @@ def attempt_category_writeback(
     itself re-validate that (the validator, `hassle.registry.validate`'s
     `category-slug-mismatch` Finding, is the one check for that); it only
     ever consults the override when a NEW category is actually being
-    created, never when reusing an existing match (M11's "never guess which
-    side is right" reuse rule is unaffected by M12 -- an existing category is
-    never renamed by push regardless of what `CATEGORY` says).
+    created, never when reusing an existing match (an existing category is
+    never renamed by push regardless of what `CATEGORY` says -- never guess
+    which side is right).
     """
     scope = _SCOPE_FOR_KIND.get(kind)
     if scope is None:

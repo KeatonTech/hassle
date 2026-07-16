@@ -1,7 +1,7 @@
-"""Sync engine (F2 data model + plan/apply/pull logic) — DESIGN §8.
+"""Sync engine (frozen plan/apply data model + plan/apply/pull logic) — DESIGN §8.
 
-Freeze point **F2** (start of M5): the plan/apply data model exported here,
-alongside the `Backend` Protocol in :mod:`hassle.backend`. See docs/backend.md.
+The plan/apply data model exported here is frozen, alongside the `Backend`
+Protocol in :mod:`hassle.backend`. See docs/backend.md.
 """
 
 from __future__ import annotations

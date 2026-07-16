@@ -416,8 +416,8 @@ def _services_domain_class_name(domain: str) -> str:
 
 
 def generate_services_stub(snapshot: RegistrySnapshot) -> str:
-    """Generate ``hassle/services.pyi`` content from a registry snapshot
-    (MILESTONES M18): a module-level ``__getattr__`` fallback (typed as
+    """Generate ``hassle/services.pyi`` content from a registry snapshot:
+    a module-level ``__getattr__`` fallback (typed as
     returning the first domain's namespace class -- matching the entities
     stub's own ``_EntitiesRegistry.__getattr__`` convention, and keeping an
     unlisted/future domain from becoming a hard pyright error) plus one typed
@@ -435,9 +435,9 @@ def generate_services_stub(snapshot: RegistrySnapshot) -> str:
         # No services captured at all -- an empty, still-valid module (the
         # module-level __getattr__ fallback still makes every domain resolve
         # to *something*, just untyped `Any`-shaped calls). The trailing
-        # `# pyright: ignore[reportIncompleteStub]` (N1, reviewer non-
-        # blocking note): a bare module-level `__getattr__` trips pyright's
-        # "obscures type errors for module" heuristic -- unlike the entities
+        # `# pyright: ignore[reportIncompleteStub]`: a bare module-level
+        # `__getattr__` trips pyright's "obscures type errors for module"
+        # heuristic -- unlike the entities
         # stub's `_EntitiesRegistry.__getattr__` (a CLASS method on a module-
         # level VARIABLE), `hassle.services` is a REAL module at runtime, so
         # that class-indirection trick doesn't apply here without breaking
@@ -503,7 +503,7 @@ def generate_services_stub(snapshot: RegistrySnapshot) -> str:
     # no blank line between them -- only before the block and after it,
     # verified against actual `ruff check --select I001` output on this
     # generator's content). `Sequence` is only needed when at least one
-    # domain actually rendered a `target=` parameter (task #28: every real
+    # domain actually rendered a `target=` parameter (every real
     # service function gets one; the domain-less `__getattr__`-only fallback
     # body never does); `Any` is needed for that same `target=` parameter, a
     # selector-typed field (`_SELECTOR_PY_TYPE`'s `dict[str, Any]` entries),
@@ -539,21 +539,21 @@ def generate_entities_stub(snapshot: RegistrySnapshot) -> str:
     lines: list[str] = []
 
     # --- one typed entity class per domain, with typed service methods ------
-    # Every entity class now ALWAYS has at least one member (the `.state`
-    # accessor, M20 entity-first conditions), so the previous "empty class
-    # collapses to `class X: ...` on one line" convention no longer applies to
-    # ANY domain -- there is no longer such a thing as a member-less entity
-    # class. `state` is typed `Any` (not the real, non-public
-    # `hassle.compiler.builders._StateAccessor`) -- same "widen rather than
-    # leak an internal type into a generated stub" convention this module's
-    # own docstring already documents for `Template`/service-field typing:
-    # the accessor's exact operator-overload return types (`_StateAccessor`
-    # for `>`/`<`, `_StateComparisonExpr` for `==`/`!=`, ...) are internal and
-    # not part of `hassle.__all__`, so re-deriving them precisely here would
-    # either leak a private name or drift the moment those internals change.
-    # `Any` still resolves `.state`/`.state == ...`/`.state.in_([...])`
-    # without a single false `reportAttributeAccessIssue` -- the actual gate
-    # this stub exists to satisfy (M28's decompiled-bundle pyright gate).
+    # Every entity class ALWAYS has at least one member (the `.state`
+    # accessor, entity-first conditions), so there is no such thing as a
+    # member-less entity class needing the "empty class collapses to
+    # `class X: ...` on one line" convention. `state` is typed `Any` (not the
+    # real, non-public `hassle.compiler.builders._StateAccessor`) -- same
+    # "widen rather than leak an internal type into a generated stub"
+    # convention this module's own docstring already documents for
+    # `Template`/service-field typing: the accessor's exact operator-overload
+    # return types (`_StateAccessor` for `>`/`<`, `_StateComparisonExpr` for
+    # `==`/`!=`, ...) are internal and not part of `hassle.__all__`, so
+    # re-deriving them precisely here would either leak a private name or
+    # drift the moment those internals change. `Any` still resolves
+    # `.state`/`.state == ...`/`.state.in_([...])` without a single false
+    # `reportAttributeAccessIssue` -- the actual gate this stub exists to
+    # satisfy (pyright must stay clean on a decompiled bundle).
     for domain in sorted(domains):
         entity_type = _entity_type_name(domain)
         services = snapshot.services.get(domain, {})
@@ -642,15 +642,13 @@ def _isort_import_sort_key(name: str) -> tuple[int, str]:
     :func:`_isort_all_sort_key` (`ALL_CAPS` constants first, then classes,
     then everything else), but CASE-INSENSITIVE within each bucket.
 
-    Found the hard way (M20, entity-first conditions milestone): the two
-    conventions genuinely differ. `RUF022`'s `__all__`-list sort is case-
-    SENSITIVE (`InOperatorTrapError` before `InclusiveNumericBoundError`,
+    The two conventions genuinely differ. `RUF022`'s `__all__`-list sort is
+    case-SENSITIVE (`InOperatorTrapError` before `InclusiveNumericBoundError`,
     `O` < `c`), but `I001`'s import-statement sort is case-INSENSITIVE
     (`InclusiveNumericBoundError` before `InOperatorTrapError`, `c` < `o`
     case-folded) -- verified against actual `ruff check --select I001 --fix`
-    output on both orderings. Every name pair before this milestone happened
-    to sort identically either way, so this divergence was latent until
-    `InOperatorTrapError`/`InclusiveNumericBoundError` landed adjacent to
+    output on both orderings. This divergence stays latent until two names
+    like `InOperatorTrapError`/`InclusiveNumericBoundError` land adjacent to
     each other in the same module's import block.
     """
     is_constant = name.replace("_", "").isupper() and any(c.isalpha() for c in name)
@@ -660,27 +658,27 @@ def _isort_import_sort_key(name: str) -> tuple[int, str]:
 
 
 def _resolve_binding_module(hassle_pkg: object, name: str) -> str:
-    """The module a ``hassle.__all__`` name should be re-exported FROM
-    (reviewer finding B1): NOT ``getattr(obj, "__module__", ...)`` -- that
-    reports the defining CLASS's module, which is wrong whenever ``obj`` is
-    an INSTANCE built somewhere else. ``hassle.E_``/``PI``/``TAU`` are
-    ``TemplateExpr`` instances constructed in ``hassle.compiler.math_expr``,
-    but ``TemplateExpr`` the class lives in ``hassle.compiler.templates`` --
-    ``__module__`` names the latter, which does not define ``E_`` at all
+    """The module a ``hassle.__all__`` name should be re-exported FROM: NOT
+    ``getattr(obj, "__module__", ...)`` -- that reports the defining CLASS's
+    module, which is wrong whenever ``obj`` is an INSTANCE built somewhere
+    else. ``hassle.E_``/``PI``/``TAU`` are ``TemplateExpr`` instances
+    constructed in ``hassle.compiler.math_expr``, but ``TemplateExpr`` the
+    class lives in ``hassle.compiler.templates`` -- ``__module__`` names the
+    latter, which does not define ``E_`` at all
     (``from hassle.compiler.templates import E_`` is an unimportable line;
     pyright reports it as an unknown import symbol, and pyright/Pylance
     alike lose all typing for these three names in every generated bundle).
 
-    Fix (adopted from reviewer direction): resolve the true BINDING module by
-    provenance instead -- walk every already-imported ``hassle.*`` submodule
-    (``sys.modules``, which already has every relevant submodule loaded,
-    since importing top-level ``hassle`` transitively imports all of
-    ``hassle.compiler.*``) and collect every module whose own namespace binds
-    this exact object under this exact name (``getattr(module, name, ...) is
-    obj`` -- identity, not equality, so a coincidentally-equal-but-different
-    object in an unrelated module is never mistaken for the real binding).
+    Instead, resolve the true BINDING module by provenance: walk every
+    already-imported ``hassle.*`` submodule (``sys.modules``, which already
+    has every relevant submodule loaded, since importing top-level ``hassle``
+    transitively imports all of ``hassle.compiler.*``) and collect every
+    module whose own namespace binds this exact object under this exact name
+    (``getattr(module, name, ...) is obj`` -- identity, not equality, so a
+    coincidentally-equal-but-different object in an unrelated module is never
+    mistaken for the real binding).
 
-    **Tie-break (deterministic, R8):** more than one module can legitimately
+    **Tie-break (deterministic):** more than one module can legitimately
     bind the same name to the same object -- every frozen name is ALSO
     re-exported through the ``hassle.compiler`` barrel package
     (``hassle/compiler/__init__.py``'s own aggregating imports), so a name

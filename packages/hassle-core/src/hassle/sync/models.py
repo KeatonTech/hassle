@@ -1,17 +1,17 @@
-"""The plan/apply data model (F2) — DESIGN §8.1, §8.2.
+"""The frozen plan/apply data model — DESIGN §8.1, §8.2.
 
 `PlanAction` is the exact set of outcomes in the DESIGN §8.2 table. `Plan` is
 one `PlanEntry` per object key, produced by :func:`hassle.sync.plan.compute_plan`
 and consumed by :func:`hassle.sync.apply.apply_plan` (push-side actions) and
 :func:`hassle.sync.pull.apply_pull` (bundle-side actions). `Manifest` is the
 `manifest.lock` model (DESIGN §8.1) — a plain data model with no wall-clock or
-other side effects; `synced_at` is always caller-supplied (R8).
+other side effects; `synced_at` is always caller-supplied.
 
 Style note: pydantic `BaseModel`, matching `hassle.ir.models` for consistency
 within the codebase. Unlike the IR models, these are *not* meant to preserve
-arbitrary unknown fields forever (they aren't an HA wire format) — but they do
-store full config dicts (never lossy summaries), keeping with I3's spirit: nothing
-the sync engine looks at is ever thrown away before a human/M7 can see it.
+arbitrary unknown fields forever (they aren't an HA wire format) — but they
+do store full config dicts (never lossy summaries): nothing the sync engine
+looks at is ever thrown away before a human or the CLI layer can see it.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ class ConflictKind(StrEnum):
 
 
 class Conflict(BaseModel):
-    """Structured conflict data (DESIGN §8.2). Rendering (3-way diff) is M7's job."""
+    """Structured conflict data (DESIGN §8.2). Rendering (3-way diff) is the CLI's job."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -119,23 +119,22 @@ class Plan(BaseModel):
 class ManifestEntry(BaseModel):
     """One object's entry in `manifest.lock` (DESIGN §8.1).
 
-    ``entry_id`` (M10 addition, additive/optional; M21 widens the kinds that
-    populate it): for a config-entry template-helper (``hassle.ir.
-    TEMPLATE_DOMAINS``) or group-helper (``hassle.ir.GROUP_DOMAINS``) object,
-    the HA-assigned config entry id (docs/ha-api-notes.md §26.5/§38) --
-    transport-side identity only, never the object-key identity
+    ``entry_id`` (additive/optional): for a config-entry template-helper
+    (``hassle.ir.TEMPLATE_DOMAINS``) or group-helper (``hassle.ir.GROUP_DOMAINS``)
+    object, the HA-assigned config entry id (docs/ha-api-notes.md §26.5/§38)
+    -- transport-side identity only, never the object-key identity
     (``unique_id``) and never part of the IR body (docs/backend.md's
     config-entry addendum). ``None`` for every other kind (automation/script/
     storage-collection helper), which have no such secondary identity to
     track.
 
-    ``category`` (MILESTONES M15 F2 amendment, additive/optional): the
-    object's HA UI category **slug** as of the last successful sync (base,
-    in the three-way sense) -- ``None`` means "uncategorized as of base"
-    (including every pre-M15 manifest, which parses with this field absent).
-    `hassle.sync.category_move` uses this to detect a local file move vs. a
-    remote (HA UI) recategorization since base, and to surface a conflict
-    (I6) rather than silently letting either side win when both changed to
+    ``category`` (additive/optional): the object's HA UI category **slug**
+    as of the last successful sync (base, in the three-way sense) -- ``None``
+    means "uncategorized as of base" (including an older manifest that
+    parses with this field absent). `hassle.sync.category_move` uses this to
+    detect a local file move vs. a remote (HA UI) recategorization since
+    base, and to surface a conflict (no local or UI edit is ever silently
+    lost) rather than silently letting either side win when both changed to
     different values. Never the display name (that's transient HA-side
     state, not tracked here) -- just the slug `bundle_ops`'s placement
     already anchors on (docs/ha-api-notes.md §22/§30).
@@ -153,8 +152,8 @@ class ManifestEntry(BaseModel):
 class Manifest(BaseModel):
     """The `manifest.lock` model (DESIGN §8.1).
 
-    `synced_at` is always supplied by the caller (the CLI layer in M7 supplies
-    wall-clock); core logic never calls `datetime.now()` or similar (R8).
+    `synced_at` is always supplied by the caller (the CLI layer supplies
+    wall-clock); core logic never calls `datetime.now()` or similar.
     """
 
     synced_at: str
@@ -193,23 +192,23 @@ class ApplyResult(BaseModel):
     outcomes: dict[str, ApplyOutcome] = {}
     succeeded: bool
     manifest: Manifest | None = None
-    #: Additive (owner duplicate-create report): WHY the failing entry
+    #: Additive: WHY the failing entry
     #: failed, when the apply engine knows -- e.g. the created-identity
     #: divergence message naming the id HA actually derived. `None` for
     #: successes and for failures with no better story than the outcome enum.
     failure_message: str | None = None
-    # M11 (additive): non-fatal warnings from category write-back on CREATE
+    # Additive: non-fatal warnings from category write-back on CREATE
     # (`hassle.sync.category_writeback`) -- always empty when nothing was
-    # attempted or everything succeeded. Never affects `succeeded` (I6: a
+    # attempted or everything succeeded. Never affects `succeeded` (a
     # category-assignment failure is metadata-only, surfaced here rather than
     # silently dropped, but never fails or rolls back the object it's about).
     category_warnings: list[str] = []
-    # M15 (additive): category-on-move conflicts (`hassle.sync.category_move`)
+    # Additive: category-on-move conflicts (`hassle.sync.category_move`)
     # -- an object whose LOCAL category (derived from its source file) and
     # REMOTE category (HA UI) both changed since the manifest's recorded base,
     # to DIFFERENT values. Distinct from `category_warnings` (a failure to
     # apply an otherwise-uncontested change): a conflict is never even
-    # attempted in either direction (I6 -- "never silently overwritten"), and
+    # attempted in either direction (never silently overwritten), and
     # the manifest's base category is left UNCHANGED so the next plan/push
     # surfaces the same conflict again rather than quietly resolving it.
     # Never affects `succeeded`/rollback for the object's own content update.

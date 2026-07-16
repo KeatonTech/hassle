@@ -1,6 +1,5 @@
-"""The `hassle.__all__` name -> backing golden-case mapping (MILESTONES M9
-test 1: "docs build fails if any `hassle.__all__` name lacks a documented
-pair").
+"""The `hassle.__all__` name -> backing golden-case mapping: docs build fails
+if any `hassle.__all__` name lacks a documented pair.
 
 Curated by hand (not grepped at doc-build time) so the mapping is reviewable
 and stable: adding a new name to `hassle.__all__` without adding it here (or
@@ -36,16 +35,16 @@ EXEMPT_NAMES: frozenset[str] = frozenset(
         "SharedScriptParamMisuseError",
         "UnknownFieldError",
         "UnknownParamError",
-        # Compile-time guard, not a construct (ux/dsl-ergonomics round):
+        # Compile-time guard, not a construct:
         "OnlyIfBlockCoverageError",
-        # M13: decorator-form template-helper body contract violation.
+        # Decorator-form template-helper body contract violation.
         "TemplateHelperDecoratorBodyError",
-        # M13 reviewer finding B1: dangling state=-omitted declaration guard.
+        # Dangling state=-omitted declaration guard.
         "DanglingTemplateHelperDeclarationError",
-        # M20 (entity-first conditions): entity.state's >=/<= mapping guard,
-        # the in-operator trap guard, and the condition-entry-point bool guard
-        # -- all compile-time traps a bundle catches/reads the message of,
-        # never a construct with its own compiled YAML shape.
+        # entity.state's >=/<= mapping guard, the in-operator trap guard, and
+        # the condition-entry-point bool guard -- all compile-time traps a
+        # bundle catches/reads the message of, never a construct with its
+        # own compiled YAML shape.
         "InclusiveNumericBoundError",
         "InOperatorTrapError",
         "ConditionArgumentTypeError",
@@ -79,12 +78,12 @@ NAME_TO_CASES: dict[str, list[str]] = {
     "counter": ["helper_declarations"],
     "timer": ["helper_declarations"],
     "schedule": ["helper_declarations"],
-    # M10: config-entry template-helper declarations
+    # config-entry template-helper declarations
     "template_number": ["template_helper_declarations"],
     "template_sensor": ["template_helper_declarations"],
     "template_binary_sensor": ["template_helper_declarations"],
     "template_select": ["template_helper_declarations"],
-    # M21: config-entry group-helper declarations
+    # config-entry group-helper declarations
     "group_binary_sensor": ["group_helper_declarations"],
     "group_button": ["group_helper_declarations"],
     "group_cover": ["group_helper_declarations"],
@@ -100,7 +99,7 @@ NAME_TO_CASES: dict[str, list[str]] = {
     # recording verbs
     "when": ["state_delay_service"],
     "only_if": ["classic_conditions"],
-    # public capture seam (task #30, `ux/capture-notify-recipe`): the `lib/`
+    # public capture seam: the `lib/`
     # recipe-builder pair a bundle author uses to capture a block's actions
     # once and splice the same bodies into more than one container.
     "capture_actions": ["capture_emit_actions"],
@@ -191,5 +190,5 @@ NAME_TO_CASES: dict[str, list[str]] = {
 
 def missing_names(all_names: list[str]) -> set[str]:
     """Names in ``all_names`` with neither a golden-case mapping nor an
-    exemption -- the M9 test 1 coverage gate."""
+    exemption -- the docs coverage gate."""
     return {name for name in all_names if name not in NAME_TO_CASES and name not in EXEMPT_NAMES}
