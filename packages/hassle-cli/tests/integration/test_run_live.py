@@ -1,16 +1,16 @@
-"""MILESTONES M7 test 5: `run --live` integration test (Dockerized HA).
+"""`run --live` integration test (Dockerized HA).
 
 Shadow automation created ENABLED with a never-fires event trigger (revised
 design, docs/ha-api-notes.md §29 addendum -- NOT `initial_state: off`, which
 turned out not to be what actually mattered here), triggered with
 `skip_condition: false` by default (HA's own default is `true` -- assert we
 override it), trace rendered with correct source lines, the action's real
-side effect observed (a counter helper increments -- M0.V pattern, proves the
-automation actually RAN, not just that the service call was accepted), shadow
-deleted -- also on failure (inject a trace-stream error; assert cleanup).
+side effect observed (a counter helper increments, proving the automation
+actually RAN, not just that the service call was accepted), shadow deleted
+-- also on failure (inject a trace-stream error; assert cleanup).
 
 `test_run_live_creates_shadow_triggers_and_cleans_up` is two-phase (docs/
-ha-api-notes.md §29 addendum, round 3): condition unsatisfied (HA's default
+ha-api-notes.md §29 addendum): condition unsatisfied (HA's default
 `input_boolean` state) -> `failed_conditions` in the trace + counter
 unchanged, proving `skip_condition: false` actually gates the run; then
 condition satisfied -> `action/0` + counter incremented, proving the action
@@ -93,11 +93,11 @@ def _write_bundle(
     # A flat bundle (DSL sources directly at the bundle root) is still fully
     # supported (docs/ha-api-notes.md §17.9 RESOLVED: the loader also
     # recurses into subdirectories now, but never requires them).
-    # The counter.increment action (M0.V pattern, coordinator ask point 3):
-    # separates "the automation.trigger service call was accepted" from "the
-    # automation's action script actually ran" -- the ambiguity that let the
-    # missing-trace bug hide as long as it did. A trace appearing is now
-    # corroborated by an independently observable side effect.
+    # The counter.increment action separates "the automation.trigger service
+    # call was accepted" from "the automation's action script actually ran"
+    # -- the ambiguity that let the missing-trace bug hide as long as it did.
+    # A trace appearing is now corroborated by an independently observable
+    # side effect.
     (root / "a.py").write_text(
         f"""
 from hassle import automation, only_if, service, state, when
@@ -115,10 +115,10 @@ def live_test_automation():
 
 
 def _owned_entities(ha: DirectBackend) -> tuple[str, str]:
-    """Create the flag entities this test's bundle references (round-5 finding:
-    the previous gate entity was seeded NOWHERE -- an eternally-false condition
-    and a silently no-op'd turn_on; every CI container is fresh, so a test may
-    assume nothing exists that it did not create)."""
+    """Create the flag entities this test's bundle references (a previous
+    version left the gate entity seeded NOWHERE -- an eternally-false
+    condition and a silently no-op'd turn_on; every CI container is fresh,
+    so a test may assume nothing exists that it did not create)."""
     trigger_id = ha.create("input_boolean", {"name": "Hassle Live Trigger Flag"})
     gate_id = ha.create("input_boolean", {"name": "Hassle Live Gate Flag"})
     return f"input_boolean.{trigger_id}", f"input_boolean.{gate_id}"
@@ -135,13 +135,12 @@ def _counter_value(ha: DirectBackend, entity_id: str) -> int:
 def test_run_live_creates_shadow_triggers_and_cleans_up(
     ha: DirectBackend, ha_url_token: tuple[str, str], tmp_path: Path
 ) -> None:
-    """Two-phase (coordinator ask, round 3): the test's own condition-gating
-    entity (`input_boolean.hassle_flag_2`, `only_if`'d in `_write_bundle`) is
-    now owned by the test instead of left at HA's own default -- round 2's
-    green trace (`failed_conditions`) proved `skip_condition: false`
-    semantics live, but incidentally, by accident of a fixture that never set
-    the gating entity to `"on"`. This test now exercises BOTH branches on
-    purpose, pinning the entire DESIGN §10.4 semantic surface in one place:
+    """Two-phase: the test's own condition-gating entity
+    (`input_boolean.hassle_flag_2`, `only_if`'d in `_write_bundle`) is owned
+    by the test instead of left at HA's own default, so the condition branch
+    exercised is never an accident of a fixture that happens to leave the
+    gating entity off. This test exercises BOTH branches on purpose, pinning
+    the entire DESIGN §10.4 semantic surface in one place:
 
     Phase 1 (condition unsatisfied -- HA's own default for a freshly created
     `input_boolean` is `"off"`, docs/ha-api-notes.md §4): trigger, assert the
@@ -151,9 +150,8 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
 
     Phase 2 (condition satisfied -- turn the gating entity on): trigger
     again, assert `action/0` in the rendered timeline and the counter DID
-    increment -- the "service call accepted" vs "automation ran" distinction
-    from round 2, now finally exercised on the branch where the action
-    actually executes.
+    increment -- the "service call accepted" vs "automation ran" distinction,
+    exercised on the branch where the action actually executes.
     """
     from hassle_cli.cli import main
 
@@ -208,19 +206,19 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     before_phase2 = _counter_value(ha, counter_entity_id)
     result = _invoke_in_dir(main, run_args, cwd=bundle, env=run_env)
     assert result.exit_code == 0, result.output
-    # Structural assertion (coordinator finding, docs/ha-api-notes.md §29):
-    # the word "trace" alone doesn't prove a timeline was actually rendered
+    # Structural assertion (docs/ha-api-notes.md §29): the word "trace"
+    # alone doesn't prove a timeline was actually rendered
     # -- a step path from the real automation must appear, and the "trace
     # never became available" warning must NOT (that would mean
     # stream_trace's poll gave up, which is the exact bug being regression-
     # tested here).
     assert "action/0" in result.output
     assert "no trace became available" not in result.output.lower()
-    # §29 addendum (coordinator ask point 3): a rendered trace alone doesn't
-    # prove the automation's action actually EXECUTED against real HA (that
-    # ambiguity -- "service call accepted" vs "automation ran" -- is exactly
-    # what let the entity_id-mismatch bug hide) -- an independently
-    # observable side effect (M0.V pattern) closes that gap.
+    # §29 addendum: a rendered trace alone doesn't prove the automation's
+    # action actually EXECUTED against real HA (that ambiguity -- "service
+    # call accepted" vs "automation ran" -- is exactly what let the
+    # entity_id-mismatch bug hide) -- an independently observable side
+    # effect closes that gap.
     assert _counter_value(ha, counter_entity_id) == before_phase2 + 1
     # Shadow cleaned up on success.
     assert _shadow_ids(ha) == []

@@ -1,5 +1,5 @@
-"""MILESTONES M7 test 1: CLI-level tests with `FakeBackend` for every command --
-exit codes, output snapshots (rich rendering tested via captured plain-text mode).
+"""CLI-level tests with `FakeBackend` for every command -- exit codes,
+output snapshots (rich rendering tested via captured plain-text mode).
 
 Commands under test: init, login, pull, status, plan, push, validate, test, run,
 fmt, stubs, explain, render, mirror, doctor.
@@ -25,13 +25,13 @@ def test_init_creates_bundle_scaffolding(tmp_path: Path, cli) -> None:
 
 
 def test_init_scaffolds_the_full_design_section_6_tree(tmp_path: Path, cli) -> None:
-    """M7.1 (updated by MILESTONES M15 work item B): `hassle init` follows
-    the category-first tree layout (DESIGN §6) -- `lib/`/`tests/` are real
-    scaffolded directories; the OLD per-kind trees (`automations/`,
-    `scripts/`, `helpers/`) are RETIRED (root-level `<slug>.py` files are the
-    layout now, created on demand by the compiler/decompiler, not scaffolded
-    empty directories). No `__init__.py` is written (the loader uses PEP 420
-    namespace packages, docs/ha-api-notes.md §17.9 RESOLVED)."""
+    """`hassle init` follows the category-first tree layout (DESIGN §6) --
+    `lib/`/`tests/` are real scaffolded directories; the OLD per-kind trees
+    (`automations/`, `scripts/`, `helpers/`) are RETIRED (root-level
+    `<slug>.py` files are the layout now, created on demand by the
+    compiler/decompiler, not scaffolded empty directories). No `__init__.py`
+    is written (the loader uses PEP 420 namespace packages, docs/
+    ha-api-notes.md §17.9 RESOLVED)."""
     project = tmp_path / "new-house"
     project.mkdir()
     result = cli(["init"], cwd=project)
@@ -43,7 +43,7 @@ def test_init_scaffolds_the_full_design_section_6_tree(tmp_path: Path, cli) -> N
         )
     for retired in ("automations", "scripts", "helpers"):
         assert not (project / retired).exists(), (
-            f"{retired}/ is a RETIRED per-kind tree (MILESTONES M15) -- must not be scaffolded"
+            f"{retired}/ is a RETIRED per-kind tree -- must not be scaffolded"
         )
 
 
@@ -100,8 +100,8 @@ def test_validate_json_clean_bundle(bundle_dir: Path, cli) -> None:
 def test_validate_json_reports_findings_with_stable_schema(
     tmp_path: Path, cli, registry_snapshot_json
 ) -> None:
-    # M8 test 3: `hassle validate --json` is the shared contract with the VS
-    # Code extension's Problems-pane integration -- one JSON object with a
+    # `hassle validate --json` is the shared contract with the VS Code
+    # extension's Problems-pane integration -- one JSON object with a
     # `findings` array, each Finding surfacing exactly the fields the
     # extension maps to a `vscode.Diagnostic` (file/line/severity/code/
     # message/fix), snapshot-tested on both sides.
@@ -214,11 +214,11 @@ def test_stubs_generates_pyi_files(bundle_dir: Path, cli) -> None:
     # methods on each domain's entity class -- there is no separate
     # services.pyi artifact (DESIGN §9.2/§5.2), just entities.pyi.
     #
-    # M8 layer-1 fix: the stub must live at `typings/hassle/registry/__init__.pyi`
-    # (a pyright custom-stubPath location), NOT `.hassle/entities.pyi` -- the
+    # The stub must live at `typings/hassle/registry/__init__.pyi` (a
+    # pyright custom-stubPath location), NOT `.hassle/entities.pyi` -- the
     # latter is not on any import path pyright resolves `hassle.registry` to,
-    # so a real editor never picked up the generated types at all (M3's own
-    # `test_registry_stubs_pyright.py` proves the correct placement/config;
+    # so a real editor never picked up the generated types at all
+    # (`test_registry_stubs_pyright.py` proves the correct placement/config;
     # this command just never matched it -- see docs/ha-api-notes.md).
     stub_path = bundle_dir / "typings" / "hassle" / "registry" / "__init__.pyi"
     assert stub_path.is_file()

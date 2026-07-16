@@ -1,5 +1,5 @@
-"""MILESTONES M7 test 2: `test_push_is_plan_plus_confirm` -- push refuses without
-confirmation when deletions are present; `--yes` bypasses.
+"""`test_push_is_plan_plus_confirm` -- push refuses without confirmation
+when deletions are present; `--yes` bypasses.
 """
 
 from __future__ import annotations

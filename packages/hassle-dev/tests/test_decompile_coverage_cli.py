@@ -1,4 +1,4 @@
-"""`hassle-dev decompile-coverage` — machine-readable coverage artifact (M2).
+"""`hassle-dev decompile-coverage` — machine-readable coverage artifact.
 
 Wired into CI as the >= 90% gate: the command analyzes the full fixture corpus,
 writes a JSON artifact listing per-fixture `raw_*` node counts, and exits

@@ -1,19 +1,19 @@
 """The permanent pull -> plan-noop invariant gate (docs/ha-api-notes.md §23).
 
 Seeds every `fixtures/configs/*.json` corpus object into a fresh `FakeBackend`
-(keyed exactly like the M0 IR corpus loader does -- `hassle-core/tests/_corpus.py`'s
+(keyed exactly like the IR corpus loader does -- `hassle-core/tests/_corpus.py`'s
 filename convention, reimplemented here since cross-package test imports aren't
 wired up in this repo), runs the REAL CLI's `hassle pull` then `hassle plan`
 against it, and asserts every resulting entry is `noop` or an `update` that
 `is_modernization_only_diff` accepts (DESIGN §8.2's one-time legacy-schema
-exception, MILESTONES M7 test 4b) -- **zero** `conflict`, **zero** plain
-(non-modernization) `update`, **zero** `delete`/`create`/`adopt`/`refresh`
-survives past the first pull's manifest write.
+exception) -- **zero** `conflict`, **zero** plain (non-modernization)
+`update`, **zero** `delete`/`create`/`adopt`/`refresh` survives past the
+first pull's manifest write.
 
-Plus two focused variants named in the task: a mode-less automation, and the
-legacy `platform:` fixture (must be modernization-labeled, not noop -- it's a
+Plus two focused variants: a mode-less automation, and the legacy
+`platform:` fixture (must be modernization-labeled, not noop -- it's a
 whole-object `raw_automation` fallback whose stored form pre-dates HA's
-`action:`/`actions:` normalization, DESIGN §7.3/§8.2, MILESTONES M2 test 1).
+`action:`/`actions:` normalization, DESIGN §7.3/§8.2).
 """
 
 from __future__ import annotations

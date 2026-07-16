@@ -1,9 +1,9 @@
 """`hassle run` without `--live` runs on the simulator (DESIGN §10.4 paragraph 5);
 `--live` is covered by the one env-gated integration test
-(tests/integration/test_run_live.py, MILESTONES M7 test 5). This file covers
-the simulator path (FakeBackend-adjacent, no network) and the live-mode
-plumbing that CAN be unit tested: skip_condition default, shadow id shape,
-and cleanup-on-error being wired through a fake "live session" seam.
+(tests/integration/test_run_live.py). This file covers the simulator path
+(FakeBackend-adjacent, no network) and the live-mode plumbing that CAN be
+unit tested: skip_condition default, shadow id shape, and cleanup-on-error
+being wired through a fake "live session" seam.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def test_shadow_id_is_hash_derived_and_prefixed() -> None:
 
     shadow_id = shadow_automation_id("automation:hall_light_on_motion")
     assert shadow_id.startswith("hassle_shadow_")
-    # Deterministic (R8): same object key -> same shadow id.
+    # Deterministic/byte-stable: same object key -> same shadow id.
     assert shadow_id == shadow_automation_id("automation:hall_light_on_motion")
 
 
@@ -136,9 +136,9 @@ def test_live_session_cleans_up_shadow_on_success(fake_backend) -> None:
 
 
 class _FakeClock:
-    """Deterministic clock/sleep for `stream_trace`'s bounded poll (R8: no
-    real wall-clock waits in tests) -- `sleep()` just advances the fake
-    clock's `now` rather than actually blocking."""
+    """Deterministic clock/sleep for `stream_trace`'s bounded poll (no real
+    wall-clock waits in tests) -- `sleep()` just advances the fake clock's
+    `now` rather than actually blocking."""
 
     def __init__(self) -> None:
         self.now = 0.0
@@ -153,8 +153,8 @@ class _FakeClock:
 
 
 def test_stream_trace_polls_until_trace_appears() -> None:
-    """CI regression (coordinator finding): `trace/list` racing HA's async
-    trace persistence used to make `get_trace_fn` return `{}` once and
+    """CI regression: `trace/list` racing HA's async trace persistence used
+    to make `get_trace_fn` return `{}` once and
     `stream_trace` accepted that immediately, so a live run silently rendered
     no trace at all even though one showed up moments later. A fake
     `get_trace_fn` that returns `{}` for the first few calls then a real
@@ -211,9 +211,8 @@ def test_stream_trace_gives_up_after_poll_timeout_returns_empty() -> None:
 
 def test_render_trace_timeline_lists_step_paths() -> None:
     """DESIGN §10.4 point 3: a step-by-step timeline, not a raw dict repr.
-    Structural assertion (a step path like `action/0` appears), matching the
-    coordinator's ask to assert on the rendered structure, not just the word
-    'trace'."""
+    Structural assertion (a step path like `action/0` appears), not just
+    the word 'trace'."""
     from hassle_cli.run_live import render_trace_timeline
 
     trace = {
@@ -242,12 +241,12 @@ def test_render_trace_timeline_empty_steps_says_so() -> None:
 
 
 def test_render_trace_timeline_failed_conditions_has_no_action_step() -> None:
-    """Round-3 coordinator finding: the live integration test's condition
-    gated on an entity left at HA's own default state, so the run always hit
-    `failed_conditions` -- the trace WAS real, just never reached `action/0`.
-    Pins the rendering shape a `failed_conditions` run actually produces
-    (M0.V §7 capture: `trigger` + `condition/0` + `condition/0/entity_id/0`,
-    no `action/*` steps at all) so the integration test's phase-1 assertions
+    """The live integration test's condition gated on an entity left at HA's
+    own default state, so the run always hit `failed_conditions` -- the
+    trace WAS real, just never reached `action/0`. Pins the rendering shape
+    a `failed_conditions` run actually produces (captured shape: `trigger` +
+    `condition/0` + `condition/0/entity_id/0`, no `action/*` steps at all)
+    so the integration test's phase-1 assertions
     (`"failed_conditions" in output`, `"action/0" not in output`) are
     verified against real rendering behavior, not just asserted blind."""
     from hassle_cli.run_live import render_trace_timeline

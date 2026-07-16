@@ -1,14 +1,14 @@
-"""Polish-batch item 3: `hassle pull` warns when a REFRESH's splice-append
-path fires for a metaprogrammed (compile-time-loop-generated) object.
+"""`hassle pull` warns when a REFRESH's splice-append path fires for a
+metaprogrammed (compile-time-loop-generated) object.
 
-Evidence (verified in session): splicing a UI edit for an object that only
-exists via a compile-time `for` loop has no single literal statement to
-replace, so `SplicingSourceWriter.splice_object` appends the refreshed
-definition standalone -- the very next compile then raises
-`DuplicateObjectError` (the loop iteration and the appended def both declare
-the same id). This test pins the pull-time warning that explains the
-situation and points at the reconcile flow BEFORE that failure surprises the
-user on their next `hassle validate`/`hassle test`.
+Splicing a UI edit for an object that only exists via a compile-time `for`
+loop has no single literal statement to replace, so
+`SplicingSourceWriter.splice_object` appends the refreshed definition
+standalone -- the very next compile then raises `DuplicateObjectError` (the
+loop iteration and the appended def both declare the same id). This test
+pins the pull-time warning that explains the situation and points at the
+reconcile flow BEFORE that failure surprises the user on their next
+`hassle validate`/`hassle test`.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def test_pull_warns_on_loop_splice_reconcile(
     )
 
     result = cli(["pull", "--allow-dirty"], cwd=git_repo)
-    # The append lands (I6: nothing lost) but the bundle now has a genuine
+    # The append lands (nothing lost) but the bundle now has a genuine
     # duplicate id -- pull's post-write compile backstop catches that (exit
     # 1), with framing that recognizes this as the EXPECTED consequence of
     # the reconcile warning above, never "a bug in Hassle's decompiler".
@@ -79,7 +79,7 @@ def test_pull_warns_on_loop_splice_reconcile(
     assert "this is expected, not a hassle bug" in lowered
     assert "bug in hassle's decompiler" not in lowered
 
-    # I6: nothing was lost -- the loop is intact and the UI edit landed,
+    # Nothing was lost -- the loop is intact and the UI edit landed,
     # appended under the marker, despite the post-write compile failing.
     after = (git_repo / "rooms.py").read_text(encoding="utf-8")
     assert "for room in ROOMS:" in after

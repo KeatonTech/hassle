@@ -1,4 +1,4 @@
-"""MILESTONES M7 test 4b (M2 review finding): `test_plan_labels_modernization_diffs`.
+"""`test_plan_labels_modernization_diffs`.
 
 A legacy-form remote object (inner `platform:`/scalar `delay:`, or outer
 singular `trigger:`/`action:` + `service:`) adopted then re-pushed produces a

@@ -1,6 +1,6 @@
-"""MILESTONES M17: `hassle doctor` reports the bundle's uv-project scaffold
-status -- three offline, filesystem-only checks (no `uv`/subprocess spawned
-by the check itself): pyproject present? sources path resolves? summary note.
+"""`hassle doctor` reports the bundle's uv-project scaffold status -- three
+offline, filesystem-only checks (no `uv`/subprocess spawned by the check
+itself): pyproject present? sources path resolves? summary note.
 """
 
 from __future__ import annotations

@@ -1,11 +1,11 @@
-"""Regression for a real bug found while fixing M10 round 4 (docs/
-ha-api-notes.md §26.10): `run_goldens`'s drift check used plain `!=` on
-parsed JSON structures, which is blind to an `int`-vs-`float` difference
-(`{"min": 0} == {"min": 0.0}` is `True` in Python) -- so a compiler change
-that turned `0` into `0.0` was reported as "up to date" by both the
-check-only path and `--update` (neither wrote anything, since neither
-believed anything had drifted). Golden files exist to catch exactly this
-kind of byte-level drift (R3), so the comparison must be type-strict.
+"""Regression (docs/ha-api-notes.md §26.10): `run_goldens`'s drift check
+used plain `!=` on parsed JSON structures, which is blind to an
+`int`-vs-`float` difference (`{"min": 0} == {"min": 0.0}` is `True` in
+Python) -- so a compiler change that turned `0` into `0.0` was reported as
+"up to date" by both the check-only path and `--update` (neither wrote
+anything, since neither believed anything had drifted). Golden files exist
+to catch exactly this kind of byte-level drift, and are regenerated (never
+hand-edited), so the comparison must be type-strict.
 """
 
 from __future__ import annotations

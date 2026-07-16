@@ -1,5 +1,5 @@
-"""Reviewer follow-up (task #15, PR #4): `hassle validate` catches `CompileError`
-and reports it cleanly (what/where/fix, exit 1, plain + `--json`) -- see
+"""`hassle validate` catches `CompileError` and reports it cleanly
+(what/where/fix, exit 1, plain + `--json`) -- see
 `hassle_cli.cli.validate` and `test_validate_template_helper_compile_error.py`.
 
 But `_build_plan` (shared by `hassle plan`, `hassle status`, and `hassle push`)

@@ -1,7 +1,7 @@
-"""M12 test 4 -- `hassle pull` emits the `CATEGORY = "..."` global when it
-CREATES a brand-new category file, is byte-stable across a re-pull, and the
-splicer's REFRESH/DROP never duplicate or move an existing `CATEGORY` line
-(DESIGN §7.3's placement, MILESTONES M12).
+"""`hassle pull` emits the `CATEGORY = "..."` global when it CREATES a
+brand-new category file, is byte-stable across a re-pull, and the splicer's
+REFRESH/DROP never duplicate or move an existing `CATEGORY` line (DESIGN
+§7.3's placement).
 """
 
 from __future__ import annotations

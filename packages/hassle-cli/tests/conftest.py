@@ -1,10 +1,11 @@
-"""Shared fixtures for the M7 CLI test suite.
+"""Shared fixtures for the CLI test suite.
 
-Everything here runs against `hassle.backend.fake.FakeBackend` (R2: no network
-in unit tests) and `click.testing.CliRunner` for exit-code + output-snapshot
-assertions. `run_cli` always passes `NO_COLOR=1` (the milestone's plain-text
-capture mode, R6: snapshots are the UX contract) unless a test explicitly
-wants to check color/rich behavior.
+Everything here runs against `hassle.backend.fake.FakeBackend` (unit tests
+never touch the network) and `click.testing.CliRunner` for exit-code +
+output-snapshot assertions. `run_cli` always passes `NO_COLOR=1` (a
+plain-text capture mode; error messages state what/where/fix and snapshots
+are the UX contract) unless a test explicitly wants to check color/rich
+behavior.
 """
 
 from __future__ import annotations

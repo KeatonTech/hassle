@@ -1,10 +1,9 @@
-"""MILESTONES M10 test 5 (part 2/2) — ignore-glob interplay for the
-config-entry template-helper domain.
+"""Ignore-glob interplay for the config-entry template-helper domain.
 
 `hassle_cli.ignore_filter` is a pure string-glob-on-object-key module (see
 `test_ignore_filtering.py`'s module docstring); a `"template_number:*"` glob
 works identically to a storage-helper glob with zero code changes -- these
-tests are the M10 proof of that, mirroring the storage-helper cases exactly.
+tests prove that, mirroring the storage-helper cases exactly.
 """
 
 from __future__ import annotations

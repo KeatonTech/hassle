@@ -1,7 +1,7 @@
 """`hassle init` (and `hassle pull`, when it creates the scaffold dirs) writes
 `AGENTS.md` (generated, DESIGN §12) plus `docs/DSL.md`/`docs/COOKBOOK.md`
-(the bundle's own copy of the reference docs -- MILESTONES M9 deliverable
-1). All three are idempotent to re-run but AGENTS.md/docs/*.md are
+(the bundle's own copy of the reference docs). All three are idempotent to
+re-run but AGENTS.md/docs/*.md are
 REGENERATED every time (unlike lib/README.md/tests/README.md, which are
 user territory) since they are wholly generated content the user never
 hand-edits (the module docstring says so) -- mirrors `.vscode/settings.json`

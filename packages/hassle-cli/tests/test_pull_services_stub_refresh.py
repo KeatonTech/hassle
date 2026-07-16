@@ -1,7 +1,6 @@
-"""MILESTONES M18: `typings/hassle/services.pyi` is generated alongside the
-entities stub -- same write path, both `hassle stubs` and `hassle pull`'s
-auto-refresh emit it (mirrors `test_pull_stubs_refresh.py`'s entities-stub
-coverage exactly).
+"""`typings/hassle/services.pyi` is generated alongside the entities stub --
+same write path, both `hassle stubs` and `hassle pull`'s auto-refresh emit
+it (mirrors `test_pull_stubs_refresh.py`'s entities-stub coverage exactly).
 """
 
 from __future__ import annotations

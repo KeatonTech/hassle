@@ -1,9 +1,8 @@
-"""Regression for the BrandtCamp field failure (2026-07-13): `hassle pull`
-REWROTE an existing `misc.py` to contain ONLY the newly-adopted objects,
-silently dropping every pre-existing uncategorized object in that file while
-the manifest kept tracking them -- so the very next `hassle plan` proposed a
-DELETE for each dropped object against live HA (I6 violation: local content
-silently lost).
+"""Regression: `hassle pull` REWROTE an existing `misc.py` to contain ONLY
+the newly-adopted objects, silently dropping every pre-existing
+uncategorized object in that file while the manifest kept tracking them --
+so the very next `hassle plan` proposed a DELETE for each dropped object
+against live HA (no local or UI edit may ever be silently lost).
 
 Root cause: `apply_pull_with_decompiler` batches every ADOPT destined for one
 file into a single decompiled module and writes it via
@@ -11,10 +10,9 @@ file into a single decompiled module and writes it via
 a silent clobber for an ALREADY-EXISTING one (the shared uncategorized
 `misc.py` is exactly the file new UI objects keep adopting into forever).
 
-Contract under test (R1: these tests were committed red, before the fix):
-after a pull that adopts new objects into an existing file, every previously
-present object must still compile out of the bundle, and `hassle plan` must
-propose zero deletes.
+Contract under test: after a pull that adopts new objects into an existing
+file, every previously present object must still compile out of the bundle,
+and `hassle plan` must propose zero deletes.
 """
 
 from __future__ import annotations
@@ -24,7 +22,7 @@ from pathlib import Path
 
 from hassle.compiler import compile_bundle
 
-PRE_EXISTING_AUTOMATION_ID = "1769914409190"  # "Everything Off", from the field report
+PRE_EXISTING_AUTOMATION_ID = "1769914409190"  # "Everything Off"
 
 
 def _commit_all(bundle: Path, message: str) -> None:
@@ -35,9 +33,9 @@ def _commit_all(bundle: Path, message: str) -> None:
 
 
 def _seed_pre_existing_objects(backend) -> list[str]:
-    """Seed the shapes from the field report: uncategorized automations, a
-    script, and a storage helper -- all of which place into the shared
-    root-level `misc.py`. Returns their object keys."""
+    """Seed uncategorized automations, a script, and a storage helper -- all
+    of which place into the shared root-level `misc.py`. Returns their
+    object keys."""
     backend.create(
         "automation",
         {
@@ -124,8 +122,8 @@ def test_pull_adopt_into_existing_misc_preserves_prior_objects(
     assert "input_boolean:vacation_mode" in compiled_keys, sorted(compiled_keys)
     assert "automation:1769914409999" in compiled_keys, sorted(compiled_keys)
 
-    # And the very next plan proposes ZERO deletes (the field failure's blast
-    # radius: 13 DELETEs against live HA). The one `create` for the bundle
+    # And the very next plan proposes ZERO deletes (the bug's blast radius
+    # was 13 DELETEs against live HA). The one `create` for the bundle
     # fixture's own hallway.py automation (local-only, never pushed to the
     # FakeBackend) is expected and unrelated -- the contract here is that no
     # pulled-then-dropped object shows up as a DELETE.

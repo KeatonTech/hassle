@@ -1,15 +1,15 @@
-"""CI-stabilization follow-up (coordinator finding, docs/ha-api-notes.md §29):
-`hassle run --live` used to silently print "shadow run complete" and nothing
-else when `trace/list` raced HA's async trace persistence and came back empty
--- `execute_live_run` (hassle_cli.commands.run_live_command) never checked
-*why* `result.trace` was falsy, it just skipped the `if result.trace:` block.
+"""Regression (docs/ha-api-notes.md §29): `hassle run --live` used to
+silently print "shadow run complete" and nothing else when `trace/list`
+raced HA's async trace persistence and came back empty -- `execute_live_run`
+(hassle_cli.commands.run_live_command) never checked *why* `result.trace`
+was falsy, it just skipped the `if result.trace:` block.
 
 These are CLI-level tests exercising `execute_live_run` end-to-end (compile ->
 push shadow -> trigger -> trace -> cleanup -> render) against a hand-rolled
 stub backend (not `FakeBackend`, which has no trace/call_service surface --
 those are `DirectBackend`-only, see hassle.backend.fake's docstring) so both
 outcomes -- a trace that eventually shows up, and one that never does -- are
-covered without a real HA connection (R2).
+covered without a real HA connection (unit tests never touch the network).
 """
 
 from __future__ import annotations
@@ -159,7 +159,7 @@ def test_execute_live_run_renders_timeline_once_trace_settles(
     from hassle_cli.commands.run_live_command import execute_live_run
 
     # Shrink the poll interval so this test doesn't take a real 0.5s+ of
-    # wall-clock sleeping (R2: unit tests stay fast) -- still exercises a
+    # wall-clock sleeping (unit tests stay fast) -- still exercises a
     # real multi-poll loop, just with a near-zero interval.
     monkeypatch.setattr(run_live, "DEFAULT_TRACE_POLL_INTERVAL", 0.001)
 
@@ -188,13 +188,13 @@ def test_execute_live_run_renders_timeline_once_trace_settles(
 def test_execute_live_run_uses_bare_automation_id_not_entity_id_for_trace_lookup(
     tmp_path: Path, _registered_stub_backend, monkeypatch
 ) -> None:
-    """Coordinator ask (point 3): rule out "wrong item_id" (e.g. the shadow's
-    full `entity_id` instead of its bare automation id) as an alternate
-    explanation for the empty-trace symptom -- it would ALSO produce an
-    empty `trace/list` and look identical to the settling race. Pin down the
-    exact params `trace/list`/`trace/get` receive against the M0.V capture
-    shape (docs/ha-api-notes.md §7: `domain` + `item_id` + `run_id`, where
-    `item_id` is the automation's own `id`, e.g. `"hassle_skipcond"` -- NOT
+    """Rule out "wrong item_id" (e.g. the shadow's full `entity_id` instead
+    of its bare automation id) as an alternate explanation for the
+    empty-trace symptom -- it would ALSO produce an empty `trace/list` and
+    look identical to the settling race. Pin down the exact params
+    `trace/list`/`trace/get` receive against the captured shape (docs/
+    ha-api-notes.md §7: `domain` + `item_id` + `run_id`, where `item_id` is
+    the automation's own `id`, e.g. `"hassle_skipcond"` -- NOT
     `"automation.hassle_skipcond"`).
 
     Also pins the §29 addendum fix: `automation.trigger`'s service call must

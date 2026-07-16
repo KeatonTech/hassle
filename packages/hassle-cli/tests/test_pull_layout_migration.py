@@ -1,7 +1,6 @@
-"""MILESTONES M15 work item B, tests 5 + 7 -- end-to-end (`hassle pull`):
-migrating an old-layout bundle to the new category-first, root-level layout,
-reporting every move, bumping `bundle_format`, and leaving a NOOP plan +
-byte-stable second pull behind.
+"""End-to-end (`hassle pull`): migrating an old-layout bundle to the
+category-first, root-level layout, reporting every move, bumping
+`bundle_format`, and leaving a NOOP plan + byte-stable second pull behind.
 """
 
 from __future__ import annotations
@@ -27,7 +26,8 @@ def test_pull_migrates_old_layout_preserving_user_content_and_deleting_empty_fil
 
     # The `git_repo` fixture's own seed automation moves from root-level
     # `hallway.py` into the OLD `automations/` tree for this test, alongside
-    # a user comment + a custom def that must survive migration (I6).
+    # a user comment + a custom def that must survive migration (no local
+    # or UI edit is silently lost).
     (git_repo / "hallway.py").unlink()
     (git_repo / "automations").mkdir(exist_ok=True)
     (git_repo / "automations" / "hallway.py").write_text(
@@ -102,9 +102,9 @@ def take_out_trash():
 def test_pull_reports_an_orphaned_category_global_in_a_kept_old_file(
     git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
-    """Polish-batch item 4(b): a kept old-tree file that retains an M12-era
-    `CATEGORY = "..."` global (now inert under the new root-level-only
-    `category_shaped_stem`) is called out explicitly in pull's output."""
+    """A kept old-tree file that retains an old-layout `CATEGORY = "..."`
+    global (now inert under the root-level-only `category_shaped_stem`) is
+    called out explicitly in pull's output."""
     _backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
 
@@ -143,9 +143,9 @@ def hall_light_on_motion():
 
 
 def test_plan_is_noop_after_migration(git_repo: Path, cli, fake_backend, toml_writer) -> None:
-    """MILESTONES M15: migration only moves source, never config -- the very
-    next `hassle push --yes` (a create-if-needed apply) must not re-create or
-    duplicate anything the bundle already pushed before migrating."""
+    """Migration only moves source, never config -- the very next `hassle
+    push --yes` (a create-if-needed apply) must not re-create or duplicate
+    anything the bundle already pushed before migrating."""
     backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
 

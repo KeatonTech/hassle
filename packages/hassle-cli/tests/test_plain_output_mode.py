@@ -1,5 +1,6 @@
 """Rich output must have a plain-text capture mode for snapshot tests
-(NO_COLOR/--plain); snapshots are the UX contract (R6 applies to error output).
+(NO_COLOR/--plain); snapshots are the UX contract, including error output
+(what/where/fix).
 """
 
 from __future__ import annotations

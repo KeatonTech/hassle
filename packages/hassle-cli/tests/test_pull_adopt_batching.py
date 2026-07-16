@@ -1,7 +1,7 @@
-"""Regression for the owner-smoke-test clobber: adopting N objects of one kind
-wrote each to the SAME default file via write_whole_file, so only the last
-survived (101 adopted, 3 persisted). Adopts targeting one destination file
-must be batched into a single multi-object module write.
+"""Regression: adopting N objects of one kind wrote each to the SAME default
+file via write_whole_file, so only the last survived (101 adopted, 3
+persisted). Adopts targeting one destination file must be batched into a
+single multi-object module write.
 """
 
 from __future__ import annotations

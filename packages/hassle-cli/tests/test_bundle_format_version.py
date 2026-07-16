@@ -1,11 +1,10 @@
-"""MILESTONES M9 test 4: bundle-format version policy.
+"""Bundle-format version policy.
 
-`hassle.toml` carries `bundle_format = <int>` (the M9-renamed field --
-`hassle_cli.config.BundleConfig` previously called this `format_version`;
-see the M9 report for the rename note). The CLI must refuse to operate on a
-bundle whose major version is NEWER than what this CLI build understands,
-with a clear upgrade error, and must not perform any partial operation
-(exit before touching the bundle/manifest/HA at all).
+`hassle.toml` carries `bundle_format = <int>` (`hassle_cli.config.BundleConfig`
+previously called this field `format_version`). The CLI must refuse to
+operate on a bundle whose major version is NEWER than what this CLI build
+understands, with a clear upgrade error, and must not perform any partial
+operation (exit before touching the bundle/manifest/HA at all).
 """
 
 from __future__ import annotations

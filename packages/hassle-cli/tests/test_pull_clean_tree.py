@@ -1,6 +1,6 @@
-"""MILESTONES M7 test 3: `test_pull_requires_clean_tree` -- dirty repo -> refusal
-with guidance; `--allow-dirty` works; non-git directory -> one-time warning,
-still functions.
+"""`test_pull_requires_clean_tree` -- dirty repo -> refusal with guidance;
+`--allow-dirty` works; non-git directory -> one-time warning, still
+functions.
 """
 
 from __future__ import annotations
