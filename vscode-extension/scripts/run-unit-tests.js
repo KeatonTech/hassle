@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Cross-Node-version-safe wrapper for `npm run test:unit` (polish-batch
- * follow-up: CI's `.github/workflows/node.yml` pins Node 20, which does not
- * exist yet -- `--no-experimental-strip-types` was added in Node 22.6.0;
+ * Cross-Node-version-safe wrapper for `npm run test:unit`
+ * (CI's `.github/workflows/node.yml` pins Node 20 --
+ * `--no-experimental-strip-types` was added in Node 22.6.0;
  * Node 20 exits immediately with "node: bad option: --no-experimental-
  * strip-types" (verified locally via `nvm use 20`), while omitting the flag
  * on Node >= 22.6 lets Node's own native TypeScript type-stripping (default

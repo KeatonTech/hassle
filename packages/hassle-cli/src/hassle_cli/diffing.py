@@ -1,9 +1,8 @@
 """3-way DSL-level diff rendering for conflicts (DESIGN §8.2: "shown with a
-3-way diff of the *decompiled DSL*, not JSON") and modernization-diff labeling
-(MILESTONES M7 test 4b, the M2 review finding).
+3-way diff of the *decompiled DSL*, not JSON") and modernization-diff labeling.
 
 Both features share the same building block: decompile a raw HA config dict
-(local/remote/base) back to its DSL source text via M2's decompiler, then
+(local/remote/base) back to its DSL source text via the decompiler, then
 diff the texts. Decompiling (not comparing JSON) is what makes a schema-only
 difference (legacy singular `trigger:`/`service:` vs modern plural
 `triggers:`/`action:`) invisible in the diff -- both forms decompile to
@@ -47,7 +46,7 @@ def is_modernization_only_diff(
     object_key: str, kind: str, local: dict[str, Any] | None, remote: dict[str, Any] | None
 ) -> bool:
     """True if `local` and `remote` differ only in legacy-vs-modern schema
-    shape, not in any semantic way (MILESTONES M7 test 4b).
+    shape, not in any semantic way.
 
     Compares the *decompiled DSL* of both sides rather than the raw JSON:
     the compiler always emits the modern inner discriminator (`trigger:`/

@@ -1,17 +1,19 @@
-"""The agent-acceptance harness (MILESTONES M9 test 3, DESIGN §12: "a
-scripted harness gives a fresh model session the pulled sample bundle +
-AGENTS.md only, and 10 representative tasks ... >= 8/10 must produce changes
-that pass `hassle validate && hassle test` without human help").
+"""The agent-acceptance harness (DESIGN §12): a harness that generates task
+prompts and checks results for evaluating code-generation quality against the
+generated docs -- "a scripted harness gives a fresh model session the pulled
+sample bundle + AGENTS.md only, and 10 representative tasks ... >= 8/10 must
+produce changes that pass `hassle validate && hassle test` without human
+help".
 
 **This module builds the harness; it does not run any model session.**
-Spawning fresh model sessions is the orchestrator's job (a capability this
-module deliberately does not have and must not grow) -- everything here is
-pure/offline: emitting the 10 task prompts for a given bundle, and
+Spawning fresh model sessions is a separate driver script's job (a capability
+this module deliberately does not have and must not grow) -- everything here
+is pure/offline: emitting the 10 task prompts for a given bundle, and
 mechanically scoring the *result* of a session against that bundle by
 running `hassle validate` and `hassle test` (as real subprocesses, exactly
 what a human/agent would run) and reporting pass/fail.
 
-## How the orchestrator runs this (one session per task)
+## How a driver script runs this (one session per task)
 
 For each of the 10 tasks `emit_tasks(bundle_dir)` returns:
 
@@ -28,7 +30,7 @@ For each of the 10 tasks `emit_tasks(bundle_dir)` returns:
    session leave the bundle in a state where `hassle validate` and
    `hassle test` both succeed? A session that produces syntactically valid,
    green-testing nonsense that doesn't actually satisfy the task's intent
-   will still mechanically "pass" here -- the milestone's `>= 8/10` bar
+   will still mechanically "pass" here -- the acceptance bar's `>= 8/10`
    also requires a human (or a second, independent model pass) to spot-
    check that the diff actually does what the task asked; `score_task`
    narrows that review to "does this candidate even meet the floor", not a
@@ -44,7 +46,7 @@ For each of the 10 tasks `emit_tasks(bundle_dir)` returns:
    goes green".
 
 `hassle-dev acceptance-tasks --bundle DIR [--json]` is the CLI entry point
-an orchestrator script shells out to for step 1's prompt text (see
+a driver script shells out to for step 1's prompt text (see
 `hassle_dev.cli`).
 
 ## The bundle these prompts are written against
@@ -106,7 +108,7 @@ def _bundle_display_name(bundle_dir: Path) -> str:
 
 def emit_tasks(bundle_dir: Path) -> list[AcceptanceTask]:
     """Build the 10 representative task prompts for ``bundle_dir``
-    (MILESTONES M9 test 3's example list, made concrete against this
+    (DESIGN §12's example list, made concrete against this
     specific bundle's own files/entities so a session has something real to
     act on -- not a generic placeholder).
 

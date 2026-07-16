@@ -29,7 +29,7 @@ class InvalidRunTargetError(ValueError):
 
 class UnknownRunTargetError(KeyError):
     """`hassle run <target>` named a function not found in the compiled
-    bundle (R6: what/where/fix -- M9 error-message audit finding)."""
+    bundle (error messages state what/where/fix)."""
 
     def __init__(self, function_name: str, known: list[str]) -> None:
         self.function_name = function_name

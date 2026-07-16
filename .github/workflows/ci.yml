@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS + Linux are the two target platforms (MILESTONES M7).
+        # macOS + Linux are the two target platforms.
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +54,7 @@ jobs:
       - name: Goldens unchanged
         run: uv run hassle-dev goldens
 
-      - name: Decompiler DSL-coverage gate (>= 90%, M2)
+      - name: Decompiler DSL-coverage gate (>= 90%)
         run: uv run hassle-dev decompile-coverage --out decompile-coverage.json
 
       - name: Upload decompiler coverage artifact
@@ -64,18 +64,17 @@ jobs:
           name: decompile-coverage-${{ matrix.os }}
           path: decompile-coverage.json
 
-      - name: Docs gate (docs/DSL.md + docs/COOKBOOK.md unchanged, MILESTONES M9)
+      - name: Docs gate (docs/DSL.md + docs/COOKBOOK.md unchanged)
         run: uv run hassle-dev docs
 
   # ---------------------------------------------------------------------------
-  # M6 integration: the same integration-marked suite against real Home
-  # Assistant, on both the `stable` and `dev` images (MILESTONES M6 "Done
-  # when"). Docker (blocked in the M0.V sandbox) runs here; the tests target any
+  # Integration: the same integration-marked suite against real Home
+  # Assistant, on both the `stable` and `dev` images. The tests target any
   # instance via HASSLE_TEST_HA_URL / HASSLE_TEST_HA_TOKEN, so this is the same
   # suite a developer runs against a local pip-installed HA.
   #
-  # M7 extends this job (not a new one): `packages/hassle-cli/tests/integration`
-  # is the ONE `run --live` test (MILESTONES M7 test 5), gated the same way and
+  # This job also covers `packages/hassle-cli/tests/integration`,
+  # the ONE `run --live` test, gated the same way and
   # run in the same step so it shares the already-running HA container.
   # ---------------------------------------------------------------------------
   integration:
@@ -122,13 +121,14 @@ jobs:
           YAML
           echo "[]" > ha-config/automations.yaml
           echo "{}" > ha-config/scripts.yaml
-          # M10 assumption (unverified in this sandbox, no Docker -- CI is the
-          # authoritative check, docs/ha-api-notes.md §26.0): `template:` is a
+          # Assumption (CI is the authoritative check, docs/ha-api-notes.md
+          # §26.0): `template:` is a
           # config-entry-capable integration, and HA generally registers a
           # `config_flow: true` integration's config_entries/flow handler from
           # its manifest regardless of YAML config presence, so no
-          # configuration.yaml stanza should be needed for M10's tests to reach
-          # `config_entries/flow/create(handler="template")`. If the M10
+          # configuration.yaml stanza should be needed for the template-helper
+          # integration tests to reach
+          # `config_entries/flow/create(handler="template")`. If this
           # integration job fails with "unknown handler" / "integration not
           # found", add a bare `template:` key here and update
           # docs/ha-api-notes.md §26.0 with the correction.

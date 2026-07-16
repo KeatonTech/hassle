@@ -1,7 +1,7 @@
 """Corpus discovery + construct-coverage analysis for `hassle-dev corpus-stats`.
 
-This enforces the M0 corpus contract in CI: at least 40 fixtures, and every
-required HA construct represented at least once (MILESTONES M0 deliverables).
+This enforces the corpus contract in CI: at least 40 fixtures, and every
+required HA construct represented at least once.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ HELPER_DOMAINS: tuple[str, ...] = (
 
 MIN_FIXTURES = 40
 
-# Required construct coverage (the M0 deliverable checklist).
+# Required construct coverage (the corpus deliverable checklist).
 REQUIRED_TRIGGERS: tuple[str, ...] = (
     "state",
     "numeric_state",

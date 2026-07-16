@@ -1,10 +1,11 @@
-"""`hassle-dev acceptance-bundle --out DIR` (MILESTONES M9 test 3, real gate):
+"""`hassle-dev acceptance-bundle --out DIR`:
 generate the "sample house" bundle that `hassle_dev.acceptance.emit_tasks`'s
 10 task prompts are written against.
 
 ## Why this exists
 
-MILESTONES M9 test 3 requires giving a fresh model session "the pulled sample
+The agent-acceptance harness (see `hassle_dev.acceptance`) requires giving a
+fresh model session "the pulled sample
 bundle + AGENTS.md only" plus the 10 prompts from `hassle-dev acceptance-tasks`.
 Those prompts presuppose a specific, coherent "sample house" (a hallway motion
 automation controlling `light.hallway`, an `input_boolean.guest_mode` helper, a
@@ -69,23 +70,24 @@ there is nothing for this generator to pre-seed; the bundle just needs to
 otherwise validate clean so the session's self-inflicted typo is the only
 finding it will see. No special seeding needed beyond a normal clean bundle.
 
-## Determinism (R8)
+## Determinism (byte-stable output; no wall clock in core logic)
 
 `generate_sample_bundle(out_dir)` is byte-for-byte stable across runs given
 the same `out_dir` basename: no wall-clock, no randomness anywhere in the
 seed data itself. The one wall-clock touchpoint in the pipeline is
 `hassle pull`'s own `manifest.lock` `synced_at` field (`hassle_cli.manifest_io
-.now_iso()`, explicitly the CLI-layer's one documented R8 exception -- core
+.now_iso()`, explicitly the CLI-layer's one documented exception to that rule
+-- core
 logic never calls it). This generator normalizes that one field to a fixed
 sentinel timestamp after the real pull completes (a post-processing
 normalization of the generator's OWN output, not a hand-edit of "a bundle" in
-the R3/golden-files sense) so the emitted tree is byte-identical seed-to-seed;
+the golden-files sense) so the emitted tree is byte-identical seed-to-seed;
 `__pycache__/` directories the loader's import machinery leaves behind are
 also removed for the same reason (they are already `.gitignore`d,
 docs/`hassle_cli.git_support.GITIGNORE_CONTENT`, and are not part of what a
 git clone of a real pulled bundle would ever contain).
 
-MILESTONES M17 adds a second such normalization: `hassle pull` now scaffolds
+A second normalization exists for the same reason: `hassle pull` scaffolds
 `pyproject.toml` (bundle-as-uv-project), with a `[tool.uv.sources]` entry
 pointing at whatever toolchain checkout auto-detection resolves ON THE
 MACHINE RUNNING THIS GENERATOR (real, useful behavior for an actual user --
@@ -113,7 +115,7 @@ _SENTINEL_SYNCED_AT = "1970-01-01T00:00:00Z"
 
 # The registry snapshot every seeded object is drawn against: the project's
 # existing canonical "home" fixture (`fixtures/registry/home.json`), already
-# used across M0-M9 as the shared realistic-house registry -- reused here
+# used throughout the test suite as the shared realistic-house registry -- reused here
 # rather than inventing a parallel one, so `light.hallway`, `light.living_room`,
 # `binary_sensor.hall_motion`, `input_boolean.guest_mode`, `sun.sun`, and the
 # `notify`/`light` services below are all real, already-verified entries, not
@@ -302,14 +304,14 @@ def test_hallway_light_suppressed_during_the_day():
     sim.assert_not_called("light.turn_on")
 '''
 
-_TEST_SEEDED_BUG = '''"""MILESTONES M9 test 3's `diagnose_failing_test` target.
+_TEST_SEEDED_BUG = '''"""The `diagnose_failing_test` acceptance-task target.
 
 `landing_light_on_motion` (automations/misc.py) has a deliberate logic bug: its
 holiday-mode condition is backwards (fires ONLY when holiday mode is ON,
 instead of being suppressed by it). This test encodes the INTENDED behavior --
 it currently fails for that reason, by design (see `hassle_dev.bundle_gen`'s
-module docstring, "Scoring nuance: diagnose_failing_test starts red BY
-DESIGN"). `xfail(strict=True)`: a plain `hassle test` run still exits 0 (the
+module docstring, "Scoring nuance: diagnose_failing_test starts red by
+design"). `xfail(strict=True)`: a plain `hassle test` run still exits 0 (the
 other 9 acceptance tasks' scoring floor is untouched by this pre-existing,
 out-of-scope bug), but this test FAILING TO FAIL (an XPASS) after a fix is
 applied without removing the marker is itself reported as a failure -- so the
@@ -374,11 +376,11 @@ def _normalize_for_determinism(bundle_root: Path) -> None:
         ]
         toml_path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
 
-    # MILESTONES M17: `hassle pull` (driven above) scaffolds `pyproject.toml`
+    # `hassle pull` (driven above) scaffolds `pyproject.toml`
     # with a `[tool.uv.sources]` entry pointing at whatever toolchain checkout
     # auto-detection resolves on THIS machine -- for a real user that's the
     # useful, intended behavior, but it would make this generator's output
-    # embed a machine/checkout-specific absolute path (R8/M9 test 3's
+    # embed a machine/checkout-specific absolute path (this generator's
     # determinism precondition: byte-identical across machines and runs).
     # Rewritten here to the bare-dependency shape, same
     # normalize-after-the-real-pull convention as `ha_url` above (rather than
@@ -439,9 +441,8 @@ def generate_sample_bundle(out_dir: Path, *, repo_root: Path | None = None) -> N
         # A freshly-generated sample bundle is never "old-layout" (nothing
         # exists on disk before this pull runs at all) -- it should start at
         # THIS CLI build's current bundle_format directly, exactly like a
-        # real `hassle init` would (MILESTONES M15 bumped this to 2), not the
-        # pre-M15 hardcoded `1` that would otherwise misrepresent a fresh
-        # bundle as one needing migration.
+        # real `hassle init` would, not a hardcoded `1` that would otherwise
+        # misrepresent a fresh bundle as one needing migration.
         (out_dir / "hassle.toml").write_text(
             f'ha_url = "fake://{token}"\nbundle_format = {CURRENT_BUNDLE_FORMAT}\nmirror = false\n',
             encoding="utf-8",

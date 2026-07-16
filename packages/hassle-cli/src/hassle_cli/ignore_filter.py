@@ -7,9 +7,9 @@ deliberate exception.
 Filtering happens **before** `hassle.sync.plan.compute_plan` ever runs (the CLI
 calls `apply_ignore_globs` on the freshly-compiled local objects and the
 freshly-fetched remote objects, then feeds the *filtered* maps to
-`compute_plan`) -- the plan engine itself (the SourceWriter/plan seam,
-table-driven) needs no change and stays exactly the shape its own test suite
-pins.
+`compute_plan`) -- the plan engine itself (the frozen `Backend`
+protocol / plan-apply data model, table-driven) needs no change and stays
+exactly the shape its own test suite pins.
 
 Semantics:
 - A key matching an ignore glob is dropped from BOTH `local_objects` and

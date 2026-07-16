@@ -8,7 +8,7 @@ import { DiagnosticsManager } from "../../diagnosticsManager";
 import { setProcessRunnerForTesting } from "../../extension";
 
 /**
- * MILESTONES M8 test 2: `@vscode/test-electron` integration suite.
+ * `@vscode/test-electron` integration suite.
  *
  *   - each command invokes the CLI with correct args (CLI mocked: a fake
  *     `ProcessRunner` is injected via `setProcessRunnerForTesting`, so no
@@ -21,7 +21,7 @@ import { setProcessRunnerForTesting } from "../../extension";
  *
  * Runs inside a real VS Code Extension Host against
  * `src/test/suite/fixtureWorkspace` (a minimal bundle with `hassle.toml`
- * AND a `pyproject.toml` -- polish-batch item 1's fallback chain only takes
+ * AND a `pyproject.toml` -- the CLI fallback chain only takes
  * the `uv run hassle` branch when one is present, so the fixture workspace
  * carries one to pin that branch for the arg-shape assertions below; the
  * no-pyproject bare-`hassle` fallback is exercised separately, against an
@@ -67,7 +67,7 @@ suite("Hassle extension: activation", () => {
     assert.strictEqual(ext!.isActive, true);
   });
 
-  test("registers the full M8 command inventory", async () => {
+  test("registers the full command inventory", async () => {
     const commands = await vscode.commands.getCommands(true);
     for (const cmd of [
       "hassle.pull",
@@ -123,7 +123,7 @@ suite("Hassle extension: commands shell to the CLI with correct args", () => {
   });
 });
 
-suite("Hassle extension: no-pyproject.toml falls back to bare `hassle` (polish-batch item 1)", () => {
+suite("Hassle extension: no-pyproject.toml falls back to bare `hassle`", () => {
   // Exercised directly against `CliRunner` (not through a registered
   // `hassle.*` command) so it doesn't need a SECOND VS Code workspace with
   // no pyproject.toml -- `fixtureWorkspace` itself now carries one (see the

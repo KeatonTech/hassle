@@ -1,4 +1,4 @@
-"""Entry point for the `hassle` console script (MILESTONES M7)."""
+"""Entry point for the `hassle` console script."""
 
 from __future__ import annotations
 
