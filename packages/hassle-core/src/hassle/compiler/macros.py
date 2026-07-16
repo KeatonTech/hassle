@@ -1,4 +1,4 @@
-"""``@macro`` -- compile-time inlining (DESIGN §5.6, MILESTONES M1 test 2).
+"""``@macro`` -- compile-time inlining (DESIGN §5.6).
 
 A macro is *just a Python function* that calls DSL recording verbs
 (``when``/``only_if``/``service``/``delay``/...) in its body. Those verbs
@@ -10,7 +10,7 @@ calls share the same active recorder. ``@macro`` therefore does not need to
 intercept or re-dispatch anything; it exists to:
 
 - mark the function as macro (documentation / introspection -- ``AGENTS.md``
-  and the M9 docs generator can tell a macro from an ordinary helper function),
+  and the docs generator can tell a macro from an ordinary helper function),
 - give a clear, macro-specific error if it is ever called with no recording
   context active at all (a bundle bug: a macro was called at module scope
   instead of from inside an automation/script body), reusing the core's

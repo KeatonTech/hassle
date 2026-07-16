@@ -1,11 +1,12 @@
-"""The recording-context compiler (DESIGN §5, §7.2) — the M1 core.
+"""The recording-context compiler (DESIGN §5, §7.2) — the core compiler.
 
-Public surface used by the pipeline, the CLI, and the follow-on M1 workstreams:
+Public surface used by the pipeline, the CLI, and the builder families built
+on top of it:
 
 - :func:`compile_bundle` / :func:`compile_registered` / :class:`CompileResult`
 - the recording verbs (:func:`when`, :func:`only_if`) and the ``@automation`` /
   ``@script`` decorators
-- the M1-core builders (:func:`state`, :func:`service`, :func:`delay`)
+- the core builders (:func:`state`, :func:`service`, :func:`delay`)
 - the extension-point protocols (:class:`TriggerBuilder` / :class:`ConditionBuilder`
   / :class:`ActionBuilder`) and the record functions the builder families call
 - the compile errors (:class:`CompileTimeBranchError` et al.)

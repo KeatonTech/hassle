@@ -2,12 +2,13 @@
 
 ``input_boolean(id="guest_mode", name="Guest Mode", ...)`` builds a
 :class:`~hassle.ir.models.HelperConfig` for one of the nine storage-
-collection helper domains (``hassle.ir.HELPER_DOMAINS``, F1) and returns
+collection helper domains (``hassle.ir.HELPER_DOMAINS``, part of the frozen
+IR schema) and returns
 an :class:`EntityRef` usable as an entity id wherever the DSL expects one
 (triggers, templates, service calls) -- the "import-and-reference pattern"
 (DESIGN §5.7: "referenced by import elsewhere").
 
-**Registration (§12 fix, M1 integration):** each constructor registers the
+**Registration (§12 fix):** each constructor registers the
 built :class:`HelperConfig` into the active bundle registry via
 ``Registry.add_object`` (registry.py), so ``compile_bundle`` lands it in
 ``CompileResult.objects`` under ``"<domain>:<id>"`` (bundle.py drains the
@@ -33,12 +34,12 @@ _DECLARED: list[HelperConfig] = []
 
 class _EntityServiceMethod:
     """The object ``e.<domain>.<object_id>.<service_name>`` evaluates to
-    (MILESTONES M18, entity-method sugar): callable, records the identical
-    action a ``service("<domain>.<service_name>", target=..., **fields)`` call
+    (entity-method sugar): callable, records the identical action a
+    ``service("<domain>.<service_name>", target=..., **fields)`` call
     would, with ``target={"entity_id": "<domain>.<object_id>"}`` implicit.
 
-    Only a CALL records anything (milestone surface 2: "Bare attribute access
-    stays an attribute ref ... only CALLS record actions") -- merely
+    Only a CALL records anything ("bare attribute access stays an attribute
+    ref ... only CALLS record actions") -- merely
     evaluating ``e.cover.x.close_cover`` (no parens) builds this object but
     calls no recording function at all, so it is inert until called, exactly
     like any other unbound method reference.
@@ -84,7 +85,7 @@ class EntityRef(str):
 
     def attr(self, attribute: str) -> Any:
         """``entity.attr("name")`` -> ``state_attr('domain.object_id', 'name')``
-        (MILESTONES M1.1 deliverable, DESIGN §5.4).
+        (DESIGN §5.4).
 
         An Expr leaf (a :class:`~hassle.compiler.templates.TemplateExpr`):
         composes with every operator like any other template leaf. Bare (no
@@ -101,7 +102,7 @@ class EntityRef(str):
 
     @property
     def state(self) -> Any:
-        """``entity.state`` (MILESTONES M20, entity-first conditions) -- a
+        """``entity.state`` (entity-first conditions) -- a
         comparison accessor building NATIVE HA conditions (structured
         ``state``/``numeric_state``, never a template string): ``==``/``!=``
         for state equality, ``>``/``<`` for ``numeric_state`` above/below,
@@ -111,13 +112,13 @@ class EntityRef(str):
 
         A DEFINED property, not resolved through ``__getattr__`` -- Python's
         attribute lookup finds a data descriptor (a ``property``) on the
-        class before ever falling back to ``__getattr__`` (MILESTONES M18's
-        entity-method sugar below), so this can never be shadowed by, or
-        shadow, ``e.<domain>.<id>.state(...)`` as a service call -- and in
-        fact no HA domain has a service literally named ``state``, so the
+        class before ever falling back to ``__getattr__`` (the entity-method
+        sugar below), so this can never be shadowed by, or shadow,
+        ``e.<domain>.<id>.state(...)`` as a service call -- and in fact no
+        HA domain has a service literally named ``state``, so the
         ambiguity is moot in practice too.
 
-        Distinct from M16's ``state_of(entity)``: that is the Jinja
+        Distinct from ``state_of(entity)``: that is the Jinja
         TEMPLATE-STRING read (``states('x')``, for use inside a
         ``@template_sensor``/expression composition); this is the
         NATIVE-CONDITION read (a real ``state``/``numeric_state`` condition
@@ -134,7 +135,7 @@ class EntityRef(str):
         return _StateAccessor(str(self))
 
     def __getattr__(self, name: str) -> _EntityServiceMethod:
-        """Entity-method sugar (MILESTONES M18, DESIGN §5.2/§5.3):
+        """Entity-method sugar (DESIGN §5.2/§5.3):
         ``e.cover.x.close_cover`` (any name not already a real attribute of
         ``EntityRef``/``str``, i.e. anything reaching ``__getattr__`` at all)
         returns a callable that records ``close_cover`` as a service call on
