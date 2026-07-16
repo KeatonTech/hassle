@@ -1,0 +1,1 @@
+hassle push: couldn't launch the external diff tool `hassle-no-such-difftool-xyz` (from $HASSLE_DIFFTOOL): No such file or directory. Fix: point $HASSLE_DIFFTOOL at an installed diff command that blocks until closed (e.g. `code --diff --wait`, `vimdiff`), or unset it to fall back to `git difftool` / `diff -u | $PAGER`.

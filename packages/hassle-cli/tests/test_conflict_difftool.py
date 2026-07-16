@@ -63,9 +63,7 @@ def test_hassle_difftool_env_wins_and_is_shlex_split() -> None:
     assert argv == ["code", "--diff", "--wait"]
 
 
-def test_git_difftool_used_when_diff_tool_configured(
-    git_repo: Path, no_ambient_git_config
-) -> None:
+def test_git_difftool_used_when_diff_tool_configured(git_repo: Path, no_ambient_git_config) -> None:
     from hassle_cli.difftool import resolve_difftool
 
     subprocess.run(
@@ -161,6 +159,8 @@ def test_conflict_prompt_offers_diff_and_returns_to_prompt(
 
     backend, token = fake_backend
     _make_conflict(git_repo, cli, backend, token, toml_writer)
+    identity = next(iter(backend.list_remote("automation")))
+    remote_before_push = dict(backend.list_remote("automation")[identity])
 
     record_dir = tmp_path / "recorded"
     record_dir.mkdir()
@@ -185,7 +185,6 @@ def test_conflict_prompt_offers_diff_and_returns_to_prompt(
 
     # The temp files carried the byte-exact decompiled DSL of each side (no
     # display wrapping): remote is HA's renamed version...
-    identity = next(iter(backend.list_remote("automation")))
     recorded_remote = (record_dir / "remote.py").read_text(encoding="utf-8")
     assert "Renamed on the HA side" in recorded_remote
     # ...and local is the bundle's edit.
@@ -197,12 +196,9 @@ def test_conflict_prompt_offers_diff_and_returns_to_prompt(
     assert "light.hallway_2" in stored
 
     # Byte-exactness of the remote side, pinned against the decompiler itself
-    # (the pushed local version replaced the remote AFTER the diff, so
-    # re-derive the pre-push remote form from the conflict scenario's alias).
+    # (captured BEFORE the push -- [l] replaced HA's version afterwards).
     assert recorded_remote == decompile_dsl(
-        f"automation:{identity}",
-        "automation",
-        {**backend.list_remote("automation")[identity], "alias": "Renamed on the HA side"},
+        f"automation:{identity}", "automation", remote_before_push
     )
 
 
@@ -323,7 +319,5 @@ def test_decompiled_sources_stay_unwrapped_for_round_trip_and_temp_files() -> No
     from hassle_cli.diffing import decompile_dsl
 
     state = "".join(_JINJA_BLOCKS)
-    src = decompile_dsl(
-        "template_sensor:hvac_status", "template_sensor", _template_sensor(state)
-    )
+    src = decompile_dsl("template_sensor:hvac_status", "template_sensor", _template_sensor(state))
     assert state in src  # intact, unbroken, on one line

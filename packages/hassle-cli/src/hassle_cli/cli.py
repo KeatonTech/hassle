@@ -849,11 +849,35 @@ def push(
         plan_already_rendered = True
         accept_local, accept_remote = list(accept_local), list(accept_remote)
         for entry in unresolved_conflicts:
-            choice = click.prompt(
-                f"{entry.object_key}: keep [l]ocal (push it), keep [r]emote, or [a]bort",
-                type=click.Choice(["l", "r", "a"]),
-                show_choices=False,
-            )
+            while True:
+                choice = click.prompt(
+                    f"{entry.object_key}: keep [l]ocal (push it), keep [r]emote, "
+                    "[d]iff in external tool, or [a]bort",
+                    type=click.Choice(["l", "r", "d", "a"]),
+                    show_choices=False,
+                )
+                if choice != "d":
+                    break
+                # [d] (owner field request, ux/conflict-difftool): the inline
+                # diff is unreadable for large objects -- open both decompiled
+                # sides in a real diff tool, then re-prompt. A failed tool
+                # launch prints its R6 message and re-prompts too: viewing a
+                # diff must never eat the resolution flow.
+                import os
+
+                from hassle_cli.difftool import diff_conflict_externally
+
+                conflict = entry.conflict
+                difftool_error = diff_conflict_externally(
+                    entry.object_key,
+                    entry.kind,
+                    local=conflict.local if conflict else entry.local,
+                    remote=conflict.remote if conflict else entry.remote,
+                    env=os.environ,
+                    cwd=root,
+                )
+                if difftool_error is not None:
+                    console.print(f"[bold red]{_esc(difftool_error)}[/bold red]")
             if choice == "a":
                 console.print("[bold red]hassle push: aborted, nothing applied.[/bold red]")
                 raise SystemExit(1)
