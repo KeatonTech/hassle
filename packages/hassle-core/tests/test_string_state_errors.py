@@ -73,7 +73,7 @@ def test_ne_against_non_literal_non_expr_raises_with_location_and_fix() -> None:
 
 
 def test_in_applies_the_same_operand_check_per_element() -> None:
-    """Polish-batch item 5: `.in_([...])` must validate EACH element with the
+    """`.in_([...])` must validate EACH element with the
     same `_check_comparison_operand` `.eq()`/`.ne()` use -- otherwise a bad
     element (e.g. a dict) would silently `repr()` into nonsense Jinja inside
     the `in [...]` list, exactly the failure mode `.eq()`/`.ne()` were

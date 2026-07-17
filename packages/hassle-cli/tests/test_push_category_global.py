@@ -146,7 +146,7 @@ def auto_hvac_1():
 def test_push_warning_survives_a_category_name_that_looks_like_rich_markup(
     git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
-    """Polish-batch item 5: a `CATEGORY` value containing `[...]` (rich
+    """A `CATEGORY` value containing `[...]` (rich
     markup syntax, e.g. `"[main]"`) must not be silently swallowed by the
     console when the mismatch warning is printed -- `rich.Console.print`
     treats an unescaped `[...]` substring as a markup tag; before the fix,

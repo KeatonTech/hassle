@@ -210,7 +210,7 @@ def test_splicing_source_writer_satisfies_protocol(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Polish-batch item 3: loop-splice reconcile warning. A compile-time loop
+# Loop-splice reconcile warning. A compile-time loop
 # generates an object with no single literal statement for the splicer to
 # target -- the append path fires (same as a stale-manifest miss), but here
 # the file's CURRENT content already compiles to that object key (it's

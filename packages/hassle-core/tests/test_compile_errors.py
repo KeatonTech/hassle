@@ -90,7 +90,7 @@ def test_dsl_call_outside_context_message() -> None:
 def test_duplicate_id_error_names_reconcile_flow_when_one_site_is_a_ui_splice(
     tmp_path: Path,
 ) -> None:
-    """Polish-batch item 3: a loop-splice reconcile (a metaprogrammed object's
+    """A loop-splice reconcile (a metaprogrammed object's
     UI edit got appended under the `# hassle: updated from UI on <date>`
     marker -- see `SplicingSourceWriter.splice_object`'s append path) produces
     a DuplicateObjectError the next time the bundle compiles, because the

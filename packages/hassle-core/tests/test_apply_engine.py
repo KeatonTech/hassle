@@ -310,7 +310,7 @@ def test_manifest_unchanged_on_failure() -> None:
 
 
 def test_apply_plan_reports_per_entry_progress() -> None:
-    """Task #39 (additive): on_progress fires once per push entry, 1-based,
+    """on_progress fires once per push entry, 1-based,
     before the entry is applied -- the CLI's heartbeat during a long push."""
     backend = FakeBackend()
     plan = Plan(
