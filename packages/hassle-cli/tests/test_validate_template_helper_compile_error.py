@@ -28,7 +28,7 @@ def _write_bundle(root: Path, registry_snapshot_json: dict) -> None:
     (root / ".hassle" / "registry.json").write_text(
         json.dumps(registry_snapshot_json), encoding="utf-8"
     )
-    (root / "hassle.toml").write_text("format_version = 1\nmirror = false\n", encoding="utf-8")
+    (root / "hassle.toml").write_text("format_version = 1\n", encoding="utf-8")
 
 
 def test_validate_reports_missing_set_value_as_a_clean_finding(

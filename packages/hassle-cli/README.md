@@ -8,7 +8,7 @@ together. See the repo-root README for the full command table and quickstart.
 ## In scope
 
 - The `click`-based command tree (`hassle init/login/pull/status/plan/push/
-  validate/test/run/explain/render/stubs/fmt/mirror/doctor`).
+  validate/test/run/explain/render/stubs/fmt/doctor`).
 - `hassle.toml` bundle configuration (`config.py`) and its format migrations.
 - Scaffolding (`init_cmd.py`): bundle directories, `AGENTS.md` + generated
   docs, `.vscode/settings.json`, CI workflow template, gitignore.

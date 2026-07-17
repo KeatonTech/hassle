@@ -14,7 +14,6 @@ Fields:
   placeholder field `format_version`; `load_config` still reads the old
   key name too (see `load_config`'s docstring) so a bundle written by an
   older `hassle init` keeps working with no migration step.
-- `mirror` -- DESIGN §8.5, off by default.
 - `token` -- **never legitimately present**; if found, `pull`/`doctor` treat
   it as a committed-secret error (DESIGN §14).
 - `ignore` -- DESIGN §8.2/§6 amendment: a list of `fnmatch` globs on object
@@ -68,7 +67,6 @@ CURRENT_BUNDLE_FORMAT = 2
 class BundleConfig:
     ha_url: str | None = None
     bundle_format: int = 1
-    mirror: bool = False
     token: str | None = None  # only ever set if someone committed one (a bug)
     ignore: list[str] = field(default_factory=list)
     toolchain_path: str | None = None
@@ -105,7 +103,6 @@ def load_config(bundle_root: Path) -> BundleConfig:
     return BundleConfig(
         ha_url=data.get("ha_url"),
         bundle_format=int(raw_format),
-        mirror=bool(data.get("mirror", False)),
         token=data.get("token"),
         ignore=list(data.get("ignore", [])),
         toolchain_path=data.get("toolchain_path"),
@@ -196,7 +193,6 @@ def write_default_config(bundle_root: Path, *, ha_url: str | None = None) -> Non
     lines = [
         f'ha_url = "{ha_url}"' if ha_url else '# ha_url = "http://homeassistant.local:8123"',
         f"bundle_format = {CURRENT_BUNDLE_FORMAT}",
-        "mirror = false",
         "# ignore = []  # fnmatch globs on object keys Hassle must never touch,",
         '#              # e.g. ["input_boolean:material_you_*"]',
         "",

@@ -17,7 +17,7 @@ command surface:
 2. **Irregular option surface.** Several commands here have option shapes that don't map
    cleanly onto "one Python function signature = one CLI command" (typer's core
    convention): `--accept-local KEY` / `--accept-remote KEY` repeatable options on
-   `push`, a `mirror` sub-group with its own subcommands, `run <target> --live
+   `push`, `run <target> --live
    --skip-conditions`, `--plain`/`NO_COLOR` interacting with a shared root-group option.
    click's explicit `@click.option(...)` decorators and `click.Group` nesting make these
    irregular shapes no harder to write than the regular ones; typer's signature-inference

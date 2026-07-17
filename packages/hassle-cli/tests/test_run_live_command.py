@@ -111,7 +111,7 @@ def _write_live_bundle(tmp_path: Path, *, token: str) -> Path:
     root = tmp_path / "house"
     root.mkdir()
     (root / "hassle.toml").write_text(
-        f'ha_url = "fake://{token}"\nformat_version = 1\nmirror = false\n', encoding="utf-8"
+        f'ha_url = "fake://{token}"\nformat_version = 1\n', encoding="utf-8"
     )
     (root / "a.py").write_text(
         """

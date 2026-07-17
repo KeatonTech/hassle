@@ -21,7 +21,7 @@ Scope (deliberately minimal — see docs/backend.md for the full rationale):
 Deliberately NOT here (`DirectBackend`-only concerns, unrelated to sync):
 registry snapshot fetch (plan/apply doesn't need registry data — see DESIGN
 §8.2/§8.3, neither table references the registry), trace access, template
-rendering, media mirror operations, server-side `validate_config`.
+rendering, server-side `validate_config`.
 """
 
 from __future__ import annotations

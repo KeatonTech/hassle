@@ -41,8 +41,7 @@ class Backend(Protocol):
 
 ### Deliberately out of scope
 
-Registry snapshot fetch, trace access, template rendering, and media mirror
-operations are **not** on `Backend`. Re-reading DESIGN §8.2/§8.3: the plan
+Registry snapshot fetch, trace access, and template rendering are **not** on `Backend`. Re-reading DESIGN §8.2/§8.3: the plan
 table only ever compares base (manifest) / local (compiled) / remote (backend
 `list_remote`) — it never consults registry data. Those concerns belong to
 `DirectBackend` directly (M6) or to other modules layered on top of it; adding

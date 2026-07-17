@@ -25,7 +25,7 @@ def _write_broken_bundle(root: Path, registry_snapshot_json: dict, *, backend_to
         json.dumps(registry_snapshot_json), encoding="utf-8"
     )
     (root / "hassle.toml").write_text(
-        f'ha_url = "fake://{backend_token}"\nformat_version = 1\nmirror = false\n',
+        f'ha_url = "fake://{backend_token}"\nformat_version = 1\n',
         encoding="utf-8",
     )
     (root / "helpers.py").write_text(

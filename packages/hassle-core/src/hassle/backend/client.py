@@ -6,12 +6,12 @@ in a synchronous facade that satisfies the frozen `Backend` protocol.
 
 Design points:
 
-- **REST** (`/api/...`) for automations, scripts, templates, media upload, and
+- **REST** (`/api/...`) for automations, scripts, templates, and
   `get_config`. Transient failures (connection refused, disconnects, timeouts)
   retry with exponential backoff; a 401 is *not* retried — it is a logical
   `HaAuthError` (DESIGN §4: token validity is proven by a call).
 - **WebSocket** (`/api/websocket`) for helpers, registries, `get_services`,
-  `validate_config`, traces, template render, media resolve/remove, and the
+  `validate_config`, traces, template render, and the
   purpose-vocabulary enumeration. The connection auto-(re)connects and
   re-authenticates on demand; commands are id-multiplexed.
 - **Request timeouts** everywhere, so a wedged instance can never hang the CLI.
@@ -119,7 +119,6 @@ class HaClient:
         path: str,
         *,
         json: Any = None,
-        data: aiohttp.FormData | None = None,
         expect: str = "json",
     ) -> Any:
         session = await self._ensure_session()
@@ -128,7 +127,7 @@ class HaClient:
         for attempt in range(self._max_retries):
             try:
                 async with session.request(
-                    method, url, json=json, data=data, headers=self._auth_header
+                    method, url, json=json, headers=self._auth_header
                 ) as resp:
                     if resp.status == 401:
                         raise HaAuthError(f"{method} {path}")
@@ -163,9 +162,6 @@ class HaClient:
 
     async def rest_delete(self, path: str) -> Any:
         return await self._rest("DELETE", path)
-
-    async def rest_post_multipart(self, path: str, data: aiohttp.FormData) -> Any:
-        return await self._rest("POST", path, data=data)
 
     # -- WebSocket ---------------------------------------------------------
 

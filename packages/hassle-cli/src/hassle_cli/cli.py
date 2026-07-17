@@ -5,7 +5,7 @@ docstring and docs/internals/cli.md.
 
 Command surface (DESIGN §8.4 loop + §10.4 + §14):
   init, login, pull, status, plan, push, validate, test, run, fmt, stubs,
-  explain, render, mirror, doctor
+  explain, render, doctor
 """
 
 from __future__ import annotations
@@ -1365,40 +1365,6 @@ def run(target: str, live: bool, yes: bool, skip_conditions: bool) -> None:
     from hassle_cli.commands.run_live_command import execute_live_run
 
     execute_live_run(root, target, skip_conditions=skip_conditions, console=console)
-
-
-# ---------------------------------------------------------------------------
-# mirror
-# ---------------------------------------------------------------------------
-
-
-@main.group()
-def mirror() -> None:
-    """DESIGN §8.5: optional in-HA mirror of the bundle."""
-
-
-@mirror.command(name="status")
-def mirror_status() -> None:
-    root = _bundle_root_or_fail()
-    config = load_config(root)
-    console = get_console()
-    if config.mirror:
-        console.print("[green]mirror: enabled[/green]")
-    else:
-        console.print(
-            "[dim]mirror: disabled (off by default; set mirror = true in hassle.toml)[/dim]"
-        )
-
-
-@mirror.command(name="push")
-def mirror_push() -> None:
-    root = _bundle_root_or_fail()
-    config = load_config(root)
-    console = get_console()
-    if not config.mirror:
-        console.print("[yellow]mirror is disabled; enable it in hassle.toml first[/yellow]")
-        raise SystemExit(1)
-    console.print("[dim]mirror push: not yet connected in this environment[/dim]")
 
 
 # ---------------------------------------------------------------------------

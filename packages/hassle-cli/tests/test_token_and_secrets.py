@@ -260,7 +260,7 @@ def test_login_replaces_stale_ha_url(tmp_path: Path, cli, monkeypatch) -> None:
     bundle = tmp_path / "house"
     bundle.mkdir()
     (bundle / "hassle.toml").write_text(
-        'mirror = true\nha_url = "http://old-host:8123"\n', encoding="utf-8"
+        'ignore = []\nha_url = "http://old-host:8123"\n', encoding="utf-8"
     )
 
     result = cli(["login", "--url", "http://new-host:8123", "--token", "t"], cwd=bundle)
@@ -268,4 +268,4 @@ def test_login_replaces_stale_ha_url(tmp_path: Path, cli, monkeypatch) -> None:
     content = (bundle / "hassle.toml").read_text(encoding="utf-8")
     assert 'ha_url = "http://new-host:8123"' in content
     assert "old-host" not in content
-    assert "mirror = true" in content  # unrelated settings preserved
+    assert "ignore = []" in content  # unrelated settings preserved

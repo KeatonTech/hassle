@@ -89,7 +89,7 @@ def _write_bundle(
 ) -> Path:
     root = tmp_path / "live-bundle"
     root.mkdir()
-    (root / "hassle.toml").write_text("format_version = 1\nmirror = false\n", encoding="utf-8")
+    (root / "hassle.toml").write_text("format_version = 1\n", encoding="utf-8")
     # A flat bundle (DSL sources directly at the bundle root) is still fully
     # supported (docs/ha-api-notes.md §17.9 RESOLVED: the loader also
     # recurses into subdirectories now, but never requires them).

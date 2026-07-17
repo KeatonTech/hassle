@@ -961,40 +961,6 @@ class DirectBackend:
     def entity_registry(self) -> list[dict[str, Any]]:
         return self._run(self._client.ws_command("config/entity_registry/list"))
 
-    # -- media source (for the mirror; DESIGN §8.5) -----------------------
-
-    def media_upload(self, folder: str, filename: str, data: bytes, content_type: str) -> str:
-        return self._run(self._amedia_upload(folder, filename, data, content_type))
-
-    async def _amedia_upload(
-        self, folder: str, filename: str, data: bytes, content_type: str
-    ) -> str:
-        import aiohttp
-
-        form = aiohttp.FormData()
-        form.add_field("media_content_id", f"media-source://media_source/local/{folder}")
-        form.add_field("file", data, filename=filename, content_type=content_type)
-        result = await self._client.rest_post_multipart(
-            "/api/media_source/local_source/upload", form
-        )
-        return str(result["media_content_id"])
-
-    def media_resolve(self, media_content_id: str) -> tuple[str, str]:
-        result = self._run(
-            self._client.ws_command("media_source/resolve_media", media_content_id=media_content_id)
-        )
-        return str(result["url"]), str(result.get("mime_type", ""))
-
-    def media_download(self, url: str) -> bytes:
-        return self._run(self._client.rest_get(url, expect="bytes"))
-
-    def media_remove(self, media_content_id: str) -> None:
-        self._run(
-            self._client.ws_command(
-                "media_source/local_source/remove", media_content_id=media_content_id
-            )
-        )
-
     # -- internal ----------------------------------------------------------
 
     def _require_kind(self, kind: str) -> None:

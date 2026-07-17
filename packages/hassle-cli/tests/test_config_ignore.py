@@ -16,7 +16,6 @@ def test_load_config_parses_ignore_globs(tmp_path: Path) -> None:
     (tmp_path / "hassle.toml").write_text(
         'ha_url = "http://x"\n'
         "format_version = 1\n"
-        "mirror = false\n"
         'ignore = ["input_boolean:material_you_*", "sensor:*_debug"]\n',
         encoding="utf-8",
     )

@@ -90,7 +90,7 @@ def bundle_dir(tmp_path: Path, registry_snapshot_json: dict[str, Any]) -> Path:
         json.dumps(registry_snapshot_json), encoding="utf-8"
     )
     (root / "hassle.toml").write_text(
-        '# ha_url = "http://homeassistant.local:8123"\nformat_version = 1\nmirror = false\n',
+        '# ha_url = "http://homeassistant.local:8123"\nformat_version = 1\n',
         encoding="utf-8",
     )
     (root / "hallway.py").write_text(
@@ -138,7 +138,7 @@ def cli(tmp_path: Path):
     return _run
 
 
-def write_hassle_toml(bundle: Path, *, backend_token: str, mirror: bool = False) -> None:
+def write_hassle_toml(bundle: Path, *, backend_token: str) -> None:
     """Write a `hassle.toml` pointing at a fake-backend test seam.
 
     `ha_url`/`ha_token_ref` are meaningless placeholders in test mode: the CLI's
@@ -147,7 +147,6 @@ def write_hassle_toml(bundle: Path, *, backend_token: str, mirror: bool = False)
     """
     content = f"""ha_url = "fake://{backend_token}"
 format_version = 1
-mirror = {"true" if mirror else "false"}
 """
     (bundle / "hassle.toml").write_text(content, encoding="utf-8")
 

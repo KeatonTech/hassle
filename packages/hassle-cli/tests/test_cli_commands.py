@@ -2,7 +2,7 @@
 output snapshots (rich rendering tested via captured plain-text mode).
 
 Commands under test: init, login, pull, status, plan, push, validate, test, run,
-fmt, stubs, explain, render, mirror, doctor.
+fmt, stubs, explain, render, doctor.
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ def test_validate_reports_findings_and_nonzero_exit(
     (root / ".hassle" / "registry.json").write_text(
         json.dumps(registry_snapshot_json), encoding="utf-8"
     )
-    (root / "hassle.toml").write_text("format_version = 1\nmirror = false\n", encoding="utf-8")
+    (root / "hassle.toml").write_text("format_version = 1\n", encoding="utf-8")
     (root / "a.py").write_text(
         """
 from hassle import automation, service
@@ -113,7 +113,7 @@ def test_validate_json_reports_findings_with_stable_schema(
     (root / ".hassle" / "registry.json").write_text(
         json.dumps(registry_snapshot_json), encoding="utf-8"
     )
-    (root / "hassle.toml").write_text("format_version = 1\nmirror = false\n", encoding="utf-8")
+    (root / "hassle.toml").write_text("format_version = 1\n", encoding="utf-8")
     (root / "a.py").write_text(
         """
 from hassle import automation, service
@@ -264,16 +264,6 @@ def test_trivial():
 def test_doctor_clean_bundle_reports_ok(bundle_dir: Path, cli) -> None:
     result = cli(["doctor"], cwd=bundle_dir)
     assert result.exit_code == 0, result.output
-
-
-def test_mirror_disabled_by_default_reports_status(
-    bundle_dir: Path, cli, fake_backend, toml_writer
-) -> None:
-    _backend, token = fake_backend
-    toml_writer(bundle_dir, backend_token=token)
-    result = cli(["mirror", "status"], cwd=bundle_dir)
-    assert result.exit_code == 0, result.output
-    assert "disabled" in result.output.lower() or "off" in result.output.lower()
 
 
 def test_pull_writes_registry_snapshot(git_repo, cli, fake_backend, toml_writer) -> None:
