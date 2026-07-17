@@ -14,8 +14,8 @@ implementing agents).
 > the source of truth for sources and tests** (the Terraform model: the platform stores the
 > live objects, your repo stores the code). This works on every HA install type (OS,
 > Supervised, Container, Core), adds no listening service to the network, and removes an entire
-> Docker/server codebase. An optional best-effort "mirror" can still stash the bundle ZIP
-> inside HA via the media-source API (§8.5). The `Backend` protocol keeps the door open for a
+> Docker/server codebase. (A best-effort in-HA "mirror" of the bundle
+> ZIP was designed here and later removed — §8.5.) The `Backend` protocol keeps the door open for a
 > future add-on if a server-side feature ever earns one (§13).
 
 ---
@@ -30,7 +30,7 @@ implementing agents).
 | G2 | Edit locally, push back, including adds/deletes | Full-state sync with a Terraform-style plan/apply flow (§8) |
 | G3 | Everything remains UI-editable | Hassle only writes through HA's native config APIs — the same ones the UI uses. No custom YAML packages, ever. (§4, invariant I1) |
 | G4 | Python-based syntax, not YAML | Embedded Python DSL compiled to HA-native JSON (§5) |
-| G5 | Unit tests persist across the edit cycle | pytest + a local HA simulator; tests live in the bundle, whose source of truth is **git** (§8.4). Optional: mirror the bundle ZIP into HA's media storage (best-effort, §8.5). *Revised from "persisted inside HA" with owner approval — see the v2 decision record above.* |
+| G5 | Unit tests persist across the edit cycle | pytest + a local HA simulator; tests live in the bundle, whose source of truth is **git** (§8.4). ~~Optional: mirror the bundle ZIP into HA's media storage (best-effort)~~ *(mirror removed — §8.5)*. *Revised from "persisted inside HA" — see the v2 decision record above.* |
 | G6 | Entity/reference validation | Four-tier validation: pyright → compile → registry → server-side check (§9) |
 | G7 | Macros / reusable logic | `@macro` (compile-time inlining) and `@shared_script` (compiles to a real HA script) (§5.6) |
 | G8 | Conflict detection on push | Per-object three-way merge against a `manifest.lock` baseline, hashes re-verified at apply time (§8) |
@@ -70,10 +70,10 @@ implementing agents).
 │   └── AGENTS.md, docs/                             │      │  → automations.yaml,     │
 │                                                    │      │    scripts.yaml,         │
 │  hassle CLI: pull · plan · push · validate · test  │      │    .storage/* — the SAME │
-│  · run --live · fmt · stubs · explain · mirror     │      │    storage the UI edits  │
+│  · run --live · fmt · stubs · explain              │      │    storage the UI edits  │
 │  pytest: runs tests on the local simulator         │      │                          │
-│  git: history, sync between machines, backup       │      │  (optional) /media/…/    │
-└────────────────────────────────────────────────────┘      │  hassle/bundle.zip mirror│
+│  git: history, sync between machines, backup       │      │                          │
+└────────────────────────────────────────────────────┘      │                          │
                      auth: one long-lived HA token          └──────────────────────────┘
 ```
 
@@ -117,7 +117,7 @@ implementing agents).
 | Component | Language / stack | Purpose |
 |---|---|---|
 | `hassle-core` (import package: `hassle`) | Python 3.12, pydantic v2, jinja2, LibCST | IR, compiler, decompiler, validator, simulator, sync engine, `Backend` protocol + `DirectBackend` (REST/WS client for HA Core) |
-| `hassle-cli` | Python (click or typer), rich, keyring | `pull/plan/push/validate/test/run/fmt/stubs/explain/mirror/doctor` |
+| `hassle-cli` | Python (click or typer), rich, keyring | `pull/plan/push/validate/test/run/fmt/stubs/explain/doctor` |
 | VS Code extension | TypeScript (thin) + pyright | Commands, diagnostics from `hassle validate`, entity hovers (stretch) |
 | Docs generator | part of `hassle-core` | Emits `AGENTS.md`, entity inventory, DSL reference into every bundle |
 
@@ -155,7 +155,7 @@ behaviorally in M0.V against a live HA instance** (see MILESTONES); HA versions 
 | Validation | — | WS `validate_config` (trigger/condition/action blocks); `POST /api/config/core/check_config` | — |
 | Traces | — | WS `trace/list` (domain [+ item_id]); `trace/get` requires domain + item_id + **run_id**; admin-only | — |
 | Template render | — | `POST /api/template`; WS `render_template` (subscription; `strict`, `report_errors` flags) | — |
-| Media (optional mirror, §8.5) | `/media` dir | WS `media_source/browse_media`, `media_source/resolve_media`; authenticated `GET /media/{source}/{path}` | `POST /api/media_source/local_source/upload` (admin, multipart `media_content_id` + `file`); WS `media_source/local_source/remove` |
+| Media (~~optional mirror~~ — removed, §8.5) | `/media` dir | WS `media_source/browse_media`, `media_source/resolve_media`; authenticated `GET /media/{source}/{path}` | `POST /api/media_source/local_source/upload` (admin, multipart `media_content_id` + `file`); WS `media_source/local_source/remove` |
 
 API quirks the implementation must respect (source-verified July 2026, then behaviorally
 verified against a live instance in M0.V — details and raw captures in
@@ -184,7 +184,7 @@ verified against a live instance in M0.V — details and raw captures in
   `skip_condition: false` explicitly unless the user asked for `--skip-conditions` (§10.4).
 - The automation `id` attribute has moved into `capability_attributes` in recent HA — it still
   surfaces in `/api/states` attribute payloads, but don't assume its position in internals.
-- The media endpoints have **two independent incidental gates** the mirror (§8.5) must pass:
+- The media endpoints have **two independent incidental gates** the (since-removed) mirror (§8.5) had to pass:
   upload checks only the client-supplied multipart `Content-Type` (must start with `image/`,
   `video/`, or `audio/`; bytes/extension never inspected), while **download** (`GET /media/…`)
   404s unless the file *extension* maps to an image/video/audio MIME type. So the mirrored ZIP
@@ -479,7 +479,7 @@ in place by the next `hassle pull` — see the migration bullet below.
 
 - The **directory (a git repo)** is the working format; **ZIP** is a transport/interchange
   format (`hassle pull --zip out.zip`, `hassle push --zip in.zip`) per G1 — useful for moving a
-  bundle without git, and what the optional mirror stores (§8.5).
+  bundle without git.
 - ~~File organization is user-controlled: the decompiler only decides placement for objects it has
   never seen (defaults: one file per HA UI category if the object's entity-registry entry has one
   — `automations/<slug(category name)>.py` / `scripts/<slug(category name)>.py`, fetched via WS
@@ -810,21 +810,15 @@ CLI affordances that keep this honest:
 - None of this *requires* git (the tool functions in a bare directory and warns once), but
   `hassle init`/first pull offers `git init` and writes the `.gitignore`.
 
-### 8.5 Optional: the in-HA mirror (best-effort)
+### 8.5 ~~Optional: the in-HA mirror (best-effort)~~ — REMOVED
 
-`hassle mirror push` uploads the bundle as a ZIP to HA's local media storage
-(`media-source://media_source/local/hassle/hassle-bundle.mp3` — ZIP bytes under a media file
-extension, which is required to pass the download gate; see §4 quirks) via the verified upload
-API; `hassle mirror pull` fetches it and verifies it is a valid ZIP. Purpose: a copy of
-sources+tests living *inside* HA (and inside HA backups **if** the user enables the Media
-toggle). Explicitly best-effort:
-
-- The mechanism rides on **two** incidental gates (upload Content-Type prefix, download
-  extension→MIME mapping) plus a pre-existing target folder — all verified working in M0.V, any
-  of which HA could change. If any gate closes, `mirror` degrades to a clear warning and
-  **nothing else in Hassle is affected** (sync never depends on the mirror).
-- Off by default; enabled via `hassle.toml` (`mirror = true`), and `hassle push` then refreshes
-  it automatically after a successful apply.
+> **Removed (2026-07-17).** The mirror was designed to stash the bundle ZIP inside HA's local
+> media storage so a copy of sources+tests lived inside HA (and its backups). The backend layer
+> was built and tested, but the CLI wiring was never finished, and the mechanism depended on two
+> incidental HA media-endpoint quirks (upload Content-Type prefix, download extension→MIME
+> mapping) that HA could close in any release. Rather than ship a feature resting on
+> unsupported behavior, it was deleted; **git is the sole store for sources and tests** (§8.4).
+> The captured HA media-API findings remain in `docs/ha-api-notes.md` §9/§10/§17.
 
 ---
 
