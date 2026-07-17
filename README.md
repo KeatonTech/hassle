@@ -37,7 +37,10 @@ edit it, test it, push it back, and the UI can still edit it too.
 
 See [`DESIGN.md`](DESIGN.md) for the full design (goals table, invariants, DSL
 reference, sync semantics). Each package under [`packages/`](packages/) has its
-own README describing what is — and is not — in its scope.
+own README describing what is — and is not — in its scope. Curious how it was
+built? The project was implemented test-first, milestone by milestone, largely
+by AI coding agents — the original plan and its acceptance contracts are
+preserved in [`docs/history/`](docs/history/).
 
 ## Install
 
@@ -205,6 +208,10 @@ The code examples in this README are executed by
 `packages/hassle-cli/tests/test_readme_examples.py` — the DSL example is
 compiled and run on the simulator, and every documented CLI command is checked
 against the real command tree, so the README cannot drift from the code.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the engineering rules (tests
+first, golden-file discipline, compatibility contracts, error-message style)
+and the full set of verification gates.
 
 ## License
 

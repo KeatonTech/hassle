@@ -1,7 +1,8 @@
 # F1 — Frozen IR interface (end of M0)
 
-This is the frozen contract every downstream workstream (M1–M5) builds against.
-Per R5, changing anything here requires updating MILESTONES.md in the same PR.
+This is the frozen contract the compiler, decompiler, sync engine, and
+simulator all build against. Changing anything here requires updating this
+document in the same PR (CONTRIBUTING.md, "compatibility contracts").
 
 > **Module path renamed 2026-07-03 (design decision):** `hassle_core.ir` is now
 > `hassle.ir` — the `hassle-core` distribution collapsed its two top-level

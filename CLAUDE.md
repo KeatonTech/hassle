@@ -1,55 +1,68 @@
 # Hassle — rules for all Claude sessions
 
-You are one agent among several implementing this project. Your job is **one milestone
-workstream at a time**, done to its test contract — not the whole project.
+The milestone build-out is complete; sessions now do maintenance: bug fixes,
+features, refactors, docs. Work one scoped change at a time, to a test
+contract you write first.
 
 ## Read order (do this before writing any code)
 
-1. [MILESTONES.md](MILESTONES.md) — find YOUR assigned milestone; its "Write these tests first"
-   list is your acceptance contract.
-2. [DESIGN.md](DESIGN.md) — read the sections your milestone references. The invariants
-   (I1–I6, §2) and the plan-semantics table (§8.2) are binding.
+1. [CONTRIBUTING.md](CONTRIBUTING.md) — the binding engineering rules and the
+   verification gates.
+2. [DESIGN.md](DESIGN.md) — the design doc. The invariants (§2) and the
+   plan-semantics table (§8.2) are binding.
+3. The README of the package you're changing (`packages/*/README.md`) — each
+   states what is in and out of its scope.
 
-If you were not told which milestone you're on, ask — do not pick one yourself.
+Context on why things are the way they are: `docs/internals/` (per-area design
+notes), `docs/ha-api-notes.md` (empirical HA API findings, §-numbered and
+cited from code), and `docs/history/` (the original milestone plan and its
+legend).
 
-## Binding rules (from MILESTONES.md R1–R8 — summary, the originals govern)
+## Binding rules (summary — CONTRIBUTING.md governs)
 
-- **Tests first.** Commit failing tests from your milestone's test list before implementation.
-- **No network in unit tests.** Fixtures and FakeBackend only; `integration/`-marked tests are
-  the only exception (M6+).
-- **Golden files** change only via `hassle-dev goldens --update`, and the PR must show the diff.
+- **Tests first.** Commit failing tests before implementation.
+- **No network in unit tests.** Fixtures and FakeBackend only;
+  `tests/integration/` is the only exception.
+- **Golden files** change only via `hassle-dev goldens --update` /
+  `hassle-dev docs --update`, and the PR must show the diff.
 - **Every bug found becomes a regression test before it is fixed.**
-- **Frozen interfaces (F1–F3)** may not change without updating MILESTONES.md in the same PR.
-- **Error messages are product surface**: what / where (file:line) / fix, one paragraph,
-  snapshot-tested.
-- **Determinism**: no wall-clock, no randomness in core logic; compiler/decompiler output must
-  be byte-stable.
-- Tooling: Python 3.12, `uv`, `ruff`, `pyright --strict` on hassle-core, `pytest`.
-- **One distribution = one top-level import package** (owner rule): internals are
-  subpackages (`hassle.ir`, `hassle.compiler`), never a sibling or facade package.
-  Distribution name ≠ import name is fine (`hassle-core` dist → `hassle` import).
+- **Compatibility contracts** (docs/ir-format.md, docs/backend.md,
+  docs/dsl-extensions.md) are additive-only; update the contract doc in the
+  same PR as any change to its interface.
+- **Error messages are product surface**: what / where (file:line) / fix, one
+  paragraph, snapshot-tested (`hassle_dev.snapshots`).
+- **Determinism**: no wall-clock, no randomness in core logic; compiler/
+  decompiler output must be byte-stable.
+- Tooling: Python 3.12, `uv`, `ruff`, `pyright --strict` on hassle-core,
+  `pytest`.
+- **One distribution = one top-level import package**: internals are
+  subpackages (`hassle.ir`, `hassle.compiler`), never a sibling or facade
+  package (`tests/test_package_layering.py` pins the dependency direction).
 
 ## Hard invariants (never violate — from DESIGN.md §2)
 
-- I1: every HA write goes through the APIs the UI uses; never write YAML files directly.
-- I2: never change an existing object's HA `id`.
-- I3: `compile(decompile(x)) == x` for ANY config (use the `raw` escape hatch, never drop data).
-- I5: tests execute compiled IR, not DSL Python.
-- I6: no local or UI edit is ever silently lost — surface a conflict instead.
+- Every HA write goes through the APIs the UI uses; never write YAML files
+  directly.
+- Never change an existing object's HA `id`.
+- `compile(decompile(x)) == x` for ANY config (use the `raw` escape hatch,
+  never drop data).
+- Tests execute compiled IR, not DSL Python.
+- No local or UI edit is ever silently lost — surface a conflict instead.
 
 ## Workflow
 
-- Branch per work item: `m<N>/<short-topic>` (e.g. `m3/did-you-mean`). Never commit directly
-  to `main`.
-- Before declaring done: your milestone's new tests green, ALL previously green tests still
-  green, `ruff` and `pyright` clean. Run them; do not assume.
+- Branch per change (e.g. `fix/<short-topic>`, `feat/<short-topic>`). Never
+  commit directly to `main`.
+- Before declaring done: your new tests green, ALL previously green tests
+  still green, `ruff` and `pyright` clean. Run them; do not assume.
 - Use the `reviewer` subagent on your diff before proposing a merge.
-- If DESIGN.md and reality disagree (an HA API behaves differently, a design detail is
-  impossible), do NOT silently work around it: record the finding in `docs/ha-api-notes.md`
-  and flag it to the human in your summary.
+- If DESIGN.md and reality disagree (an HA API behaves differently, a design
+  detail is impossible), do NOT silently work around it: record the finding in
+  `docs/ha-api-notes.md` and flag it to the human in your summary.
 
 ## Project subagents (in .claude/agents/)
 
-- `implementer` (Sonnet) — milestone work items.
-- `reviewer` (Opus) — verifies a diff against the milestone's test contract; read/run only.
+- `implementer` (Sonnet) — scoped implementation work.
+- `reviewer` (Opus) — verifies a diff against its test contract and the design
+  invariants; read/run only.
 - `fixture-wrangler` (Haiku) — fixture corpus, boilerplate, mechanical edits.

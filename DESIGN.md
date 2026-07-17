@@ -5,8 +5,9 @@ and helpers. Pull everything down as clean Python, edit and unit-test locally, p
 while everything stays fully editable in the Home Assistant UI.
 
 Status: **DRAFT v2 — CLI-only architecture (owner-approved direction, 2026-07-03).**
-Companion document: [MILESTONES.md](MILESTONES.md) (implementation plan with TDD gates for the
-implementing agents).
+Companion documents: [CONTRIBUTING.md](CONTRIBUTING.md) (the engineering rules and gates) and
+[docs/history/milestones.md](docs/history/milestones.md) (the original implementation plan this
+project was built against — historical record, with a vocabulary legend).
 
 > **v2 change (decision record):** v1 of this design included a Home Assistant add-on that
 > proxied all API traffic and persisted bundle files server-side. It was cut. Every HA API
@@ -131,7 +132,7 @@ hassle/
 ├── vscode-extension/
 ├── fixtures/                 # corpus of real HA JSON configs + registry snapshots (see MILESTONES M0)
 ├── docs/                     # DSL reference, cookbook, agent docs templates, ha-api-notes.md
-├── DESIGN.md  MILESTONES.md
+├── DESIGN.md  CONTRIBUTING.md   # milestone plan preserved in docs/history/
 └── pyproject.toml            # uv workspace; ruff + pyright strict on hassle-core
 ```
 

@@ -134,8 +134,8 @@ raise a what/where/fix error if not (snapshot-test it, R6).
 
 ## 4. What you may NOT touch
 
-- **`normalize_ha` and the IR F1 surface** — frozen. If you think you need a change,
-  stop and report (R5); update MILESTONES.md in the same PR or don't do it.
+- **`normalize_ha` and the frozen IR surface** — frozen. If you think you need a
+  change, stop and report; update docs/ir-format.md in the same PR or don't do it.
 - **The plural canonical schema** — always emit plural + `action:`. No singular keys
   except inside a user's `raw_*` body (which `normalize_ha` handles).
 - **`CompileResult.objects` / `spans_for` signatures** — downstream (validation,

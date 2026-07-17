@@ -1,6 +1,13 @@
-# Hassle — Implementation Plan (for the implementing agents)
+# Hassle — Implementation Plan (historical record)
 
-Read [DESIGN.md](DESIGN.md) first (v2, CLI-only — there is no add-on). This file tells you what
+> **Historical document.** This is the original milestone plan the project was
+> built against, preserved as written. The engineering rules it defines (R1–R8)
+> are restated for contributors in [CONTRIBUTING.md](../../CONTRIBUTING.md);
+> the internal shorthand (M-numbers, R/I/F/G codes, "done gates", agent roles)
+> is decoded in [this directory's README](README.md). Nothing below is updated
+> anymore.
+
+Read [DESIGN.md](../../DESIGN.md) first (v2, CLI-only — there is no add-on). This file tells you what
 to build, in what order, and — most importantly — **which tests to write before writing the
 code**. Every milestone is TDD: its "Write these tests first" list is the acceptance contract.
 A milestone is done when those tests (plus everything previously green) pass in CI.
@@ -45,7 +52,7 @@ the frozen IR (F1). M8 (VS Code) and M9 (docs) can start early in stub form but 
   M6 builds `DirectBackend` against the same protocol — independently.
 - **F3** (end of M1): DSL public API surface (`hassle.__all__`, 72 names, plus the
   `hassle.registry.entities` entry point) — additions allowed, changes are not.
-  Declared in [docs/dsl-extensions.md](docs/dsl-extensions.md).
+  Declared in [docs/dsl-extensions.md](../dsl-extensions.md).
 
 ---
 

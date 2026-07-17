@@ -1,11 +1,11 @@
 # `Backend` protocol, plan/apply data model, and the `SourceWriter` seam (F2)
 
-Freeze point **F2** (declared at the start of M5, per MILESTONES.md): the
-`Backend` Protocol plus the plan/apply data model. M5 builds the sync engine
-against an in-memory `FakeBackend`; M6 builds `DirectBackend` (the real
-REST/WebSocket transport) against the same Protocol, independently and in
-parallel. Changing any shape documented here after this point requires a
-MILESTONES.md update in the same PR (R5).
+This is a frozen compatibility contract: the `Backend` Protocol plus the
+plan/apply data model. The sync engine is built against an in-memory
+`FakeBackend`; `DirectBackend` (the real REST/WebSocket transport) implements
+the same Protocol, so the two stay interchangeable. Changing any shape
+documented here requires updating this document in the same PR
+(CONTRIBUTING.md, "compatibility contracts").
 
 ## 1. The `Backend` Protocol
 

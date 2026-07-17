@@ -1,10 +1,11 @@
 # F3 — Frozen DSL public API surface (end of M1)
 
 > **DECLARED 2026-07-03** (post final review + fixes, 338 tests green). This
-> is the frozen contract every bundle and downstream milestone (M2 decompiler,
-> M3 stubs/validation, M4 simulator, M7 CLI, M9 docs) builds against.
-> Per R5, changing anything frozen here requires updating MILESTONES.md in the
-> same PR. **Additions are allowed; changes and removals are not.**
+> is the frozen contract every bundle — and the decompiler, stubs/validation,
+> simulator, CLI, and generated docs — builds against. Changing anything
+> frozen here requires updating this document in the same PR
+> (CONTRIBUTING.md, "compatibility contracts"). **Additions are allowed;
+> changes and removals are not.**
 
 > **Renamed 2026-07-03 (design decision):** the `hassle-core` distribution now
 > ships exactly one top-level import package, `hassle` (previously two:
