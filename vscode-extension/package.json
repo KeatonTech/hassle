@@ -5,7 +5,7 @@
   "version": "0.0.1",
   "publisher": "REPLACE_WITH_YOUR_PUBLISHER_ID",
   "private": true,
-  "license": "SEE LICENSE IN ../LICENSE",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },

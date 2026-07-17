@@ -126,7 +126,6 @@ the bundle loader recurses.
 | `hassle explain <key>` / `hassle render <template>` | Show compiled YAML for one object / render a Jinja template offline. |
 | `hassle stubs [--refresh]` | Regenerate the typed `.pyi` stubs from the registry snapshot. |
 | `hassle fmt` | Run `ruff format` over the bundle's Python sources. |
-| `hassle mirror status/push` | Placeholder for stashing the bundle as a ZIP inside HA's own media storage. **Not implemented yet** — `mirror push` currently reports that it isn't connected. |
 | `hassle doctor` | Committed-secret scan, orphaned shadow-automation sweep, HA tested-version-range check. |
 
 DSL coverage: automations, scripts (with typed `fields`), all 9 storage-collection
@@ -209,4 +208,4 @@ against the real command tree, so the README cannot drift from the code.
 
 ## License
 
-TBD.
+[MIT](LICENSE).
