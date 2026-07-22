@@ -1,8 +1,8 @@
 # Hassle — Design Document
 
-**Hassle** (HASS + hassle): a round-trip toolchain for Home Assistant automations, scripts,
-and helpers. Pull everything down as clean Python, edit and unit-test locally, push back up —
-while everything stays fully editable in the Home Assistant UI.
+**Hassle** (Home Assistant Script Sync for Local Editing): a round-trip toolchain for Home 
+Assistant automations, scripts, and helpers. Pull everything down as clean Python, edit and
+unit-test locally, push back up — while everything stays fully editable in the Home Assistant UI.
 
 Status: **v2 — CLI-only architecture.**
 Companion documents: [CONTRIBUTING.md](CONTRIBUTING.md) (the engineering rules and gates) and
@@ -92,7 +92,7 @@ project was built against — historical record, with a vocabulary legend).
   drifted from the manifest baseline — everything else keeps your hand-written formatting and
   comments untouched. A fresh machine gets the sources from `git clone`, not from HA.
 
-### Invariants (implementing agents: never violate these)
+### Invariants
 
 - **I1 — UI editability.** Every write goes through the same HA APIs the UI uses
   (`/api/config/...` REST, helper WebSocket collections). Never write YAML files directly.
