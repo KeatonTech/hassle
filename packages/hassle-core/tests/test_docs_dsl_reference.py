@@ -20,7 +20,7 @@ DSL_FIXTURES = REPO_ROOT / "fixtures" / "dsl"
 
 
 def test_every_all_name_is_covered_or_exempt() -> None:
-    """The coverage check the milestone gates on: every name in
+    """The docs coverage gate: every name in
     ``hassle.__all__`` either has >= 1 backing golden case, or is on the
     explicit, documented exemption list (error/trap classes -- see
     ``hassle.docs.construct_map`` for why each one is exempt)."""

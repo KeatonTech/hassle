@@ -67,7 +67,7 @@ def test_bare_states_in_list_inverts_to_state_of_in() -> None:
 
 # ---------------------------------------------------------------------------
 # Regression: surrounding whitespace around an otherwise-invertible `{{ ... }}`
-# block must NOT be silently dropped (bug found via this milestone's own
+# block must NOT be silently dropped (bug found via this feature's own
 # torture-template coverage -- see module docstring).
 # ---------------------------------------------------------------------------
 

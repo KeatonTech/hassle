@@ -180,7 +180,7 @@ def test_nested_mixed_ops_precedence_grouping() -> None:
     assert result2.to_template() == "{{ 2 * (x + y) }}"
 
     # Wrong grouping would silently drop the parens; extra parens are fine
-    # (over-parenthesizing is explicitly acceptable per the milestone), but
+    # (over-parenthesizing is explicitly acceptable by design), but
     # *missing* parens that change semantics is the failure this test guards.
     result3 = (x - y) / (x + y)
     assert result3.to_template() == "{{ (x - y) / (x + y) }}"
@@ -193,7 +193,7 @@ def test_deeply_nested_mixed_ops() -> None:
     # so it chains flat too -- matching Python/Jinja's own left-to-right,
     # same-precedence binding. Under-grouping (dropping a *necessary* paren,
     # which would silently change meaning) is the failure this test guards;
-    # extra parens remain acceptable elsewhere per the milestone.
+    # extra parens remain acceptable elsewhere by design.
     x = var("x")
     y = var("y")
     z = var("z")

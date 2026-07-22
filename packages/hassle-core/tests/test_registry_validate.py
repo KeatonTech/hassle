@@ -30,7 +30,7 @@ def _write_bundle(tmp_path: Path, code: str) -> Path:
     return bundle
 
 
-# --- milestone test 1: unknown entity flagged / known entity ok -------------
+# --- unknown entity flagged / known entity ok -------------------------------
 
 
 def test_unknown_entity_flagged(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
@@ -371,7 +371,7 @@ def a():
     assert findings == [], f"unexpected findings on repeat_for_each placeholder: {findings}"
 
 
-# --- milestone test 2: did-you-mean -----------------------------------------
+# --- did-you-mean -----------------------------------------------------------
 
 
 def test_did_you_mean(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
@@ -391,7 +391,7 @@ def a():
     assert "light.hallway" in bad.fix
 
 
-# --- milestone test 2b: purpose vocabulary validation -----------------------
+# --- purpose vocabulary validation ------------------------------------------
 
 
 def test_unknown_purpose_trigger_type(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
@@ -499,7 +499,7 @@ def a():
     assert any(f.code == "unknown-label" for f in findings)
 
 
-# --- milestone test 3: bundle-declared helpers count as existing -----------
+# --- bundle-declared helpers count as existing ------------------------------
 
 
 def test_bundle_declared_helper_counts(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
@@ -544,7 +544,7 @@ def a():
     )
 
 
-# --- milestone test 4: service-call parameter validation -------------------
+# --- service-call parameter validation --------------------------------------
 
 
 def test_service_param_unknown(tmp_path: Path, snapshot: RegistrySnapshot) -> None:

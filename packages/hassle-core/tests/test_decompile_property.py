@@ -9,7 +9,7 @@ The strategy builds automation configs directly from the IR/DSL schema (random
 combinations of state/numeric_state triggers, state/template conditions, service
 and delay actions, `mode`), which is exactly the shape ``AutomationConfig``
 models and ``compile_bundle`` produces -- "generated from the model schema" per
-the milestone text.
+the original test contract.
 """
 
 from __future__ import annotations

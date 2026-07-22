@@ -82,7 +82,7 @@ def test_purpose_condition_shape() -> None:
 
 def test_purpose_trigger_entity_target_accepts_plain_entity_id_string() -> None:
     # Entity refs: bare "domain.object_id" string is one of the five target forms
-    # (the `e.<domain>.<object_id>` stub sugar is a later-milestone convenience
+    # (the `e.<domain>.<object_id>` stub sugar is a separate convenience
     # over the same primitive).
     trig = on("motion.detected", target="binary_sensor.hall_motion")
     assert trig.to_trigger()["target"] == {"entity_id": "binary_sensor.hall_motion"}

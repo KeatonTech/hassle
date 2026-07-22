@@ -201,7 +201,7 @@ class _StateAccessor(_NoBool):  # pyright: ignore[reportUnusedClass]
     # Constructed only from `hassle.compiler.helpers.EntityRef.state` (a
     # cross-module, lazily-imported reference -- same avoidance convention as
     # every other helpers<->builders seam in this file) and referenced
-    # directly by this milestone's tests -- never instantiated from within
+    # directly by tests -- never instantiated from within
     # `builders.py` itself, which is the one thing pyright's strict
     # `reportUnusedClass` actually checks for an underscore-prefixed class.
     """``entity.state`` (entity-first conditions) — a

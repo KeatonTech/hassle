@@ -236,7 +236,7 @@ def test_state_accessor_used_as_when_trigger_raises_clear_error() -> None:
 def test_entity_ref_remains_hashable_and_dict_keyable() -> None:
     """`EntityRef` itself never gained an `__eq__` override (only the new
     `.state` ACCESSOR object did) -- so it stays usable as a dict key/in a
-    set, exactly as any `str` is, unaffected by this milestone."""
+    set, exactly as any `str` is, unaffected by the accessor feature."""
     d = {e.sensor.temp: "ok"}
     assert d[e.sensor.temp] == "ok"
     assert e.sensor.temp in {e.sensor.temp, e.sensor.other}

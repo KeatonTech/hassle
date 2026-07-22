@@ -78,7 +78,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class AcceptanceTask:
     """One representative task: a stable id, a category (machine-readable,
-    matches the milestone's example list), and the exact prompt text a
+    matches the cookbook's recipe list), and the exact prompt text a
     fresh model session receives verbatim."""
 
     task_id: str

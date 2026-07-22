@@ -14,7 +14,7 @@ The loop (DESIGN §8.4):
 
 This test IS the scripted transcript: each `hassle` invocation is one counted
 command (plain shell/git steps are not Hassle commands and don't count against
-the <10 budget, matching the milestone's "demoable ... in < 10 commands" framing
+the <10 budget, matching the original "demoable ... in < 10 commands" goal
 of the CLI's own command count).
 """
 

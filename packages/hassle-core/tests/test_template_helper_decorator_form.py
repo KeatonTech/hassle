@@ -106,7 +106,7 @@ def test_decorator_form_identity_is_still_slug_of_name() -> None:
 
 
 def test_decorator_form_matches_hand_written_call_form_ir_shape() -> None:
-    """Golden-pair equivalence (milestone text): the decorator fixture's
+    """Golden-pair equivalence: the decorator fixture's
     `template_sensor:average_temp` IR has the exact same KEYS (and non-state
     values) as the call-form fixture's own `template_sensor:average_temp` --
     only `state=`'s Jinja text differs (a different, but equivalent,

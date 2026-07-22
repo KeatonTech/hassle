@@ -243,7 +243,7 @@ def _guest_mode_helper() -> dict[str, Any]:
 
 
 def _demo_script() -> dict[str, Any]:
-    """At least one script, per the milestone's seeding requirement --
+    """At least one script, per the generator's seeding contract --
     otherwise unreferenced by any of the 10 prompts, so it's simple: toggle
     the porch light."""
     return {
