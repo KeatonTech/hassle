@@ -1,383 +1,25 @@
-# F3 — Frozen DSL public API surface (end of M1)
+# DSL public API surface
 
-> **DECLARED 2026-07-03** (post final review + fixes, 338 tests green). This
-> is the frozen contract every bundle — and the decompiler, stubs/validation,
-> simulator, CLI, and generated docs — builds against. Changing anything
-> frozen here requires updating this document in the same PR
-> (CONTRIBUTING.md, "compatibility contracts"). **Additions are allowed;
-> changes and removals are not.**
+This is the frozen contract every bundle — and the decompiler, stubs/validation,
+simulator, CLI, and generated docs — builds against. Changing anything
+frozen here requires updating this document in the same PR
+(CONTRIBUTING.md, "compatibility contracts"). **Additions are allowed;
+changes and removals are not.**
 
-> **Renamed 2026-07-03 (design decision):** the `hassle-core` distribution now
-> ships exactly one top-level import package, `hassle` (previously two:
-> `hassle_core` + a thin `hassle` facade). `hassle_core.dsl_builtins` — a
-> second re-export of this same surface, kept only so tools could import it
-> without depending on the `hassle` package layout — is deleted along with
-> `hassle_core` itself; there is now only one module to import this surface
-> from, so the parity concern it existed to guard against (and its test,
-> `test_dsl_builtins_parity_with_hassle_all`) is moot by construction. All
-> module paths below (`hassle_core.compiler.*`, `hassle_core.ir`, …) are now
-> `hassle.compiler.*` / `hassle.ir`; the frozen contract itself is unchanged.
-
-> **Widened 2026-07-05 (`ux/shared-script-calls`, design-review feedback, F3-additive):**
-> the module-internal `ScriptCallAction` (`hassle.compiler.scripts` — already
-> listed below as non-frozen tooling surface, not part of `hassle.__all__`)
-> gained three optional keyword-only constructor args, `metadata=`/`alias=`/
-> `enabled=`, mirroring every other action shape's step options. The
-> `@shared_script`-decorated caller wrapper it backs widened the same way:
-> `flash_lights(times=5, metadata={...}, alias="...", enabled=False)` is now
-> accepted alongside the script's own declared field kwargs. Purely additive —
-> no existing call site's signature changed, and `hassle.__all__` itself is
-> untouched (`shared_script` was already frozen there; only its returned
-> wrapper's accepted kwargs widened). Motivation: the decompiler's new
-> function-call rewrite for a caller's `script.<id>` action (DESIGN §7.3) needs
-> a way to round-trip a UI-saved action's `metadata: {}` / step `alias`/
-> `enabled` through the call site instead of falling back to `service()`.
-
-> **Widened 2026-07-05 (`ux/shared-script-rich-fields`, design-review feedback,
-> F3-additive):** `@shared_script` gained a `fields=` kwarg carrying full HA
-> field metadata (`name`/`description`/`selector`/`example`/...) VERBATIM —
-> when supplied it wins over the signature-derived `fields` dict (byte-
-> stability by construction), since real HA-UI-authored scripts always carry
-> this richer shape (the narrower signature-only rule made the decompiler's
-> caller-rewrite feature inert on real bundles: every field forced the
-> `@script` fallback). The signature stays the ergonomic call-site layer —
-> every declared field is still a real Python parameter, `None`-defaulted
-> when the metadata carries no `"default"` key (HA-side requiredness lives in
-> the metadata, not in whether the compiler can invoke the body with zero
-> arguments to build its sequence). New error `UnknownFieldError` (added to
-> `hassle.__all__`, surface count 72 → 73): a call-site kwarg not among
-> `fields=`'s keys (the superset source of truth when `fields=` is explicit)
-> is rejected even if it would otherwise bind against the signature — catches
-> an author who added a Python parameter but forgot to also declare it as a
-> field. Purely additive; no existing name's meaning changed.
-
-> **Widened 2026-07-05 (`ux/triggers-in-decorator`, approved DSL
-> evolution, F3-additive):** `@automation` gained a `triggers=`
-> keyword-only kwarg: a list of `TriggerBuilder` objects — the same objects
-> `when()` accepts — evaluated at decoration time (built when the
-> `@automation(...)` line itself runs, before the compiler invokes the
-> function body). This is now the CANONICAL decompiled form (DESIGN §5.3/§7.3):
-> the decompiler emits `triggers=[...]` in the decorator instead of a
-> `when(...)` call at the top of the body, multi-line (one trigger per line)
-> when there's more than one. `when()` itself is UNCHANGED and remains fully
-> supported (F3 forbids removing it) — still the right tool when the trigger
-> list must be built dynamically (a compile-time loop, a shared helper
-> function, …), since `triggers=`'s list is one Python expression evaluated
-> once, at decoration time, and so can only ever be a single static list
-> literal. `triggers=` and `when()` COMPOSE: the decorator's list is recorded
-> first, then any `when()` calls inside the body append after it, in call
-> order — see DESIGN §5.3's position-independence note. Compile parity is
-> exact: `@automation(triggers=[state(x).to("on")])` produces byte-identical
-> IR to the equivalent `when(state(x).to("on"))` form (golden pair
-> `fixtures/dsl/triggers_in_decorator/`, proven against the `when()`-form
-> golden `fixtures/dsl/state_delay_service/`'s identical `expected_ir.json`).
-> Purely additive: no existing name's meaning changed, `hassle.__all__` itself
-> is untouched (`automation` was already frozen there; only its accepted
-> kwargs widened).
-
-> **Widened 2026-07-05 (`ux/dsl-ergonomics`, design-review feedback, F3-additive,
-> surface count 98 → 101 — the doc's earlier "72"/"73" counts predate several
-> unrelated widenings and were never kept current; this note states the
-> actual delta this workstream makes, not a running total):** four DSL
-> ergonomics changes, all additive.
-> (1) `only_if(*conditions)` — already frozen — is now dual-form: the bare
-> call is byte-for-byte unchanged (F3); the SAME call is also usable as
-> `with only_if(...):`, which additionally requires every action the
-> automation records to be inside that one block (an action recorded
-> before/after it raises the new `OnlyIfBlockCoverageError`, added to
-> `hassle.__all__`). The decompiler now emits the block form as canonical
-> whenever an automation has any conditions at all, wrapping every action —
-> compiled IR is byte-identical either form (golden pair
-> `fixtures/dsl/only_if_block_form/` vs. `fixtures/dsl/only_if_bare_form_parity/`).
-> (2) Two new `StrEnum` names, `Mode` and `MaxExceeded` (added to
-> `hassle.__all__`), for HA's enumerated `mode:`/`max_exceeded:` automation/
-> script options — a real `str` subclass, so `mode=Mode.RESTART` compiles
-> byte-identical to `mode="restart"`; the decompiler emits the enum member
-> for a recognized value and falls back to the raw string otherwise (never
-> fails on an unrecognized future HA value). (3) `service(..., target=...)`
-> (and every other `target=` accepting call) now also accepts a bare entity
-> ref/`str`, a list of them, or an `area()`/`floor()`/`label()`/`device_id()`
-> target helper object directly — normalized to HA's stored target dict shape
-> by the new `hassle.compiler.purpose.normalize_target` (non-public tooling
-> seam, not added to `hassle.__all__`); an already-built dict passes through
-> unchanged. The decompiler emits the bare form whenever a stored `target`
-> has exactly one key, keeping the dict literal for any multi-key target.
-> (4) `repeat_for_each(items)` now also accepts a bare Jinja template `str`
-> (HA's `repeat.for_each` may be stored as a template that renders to a list
-> at runtime, not just a literal list) — passed through verbatim, never
-> exploded into a list of characters (the bug this fixes, docs/ha-api-notes.md).
-> None of these four changes alters the meaning of any existing name;
-> `hassle.__all__` itself gains exactly three entries (`Mode`, `MaxExceeded`,
-> `OnlyIfBlockCoverageError`) and `only_if`'s existing frozen entry is
-> untouched (only its usage — bare vs. `with` — widened).
-
-> **Widened 2026-07-06 (`m16/string-exprs`, F3-additive,
-> surface count 105 → 106):** one new name, `state_of(entity_or_id)` — a
-> bare STRING-context template read (`states('x')`, no `| float`), mirroring
-> `expr()`'s argument handling exactly (accepts a plain entity id string, an
-> `e.`-registry ref, or a `state(...)` builder). String comparisons are
-> spelled via the ALREADY-frozen `.eq()`/`.ne()` methods (no new comparison
-> names); membership is a new method on the existing `TemplateExpr` class,
-> `.in_(["a", "b"])` → `in ['a', 'b']` (not added to `hassle.__all__` — it's a
-> method, not a module-level name, same convention as `.eq()`/`.ne()`
-> themselves). Boolean composition (`&`/`|`/`~`) and the `__bool__`/
-> `CompileTimeBranchError` trap are unchanged — `state_of(...)` just produces
-> another `TemplateExpr`. New error `TemplateComparisonOperandError` (module-
-> internal, `hassle.compiler.templates` — NOT added to `hassle.__all__`,
-> same non-public-error convention as `TemplateEntityRefError`): `.eq()`/
-> `.ne()` against something that is neither a `TemplateExpr` nor a bare
-> int/float/str/bool literal (e.g. a list/dict) raises this instead of
-> silently `repr()`-ing the value into nonsense Jinja. Inverter coverage
-> (`hassle.decompiler.template_invert`, non-public tooling): bare
-> `states('x')` (no `| float`) plus `==`/`!=`/`in [...]` against a string now
-> invert to `state_of(...)` forms; `is_state('x', 'y')` is NOT accepted by
-> the parser at all — it re-renders as `states('x') == 'y'`, which differs
-> textually from an `is_state(...)`-authored template, so the byte-exact
-> acceptance gate (already the enforced rule) correctly
-> rejects it and the caller falls back to the unchanged string form. This is
-> a one-time canonicalization: only after the user's own edit (or Hassle's
-> compiled re-render) replaces the stored template with the canonical
-> `states(...) == ...` spelling does it invert cleanly forever after — never
-> weakened to force a match. Regression fix alongside this addition (see
-> `hassle.decompiler.template_invert`'s module docstring / M16 test file):
-> `invert_template`'s acceptance check compared its re-render against
-> `jinja_text.strip()` instead of the original, unstripped `jinja_text` — a
-> pre-existing bug (reachable via `expr(...)`'s `| float` grammar too) that
-> silently dropped a leading/trailing newline around a `{{ ... }}` block on
-> inversion, violating I3; now compares against the original text.
-
-> **Widened 2026-07-07 (M19, F3-additive, surface count
-> 106 → 108 relative to the pre-M19/pre-M20-PRs baseline this note and the
-> `ux/capture-notify-recipe` note below were both independently written
-> against — see the reconciliation note after both for the actual combined
-> total now that both have merged; AMENDED 2026-07-07, pre-merge design
-> feedback on the M19 PR — rewritten in place since the amended names were
-> never merged, no deprecation dance needed):** two new names.
-> `SharedScriptParamMisuseError` —
-> `range()`/`bool()`/`int()`/`float()`/`round()`/`math.trunc()` misuse, AND
-> (PR review finding) `for`/`in`/`len`/indexing container misuse, on a bound
-> shared-script parameter. Its message teaches the HONEST runtime/compile-time
-> alternatives directly (`with repeat_count(name):`/`with
-> repeat_for_each(name):`/a runtime condition-template for a genuinely
-> runtime value; a module constant or `@macro` argument for a genuinely
-> compile-time one) rather than naming an escape hatch. `field_default(value)`
-> — the typed-default helper for a `@shared_script` parameter annotated
-> `TemplateExpr` (design-directed typing resolution, below): the identity
-> function AT RUNTIME (returns ``value`` unchanged, so the compiler's
-> `inspect.signature` introspection sees the real declared default), typed as
-> returning `TemplateExpr` so a field's default expression (`tag: TemplateExpr
-> = field_default("")`) type-checks against its own annotation instead of
-> being self-inconsistent (`tag: TemplateExpr = ""` would itself be a
-> `reportArgumentType` error). Named in `pyproject.toml`'s
-> `[tool.ruff.lint.flake8-bugbear] extend-immutable-calls` (ruff's own B008
-> would otherwise flag `field_default(...)` as a mutable-default-style
-> anti-pattern, since it can't know the call is a pure identity function).
-> An originally-planned third name, `param_default(name)` (plus its own
-> `NoDeclaredDefaultError`), was rejected during design review before merge: it would
-> have returned the field's DECLARED default to sidestep the binding for
-> deliberate compile-time metaprogramming (the `for _ in
-> range(param_default("times")):` unroll pattern) — but that bakes a stale
-> compile-time value into the compiled sequence while the HA field still
-> exists and still invites callers to pass other values, making the field a
-> lie (a caller's actual `times=5` would be silently ignored forever by an
-> unroll that only ever saw the declared default). Neither name shipped.
->
-> **Typing resolution (pre-merge design feedback, same round):** every
-> `@shared_script` signature parameter is now annotated `TemplateExpr` (body-
-> true — inside the body it's ALWAYS a runtime template marker, never its
-> declared Python default's type; a plain-type annotation like `times: int`
-> would let `sun_angle / 2`-style body composition type-check as real
-> arithmetic when it's actually building Jinja text, an "int-field lie"
-> pyright doesn't catch since it trusts the annotation over the runtime type).
-> Resolved EMPIRICALLY via a pyright `--outputjson` probe (session
-> investigation, matching `test_annotation_truth_pyright_gate.py`'s
-> convention): `@shared_script`'s returned CALLER wrapper's own signature is,
-> and always has been, `(*args: Any, **kwargs: Any) -> None` — no
-> `ParamSpec`/`functools.wraps` type-level propagation happens, so a call
-> site's typing is COMPLETELY DECOUPLED from the decorated function's own
-> annotations (verified: a caller passing a plain literal, a wrong kwarg NAME,
-> or a wrong kwarg VALUE TYPE all produce ZERO pyright diagnostics either way
-> — the real validation net is `UnknownFieldError`/Python's own `TypeError`
-> from `bind_partial`, at COMPILE time, unaffected by any typing change here).
-> This decoupling is what makes body-true `TemplateExpr` annotations free: no
-> caller-side typing is lost by choosing the body-true annotation over a
-> caller-friendly one, because callers never saw either. `param(name)`'s
-> return type is also `TemplateExpr` (a `_BoundParamMarker` subclass, module-
-> internal, not itself an export). Decompiler emission
-> (`hassle.decompiler.codegen._shared_script_signature`): every parameter
-> keyword-only (a leading `*,` — a required field with no declared default,
-> bare `TemplateExpr` with no `=...`, can otherwise follow a defaulted one in
-> the STORED `fields` dict's own order, e.g.
-> `fixtures/configs/script_with_fields.json`'s `light_entity`/`brightness`/
-> `delay_seconds`, which is a plain-Python-parameter-ordering `SyntaxError`
-> unless keyword-only — a regression this exact fixture caught); a required
-> field gets bare `name: TemplateExpr`, a defaulted one gets `name:
-> TemplateExpr = field_default(<default>)`. The M28 pyright gate
-> (`test_annotation_truth_pyright_gate.py`'s convention) is the acceptance
-> bar: both a decompiled `@shared_script` body-composition file AND a
-> separate caller file calling it with plain literals are zero policed
-> diagnostics under standard mode. Companion behavior change (not a new name —
-> `param()`'s existing frozen entry, and the meaning of a `@shared_script`
-> body's own signature parameters, both widen): compiling a `@shared_script`
-> body now binds EVERY signature parameter whose name is a declared field to
-> its `param(name)` marker BEFORE the body runs, regardless of its declared
-> Python default — so `tag=tag` inside the body is now exactly equivalent to
-> `tag=param("tag")` (previously, an unbound bare parameter held its literal
-> Python default — `None` if undeclared — a footgun this milestone was
-> commissioned to close). `param(name)` itself is unchanged in spelling and
-> stays valid (back-compat); its return value is now a `_BoundParamMarker`
-> (module-internal `hassle.compiler.scripts` class, NOT added to
-> `hassle.__all__` — a `TemplateExpr` subclass, so nothing about the DSL
-> surface changes beyond the one name above). Decompiler widening
-> (`hassle.decompiler.template_invert`/
-> `hassle.decompiler.codegen`, non-public tooling): inside a `@shared_script`
-> body's own decompile, a `"{{ <field> }}"` data value whose name is exactly
-> one of the script's own fields now inverts to the bare parameter read
-> (`tag`) instead of the raw string; a larger invertible expression
-> containing a field read decompiles through the same bounded inverter with
-> fields bound as parameters; the same field-aware rewrite also applies to
-> `repeat.count`/`repeat.for_each`, so `repeat_count(times)`/
-> `repeat_for_each(items)` round-trip with the bare parameter too (the
-> blessed alternative to the rejected `param_default()`). Scoped strictly to
-> an actual shared-script body's decompile (a module-level context, reset
-> immediately after) — never affects automation/plain-`@script`
-> decompilation, and the byte-exact re-render acceptance gate (MILESTONES
-> M13) still governs: anything the inverter can't accept keeps the unchanged
-> raw-string fallback (I3).
-
-> **Widened 2026-07-07 (`ux/capture-notify-recipe`, F3-additive,
-> surface count 106 → 108 — independently of the M19 note above; both were
-> written against the same pre-both-merge 106 baseline, see the
-> reconciliation note below for the combined total):** two new names,
-> `capture_actions()` /
-> `emit_actions(bodies, *, span=)` — the public capture seam a `lib/`
-> recipe builder uses to record a block's actions once and splice the SAME
-> bodies into more than one container it assembles itself (e.g. one shared
-> notification action list reused across several `choose()` branches).
-> `with capture_actions() as bodies:` records exactly like any other action
-> context (`if_then`, a `choose()` branch, …) but does NOT append into the
-> enclosing sequence — `bodies` is a plain `list[dict[str, Any]]` of action
-> bodies (the same shape every builder's `to_action()` produces), with no
-> `RecordedNode`/span wrapper (those stay compiler-internal, per "Internal
-> extension seams that remain NON-public" below). `emit_actions(bodies)`
-> appends each captured body, in declaration order, into whatever container
-> is active at the CALL site (respecting `push_actions` nesting exactly like
-> a direct builder call would), each re-wrapped with a fresh span captured
-> at the `emit_actions(...)` line — so an error later raised against an
-> emitted action points at the splice site, never some unrelated earlier
-> line. `bodies` is read-only to `emit_actions`: emitting the same captured
-> list more than once (e.g. into two different branches, see
-> `fixtures/dsl/capture_emit_actions/`) is supported and produces
-> independent, equal-but-distinct entries. Both raise
-> `NoRecordingContextError` outside an active recording context, same
-> message shape as `when`/`only_if`/every other recording verb (R6). This is
-> the seam the cookbook's actionable-mobile-notification recipe
-> (`notify_mobile`/`action`, `fixtures/cookbook/bundle/lib/notify_actions.py`)
-> is built on; neither name changes the meaning of any existing construct.
-
-> **Widened 2026-07-07 (`m20/entity-conditions`,
-> F3-additive, `hassle.__all__` itself untouched — every addition below is a
-> METHOD/PROPERTY, not a module-level name):** entity-first conditions,
-> `entity.state != ""`.
->
-> `EntityRef.state` (a defined `@property`, so it wins over M18's
-> service-method `__getattr__` — no HA domain has a service literally named
-> `state`; property lookup is a data descriptor and is always checked before
-> `__getattr__` even runs) returns a comparison accessor
-> (`hassle.compiler.builders._StateAccessor`, non-public) bound to that one
-> entity id:
-> - `==`/`!=` → a native `state` condition (`state(x).is_(v)` /
->   `state(x).is_not(v)`, byte-identical IR either spelling);
-> - `>`/`<` → `numeric_state(x, above=v)` / `(x, below=v)`;
-> - `>=`/`<=` → `InclusiveNumericBoundError` (added to `hassle.__all__` — see
->   below): HA's `numeric_state` has no inclusive bound, so silently mapping
->   these onto `above`/`below` would compile a condition that is subtly wrong
->   right at the boundary value. Raised instead of a wrong compile, naming the
->   honest exclusive-operator rewrite;
-> - `.in_([...])` → `state(x).is_(["a", "b"])` (HA's `state` condition already
->   accepts a list value as OR-membership, verified against a real
->   UI-authored config, `fixtures/configs/automation_condition_state_list_valued_fields.json`).
->
-> Works identically on every `EntityRef` source — `e.<domain>.<id>` registry
-> refs AND helper-declaration handles (`input_text(id=...)` and friends all
-> return `EntityRef`), since both share the one implementation.
->
-> The **`in`-operator trap** (Python semantics, non-negotiable): `x.state in
-> [...]` dispatches to `list.__contains__`, which calls `bool()` on each
-> element comparison to decide membership — no `__eq__` override can
-> intercept this. The comparison-RESULT object (what `==`/`!=` return) refuses
-> `__bool__` with a new error, `InOperatorTrapError` (added to
-> `hassle.__all__`), naming `.in_([...])` as the fix — the natural-but-
-> impossible spelling fails loudly, never silently.
->
-> `StateExpr.is_not(v)` (a new method, mirroring `.is_()` exactly, including
-> its list-valued `entity_id`/`value` handling) compiles to
-> `{"condition": "not", "conditions": [<state-condition>]}`, byte-identical to
-> `not_(state(x).is_(v))`. The `.state` accessor's `==`/`!=` are REAL `__eq__`/
-> `__ne__` overloads. `TemplateExpr` is a `str` subclass and must keep
-> ordinary string equality (see `hassle.compiler.templates`'s "Note on
-> ==/!="); `StateExpr` is NOT a `str` subclass (merge-time correction — the
-> original note here misstated this), but it deliberately keeps plain object
-> equality anyway: ONE blessed operator surface (the accessor) beats two
-> parallel spellings, and the `ConditionArgumentTypeError` bool-guard catches
-> a `state(x) != ...` mistake loudly, naming both `.is_not()` and the
-> `.state` accessor. The accessor is a bespoke, non-`str` object that exists
-> only to be compared, so overloading it can never collide with
-> string-equality semantics. (Typing-dance note: a class
-> overloading `__eq__` for a non-`bool` return needs an explicit
-> `# type: ignore[override]` on each of `__eq__`/`__ne__` — `object.__eq__`'s
-> signature returns `bool`, and pyright strict enforces that; the class also
-> loses its default identity-`__hash__` the moment it defines `__eq__` and
-> gets `__hash__` explicitly restored to `object.__hash__`, since nothing
-> requires this accessor to be unhashable and leaving it `None` would be a
-> landmine for a future caller.)
->
-> Trigger/expression non-confusion (spec test 3): the accessor's comparison
-> result has `to_condition()` only, no `to_trigger` — passing it to `when(...)`
-> fails with a plain `AttributeError` on the missing method, never silently
-> compiling as some other trigger shape. Distinct from M16's `state_of(entity)`
-> (the Jinja TEMPLATE-STRING read, `states('x')`, for template/expression
-> composition): `.state` is the NATIVE-CONDITION read (a real `state`/
-> `numeric_state` condition dict for `only_if(...)`/`if_then(...)`/etc.) — the
-> two never produce the same IR shape.
->
-> **Also lands a general R6 hardening (absorbed scope item, this same PR):**
-> every condition-accepting entry point (`only_if`, `if_then`, `else_if`,
-> `choose().when_`, `repeat_while`, `repeat_until`, `any_of`/`all_of`/`not_`)
-> now rejects a plain Python `bool` argument with a new error,
-> `ConditionArgumentTypeError` (added to `hassle.__all__`) — previously a bare
-> `AttributeError: 'bool' object has no attribute 'to_condition'` deep inside
-> the compiler, the classic `==`/`!=`-on-a-plain-value typo. Stubs: generated
-> entity classes type the `.state` accessor (`hassle.registry.stubs`'s
-> `generate_entities_stub`); the M28 decompiled-bundle pyright gate stays
-> zero. Decompiler canonical output is UNCHANGED this milestone (authoring
-> sugar only — the decompiler still emits `state(...)`/`numeric_state(...)`
-> builder calls, never the `.state` accessor form); `hassle.__all__` count
-> 108 → 111 (`InclusiveNumericBoundError`, `InOperatorTrapError`,
-> `ConditionArgumentTypeError`).
-
-> **Reconciliation (merge of `m19/real-params` and `main` after both the M19
-> and `ux/capture-notify-recipe` PRs landed):** the two notes above were each
-> written independently against the same pre-merge 106-name baseline, each
-> claiming "106 → 108" for their own two additions. The actual combined
-> surface after M19 + capture/emit is 110 names; with `m20/entity-conditions`'s
-> three error additions the final total is **113 names** (verified at merge
-> time: `len(hassle.__all__) == 113`). No name collisions anywhere.
-
-The public surface is exactly `hassle.__all__` (module`packages/hassle-core/src/hassle/__init__.py`). Bundle files write
+The public surface is exactly `hassle.__all__` (module
+`packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.
 
-Current surface: **72 names**, plus TWO dedicated entry points that are
-deliberately *not* folded into `hassle.__all__`: `hassle.registry` (below;
-DESIGN §5.3 imports it under its own alias, `from hassle.registry import
-entities as e`) and `hassle.services` (its own section
+Two dedicated entry points are deliberately *not* folded into `hassle.__all__`:
+`hassle.registry` (below; DESIGN §5.3 imports it under its own alias, `from
+hassle.registry import entities as e`) and `hassle.services` (its own section
 below) — both are domain/instance-dynamic (their real shape depends on the
 bundle's own registry snapshot), which is exactly why neither is part of the
 star surface: `hassle.__all__` is a fixed, frozen contract, but which
 domains/services exist is a property of a specific HA install, not the DSL
 itself.
 
-### Entity indexing form — `hassle.registry.entities` (DESIGN §5.2/§5.3, M1 test 8)
+### Entity indexing form — `hassle.registry.entities` (DESIGN §5.2/§5.3)
 
 ```python
 from hassle.registry import entities as e
@@ -395,11 +37,10 @@ entity id). The digit-leading rule (DESIGN §5.2: object_ids match
 `(?!_)[\da-z_]+(?<!_)`, so they may start with a digit but a Python identifier
 can't) strips exactly one leading underscore when the next character is a
 digit; any other name passes through unchanged. This module (`hassle.registry`)
-is the M1 *runtime* shape and is domain-open (no registry snapshot backs it);
-M3 layers generated, typed `.pyi`
-stub classes with the identical attribute/index shape on top, so a bad
-attribute name becomes a pyright error in the editor without changing how
-bundles are written.
+is domain-open (no registry snapshot backs it at runtime); the registry module
+also generates typed `.pyi` stub classes with the identical attribute/index
+shape on top, so a bad attribute name becomes a pyright error in the editor
+without changing how bundles are written.
 
 ### Typed service namespaces — `hassle.services`, and entity-method sugar
 
@@ -412,17 +53,17 @@ cover.close_cover(target={"entity_id": "cover.blind"})
 e.cover.blind.close_cover()                                 # entity-method sugar
 ```
 
-`hassle.services` is a **new, non-star module** (F3-additive; not part of
-`hassle.__all__` for the same domain-instance-dynamic reason
-`hassle.registry` isn't): a module-level PEP 562 `__getattr__` accepts ANY
-domain name and returns a namespace object whose own `__getattr__` accepts
-ANY service name and returns a callable — `light.turn_on(**fields)` records
-the identical action a `service("light.turn_on", **fields)` call would.
-Offline compile never fails on an unknown domain/service (that is
-`hassle validate`'s job — an `unknown-service` Finding with a did-you-mean
-suggestion, gated on real edit-distance evidence rather than "not in this
-snapshot", since HA's service catalog is per-installed-integration, never a
-complete, stable enumeration the way entities are).
+`hassle.services` is a non-star module (not part of `hassle.__all__`, for the
+same domain-instance-dynamic reason `hassle.registry` isn't): a module-level
+PEP 562 `__getattr__` accepts ANY domain name and returns a namespace object
+whose own `__getattr__` accepts ANY service name and returns a callable —
+`light.turn_on(**fields)` records the identical action a
+`service("light.turn_on", **fields)` call would. Offline compile never fails
+on an unknown domain/service (that is `hassle validate`'s job — an
+`unknown-service` Finding with a did-you-mean suggestion, gated on real
+edit-distance evidence rather than "not in this snapshot", since HA's service
+catalog is per-installed-integration, never a complete, stable enumeration the
+way entities are).
 
 **Entity-method sugar:** `e.<domain>.<id>.<method>(**fields)` (any
 `EntityRef`, whether from `hassle.registry.entities` or a helper
@@ -449,107 +90,201 @@ star-imported DSL name, e.g. `automation`/`script`/`zone`/`schedule`/`time`
 are simultaneously real HA service domains and frozen DSL names). Everything
 else (a templated service name, a service/domain absent from the snapshot,
 no snapshot supplied at all, or a non-kwarg-safe data key) falls back to
-`service(...)` — I3 byte-exact through both branches. The entity-method form
-is author-only sugar and is never emitted by the decompiler (one canonical
-output form, independent of how the DSL source happened to be written).
+`service(...)` — round-trips byte-exact through both branches. The
+entity-method form is author-only sugar and is never emitted by the
+decompiler (one canonical output form, independent of how the DSL source
+happened to be written).
 
 ## The frozen surface, grouped by role
 
 ### Object decorators / declarations (top-level objects)
 - `automation` — `@automation(**ha_options)` registers an automation.
-  `triggers=` (F3-additive, `ux/triggers-in-decorator`) is a list of
-  `TriggerBuilder` objects recorded at decoration time — the canonical,
-  decompiler-emitted way to attach triggers; composes with `when()` (below),
-  which remains the tool for a dynamically-built trigger list.
+  `triggers=` is a list of `TriggerBuilder` objects — the same objects
+  `when()` accepts — evaluated at decoration time (built when the
+  `@automation(...)` line itself runs, before the compiler invokes the
+  function body). This is the CANONICAL decompiled form (DESIGN §5.3/§7.3):
+  the decompiler emits `triggers=[...]` in the decorator instead of a
+  `when(...)` call at the top of the body, multi-line (one trigger per line)
+  when there's more than one. `when()` itself remains fully supported — still
+  the right tool when the trigger list must be built dynamically (a
+  compile-time loop, a shared helper function, …), since `triggers=`'s list is
+  one Python expression evaluated once, at decoration time, and so can only
+  ever be a single static list literal. `triggers=` and `when()` COMPOSE: the
+  decorator's list is recorded first, then any `when()` calls inside the body
+  append after it, in call order (DESIGN §5.3's position-independence note).
+  Compile parity is exact: `@automation(triggers=[state(x).to("on")])`
+  produces byte-identical IR to the equivalent `when(state(x).to("on"))` form.
 - `script` — `@script(**ha_options)` registers a plain script.
 - `shared_script` — `@shared_script(...)` registers a script **and** returns a
-  call-site verb (invoking it elsewhere records a `script.<id>` call, DESIGN §5.6).
+  call-site verb (invoking it elsewhere records a `script.<id>` call, DESIGN
+  §5.6). See "`@shared_script` parameters" below for the body-side binding
+  rules. The call-site wrapper accepts every declared field as a kwarg, plus
+  three optional keyword-only step options mirroring every other action
+  shape's step options: `metadata=`/`alias=`/`enabled=` (e.g.
+  `flash_lights(times=5, metadata={...}, alias="...", enabled=False)`) — used
+  to round-trip a UI-saved action's `metadata: {}` / step `alias`/`enabled`
+  through the call site. `fields=` on the decorator itself carries full HA
+  field metadata (`name`/`description`/`selector`/`example`/...) VERBATIM;
+  when supplied it wins over the signature-derived `fields` dict (byte
+  stability by construction), since real HA-UI-authored scripts always carry
+  this richer shape. The signature stays the ergonomic call-site layer —
+  every declared field is still a real Python parameter, `None`-defaulted
+  when the metadata carries no `"default"` key (HA-side requiredness lives in
+  the metadata, not in whether the compiler can invoke the body with zero
+  arguments to build its sequence). A call-site kwarg not among `fields=`'s
+  keys (the superset source of truth when `fields=` is explicit) is rejected
+  with `UnknownFieldError` even if it would otherwise bind against the
+  signature — catches an author who added a Python parameter but forgot to
+  also declare it as a field.
 - `macro` — `@macro` marks a compile-time-inlined function (DESIGN §5.6).
 - `raw_automation` — `@raw_automation(id=...)` over a zero-arg function returning
   a verbatim automation dict (DESIGN §5.8; `normalize_ha` is applied).
 - `blueprint_automation` — `blueprint_automation(id=, use_blueprint=, inputs=,
   alias=, description=)`; maps `inputs=` → stored `use_blueprint.input` with an
-  author-qualified path (docs/ha-api-notes.md §10.5). `alias=`/`description=`
-  are an M2 addition (widening, not a break — real blueprint automations carry
-  these top-level fields alongside `use_blueprint`, docs/ha-api-notes.md §10.5).
+  author-qualified path (docs/internals/ha-api-notes.md §10.5). `alias=`/`description=`
+  are real blueprint-automation top-level fields alongside `use_blueprint`
+  (docs/internals/ha-api-notes.md §10.5).
 - Helper declarations (DESIGN §5.7), one per storage-collection domain, each
   returning an `EntityRef` usable as an entity id elsewhere:
   `input_boolean`, `input_number`, `input_select`, `input_text`,
   `input_datetime`, `input_button`, `counter`, `timer`, `schedule`.
-- **M10 ADDITION** — template-helper declarations (config-entry domain, DESIGN
-  §13's config-entry plugin, docs/ha-api-notes.md §26): `template_number(name=,
+- Template-helper declarations (config-entry domain, DESIGN §13's config-entry
+  plugin, docs/internals/ha-api-notes.md §26): `template_number(name=,
   state=, set_value=, min=, max=, step=, unit_of_measurement=, icon=)`,
   `template_sensor(name=, state=, unit_of_measurement=, device_class=, icon=)`,
   `template_binary_sensor(name=, state=, device_class=, icon=)`,
   `template_select(name=, state=, options=, select_option=, icon=)`. Same
   import-and-reference pattern as the storage-collection helpers above
   (returns an `EntityRef`).
-  **No `id=`/`unique_id=` kwarg** (redesigned 2026-07-05, docs/ha-api-notes.md
-  §26.6, CI evidence: real HA's config-flow form schema rejects an
-  unrecognized `unique_id` key outright — a flow-created entry has no
-  caller-settable unique id at all). `name=` is the sole identity-bearing
-  kwarg: the object key is `"<domain>:<slugify(name)>"`, mirroring the
-  storage helpers' "id is a slug of name" rule. `set_value=` on
-  `template_number` and `select_option=` on `template_select` are REQUIRED
-  (HA's own form schema rejects the submission without them — a number/select
-  needs a write-target action sequence; `template_sensor`/
-  `template_binary_sensor` are read-only and need neither). The HA-assigned
-  `entry_id` is manifest-only (docs/backend.md), never in the DSL body.
-- **M21 ADDITION** — group-helper declarations (config-entry domain, DESIGN
-  §13's config-entry plugin, the mechanical follow-on M10 itself predicted;
-  docs/ha-api-notes.md §38): one builder per flavor, all taking
-  `name=`/`entities=`/`hide_members=` (default `False`, always materialized
-  explicitly): `group_button`, `group_cover`, `group_event`, `group_fan`,
-  `group_lock`, `group_media_player`, `group_notify`, `group_valve`. Three
-  flavors additionally take `all=` (default `False`, always materialized
-  explicitly): `group_binary_sensor`, `group_light`, `group_switch`. One
-  flavor additionally takes a REQUIRED `type=` (the aggregation kind:
-  min/max/mean/median/last/range/product/sum/stdev): `group_sensor`. Same
-  import-and-reference pattern as every other helper builder (returns an
-  `EntityRef`); no decorator form (no Jinja `state=` field to defer, unlike
-  template).
-  **No `id=`/`unique_id=` kwarg**, same rule as template helpers
-  (docs/ha-api-notes.md §38.1: real HA's `group` config-flow form schema
-  also rejects an unrecognized `unique_id` key outright). `name=` is the
-  sole identity-bearing kwarg: the object key is
-  `"group_<flavor>:<slugify(name)>"` (e.g. `group_cover:entryway_top`).
-  The HA-assigned `entry_id` is manifest-only
-  (docs/backend.md), never in the DSL body. `entities=` (a list of member
-  entity ids, possibly another group's own produced entity id — groups may
-  nest) preserves order verbatim (I3).
+  **No `id=`/`unique_id=` kwarg** (real HA's config-flow form schema rejects
+  an unrecognized `unique_id` key outright — a flow-created entry has no
+  caller-settable unique id at all; docs/internals/ha-api-notes.md §26.6).
+  `name=` is the sole identity-bearing kwarg: the object key is
+  `"<domain>:<slugify(name)>"`, mirroring the storage helpers' "id is a slug
+  of name" rule. `set_value=` on `template_number` and `select_option=` on
+  `template_select` are REQUIRED (HA's own form schema rejects the submission
+  without them — a number/select needs a write-target action sequence;
+  `template_sensor`/`template_binary_sensor` are read-only and need neither).
+  The HA-assigned `entry_id` is manifest-only (docs/internals/backend-protocol.md),
+  never in the DSL body.
+- Group-helper declarations (config-entry domain, DESIGN §13's config-entry
+  plugin; docs/internals/ha-api-notes.md §38): one builder per flavor, all
+  taking `name=`/`entities=`/`hide_members=` (default `False`, always
+  materialized explicitly): `group_button`, `group_cover`, `group_event`,
+  `group_fan`, `group_lock`, `group_media_player`, `group_notify`,
+  `group_valve`. Three flavors additionally take `all=` (default `False`,
+  always materialized explicitly): `group_binary_sensor`, `group_light`,
+  `group_switch`. One flavor additionally takes a REQUIRED `type=` (the
+  aggregation kind: min/max/mean/median/last/range/product/sum/stdev):
+  `group_sensor`. Same import-and-reference pattern as every other helper
+  builder (returns an `EntityRef`); no decorator form (no Jinja `state=` field
+  to defer, unlike template).
+  **No `id=`/`unique_id=` kwarg**, same rule as template helpers (real HA's
+  `group` config-flow form schema also rejects an unrecognized `unique_id`
+  key outright; docs/internals/ha-api-notes.md §38.1). `name=` is the sole
+  identity-bearing kwarg: the object key is `"group_<flavor>:<slugify(name)>"`
+  (e.g. `group_cover:entryway_top`). The HA-assigned `entry_id` is
+  manifest-only (docs/internals/backend-protocol.md), never in the DSL body.
+  `entities=` (a list of member entity ids, possibly another group's own
+  produced entity id — groups may nest) preserves order verbatim.
+
+### `@shared_script` parameters
+
+Every `@shared_script` signature parameter is annotated `TemplateExpr` — body-true:
+inside the body it is ALWAYS a runtime template marker, never its declared
+Python default's type. (A plain-type annotation like `times: int` would let
+`sun_angle / 2`-style body composition type-check as real arithmetic when it's
+actually building Jinja text.) The decorated function's own signature is
+irrelevant to a caller's typing: `@shared_script`'s returned CALLER wrapper
+signature is `(*args: Any, **kwargs: Any) -> None`, completely decoupled from
+the body's annotations — the real validation net is `UnknownFieldError` /
+Python's own `TypeError` from `bind_partial`, at compile time.
+
+- `param(name)` — inside the body, a runtime reference to a declared field
+  (returns `TemplateExpr`, specifically a `_BoundParamMarker` subclass,
+  module-internal). Compiling a `@shared_script` body binds EVERY signature
+  parameter whose name is a declared field to its `param(name)` marker BEFORE
+  the body runs, regardless of its declared Python default — so `tag=tag`
+  inside the body is exactly equivalent to `tag=param("tag")`; an unbound bare
+  parameter never silently holds its literal Python default.
+- `field_default(value)` — the typed-default helper for a parameter annotated
+  `TemplateExpr`: the identity function AT RUNTIME (returns `value`
+  unchanged, so the compiler's `inspect.signature` introspection sees the
+  real declared default), typed as returning `TemplateExpr` so a field's
+  default expression (`tag: TemplateExpr = field_default("")`) type-checks
+  against its own annotation. Named in `pyproject.toml`'s
+  `[tool.ruff.lint.flake8-bugbear] extend-immutable-calls` so ruff's B008
+  doesn't flag it as a mutable-default-style anti-pattern.
+- `SharedScriptParamMisuseError` — raised on `range()`/`bool()`/`int()`/
+  `float()`/`round()`/`math.trunc()` misuse, and on `for`/`in`/`len`/indexing
+  container misuse, applied to a bound shared-script parameter. Its message
+  teaches the runtime/compile-time alternatives directly (`with
+  repeat_count(name):` / `with repeat_for_each(name):` / a runtime
+  condition-template for a genuinely runtime value; a module constant or
+  `@macro` argument for a genuinely compile-time one).
+- Decompiler emission (`hassle.decompiler.codegen._shared_script_signature`):
+  every parameter is keyword-only (a leading `*,` — a required field with no
+  declared default, bare `TemplateExpr` with no `=...`, can otherwise follow a
+  defaulted one in the stored `fields` dict's own order, which is a plain
+  Python parameter-ordering `SyntaxError` unless keyword-only). A required
+  field gets bare `name: TemplateExpr`, a defaulted one gets `name:
+  TemplateExpr = field_default(<default>)`. Inside a `@shared_script` body's
+  own decompile, a `"{{ <field> }}"` data value whose name is exactly one of
+  the script's own fields inverts to the bare parameter read (`tag`) instead
+  of the raw string; a larger invertible expression containing a field read
+  decompiles through the same bounded inverter with fields bound as
+  parameters; the same field-aware rewrite also applies to
+  `repeat.count`/`repeat.for_each`, so `repeat_count(times)`/
+  `repeat_for_each(items)` round-trip with the bare parameter too. Scoped
+  strictly to an actual shared-script body's decompile (a module-level
+  context, reset immediately after) — never affects automation/plain-`@script`
+  decompilation; anything the inverter can't accept keeps the unchanged
+  raw-string fallback.
 
 ### Recording verbs
 - `when(*triggers)` — append triggers to the active automation. Fully
   supported alongside `@automation(triggers=...)` (composes, decorator list
-  first) — the right tool for a dynamically-built trigger list; no longer the
-  decompiler's canonical output form (`ux/triggers-in-decorator`), but never
-  removed (F3).
-- `only_if(*conditions)` — append conditions.
-- `capture_actions()` (task #30 ADDITION) → `with capture_actions() as
-  bodies:` — capture a block's actions as plain action-body dicts WITHOUT
-  appending them to the enclosing sequence. `emit_actions(bodies, *,
-  alias=)` — splice previously captured bodies into the CURRENT recording
-  context (respecting nested containers), each re-wrapped with a span
-  captured at the `emit_actions(...)` call site. The public seam a `lib/`
-  recipe builder uses in place of the internal `push_actions`/`RecordedNode`
-  machinery `if_then`/`choose` are built on.
+  first) — the right tool for a dynamically-built trigger list; not the
+  decompiler's canonical output form (see `triggers=` above), but never
+  removed.
+- `only_if(*conditions)` — append conditions. Dual-form: the bare call is a
+  plain function call; the SAME call is also usable as `with only_if(...):`,
+  which additionally requires every action the automation records to be
+  inside that one block (an action recorded before/after it raises
+  `OnlyIfBlockCoverageError`). The decompiler emits the block form as
+  canonical whenever an automation has any conditions at all, wrapping every
+  action — compiled IR is byte-identical either form.
+- `capture_actions()` → `with capture_actions() as bodies:` — capture a
+  block's actions as plain action-body dicts WITHOUT appending them to the
+  enclosing sequence. `emit_actions(bodies, *, span=)` — splice previously
+  captured bodies into the CURRENT recording context (respecting nested
+  containers), each re-wrapped with a span captured at the
+  `emit_actions(...)` call site by default (or the given `span`) — so an
+  error later raised against an emitted action points at the splice site,
+  never some unrelated earlier line. `bodies` is read-only to
+  `emit_actions`: emitting the same captured list more than once (e.g. into
+  two different branches, see `fixtures/dsl/capture_emit_actions/`) is
+  supported and produces independent, equal-but-distinct entries. Both raise
+  `NoRecordingContextError` outside an active recording context, same message
+  shape as `when`/`only_if`/every other recording verb. This is the public
+  seam a `lib/` recipe builder uses in place of the internal
+  `push_actions`/`RecordedNode` machinery `if_then`/`choose` are built on
+  (e.g. the cookbook's actionable-mobile-notification recipe,
+  `fixtures/cookbook/bundle/lib/notify_actions.py`).
 
 ### Core action verbs
 - `service(action, *, target=, data=, data_template=, response_variable=,
   continue_on_error=, metadata=, alias=, enabled=, **fields)` — the **single**
   service-call verb (bare kwargs → `data`; `response_variable`/
   `continue_on_error`/`metadata`/`data_template`/`alias`/`enabled` emit as
-  top-level HA action fields). `metadata=` is a real-world smoke-test ADDITION
-  (docs/ha-api-notes.md §19.1): the HA UI stamps `"metadata": {}` on every
-  action it saves; passing it (even as `{}`) round-trips that byte-stable.
-  Omitted by default. `data_template=`/`alias=`/`enabled=` are residue-coverage
-  round-2 ADDITIONS (docs/ha-api-notes.md §20): `data_template=` is the legacy
-  templated-data key, a sibling of `data` never folded into it; `alias=`/
-  `enabled=` name/toggle the individual step (the HA UI does this on every
-  step). All three omitted by default.
+  top-level HA action fields). `metadata=` round-trips the `"metadata": {}`
+  the HA UI stamps on every action it saves (docs/internals/ha-api-notes.md
+  §19.1); omitted by default. `data_template=` is the legacy templated-data
+  key, a sibling of `data` never folded into it; `alias=`/`enabled=`
+  name/toggle the individual step, the same way the HA UI does on every step
+  (docs/internals/ha-api-notes.md §20). All three omitted by default.
 - `delay(*, alias=, enabled=, **units)` — dict-form delay. `alias=`/`enabled=`
-  are the same residue-coverage round-2 ADDITION, keyword-only so they never
-  collide with a duration unit.
+  are keyword-only so they never collide with a duration unit.
 - `variables(**kwargs)` — a `variables` action.
 - `stop(message=None, *, error=None)` — a `stop` action.
 - `fire_event(event_type, **event_data)` — the fire-event **action** (distinct
@@ -572,30 +307,82 @@ output form, independent of how the DSL source happened to be written).
   for the classic-builder family via `.with_options(...)`.
 - `state(entity_id)`'s `entity_id` (and `.to()`/`.is_()`'s `value`) and
   `numeric_state(entity_id, ...)`'s `entity_id` accept `str | Sequence[str]`
-  (real-world smoke-test ADDITION, docs/ha-api-notes.md §19.2; widened from
-  `str | list[str]` to `str | Sequence[str]` in the task #28 annotation-truth
-  pass — `list[X]` is invariant, so a decompiled bundle's
+  (`Sequence` rather than `list` so a decompiled bundle's
   `state(e.<domain>.<id>)` — an entity STUB CLASS, a `str` subclass but not
-  literally `str` — was a pyright error even though it is correct, runnable
-  code; `Sequence` is covariant, and a bare `str` is itself a `Sequence[str]`,
-  so the single-entity form is unaffected): the HA UI always stores these
-  fields as a list, even for a single entity/value, and a singleton list
-  decompiles back to a list, never a scalar. Residue-coverage round 2
-  (docs/ha-api-notes.md §20) extended the **decompiler** side of this to the
-  `state` **condition** path (`to_condition()`'s `entity_id`/`state` were
-  already list-capable at the builder level since round 1; only
-  `hassle.decompiler.exprs._cond_state` needed the matching widening) — no
-  further DSL surface change, since `state()` is the same dual-purpose builder.
-- `time(at=, after=, before=, weekday=)`: `weekday=` is now also emitted on the
-  **trigger** side, not condition-only as originally documented (real-world
-  smoke-test ADDITION, docs/ha-api-notes.md §19.3 — HA's `time` trigger schema
-  accepts it). `at=` accepting an entity reference (`input_datetime.x`) needed
-  no code change (`at` was always a plain `str`) but is noted there too.
+  literally `str` — type-checks correctly under pyright strict; a bare `str`
+  is itself a `Sequence[str]`, so the single-entity form is unaffected): the
+  HA UI always stores these fields as a list, even for a single entity/value,
+  and a singleton list decompiles back to a list, never a scalar. This
+  applies on both the trigger and the `state` **condition** path
+  (`hassle.decompiler.exprs._cond_state`), since `state()` is the same
+  dual-purpose builder either way.
+- `time(at=, after=, before=, weekday=)`: `weekday=` is emitted on both the
+  **trigger** and condition side (HA's `time` trigger schema accepts it,
+  docs/internals/ha-api-notes.md §19.3). `at=` accepts an entity reference
+  (`input_datetime.x`) as a plain `str`.
+
+### Entity-state conditions
+- `EntityRef.state` — a `@property` on any `EntityRef` (both `e.<domain>.<id>`
+  registry refs and helper-declaration handles, since both share the one
+  implementation). Property lookup is a data descriptor and is always checked
+  before the entity-method `__getattr__` sugar (above), so no HA domain name
+  can shadow it. Returns a comparison accessor
+  (`hassle.compiler.builders._StateAccessor`, non-public) bound to that one
+  entity id:
+  - `==`/`!=` → a native `state` condition (`state(x).is_(v)` /
+    `state(x).is_not(v)`, byte-identical IR either spelling);
+  - `>`/`<` → `numeric_state(x, above=v)` / `(x, below=v)`;
+  - `>=`/`<=` → `InclusiveNumericBoundError`: HA's `numeric_state` has no
+    inclusive bound, so silently mapping these onto `above`/`below` would
+    compile a condition that is subtly wrong right at the boundary value.
+    Raised instead of a wrong compile, naming the honest exclusive-operator
+    rewrite;
+  - `.in_([...])` → `state(x).is_(["a", "b"])` (HA's `state` condition already
+    accepts a list value as OR-membership, verified against a real
+    UI-authored config).
+
+  The **`in`-operator trap** (Python semantics, non-negotiable): `x.state in
+  [...]` dispatches to `list.__contains__`, which calls `bool()` on each
+  element comparison to decide membership — no `__eq__` override can
+  intercept this. The comparison-RESULT object (what `==`/`!=` return) refuses
+  `__bool__` with `InOperatorTrapError`, naming `.in_([...])` as the fix — the
+  natural-but-impossible spelling fails loudly, never silently.
+
+  `StateExpr.is_not(v)` (mirroring `.is_()` exactly, including its
+  list-valued `entity_id`/`value` handling) compiles to `{"condition": "not",
+  "conditions": [<state-condition>]}`, byte-identical to `not_(state(x).is_(v))`.
+  The `.state` accessor's `==`/`!=` are real `__eq__`/`__ne__` overloads;
+  `StateExpr` is not a `str` subclass and deliberately keeps plain object
+  equality — one blessed operator surface (the accessor) beats two parallel
+  spellings, and `ConditionArgumentTypeError` (below) catches a
+  `state(x) != ...` mistake loudly, naming both `.is_not()` and the `.state`
+  accessor.
+
+  The accessor's comparison result has `to_condition()` only, no
+  `to_trigger()` — passing it to `when(...)` fails with a plain
+  `AttributeError` on the missing method, never silently compiling as some
+  other trigger shape. Distinct from `state_of(entity)` (below, the Jinja
+  TEMPLATE-STRING read, `states('x')`, for template/expression composition):
+  `.state` is the NATIVE-CONDITION read (a real `state`/`numeric_state`
+  condition dict for `only_if(...)`/`if_then(...)`/etc.) — the two never
+  produce the same IR shape.
+
+- `ConditionArgumentTypeError` — every condition-accepting entry point
+  (`only_if`, `if_then`, `else_if`, `choose().when_`, `repeat_while`,
+  `repeat_until`, `any_of`/`all_of`/`not_`) rejects a plain Python `bool`
+  argument with this error instead of a bare
+  `AttributeError: 'bool' object has no attribute 'to_condition'` deep inside
+  the compiler — the classic `==`/`!=`-on-a-plain-value typo.
+
+Stubs: generated entity classes type the `.state` accessor
+(`hassle.registry.stubs`'s `generate_entities_stub`). Decompiler canonical
+output never emits the `.state` accessor form — it is authoring sugar only;
+the decompiler still emits `state(...)`/`numeric_state(...)` builder calls.
 
 ### Condition combinators
 - `all_of(*conditions)`, `any_of(*conditions)`, `not_(condition)`.
 
-### Purpose-specific builders (2026.7+, DESIGN §5.4)
+### Purpose-specific builders (DESIGN §5.4)
 - `on(type, *, target=, behavior=, for_=, **options)` — purpose **trigger**.
 - `met(type, *, target=, **options)` — purpose **condition**.
 - Target constructors: `area`, `floor`, `label`, `device_id` (plus a plain
@@ -606,24 +393,37 @@ output form, independent of how the DSL source happened to be written).
 
 ### Template expression builder
 - `expr(entity)` — numeric-context template read (`states('x') | float`).
-- `state_of(entity)` (M16 ADDITION) — string-context template read
-  (`states('x')`, no `| float`); accepts the same argument shapes as
-  `expr()` (plain entity id string, `e.`-registry ref, or `state(...)`
-  builder). Compose string comparisons via the same `.eq()`/`.ne()` methods
-  (`states('x') == 'y'` / `!=`), and membership via `.in_(["a", "b"])` →
-  `states('x') in ['a', 'b']`.
+- `state_of(entity)` — string-context template read (`states('x')`, no
+  `| float`); accepts the same argument shapes as `expr()` (plain entity id
+  string, `e.`-registry ref, or `state(...)` builder). Compose string
+  comparisons via the same `.eq()`/`.ne()` methods (`states('x') == 'y'` /
+  `!=`), and membership via `.in_(["a", "b"])` → `states('x') in ['a', 'b']`
+  (a method on `TemplateExpr`, not a module-level name, same convention as
+  `.eq()`/`.ne()` themselves).
 - `template(raw)` — raw Jinja passthrough (see the trigger/condition note above).
-- `param(name)` — inside a `@shared_script` body, a runtime reference to a field.
-- (Operators `>`, `<`, `+`, `-`, `&`, `|`, `~`, `.eq`, `.ne`, `.in_`, … on the
+- `param(name)` — inside a `@shared_script` body, a runtime reference to a field
+  (see "`@shared_script` parameters" above).
+- Operators `>`, `<`, `+`, `-`, `&`, `|`, `~`, `.eq`, `.ne`, `.in_`, … on the
   returned expression build up the Jinja string; a native Python `if` on one
   raises `CompileTimeBranchError`. `.eq()`/`.ne()` against something that
-  isn't a `TemplateExpr` or a bare int/float/str/bool literal raises
-  `TemplateComparisonOperandError`, M16 ADDITION.)
+  isn't a `TemplateExpr` or a bare int/float/str/bool literal (e.g. a
+  list/dict) raises `TemplateComparisonOperandError` (module-internal,
+  `hassle.compiler.templates` — not part of `hassle.__all__`) instead of
+  silently `repr()`-ing the value into nonsense Jinja.
+- Inverter coverage (`hassle.decompiler.template_invert`, non-public
+  tooling): bare `states('x')` (no `| float`) plus `==`/`!=`/`in [...]`
+  against a string inverts to `state_of(...)` forms; `is_state('x', 'y')` is
+  NOT accepted by the parser at all — it re-renders as `states('x') == 'y'`,
+  which differs textually from an `is_state(...)`-authored template, so the
+  byte-exact acceptance gate correctly rejects it and the caller falls back
+  to the unchanged string form. This is a one-time canonicalization: only
+  after the user's own edit (or Hassle's compiled re-render) replaces the
+  stored template with the canonical `states(...) == ...` spelling does it
+  invert cleanly forever after.
 
-### Runtime-math expression surface (M1.1 ADDITION, DESIGN §5.4 extension)
-Symbolic-expression extension of the template builder (docs/ha-api-notes.md
-records no deviation; every builder mirrors HA's Jinja math set 1:1). All of
-this is additive to `hassle.__all__`; nothing above changed.
+### Runtime-math expression surface (DESIGN §5.4 extension)
+Symbolic-expression extension of the template builder (docs/internals/ha-api-notes.md
+records no deviation; every builder mirrors HA's Jinja math set 1:1).
 - Trig/algebra (bare Jinja function calls): `sin`, `cos`, `tan`, `asin`,
   `acos`, `atan`, `atan2`, `sqrt`, `log`.
 - Jinja2-filter mirrors: `round_(x, precision=None)` → `| round` /
@@ -637,57 +437,52 @@ this is additive to `hassle.__all__`; nothing above changed.
   stdlib `datetime.timedelta`).
 - `var(name)` — a runtime reference to an action-level `variables:` key
   (`{{ name }}`); unlike `param()`, freeform (no signature-bound validation).
-- `param(name)` is now documented as a composable `Expr`: it always returned
-  a `TemplateExpr` (no behavior changed), this milestone just exercises and
-  pins that composability (`param("x") / 360 * 2 * PI`).
+- `param(name)` always returns a composable `Expr` (`param("x") / 360 * 2 * PI`
+  works).
 - `.attr(name)` on any entity reference (`EntityRef`, returned by helper
   declarations and by `hassle.registry.entities`) → `state_attr('domain.id',
   'name')`, e.g. `e.sun.sun.attr("elevation")`.
-- `concat(*parts)` — explicit string join via Jinja's `~` operator. Documented
-  decision: `+` on a `TemplateExpr` is **always arithmetic**, never string
-  concatenation; `concat(...)` is the explicit spelling for joining text.
+- `concat(*parts)` — explicit string join via Jinja's `~` operator. `+` on a
+  `TemplateExpr` is **always arithmetic**, never string concatenation;
+  `concat(...)` is the explicit spelling for joining text.
 - Full reflected-operator set: `//`, `%`, `**` (with reflected forms) and
-  unary `-`, alongside the M1 set (`+ - * /`, comparisons, `& | ~`).
+  unary `-`, alongside `+ - * /`, comparisons, `& | ~`.
 - `PythonMathMisuseError` — Python's stdlib `math.*` (or a bare `float()`/
   `int()`) called on a runtime `TemplateExpr` raises this what/where/fix error
   instead of a bare `TypeError`; `math.pi` etc. as a **plain Python constant**
   is not a trap — it is just a literal, and composes fine.
-- **One-way sugar:** the M2 decompiler always reconstructs a compiled Jinja
+- **One-way sugar:** the decompiler always reconstructs a compiled Jinja
   string as a raw `template("...")` string; it never re-derives the operator/
   builder call chain (`cos(...)`, `.attr(...)`, …) that produced it.
 
 ### Control flow (DESIGN §5.5) — context managers
 - `if_then(condition, *, alias=, enabled=)` / `else_then()` / `else_if(condition)`.
 - `choose(*, alias=, enabled=)` → use `as c:` then `c.when_(condition, *,
-  alias=, enabled=)` / `c.default()`. `c.when_()`'s `alias=`/`enabled=` are a
-  residue-coverage round-3 ADDITION (docs/ha-api-notes.md §21.1): they name/
-  toggle *that branch specifically* — a third, distinct layer from `choose()`'s
-  own `alias=`/`enabled=` (the whole block) and from any step's own inside the
-  branch's body.
+  alias=, enabled=)` / `c.default()`. `c.when_()`'s `alias=`/`enabled=`
+  name/toggle *that branch specifically* — a distinct layer from `choose()`'s
+  own `alias=`/`enabled=` (the whole block) and from any step's own inside
+  the branch's body.
 - `repeat_count(n, *, alias=, enabled=)` / `repeat_while(condition, *, alias=,
   enabled=)` / `repeat_until(condition, *, alias=, enabled=)` /
-  `repeat_for_each(items, *, alias=, enabled=)`.
+  `repeat_for_each(items, *, alias=, enabled=)`. `repeat_for_each` also
+  accepts a bare Jinja template `str` (HA's `repeat.for_each` may be stored
+  as a template that renders to a list at runtime, not just a literal list) —
+  passed through verbatim, never exploded into a list of characters.
 - `parallel(*, alias=, enabled=)` → optionally bind `as p:` and use `with
-  p.branch(alias=, enabled=): ...` (residue-coverage round-3 ADDITION,
-  docs/ha-api-notes.md §21.1/§21.2) to group one or more steps into one
+  p.branch(alias=, enabled=): ...` to group one or more steps into one
   explicit branch, optionally naming/toggling it. A bare `with parallel():
-  action(); action()` with **no** `as p:` binding is unchanged: each top-level
-  action still becomes its own single-action branch, exactly as before this
-  addition (fully backward compatible, no pre-existing caller's compiled
-  output changes). `p.branch()` is also how a branch with more than one step
-  is authored — round-2-and-earlier `parallel()` had no way to group multiple
-  actions into a single branch at all.
+  action(); action()` with **no** `as p:` binding still puts each top-level
+  action into its own single-action branch. `p.branch()` is how a branch with
+  more than one step is authored.
 - `wait_for(*triggers, ..., alias=, enabled=)` / `wait_template(raw, ...,
   alias=, enabled=)`.
-- `alias=`/`enabled=` on every construct above (container-level) are
-  residue-coverage round-2 ADDITIONS (docs/ha-api-notes.md §20): the HA UI
-  names and toggles whole containers (`if`/`choose`/`repeat`/`parallel`/
-  `wait_for_trigger`/`wait_template`) the same way it does leaf actions —
-  `with if_then(cond, alias="..."):` compiles the `alias` onto the assembled
-  `if`-block body, not onto a child step. Omitted by default (unchanged
-  behavior for every pre-existing caller).
+- `alias=`/`enabled=` on every construct above (container-level) name and
+  toggle whole containers (`if`/`choose`/`repeat`/`parallel`/
+  `wait_for_trigger`/`wait_template`) the same way the HA UI does — `with
+  if_then(cond, alias="..."):` compiles the `alias` onto the assembled
+  `if`-block body, not onto a child step. Omitted by default.
 
-### Raw escape hatches (DESIGN §5.8, I3)
+### Raw escape hatches (DESIGN §5.8)
 - `raw_trigger(dict)`, `raw_condition(dict)`, `raw_action(dict)` — verbatim
   passthrough of any HA block the DSL doesn't model (normalized by the compiler).
 
@@ -697,21 +492,37 @@ this is additive to `hassle.__all__`; nothing above changed.
 - `ElseWithoutIfError` — `else_then()`/`else_if()` with no preceding `if`/`choose`.
 - `NoParamContextError` — `param()` outside a `@shared_script` body.
 - `UnknownParamError` — `param(name)` naming a field absent from the signature.
-- `PythonMathMisuseError` (M1.1 ADDITION) — Python's stdlib `math.*`/`float()`/
-  `int()` called on a runtime `TemplateExpr`.
+- `UnknownFieldError` — a `@shared_script` call-site kwarg not among an
+  explicit `fields=`'s keys.
+- `OnlyIfBlockCoverageError` — an action recorded outside a `with
+  only_if(...):` block that covers the whole automation.
+- `SharedScriptParamMisuseError` — Python-only operations (`range()`,
+  indexing, `len()`, …) applied to a bound shared-script parameter.
+- `InclusiveNumericBoundError` — `.state >=`/`.state <=` on an `EntityRef`
+  (no inclusive form of `numeric_state`).
+- `InOperatorTrapError` — `x.state in [...]` (Python's `in` can't be
+  overridden to raise usefully; use `.in_([...])`).
+- `ConditionArgumentTypeError` — a plain Python `bool` passed where a
+  condition builder is expected.
+- `TemplateComparisonOperandError` — module-internal (not in `hassle.__all__`)
+  — `.eq()`/`.ne()` against a non-`TemplateExpr`, non-literal value.
+- `PythonMathMisuseError` — Python's stdlib `math.*`/`float()`/`int()` called
+  on a runtime `TemplateExpr`.
 
 ## Stability contract
 
-- **Additions allowed.** Later milestones may add names to `hassle.__all__`
-  (e.g. the M3 entity-sugar `e.<domain>.<object_id>` builders, which compile down
-  to `service(...)`/`state(...)`). Adding a name is not a breaking change.
-- **Changes / removals are breaking** and require a MILESTONES.md update in the
-  same PR. This includes: renaming a public name, removing one, changing the
-  meaning of a call, or narrowing an accepted keyword. Widening a signature
-  with a new optional keyword is an addition, not a change.
-- **Emitted IR shape is governed by F1** (the plural canonical HA schema); the
-  DSL is byte-deterministic (R8) and every construct has a golden pair under
-  `fixtures/dsl/`.
+- **Additions allowed.** New names may be added to `hassle.__all__` at any
+  time — e.g. the entity-sugar `e.<domain>.<object_id>` builders, which
+  compile down to `service(...)`/`state(...)`. Adding a name is not a
+  breaking change.
+- **Changes / removals are breaking** and are not permitted without a
+  compatibility-contract exception process (CONTRIBUTING.md). This includes:
+  renaming a public name, removing one, changing the meaning of a call, or
+  narrowing an accepted keyword. Widening a signature with a new optional
+  keyword is an addition, not a change.
+- **Emitted IR shape is governed by `docs/internals/ir-format.md`** (the
+  plural canonical HA schema); the DSL is byte-deterministic and every
+  construct has a golden pair under `fixtures/dsl/`.
 
 ## Internal extension seams that remain NON-public
 
@@ -727,12 +538,14 @@ These are how new builder families are added; they are **not** in
   drives.
 - `hassle.compiler.spans` — `SourceSpan`, `capture_span` (span capture).
 - `hassle.compiler.registry` — `Registry`, `RegisteredObject`,
-  `PrebuiltObject`, `current_registry`, `fresh`, `Registry.add_object` (the §12
-  pre-built-object registration path).
+  `PrebuiltObject`, `current_registry`, `fresh`, `Registry.add_object` (the
+  pre-built-object registration path used by macro/lib-style bundle code that
+  registers an object without going through a `@automation`/`@script`
+  decorator).
 - `hassle.compiler.bundle` — `CompileResult` (`.objects`, `.spans_for`),
   `compile_bundle`, `compile_registered`. The pipeline output the compiler,
   validator, and simulator consume.
-- `hassle.ir` — the F1 IR surface (frozen separately).
+- `hassle.ir` — the frozen IR surface (`docs/internals/ir-format.md`).
 - Module-internal helpers exposed only for the builder modules and their unit
   tests: `EntityRef`, `declared_helpers`, `declared_raw_automations`,
   `build_raw_automation`, `TemplateExpr`, `StateExpr`, `NumericStateExpr`, the
@@ -740,22 +553,25 @@ These are how new builder families are added; they are **not** in
   `ScriptCallAction`, `Raw{Trigger,Condition,Action}`, `capture_span`. These are
   importable from `hassle.compiler` for tooling but are **not** part of the
   frozen bundle-facing surface.
-- `hassle.compiler.math_expr` (M1.1 ADDITION) — the sibling module the
-  runtime-math builders live in; its module-internal `_call`/`_filter`/
-  `_render_operand`/`_render_call_arg` are not part of the frozen surface
-  (only the function/constant names re-exported through `hassle.__all__`
-  are). `TemplateExpr.render_as_operand(min_prec=...)` (on the frozen-surface
+- `hassle.compiler.math_expr` — the sibling module the runtime-math builders
+  live in; its module-internal `_call`/`_filter`/`_render_operand`/
+  `_render_call_arg` are not part of the frozen surface (only the
+  function/constant names re-exported through `hassle.__all__` are).
+  `TemplateExpr.render_as_operand(min_prec=...)` (on the frozen-surface
   `TemplateExpr`) is the sanctioned public seam a sibling builder module uses
   to render one expression nested inside another without reaching into the
   private `_as_operand`/`_prec`/`_compound` fields — same convention as
   subclassing `builders._NoBool` for the `__bool__` trap.
+- `hassle.compiler.purpose.normalize_target` — normalizes a bare entity
+  ref/`str`, a list of them, or an `area()`/`floor()`/`label()`/`device_id()`
+  target helper object into HA's stored `target` dict shape. Every `target=`
+  parameter in the frozen surface accepts these forms and normalizes through
+  this internal helper; an already-built dict passes through unchanged.
 
 ## Acceptance
 
-All M1 golden pairs green (`fixtures/dsl/`, checked by
-`test_dsl_golden_pairs.py` and `hassle-dev goldens`); every fixture-corpus
-construct expressible in the DSL with a backing golden (the M1 done-gate
-expressibility checklist, in the integration report); `test_entity_attr_and_
-index_equivalent` (`test_entity_accessor.py`) green —
-`e.sensor.hall_motion` and `e.sensor["hall_motion"]` compile to byte-identical
-IR.
+All golden pairs under `fixtures/dsl/` are green (`test_dsl_golden_pairs.py`
+and `hassle-dev goldens`); every fixture-corpus construct is expressible in
+the DSL with a backing golden; `test_entity_attr_and_index_equivalent`
+(`test_entity_accessor.py`) is green — `e.sensor.hall_motion` and
+`e.sensor["hall_motion"]` compile to byte-identical IR.

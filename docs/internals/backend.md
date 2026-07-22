@@ -1,6 +1,6 @@
 # Backend internals
 
-Design rationale that's too long to keep inline in the source. See docs/backend.md for the
+Design rationale that's too long to keep inline in the source. See docs/internals/backend-protocol.md for the
 frozen `Backend` protocol and plan/apply data model; this file is for maintainers of
 `hassle.backend`, in particular `DirectBackend`'s real-HA transport quirks.
 

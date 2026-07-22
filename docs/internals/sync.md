@@ -1,6 +1,6 @@
 # Sync internals
 
-Design rationale that's too long to keep inline in the source. See docs/backend.md for the
+Design rationale that's too long to keep inline in the source. See docs/internals/backend-protocol.md for the
 frozen plan/apply data model and DESIGN.md §8 for the user-facing sync semantics; this file
 is for maintainers of `hassle.sync`.
 
@@ -10,7 +10,7 @@ is for maintainers of `hassle.sync`.
 it's explicitly documented as a stand-in for a real `SourceWriter` implementation.
 `hassle.sync.pull_apply` is that real implementation: it re-implements `apply_pull`'s action
 dispatch, but with real decompiled DSL source (`hassle.decompiler.decompile_bundle`) instead
-of the placeholder, while keeping the exact same conflict-marker format (docs/backend.md's
+of the placeholder, while keeping the exact same conflict-marker format (docs/internals/backend-protocol.md's
 `<<<<<<< local` block) so a conflict written by the CLI looks identical to one written by
 `RecordingSourceWriter`-based unit tests.
 

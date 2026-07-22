@@ -4,20 +4,18 @@
 and helpers. Pull everything down as clean Python, edit and unit-test locally, push back up —
 while everything stays fully editable in the Home Assistant UI.
 
-Status: **DRAFT v2 — CLI-only architecture (owner-approved direction, 2026-07-03).**
+Status: **v2 — CLI-only architecture.**
 Companion documents: [CONTRIBUTING.md](CONTRIBUTING.md) (the engineering rules and gates) and
 [docs/history/milestones.md](docs/history/milestones.md) (the original implementation plan this
 project was built against — historical record, with a vocabulary legend).
 
-> **v2 change (decision record):** v1 of this design included a Home Assistant add-on that
-> proxied all API traffic and persisted bundle files server-side. It was cut. Every HA API
-> Hassle needs is directly reachable by a CLI holding a long-lived access token, and **git is
-> the source of truth for sources and tests** (the Terraform model: the platform stores the
-> live objects, your repo stores the code). This works on every HA install type (OS,
-> Supervised, Container, Core), adds no listening service to the network, and removes an entire
-> Docker/server codebase. (A best-effort in-HA "mirror" of the bundle
-> ZIP was designed here and later removed — §8.5.) The `Backend` protocol keeps the door open for a
-> future add-on if a server-side feature ever earns one (§13).
+> Hassle is CLI-only: there is no Home Assistant add-on. Every HA API Hassle needs is directly
+> reachable by a CLI holding a long-lived access token, and **git is the source of truth for
+> sources and tests** (the Terraform model: the platform stores the live objects, your repo
+> stores the code). This works on every HA install type (OS, Supervised, Container, Core), adds
+> no listening service to the network, and removes an entire Docker/server codebase. The
+> `Backend` protocol keeps the door open for a future add-on if a server-side feature ever earns
+> one (§13).
 
 ---
 
@@ -31,7 +29,7 @@ project was built against — historical record, with a vocabulary legend).
 | G2 | Edit locally, push back, including adds/deletes | Full-state sync with a Terraform-style plan/apply flow (§8) |
 | G3 | Everything remains UI-editable | Hassle only writes through HA's native config APIs — the same ones the UI uses. No custom YAML packages, ever. (§4, invariant I1) |
 | G4 | Python-based syntax, not YAML | Embedded Python DSL compiled to HA-native JSON (§5) |
-| G5 | Unit tests persist across the edit cycle | pytest + a local HA simulator; tests live in the bundle, whose source of truth is **git** (§8.4). ~~Optional: mirror the bundle ZIP into HA's media storage (best-effort)~~ *(mirror removed — §8.5)*. *Revised from "persisted inside HA" — see the v2 decision record above.* |
+| G5 | Unit tests persist across the edit cycle | pytest + a local HA simulator; tests live in the bundle, whose source of truth is **git** (§8.4) |
 | G6 | Entity/reference validation | Four-tier validation: pyright → compile → registry → server-side check (§9) |
 | G7 | Macros / reusable logic | `@macro` (compile-time inlining) and `@shared_script` (compiles to a real HA script) (§5.6) |
 | G8 | Conflict detection on push | Per-object three-way merge against a `manifest.lock` baseline, hashes re-verified at apply time (§8) |
@@ -43,39 +41,41 @@ project was built against — historical record, with a vocabulary legend).
 ### Non-goals (v1)
 
 - Managing YAML-only configuration (packages, `configuration.yaml` integrations, Lovelace YAML mode).
-- ~~Managing config-entry helpers~~ **Revised (owner decision, 2026-07-05):** template-domain
-  config-entry helpers are now in scope as M10 (the first §13 plugin); other config-entry
+- Template-domain config-entry helpers are in scope (the first §13 plugin); other config-entry
   domains (threshold, derivative, group, …) remain follow-ons.
 - Replacing HA's execution engine. Hassle compiles **to** native HA automations; nothing runs
   through Hassle at runtime. If Hassle is deleted, everything keeps working.
 - Multi-user concurrent editing beyond conflict *detection* (no CRDT/merge editor).
-- A Home Assistant add-on (see the v2 decision record).
+- A Home Assistant add-on (see the CLI-only architecture note above).
 
 ---
 
 ## 2. The core idea in one page
 
 ```
-┌────────────────────── laptop ──────────────────────┐      ┌───── Home Assistant ─────┐
-│  bundle/  — a git repo (source of truth for        │      │                          │
-│  sources + tests); ZIP is just a transport format  │      │  HA Core APIs (the same  │
-│   ├── <category>.py, misc.py  (see §6 for the      │ pull │  ones the UI uses):      │
-│   │    current, category-first layout — MILESTONES │──────┼─ config REST API         │
-│   │    M15 retired the old automations/scripts/    │      │  (automations, scripts)  │
-│   │    helpers/ per-kind trees this diagram once    │      │                          │
-│   │    showed here)                                │      │                          │
-│   ├── lib/*.py      (macros)  ─────────────────────┼──────┼─►WebSocket API (helpers, │
-│   ├── tests/test_*.py                       push   │      │  registry, validation,   │
-│   ├── stubs/  (generated .pyi)         (plan/apply)│      │  traces, templates)      │
-│   ├── .hassle/ (manifest.lock, registry snapshot)  │      │                          │
-│   └── AGENTS.md, docs/                             │      │  → automations.yaml,     │
-│                                                    │      │    scripts.yaml,         │
-│  hassle CLI: pull · plan · push · validate · test  │      │    .storage/* — the SAME │
-│  · run --live · fmt · stubs · explain              │      │    storage the UI edits  │
-│  pytest: runs tests on the local simulator         │      │                          │
-│  git: history, sync between machines, backup       │      │                          │
-└────────────────────────────────────────────────────┘      │                          │
-                     auth: one long-lived HA token          └──────────────────────────┘
+┌──────────────────────────────────────────────────────┐                          ┌──────────────────────────────────────────┐
+│                        laptop                        │                          │              Home Assistant              │
+│                                                      │                          │                                          │
+│ bundle/  — a git repo (source of truth for           │                          │ HA Core APIs (the same ones the UI       │
+│ sources + tests); ZIP is just a transport            │                          │ uses):                                   │
+│ format                                               │    ◄──── pull ──────     │   config REST API                        │
+│   ├── hassle.toml                                    │                          │   (automations, scripts)                 │
+│   ├── <category>.py   (one per HA category;          │                          │                                          │
+│   │                     misc.py fallback — §6)       │ ── push (plan/apply) ──► │   WebSocket API (helpers, registry,      │
+│   ├── lib/             (shared helpers/macros)       │                          │   validation, traces, templates)         │
+│   ├── tests/                                         │                          │                                          │
+│   ├── typings/         (generated .pyi)              │                          │ → automations.yaml, scripts.yaml,        │
+│   ├── .hassle/         (manifest.lock,               │                          │   .storage/* — the SAME storage the      │
+│   │                     registry snapshot)           │                          │   UI edits                               │
+│   └── AGENTS.md, docs/                               │                          │                                          │
+│                                                      │                          │                                          │
+│ hassle CLI: pull · plan · push · validate ·          │                          │                                          │
+│   test · run --live · fmt · stubs · explain          │                          │                                          │
+│ pytest: runs tests on the local simulator            │                          │                                          │
+│ git: history, sync between machines, backup          │                          │                                          │
+└──────────────────────────────────────────────────────┘                          └──────────────────────────────────────────┘
+
+                          auth: one long-lived HA token
 ```
 
 - **HA is the source of truth for live objects** (automations, scripts, helpers). **Git is the
@@ -102,7 +102,7 @@ project was built against — historical record, with a vocabulary legend).
   HA config, via the `raw` escape hatch (§5.8) when the DSL can't model a construct. Precisely:
   equality is modulo HA's *own* storage normalization (HA ≥ 2024.10 rewrites legacy singular
   `trigger/condition/action` + `service:` to the plural schema before storing — see
-  docs/ha-api-notes.md §10.1), so `compile(decompile(x)) == normalize_ha(x)`; for configs as HA
+  docs/internals/ha-api-notes.md §10.1), so `compile(decompile(x)) == normalize_ha(x)`; for configs as HA
   actually stores and returns them — the only ones the sync engine ever sees — that is exact
   equality.
 - **I4 — No runtime dependency.** HA never depends on Hassle to execute anything.
@@ -157,11 +157,11 @@ versions drift.
 | Validation | — | WS `validate_config` (trigger/condition/action blocks); `POST /api/config/core/check_config` | — |
 | Traces | — | WS `trace/list` (domain [+ item_id]); `trace/get` requires domain + item_id + **run_id**; admin-only | — |
 | Template render | — | `POST /api/template`; WS `render_template` (subscription; `strict`, `report_errors` flags) | — |
-| Media (~~optional mirror~~ — removed, §8.5) | `/media` dir | WS `media_source/browse_media`, `media_source/resolve_media`; authenticated `GET /media/{source}/{path}` | `POST /api/media_source/local_source/upload` (admin, multipart `media_content_id` + `file`); WS `media_source/local_source/remove` |
+| Media (mirror removed, §8.5) | `/media` dir | WS `media_source/browse_media`, `media_source/resolve_media`; authenticated `GET /media/{source}/{path}` | `POST /api/media_source/local_source/upload` (admin, multipart `media_content_id` + `file`); WS `media_source/local_source/remove` |
 
 API quirks the implementation must respect (source-verified July 2026, then behaviorally
 verified against a live instance in M0.V — details and raw captures in
-[docs/ha-api-notes.md](docs/ha-api-notes.md), corrections in its §10):
+[docs/internals/ha-api-notes.md](docs/internals/ha-api-notes.md), corrections in its §10):
 
 - **Plural schema normalization (HA ≥ 2024.10).** The config API accepts legacy singular keys
   (`trigger/condition/action`, `service:`) but **stores and returns the plural form**
@@ -203,19 +203,13 @@ verified against a live instance in M0.V — details and raw captures in
 
 ## 5. The DSL
 
-### 5.1 Why embedded Python (decision record)
+### 5.1 Why embedded Python
 
-Alternatives considered:
-
-1. **Custom language + custom parser + custom LSP** — full control over syntax, but we'd hand
-   a swarm of models a compiler-and-LSP project. Highest risk, worst tooling on day one.
-2. **Structured Python-ish YAML alternative (e.g. Pkl, CUE)** — still "a config language", user
-   asked for Python-like scripting; no pytest story.
-3. **Embedded Python DSL** (chosen) — bundle files are real Python. We get for free:
-   the parser (CPython), formatting (ruff), syntax highlighting (every editor), **autocompletion
-   and typo-catching via generated type stubs + pyright**, unit tests via pytest, and macros as
-   plain functions. The compiler is "trace a function call and build JSON", which is a small,
-   very testable program.
+Bundle files are real Python: an embedded DSL, not a custom language or a config format. This
+gets, for free: the parser (CPython), formatting (ruff), syntax highlighting (every editor),
+**autocompletion and typo-catching via generated type stubs + pyright**, unit tests via pytest,
+and macros as plain functions. The compiler is "trace a function call and build JSON", which is
+a small, very testable program.
 
 The trade-off: Python executes at *compile time*, so runtime control flow needs explicit
 constructs (§5.5). This is a real sharp edge; it is mitigated by trap-catching (§5.5) and is a
@@ -418,43 +412,19 @@ hall_motion = blueprint_automation(       # call form: it declares an object, no
 
 (DSL keeps the ergonomic `inputs=`; the stored JSON key is `use_blueprint.input` — singular —
 and the path includes the author directory. The compiler/decompiler map between the two; see
-docs/ha-api-notes.md §10.5.)
+docs/internals/ha-api-notes.md §10.5.)
 
-The decompiler's "DSL coverage %" over the fixture corpus is a tracked metric (MILESTONES M2);
-`raw` is the correctness backstop, not the plan.
+The decompiler's "DSL coverage %" over the fixture corpus is a tracked metric; `raw` is the
+correctness backstop, not the plan.
 
 ---
 
 ## 6. Bundle format
 
-~~Original (v1, superseded by MILESTONES M15):~~
-
-```
-my-home/                   # a git repository (hassle init/pull offers to `git init`)
-├── hassle.toml            # bundle settings: HA URL (never the token), formatting opts, plugins
-├── automations/           # one file per area/topic; multiple objects per file is fine
-├── scripts/
-├── helpers/
-├── lib/                   # macros, shared scripts, constants — yours, never auto-regenerated
-│                          # (README.md written once by `init`/`pull`, explaining the directory)
-├── tests/                 # pytest files — yours; persist in git (G5)
-├── stubs/                 # generated .pyi (checked in so pyright works immediately)
-├── .vscode/settings.json  # points pyright at stubs/; generated once, then left alone
-├── .hassle/
-│   ├── manifest.lock      # machine-owned sync baseline (§8.1) — committed, never hand-edited
-│   ├── registry.json      # snapshot: entities, services, areas, devices, labels, categories (§9.2)
-│   └── plan.json          # last computed plan (transient, gitignored)
-├── .gitignore             # generated: plan.json, caches
-├── AGENTS.md              # generated agent instructions (§12)
-└── docs/                  # generated DSL reference + cookbook (stable content, versioned)
-```
-
-**Revised (MILESTONES M15, "category-first bundle layout" — owner-commissioned,
-evidence base docs/ha-api-notes.md §31): root-level, mixed-kind category files, not
-a per-kind tree.** The `automations/`/`scripts/`/`helpers/` trees above are RETIRED —
-every category (automation, script, or any of the 13 helper kinds sharing HA's
-`"helpers"` category-registry scope) now gets ONE root-level file that can hold
-objects of every kind at once:
+Bundle layout is root-level and mixed-kind: every category (automation, script, or any of the
+13 helper kinds sharing HA's `"helpers"` category-registry scope, evidence base
+docs/internals/ha-api-notes.md §31) gets ONE root-level file that can hold objects of every kind
+at once:
 
 ```
 my-home/                   # a git repository (hassle init/pull offers to `git init`)
@@ -475,50 +445,41 @@ my-home/                   # a git repository (hassle init/pull offers to `git i
 └── docs/                  # generated DSL reference + cookbook (stable content, versioned)
 ```
 
-`lib/`, `tests/`, `stubs/`, `docs/`, and `.hassle/` are unchanged by this revision.
-An old-layout bundle (the retired per-kind trees, `bundle_format` 1) is migrated
-in place by the next `hassle pull` — see the migration bullet below.
+An old-layout bundle (per-kind `automations/`/`scripts/`/`helpers/` trees, `bundle_format` 1) is
+migrated in place by the next `hassle pull` — see the migration bullet below.
 
 - The **directory (a git repo)** is the working format; **ZIP** is a transport/interchange
   format (`hassle pull --zip out.zip`, `hassle push --zip in.zip`) per G1 — useful for moving a
   bundle without git.
-- ~~File organization is user-controlled: the decompiler only decides placement for objects it has
-  never seen (defaults: one file per HA UI category if the object's entity-registry entry has one
-  — `automations/<slug(category name)>.py` / `scripts/<slug(category name)>.py`, fetched via WS
-  `config/category_registry/list` per scope; else `automations/misc.py` / `scripts/misc.py` /
-  `helpers/misc.py` — helpers have no category-registry scope in HA, so they always use the domain
-  default); after that, objects stay in whatever file the user puts them in (tracked by
-  manifest).~~ **Revised (MILESTONES M15):** file organization is still user-controlled after
-  first placement, but the DEFAULT for a never-seen object is now root-level and cross-kind:
-  `<slug(category name)>.py` at the bundle root, derived from the object's OWN scope's category
-  (automation → category-registry scope `"automation"`, script → `"script"`, every helper kind →
-  the single shared scope `"helpers"`, all confirmed live, docs/ha-api-notes.md §31.2/§31.6) —
-  same category name across scopes lands every object in the SAME file (a mixed-kind category
-  file); else the single shared `misc.py`, replacing the old three-tree `automations/misc.py` /
-  `scripts/misc.py` / `helpers/misc.py` fallback. **Local moves sync back:** moving an EXISTING
-  object to a different category-shaped file is a category reassignment on the next push
-  (`ManifestEntry.category`, three-way against the base recorded at last sync — F2 amendment) —
-  extends the create-only write-back below to updates; a local move + a conflicting HA-side
-  recategorization surfaces as a conflict (I6), never silently overwritten either way. A
-  mixed-kind file maps to up to three real category ROWS (one per scope, sharing only a name) —
-  created per scope on demand; if HA-side renames make the scopes' names diverge for what was one
-  file, the next pull places each object by its own scope's category (the file may split) and
-  emits a divergence warning, never guessing a winner.
+- File organization is user-controlled after first placement, but the DEFAULT for a never-seen
+  object is root-level and cross-kind: `<slug(category name)>.py` at the bundle root, derived
+  from the object's OWN scope's category (automation → category-registry scope `"automation"`,
+  script → `"script"`, every helper kind → the single shared scope `"helpers"`, all confirmed
+  live, docs/internals/ha-api-notes.md §31.2/§31.6) — same category name across scopes lands
+  every object in the SAME file (a mixed-kind category file); else the single shared `misc.py`.
+  **Local moves sync back:** moving an EXISTING object to a different category-shaped file is a
+  category reassignment on the next push (`ManifestEntry.category`, three-way against the base
+  recorded at last sync — F2 amendment) — extends the create-only write-back below to updates; a
+  local move + a conflicting HA-side recategorization surfaces as a conflict (I6), never silently
+  overwritten either way. A mixed-kind file maps to up to three real category ROWS (one per
+  scope, sharing only a name) — created per scope on demand; if HA-side renames make the scopes'
+  names diverge for what was one file, the next pull places each object by its own scope's
+  category (the file may split) and emits a divergence warning, never guessing a winner.
   **`hassle init` and `hassle pull`** (when it scaffolds missing directories) also write
   `lib/README.md` (explaining `@macro`/`@shared_script`/plain constants, §5.6) and, when `tests/`
   is otherwise empty, a one-line `tests/README.md` — both idempotent, never overwriting an
   existing file.
-- **Migration (MILESTONES M15):** an old-layout bundle is detected by `hassle pull` (populated
+- **Migration:** an old-layout bundle is detected by `hassle pull` (populated
   `automations/`/`scripts/`/`helpers/` trees) and restructured in place: every managed object is
   spliced out of its old file and regenerated at its new root-level destination; an old file is
   deleted only when nothing but imports would remain in it (I6 — a user's own comment or a custom
   `def` keeps the file alive, with just the migrated object's statement removed). Every move is
   reported in `hassle pull`'s output. `hassle.toml`'s `bundle_format` bumps once migration
-  completes (the M9 versioning surface: an OLDER CLI opening a NEWER bundle_format refuses with a
+  completes (the versioning surface: an OLDER CLI opening a NEWER bundle_format refuses with a
   clear upgrade error; an older bundle_format itself is never refused — it's exactly what
   triggers migration). Migration only moves DSL source, never changes an object's compiled
   config, so the very next plan is a NOOP and a second pull is byte-stable.
-- **`ignore` (owner amendment, `ux/pull-organization`):** `hassle.toml` may declare
+- **`ignore` (`ux/pull-organization`):** `hassle.toml` may declare
   `ignore = ["input_boolean:material_you_*", …]` — `fnmatch` globs matched against object keys.
   This REVISES §8.2's "first-ever pull adopts everything; nothing is ever unmanaged": an object
   key matching an `ignore` glob is filtered out of both the freshly-compiled local objects and the
@@ -554,7 +515,7 @@ union), `Condition`, `Action` (tagged union incl. `choose/if/repeat/parallel/wai
   the plan would show perpetual spurious diffs.
 
 Pipelines: `DSL —(trace)→ IR —(serialize)→ HA JSON` and `HA JSON —(parse)→ IR —(codegen)→ DSL`.
-The IR is the frozen interface between the two pipelines (docs/ir-format.md).
+The IR is the frozen interface between the two pipelines (docs/internals/ir-format.md).
 
 ### 7.2 Compiler
 
@@ -579,8 +540,8 @@ failures — point at the user's Python line.
   "clone the repo", and the CLI says so.
 - Objects that decompile to `raw_*` are flagged in `hassle pull` output as DSL-coverage gaps.
 
-**Codegen readability (owner feedback after first real pull; style, not schema — I3 holds byte-
-for-byte, verified over the whole round-trip corpus):**
+**Codegen readability (style, not schema — I3 holds byte-for-byte, verified over the whole
+round-trip corpus):**
 
 - **Entity references through the registry accessor:** an entity id in an entity position
   (`state()`/`numeric_state()`'s entity arg, `target={"entity_id": ...}` — including nested
@@ -593,21 +554,14 @@ for-byte, verified over the whole round-trip corpus):**
   purely cosmetic: it compiles to the identical HA value.
 - **Star import:** a freshly decompiled module emits `from hassle import *` (the DSL surface
   defines `__all__`, so pyright resolves this without configuration) instead of an enumerated
-  builder-name list — owner preference, and it also means an F3 addition never needs a matching
-  update to a generated-code import list. The `entities as e` import stays its own explicit line
+  builder-name list; it also means an F3 addition never needs a matching update to a
+  generated-code import list. The `entities as e` import stays its own explicit line
   (DESIGN §5.3: a dedicated, non-`__all__` entry point). This is the **generated-code** style
   only; hand-written bundle files may use either form.
-- **Section comments — introduced, then removed (dated note).** Originally: `# --- conditions ---`
-  / `# --- actions ---` precede each non-empty section of an automation body (a script gets
-  `# --- sequence ---` when its sequence is non-empty); an empty section gets no comment.
-  Triggers never had a body section at all once `triggers=` moved them into the decorator
-  (`ux/triggers-in-decorator`). **Removed 2026-07 (`ux/dsl-ergonomics`, owner amendment,
-  supersedes this bullet's original "judge readability" latitude on item 1):** once conditions
-  also moved out of the body — the `with only_if(...):` block form (below) is now the canonical
-  decompiled shape whenever an automation has any conditions at all — the remaining section
-  comments no longer disambiguated anything: the body's structure (decorator = when, `only_if`
-  block = gate, plain statements = do) is self-describing on its own. A freshly decompiled
-  automation/script body therefore carries no `# --- ... ---` comments at all.
+- **No section comments.** A freshly decompiled automation/script body carries no
+  `# --- ... ---` comments: the body's structure (decorator = when, `only_if` block = gate,
+  plain statements = do) is self-describing on its own — triggers live in the decorator (below),
+  and conditions are wrapped in a `with only_if(...):` block whenever any exist.
 - **Function names derive from `alias`, not `id`** (this section as originally written, now
   actually implemented): the name is `slugify(alias)`, with a deterministic `_2`/`_3` suffix on a
   collision — collisions include another decompiled object's alias-slug **and** any name the
@@ -620,8 +574,8 @@ for-byte, verified over the whole round-trip corpus):**
   on next pull/decompile, which shows up as a rename in the spliced diff (previously invisible,
   since the id-derived name never changed) — considered acceptable, since the alias visibly
   changed too and the diff is otherwise exactly the meaningful one-line edit.
-- **Scripts decompile as `@shared_script`, not `@script`** (owner feedback, `ux/shared-script-calls`,
-  widened by `ux/shared-script-rich-fields`): since `@shared_script` compiles to the exact same
+- **Scripts decompile as `@shared_script`, not `@script`** (`ux/shared-script-calls`, widened by
+  `ux/shared-script-rich-fields`): since `@shared_script` compiles to the exact same
   `ScriptConfig` `@script` does, every script decompiles to `@shared_script` by default. Fields whose
   every spec is *exactly* `{"default": ...}` get the terse form (no explicit `fields=` kwarg — the
   signature alone reproduces it, with a Python type annotation when one is inferable from the
@@ -635,8 +589,8 @@ for-byte, verified over the whole round-trip corpus):**
   original signature-only rule made the `@script` fallback the common case, not the exception. The
   `@script` fallback is now rare — only a field name that isn't a valid Python identifier, or a
   malformed (non-dict) field spec, neither of which the HA UI ever produces.
-- **Caller rewrite: a `script.<object_id>` call becomes a real function call** (owner feedback):
-  a stored action `{"action": "script.<id>", "data": {...}, "metadata": {...}}` decompiles to
+- **Caller rewrite: a `script.<object_id>` call becomes a real function call.**
+  A stored action `{"action": "script.<id>", "data": {...}, "metadata": {...}}` decompiles to
   `<fn_name>(<data as kwargs>, metadata={...})` when `<id>` is a MANAGED script in the same pull
   batch, every `data` key is one of the script's declared fields, the action is the direct
   `script.<id>` form (`script.turn_on` with `target`/`variables` is a different, generic-caller
@@ -644,7 +598,7 @@ for-byte, verified over the whole round-trip corpus):**
   `continue_on_error` beyond what the call reproduces — any of these falls back to today's
   `service()` form (never `raw`). `ScriptCallAction` (compiler-internal, `hassle.compiler.scripts`)
   widened additively to carry `metadata=`/`alias=`/`enabled=` so the rewritten call recompiles
-  byte-identical (docs/dsl-extensions.md).
+  byte-identical (docs/internals/dsl-extensions.md).
 - **Cross-file imports for the caller rewrite:** when the callee script lives in a different
   destination file than its caller (category-based placement routinely splits them), the
   decompiler emits `from scripts.<module> import <fn_name>` — built from a cross-reference table
@@ -660,8 +614,8 @@ for-byte, verified over the whole round-trip corpus):**
   direction's edge is deterministically dropped back to `service()`, with a one-line
   `# hassle: ... cross-file script call cycle ...` comment, rather than ever emitting a mutually
   importing pair of generated files.
-- **Triggers decompile into the decorator, not the body** (owner-approved DSL evolution,
-  `ux/triggers-in-decorator`, task #10; DESIGN §5.3/§5.5): typed triggers are emitted as a
+- **Triggers decompile into the decorator, not the body** (`ux/triggers-in-decorator`, task #10;
+  DESIGN §5.3/§5.5): typed triggers are emitted as a
   `triggers=[...]` decorator kwarg (multi-line, one trigger per line, when there's more than
   one — the same formatting `when(...)` used to use for a multi-trigger body call), rather than
   a `when(...)` call at the top of the body. `when()` itself is unaffected and stays fully
@@ -820,7 +774,7 @@ CLI affordances that keep this honest:
 > incidental HA media-endpoint quirks (upload Content-Type prefix, download extension→MIME
 > mapping) that HA could close in any release. Rather than ship a feature resting on
 > unsupported behavior, it was deleted; **git is the sole store for sources and tests** (§8.4).
-> The captured HA media-API findings remain in `docs/ha-api-notes.md` §9/§10/§17.
+> The captured HA media-API findings remain in `docs/internals/ha-api-notes.md` §9/§10/§17.
 
 ---
 
@@ -906,7 +860,7 @@ with `hassle init`: `hassle validate && hassle test` on every push).
    event trigger on a run-unique event type (`hassle_shadow_never_<uuid>`) that nothing on the
    real event bus will ever fire — the same "its triggers never fire on their own" guarantee,
    without disabling the automation. *(Revised post-M7: the original design used
-   `initial_state: off` instead; live verification against real HA (docs/ha-api-notes.md §27
+   `initial_state: off` instead; live verification against real HA (docs/internals/ha-api-notes.md §27
    addendum) found the integration test that would have caught problems with that mechanism was
    itself broken from the day it was written by an unrelated test bug, so the disabled-shadow
    path had never actually run against real HA. HA source confirms a disabled automation's forced

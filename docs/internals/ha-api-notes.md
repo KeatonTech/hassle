@@ -491,7 +491,7 @@ so the mirror never targets the bare root.
   `alias`/`description` fields alongside `use_blueprint` (see
   `fixtures/configs/automation_blueprint_based.json`), which the M1
   `blueprint_automation(id=, use_blueprint=, inputs=)` builder had no kwargs
-  for. Fixed as an F3 *addition* (widening, not a break, per docs/dsl-extensions.md's
+  for. Fixed as an F3 *addition* (widening, not a break, per docs/internals/dsl-extensions.md's
   stability contract): `alias=`/`description=` optional kwargs added in M2 so
   the decompiler can round-trip a blueprint automation's alias/description
   without falling back to `raw_automation`.
@@ -553,15 +553,15 @@ not wired into `compile_bundle` (found by the templates/macros/object-types work
 > `hassle-core` distribution collapsed its two top-level import packages
 > (`hassle_core` + a thin `hassle` facade) into one, `hassle`. Every
 > `hassle_core.*` path in the retained report below is now `hassle.*`; see
-> docs/ir-format.md and docs/dsl-extensions.md for the full rename note.
+> docs/internals/ir-format.md and docs/internals/dsl-extensions.md for the full rename note.
 
 **Not an HA-behavior finding — an internal extension-contract gap in
-docs/compiler-api.md**, flagged here per CLAUDE.md's "if the internal-api
+docs/internals/compiler-api.md**, flagged here per CLAUDE.md's "if the internal-api
 contract is insufficient, stop and report rather than modifying core."
 
 `compile_bundle`/`compile_registered` (`packages/hassle-core/src/hassle/compiler/bundle.py`
 -- path renamed 2026-07-03 from `hassle_core/compiler/bundle.py`, design decision, see
-docs/ir-format.md; frozen for follow-on M1 workstreams) only drain `registry.Registry` -- a list of
+docs/internals/ir-format.md; frozen for follow-on M1 workstreams) only drain `registry.Registry` -- a list of
 `RegisteredObject`, each of which is compiled by opening a `Recorder` and calling
 `reg.func()` once, i.e. "run a function, record trigger/condition/action calls
 into it." That model fits automations, scripts, and (via a caller-side wrapper)
@@ -665,7 +665,7 @@ This is a real constraint the M2 decompiler/round-trip test had to account for:
 about 50 of the `fixtures/configs/automation_*.json` fixtures have **no** `id`
 field at all (they're hand-authored docs examples predating the corpus's
 identity convention; real HA always assigns an `id` on creation and returns it
-on every read, docs/ha-api-notes.md §2). Decompiling one of these fixtures and
+on every read, docs/internals/ha-api-notes.md §2). Decompiling one of these fixtures and
 recompiling it therefore always adds an explicit `id` (the fixture's filename
 stem, used as the synthesized identity) to the output -- correctly matching
 what a real HA automation would already have, not a lossy round-trip. M2's
@@ -955,7 +955,7 @@ UI-authored action forever (I3) — this is not optional/cosmetic the way the
 `platform:`→`trigger:` or scalar-delay modernizations are (§16/§18), because HA
 itself never strips the key, so there is no "already canonical" case where it's
 absent from a live object. **Fix:** `service()`/`ServiceAction` gained an
-optional `metadata=` kwarg (F3-additive, docs/dsl-extensions.md's "widening a signature
+optional `metadata=` kwarg (F3-additive, docs/internals/dsl-extensions.md's "widening a signature
 with a new optional keyword is an addition, not a change"); the decompiler
 emits `metadata={...}` whenever the key is present in the stored action,
 including `metadata={}`, and omits the kwarg entirely when absent (so
@@ -1022,7 +1022,7 @@ versions, but the *storage* layer never migrates an already-saved config's key
 spelling on its own — only re-saving through the UI would). Folding it into
 `data` would drop the distinction and hash-drift on every recompile (I3), so
 it must round-trip as its own field. **Fix:** `service()`/`ServiceAction`
-gained an optional `data_template=` kwarg (F3-additive, docs/dsl-extensions.md's
+gained an optional `data_template=` kwarg (F3-additive, docs/internals/dsl-extensions.md's
 "widening a signature with a new optional keyword is an addition, not a
 change") — the least-surface option, mirroring `metadata=`'s existing
 treatment rather than inventing a new builder. The decompiler emits
@@ -1172,7 +1172,7 @@ The field measurement's shape list also named a `choose` branch whose
 pre-round-3 and current decompiler: `_choose` calls the same top-level
 `decompile_condition` dispatcher `_cond_numeric_state` already goes through
 for a bare automation-level condition, and `_cond_numeric_state`'s `known` set
-already included `attribute` (an M1.1-era addition, docs/ha-api-notes.md's
+already included `attribute` (an M1.1-era addition, docs/internals/ha-api-notes.md's
 sun-elevation condition note). No code path exists that treats a
 choose-nested condition differently from a top-level one. **No fix was
 needed** — `automation_choose_numeric_state_attribute_condition.json` is a
@@ -1594,7 +1594,7 @@ already have everything the sync engine needs; the multi-step flow is
 entirely an **internal** `FakeBackend`/`DirectBackend` implementation detail
 for `kind in TEMPLATE_DOMAINS`, exactly the way the nine storage helpers'
 `{domain}_id` payload-key convention (quirk #1) is internal and never leaks
-into the Protocol. No MILESTONES.md F2 update needed. See docs/backend.md's
+into the Protocol. No MILESTONES.md F2 update needed. See docs/internals/backend-protocol.md's
 config-entry addendum for the identity/manifest bookkeeping this implies
 (`entry_id` lives in `ManifestEntry`, additively).
 
@@ -1692,7 +1692,7 @@ updated in the same series, R5):**
   identity gets a fresh `entry_id`.
 - **DSL surface (`hassle.compiler.template_helpers`):** `id=`/`unique_id=`
   kwargs are REMOVED (F3-compatible: never shipped in a release, so this is
-  not a break of a frozen surface — see docs/dsl-extensions.md). `template_number`
+  not a break of a frozen surface — see docs/internals/dsl-extensions.md). `template_number`
   gained a required `set_value=` kwarg; `template_select` gained a required
   `select_option=` kwarg. `name=` became the sole identity-bearing kwarg.
 
@@ -2423,7 +2423,7 @@ still take `entity_id`-shaped WS payloads, `DirectBackend`'s tests in
 its own bookkeeping.
 
 **Backend surface (additive, NOT part of the frozen `Backend` Protocol F2 — same pattern as
-`entry_id_for`/`fetch_registry_snapshot`, docs/backend.md §3.1, probed via `getattr` so a hand-
+`entry_id_for`/`fetch_registry_snapshot`, docs/internals/backend-protocol.md §3.1, probed via `getattr` so a hand-
 rolled test `Backend` stub without it simply skips write-back with no warning):**
 `list_categories(scope)`, `create_category(scope, name)`, `assign_category(kind, identity, scope,
 category_id)`, `categories_for(kind, identity)` (test/CLI-facing lookup, not used by

@@ -26,15 +26,15 @@ class Backend(Protocol):
 - `list_remote` returns every object of that kind currently stored in HA,
   keyed by **identity** (not the full `"<kind>:<identity>"` object key), with
   each config body already in HA's normalized/plural storage form (DESIGN
-  §7.1, docs/ha-api-notes.md §10.1) — `DirectBackend` gets this for free
+  §7.1, docs/internals/ha-api-notes.md §10.1) — `DirectBackend` gets this for free
   because real HA already normalizes on read-back; `FakeBackend` reproduces it
   by calling `hassle.ir.normalize_ha` on every `create`/`update`.
 - `create` returns the new object's identity (HA assigns automation/script ids
-  from the caller and helper ids by slugifying `name`, per docs/ha-api-notes.md
+  from the caller and helper ids by slugifying `name`, per docs/internals/ha-api-notes.md
   §2–§4 — either way, the backend is the source of truth for what identity was
   actually assigned).
 - `update`/`delete` are addressed by `(kind, identity)`. The real HA helper
-  WebSocket API keys update/delete payloads as `{domain}_id` (docs/ha-api-notes.md
+  WebSocket API keys update/delete payloads as `{domain}_id` (docs/internals/ha-api-notes.md
   §4, quirk #1) — that is a `DirectBackend`/`FakeBackend` **internal**
   implementation detail; it does not appear in this Protocol's signature,
   keeping the Protocol domain-shape-agnostic.
@@ -219,13 +219,13 @@ scoped to the `template` domain (`hassle.ir.TEMPLATE_DOMAINS`:
 addressed the same `(kind, identity)` way. What differs is entirely internal
 to `FakeBackend`/`DirectBackend`:
 
-- **Identity (redesigned after CI evidence, docs/ha-api-notes.md §26.6):**
+- **Identity (redesigned after CI evidence, docs/internals/ha-api-notes.md §26.6):**
   there is no settable `unique_id` — real HA's config-flow form schema
   rejects an unrecognized `unique_id` key outright. `identity` is
   DERIVED from the declared `name` (slugified), the same rule storage
   helpers use for an unsupplied `id` (§4/§17.5) — except here it's the ONLY
   identity source. HA's own config-entry identity, the `entry_id` it assigns
-  on creation (docs/ha-api-notes.md §26), remains transport-side only; the
+  on creation (docs/internals/ha-api-notes.md §26), remains transport-side only; the
   wire-level correlator for re-deriving identity on `list_remote` is the
   entry's `title` (set from the submitted `name` by the flow). Which of the
   four template sub-kinds a listed entry is gets determined by
@@ -250,7 +250,7 @@ to `FakeBackend`/`DirectBackend`:
   caller (the sync engine) never sees the intermediate flow steps, exactly as
   it never sees the helper `{domain}_id` payload-key convention (quirk #1)
   either. `delete` is a plain entry removal by `entry_id`.
-  **Transport correction (found via CI, docs/ha-api-notes.md §26.0):** flow
+  **Transport correction (found via CI, docs/internals/ha-api-notes.md §26.0):** flow
   create/step-submission, options-flow create/step-submission, and entry
   removal are all **REST**, not WebSocket (`POST /api/config/config_entries/
   flow[/{flow_id}]`, `POST /api/config/config_entries/options/flow[/{flow_id}]`,
@@ -264,7 +264,7 @@ to `FakeBackend`/`DirectBackend`:
   dependency-ordering rationale (an automation/script may reference a
   template helper's entity id, so it must exist first).
 
-See docs/ha-api-notes.md §26 for the full flow-shape capture notes and the
+See docs/internals/ha-api-notes.md §26 for the full flow-shape capture notes and the
 rollback entry_id-changes caveat.
 
 ### 3.1.1 What a new config-entry domain needs (proving the follow-ons are mechanical)
@@ -329,7 +329,7 @@ domain (an IR shape + a DSL builder); steps 3-6 are membership-set additions
 into machinery this milestone already built generically. This is the
 concrete evidence for this milestone's "mechanical follow-ons" framing.
 
-**M21 update (the `group` follow-on, docs/ha-api-notes.md §38): this
+**M21 update (the `group` follow-on, docs/internals/ha-api-notes.md §38): this
 prediction held for steps 1-5, almost exactly as written**, with the
 `step_id`-based sub-kind discrimination §38.2 flagged as a possible
 alternative found unnecessary in practice -- `_template_entry_domains`
