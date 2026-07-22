@@ -1,4 +1,4 @@
-# `Backend` protocol, plan/apply data model, and the `SourceWriter` seam (F2)
+# `Backend` protocol, plan/apply data model, and the `SourceWriter` seam
 
 This is a frozen compatibility contract: the `Backend` Protocol plus the
 plan/apply data model. The sync engine is built against an in-memory
@@ -41,12 +41,12 @@ class Backend(Protocol):
 
 ### Deliberately out of scope
 
-Registry snapshot fetch, trace access, and template rendering are **not** on `Backend`. Re-reading DESIGN §8.2/§8.3: the plan
-table only ever compares base (manifest) / local (compiled) / remote (backend
-`list_remote`) — it never consults registry data. Those concerns belong to
-`DirectBackend` directly (M6) or to other modules layered on top of it; adding
-them here would widen the seam every future `Backend` implementer has to
-satisfy for no sync-engine benefit.
+Registry snapshot fetch, trace access, and template rendering are **not** on
+`Backend`. The plan table only ever compares base (manifest) / local
+(compiled) / remote (backend `list_remote`) — it never consults registry data
+(DESIGN §8.2/§8.3). Those concerns belong to `DirectBackend` directly or to
+other modules layered on top of it; adding them here would widen the seam
+every future `Backend` implementer has to satisfy for no sync-engine benefit.
 
 ## 2. The plan/apply data model (`hassle.sync`)
 
@@ -86,7 +86,7 @@ class Conflict(BaseModel):
 
 Full config payloads, never lossy summaries (`local`/`remote` may be `None`
 when that side was deleted). Rendering a pretty 3-way diff of the *decompiled
-DSL* is M7's job (DESIGN §8.2); this is only the structured data.
+DSL* is the CLI's job (DESIGN §8.2); this is only the structured data.
 
 ### `PlanEntry` / `Plan`
 
@@ -133,8 +133,8 @@ class Manifest(BaseModel):
 ```
 
 `synced_at` is **always caller-supplied** — core logic never calls
-`datetime.now()` or anything else wall-clock-shaped (R8); the CLI layer (M7)
-is what actually knows the time. `Manifest.canonical_json()` reuses
+`datetime.now()` or anything else wall-clock-shaped; the CLI layer is what
+actually knows the time. `Manifest.canonical_json()` reuses
 `hassle.ir.canonical.canonical_json` for stable serialization, matching the
 IR's own convention.
 
@@ -159,9 +159,8 @@ caller keeps its old manifest (`test_manifest_updates_only_on_success`).
 ## 3. The `SourceWriter` seam
 
 `hassle.sync.source_writer.SourceWriter` decouples the sync engine's pull-side
-actions from M2's LibCST-based splicer, which lives on a parallel,
-not-yet-merged branch. The pull engine (`hassle.sync.pull`) only depends on
-this Protocol:
+actions from the LibCST-based splicer. The pull engine (`hassle.sync.pull`)
+only depends on this Protocol:
 
 ```python
 class SourceWriter(Protocol):
@@ -174,21 +173,31 @@ class SourceWriter(Protocol):
   (a brand-new object has no existing file to splice into).
 - `splice_object` — replace just one object's definition within an existing
   file, preserving everything else byte-for-byte (DESIGN §7.3's
-  `test_splice_preserves_rest_of_file`, M2's job). Used for `refresh`.
+  `test_splice_preserves_rest_of_file`). Used for `refresh`.
 - `delete_object` — remove an object's source (`drop`). May delete the whole
   file if that was the object's only definition.
 
-**M2 will implement `SourceWriter` for real** with the LibCST splicer at
-integration time. M5 ships two implementations so its own tests can exercise
-the seam without M2:
+Three implementations:
 
+- `SplicingSourceWriter` — the real one, and what `hassle pull` uses:
+  `splice_object` surgically replaces one object's statement in place via
+  `hassle.decompiler.splice`, and `delete_object` removes only that object's
+  statement — sibling objects and hand-written comments in the same file
+  survive byte-for-byte (no local or UI edit is ever silently lost). If the
+  manifest points at a file that no longer defines the object, it appends the
+  refreshed definition under a `# hassle: updated from UI on <date>` marker
+  rather than clobbering unrelated content; if that append would collide with
+  a metaprogrammed (compile-time-loop-generated) object of the same key, it
+  records a `reconcile_warnings` entry instead of creating a silent duplicate.
 - `WholeFileSourceWriter` — a blunt but correct stand-in: every operation
   is a whole-file write or delete (`splice_object` degrades to
-  `write_whole_file`). Good enough for `adopt`, acceptable for `refresh`/`drop`
-  until M2 lands.
+  `write_whole_file`). Correct only when every touched file holds a single
+  object — on a multi-object file, `splice_object`/`delete_object` would
+  clobber the siblings, so this implementation is used only for `adopt` (a
+  new file has no "rest of file" to preserve) and in tests.
 - `RecordingSourceWriter` — an in-memory test double (no disk I/O) that
   records every call for assertions; used throughout the pull-engine unit
-  tests and the I6 fuzz test.
+  tests and the fuzz test for lost edits.
 
 ### Conflict marker format
 
@@ -205,32 +214,31 @@ conflict by tooling):
 >>>>>>> remote
 ```
 
-M7 owns real conflict UX (a rich 3-way *DSL*-level diff, DESIGN §8.2); this
-format only exists so a human (or M7, at integration time) can see both sides
-of a conflict from M5's output today.
+The CLI owns real conflict UX (a rich 3-way *DSL*-level diff, DESIGN §8.2);
+this format only exists so a human can see both sides of a conflict from the
+pull engine's output directly.
 
-## 3.1. Config-entry template-helper addendum (M10, additive — `Backend` unchanged)
+## 3.1. Config-entry template/group-helper addendum (`Backend` unchanged)
 
-This milestone adds the first config-entry `ObjectType` plugin (DESIGN §13),
-scoped to the `template` domain (`hassle.ir.TEMPLATE_DOMAINS`:
-`template_number`/`template_sensor`/`template_binary_sensor`/
-`template_select`). This needed **zero changes to the `Backend` Protocol**:
+Template (`hassle.ir.TEMPLATE_DOMAINS`: `template_number`/`template_sensor`/
+`template_binary_sensor`/`template_select`) and group
+(`hassle.ir.GROUP_DOMAINS`, twelve flavors) are config-entry `ObjectType`
+plugins (DESIGN §13). Both need **zero changes to the `Backend` Protocol**:
 `list_remote`/`create`/`update`/`delete` are exactly the same four methods,
 addressed the same `(kind, identity)` way. What differs is entirely internal
 to `FakeBackend`/`DirectBackend`:
 
-- **Identity (redesigned after CI evidence, docs/internals/ha-api-notes.md §26.6):**
-  there is no settable `unique_id` — real HA's config-flow form schema
-  rejects an unrecognized `unique_id` key outright. `identity` is
-  DERIVED from the declared `name` (slugified), the same rule storage
-  helpers use for an unsupplied `id` (§4/§17.5) — except here it's the ONLY
-  identity source. HA's own config-entry identity, the `entry_id` it assigns
-  on creation (docs/internals/ha-api-notes.md §26), remains transport-side only; the
-  wire-level correlator for re-deriving identity on `list_remote` is the
-  entry's `title` (set from the submitted `name` by the flow). Which of the
-  four template sub-kinds a listed entry is gets determined by
-  cross-referencing the entity registry's `config_entry_id` field (a WS
-  call, `config/entity_registry/list`, unaffected by any of this) rather
+- **Identity:** there is no settable `unique_id` — real HA's config-flow form
+  schema rejects an unrecognized `unique_id` key outright. `identity` is
+  DERIVED from the declared `name` (slugified), the same rule storage helpers
+  use for an unsupplied `id` — except here it's the ONLY identity source
+  (docs/internals/ha-api-notes.md §26.6/§38.1). HA's own config-entry
+  identity, the `entry_id` it assigns on creation (docs/internals/ha-api-notes.md
+  §26), remains transport-side only; the wire-level correlator for
+  re-deriving identity on `list_remote` is the entry's `title` (set from the
+  submitted `name` by the flow). Which config-entry sub-kind a listed entry
+  is gets determined by cross-referencing the entity registry's
+  `config_entry_id` field (a WS call, `config/entity_registry/list`) rather
   than a client-side marker, since sub-kind data can't travel through
   `options` either (the same "no bookkeeping keys" schema rule).
 - **`ManifestEntry.entry_id`** (additive optional field, `hassle.sync.models`):
@@ -238,140 +246,106 @@ to `FakeBackend`/`DirectBackend`:
   object key. `apply.py`'s `_advance_manifest` populates it by calling an
   **additive, non-Protocol** `entry_id_for(kind, identity) -> str | None`
   method both `FakeBackend` and `DirectBackend` expose (probed defensively
-  via `getattr`, the same pattern `fetch_registry_snapshot` already
-  established for backend extras outside F2) — a `Backend` implementer that
-  doesn't expose it (hypothetically, a backend with no config-entry kinds at
-  all) simply gets `entry_id=None` forever, which is harmless: nothing else
-  reads it except a future DirectBackend needing it to address
-  `config_entries/options/flow` by entry_id rather than re-deriving it.
+  via `getattr`, the same pattern `fetch_registry_snapshot` uses for backend
+  extras outside this Protocol) — a `Backend` implementer that doesn't expose
+  it (hypothetically, a backend with no config-entry kinds at all) simply
+  gets `entry_id=None` forever, which is harmless: nothing else reads it
+  except `DirectBackend` needing it to address
+  `config_entries/options/flow` by entry_id rather than re-deriving it. The
+  same additive, `getattr`-probed pattern backs the category-writeback
+  surface (`list_categories`/`create_category`/`categories_for`/
+  `assign_category` — see `hassle.sync.category_writeback`).
 - **Internally:** `create`/`update` drive a simulated (`FakeBackend`) or real
-  (`DirectBackend`, M10) multi-step config-entry flow / options-flow to
-  completion inside the single synchronous method call — the Protocol's
-  caller (the sync engine) never sees the intermediate flow steps, exactly as
-  it never sees the helper `{domain}_id` payload-key convention (quirk #1)
-  either. `delete` is a plain entry removal by `entry_id`.
-  **Transport correction (found via CI, docs/internals/ha-api-notes.md §26.0):** flow
-  create/step-submission, options-flow create/step-submission, and entry
-  removal are all **REST**, not WebSocket (`POST /api/config/config_entries/
-  flow[/{flow_id}]`, `POST /api/config/config_entries/options/flow[/{flow_id}]`,
+  (`DirectBackend`) multi-step config-entry flow / options-flow to completion
+  inside the single synchronous method call — the Protocol's caller (the sync
+  engine) never sees the intermediate flow steps, exactly as it never sees
+  the helper `{domain}_id` payload-key convention (quirk #1) either. `delete`
+  is a plain entry removal by `entry_id`. Flow create/step-submission,
+  options-flow create/step-submission, and entry removal are all **REST**,
+  not WebSocket (`POST /api/config/config_entries/flow[/{flow_id}]`,
+  `POST /api/config/config_entries/options/flow[/{flow_id}]`,
   `DELETE /api/config/config_entries/entry/{entry_id}`) — only entry
-  *listing* (`config_entries/get`) is WS. The original implementation drove
-  all of these over WS and failed identically against both HA `stable` and
-  `dev` with `Unknown command`; `DirectBackend` now uses `HaClient.rest_post`/
-  `rest_delete` for every write path.
-- **Apply order** (`hassle.sync.apply._KIND_ORDER`): the four template
+  *listing* (`config_entries/get`) is WS (docs/internals/ha-api-notes.md
+  §26.0). `DirectBackend` uses `HaClient.rest_post`/`rest_delete` for every
+  write path here.
+- **Apply order** (`hassle.sync.apply._KIND_ORDER`): the template and group
   domains slot in after the nine storage helpers, before scripts — same
   dependency-ordering rationale (an automation/script may reference a
-  template helper's entity id, so it must exist first).
+  template/group helper's entity id, so it must exist first). `_KIND_ORDER`
+  is a literal ordered tuple, not a bare `OBJECT_KINDS` membership check —
+  `_kind_sort_key`'s fallback for a kind absent from the tuple sorts it dead
+  last (after `script`, the tuple's own last entry), which would be silently
+  wrong dependency order for any object referencing it. A new config-entry
+  domain must be added to `_KIND_ORDER` explicitly, not just to
+  `OBJECT_KINDS`.
 
-See docs/internals/ha-api-notes.md §26 for the full flow-shape capture notes and the
-rollback entry_id-changes caveat.
+See docs/internals/ha-api-notes.md §26 and §38 for the full flow-shape capture
+notes.
 
-### 3.1.1 What a new config-entry domain needs (proving the follow-ons are mechanical)
+### 3.1.1 Adding a new config-entry domain
 
-DESIGN §13 names `threshold`/`derivative`/`group`/… as future config-entry
-helper plugins after `template`. Scoping M10 to one domain only pays off if
-adding the next one is small and mechanical, not a repeat of this milestone's
-design work. Concretely, a new domain (e.g. `threshold`) needs:
+A new config-entry helper domain (e.g. `threshold`/`derivative`, DESIGN §13's
+other named follow-ons) needs:
 
 1. **IR:** a domain string added to a `*_DOMAINS` frozenset next to
-   `TEMPLATE_DOMAINS` (`hassle.ir.keys`) — or, if it shares the exact same
-   options shape as `TemplateHelperConfig` (`name` + passthrough extras, no
-   `unique_id`/`id` field at all, §26.6), no new IR class at all; a
+   `TEMPLATE_DOMAINS`/`GROUP_DOMAINS` (`hassle.ir.keys`) — or, if it shares
+   the exact same options shape as `TemplateHelperConfig` (`name` + passthrough
+   extras, no `unique_id`/`id` field at all), no new IR class at all; a
    genuinely different shape gets its own thin `IRObject` subclass mirroring
-   `TemplateHelperConfig` (~15 lines). `identity` is a computed
-   `slugify(name)` property either way — check the new integration's own
-   config-flow schema for whether it, too, rejects a caller-supplied
-   `unique_id` (§26.6's finding may not generalize to every future
-   config-entry integration; verify against its own `config_flow.py`, don't
-   assume).
+   `TemplateHelperConfig`. `identity` is a computed `slugify(name)` property
+   either way — check the new integration's own config-flow schema for
+   whether it, too, rejects a caller-supplied `unique_id` (verify against its
+   own `config_flow.py` rather than assuming the template/group finding
+   generalizes).
 2. **DSL:** one builder function per new domain in a sibling module to
    `hassle.compiler.template_helpers`, reusing `_declare_helper`'s pattern
    (validate domain membership, build the IR object, register via
    `current_registry().add_object`, return an `EntityRef`) — no new
-   registration mechanism. Check the new domain's own required-field set
-   (§26.6's finding: `set_value`/`select_option` are template-specific write
-   targets, not a general config-entry pattern) and encode it the same way
-   (`_TEMPLATE_REQUIRED_FIELDS`-equivalent map).
-3. **FakeBackend:** the SAME three internal methods
+   registration mechanism. Check the new domain's own required-field set and
+   encode it the same way (a `_TEMPLATE_REQUIRED_FIELDS`-equivalent map).
+3. **`FakeBackend`:** the same internal methods
    (`_create_via_flow`/`_update_via_options_flow`/`entry_id_for`, or a shared
-   helper extracted from them if a second domain makes the duplication worth
-   collapsing) dispatch on the new domain's `_TEMPLATE_FLOW_TYPE`-equivalent
-   step_id map and its own required-fields map — `create`/`update`/`delete`/
-   `list_remote` themselves need NO change (they already dispatch on
-   `kind in TEMPLATE_DOMAINS`-shaped membership checks; widen the membership
-   set or add a sibling one).
-4. **DirectBackend:** same shape — the REST flow/options-flow/entry-removal
-   endpoints (`/api/config/config_entries/flow[/{flow_id}]`, `/api/config/
-   config_entries/options/flow[/{flow_id}]`, `/api/config/config_entries/
-   entry/{entry_id}`, §26.0) are **generic across every config-entry
-   integration** (`handler=<domain integration name>` is the only per-domain
-   parameter on the start-flow POST); only the step_id/field-name/
-   required-field map is domain-specific. The entity-registry
-   sub-kind-discrimination cross-reference (§26.6) is also generic — any
-   config-entry integration creating exactly one entity per entry can reuse
-   `_template_entry_domains`'s pattern verbatim.
-5. **Decompiler/placement:** `_template_helper_source` needs no rename logic
-   at all (there's no identity kwarg to rename, §26.6) — the stored body's
-   keys map straight onto the builder's kwargs, generic per-domain (keyed
-   off `TEMPLATE_DOMAINS` membership, not a hardcoded domain name);
-   `default_source_path`'s shared root-level `misc.py` rule (category-first
-   layout, superseding the earlier per-kind `helpers/misc.py`)
-   already covers `TEMPLATE_DOMAINS` as a set via `_SCOPE_FOR_KIND`'s shared
-   `"helpers"` scope, so a domain added to that set needs no placement-code
-   change at all.
-6. **Apply order / validation / ignore-glob:** all three are driven by
-   `hassle.ir.OBJECT_KINDS` membership or plain object-key string matching —
-   zero code changes for a new domain that's added to `OBJECT_KINDS`.
+   helper if a further domain makes the duplication worth collapsing)
+   dispatch on the new domain's own step_id map and required-fields map —
+   `create`/`update`/`delete`/`list_remote` themselves need no change (they
+   already dispatch on `kind in TEMPLATE_DOMAINS`-shaped membership checks;
+   widen the membership set or add a sibling one).
+4. **`DirectBackend`:** same shape — the REST flow/options-flow/entry-removal
+   endpoints are generic across every config-entry integration
+   (`handler=<domain integration name>` is the only per-domain parameter on
+   the start-flow POST); only the step_id/field-name/required-field map is
+   domain-specific. The entity-registry sub-kind-discrimination cross-reference
+   is also generic — any config-entry integration creating exactly one entity
+   per entry can reuse `_config_entry_entity_domains`'s pattern verbatim.
+5. **Decompiler/placement:** the stored body's keys map straight onto the
+   builder's kwargs, generic per-domain (keyed off the domain set's
+   membership, not a hardcoded domain name); `default_source_path`'s shared
+   root-level `misc.py` rule (category-first layout) already covers a domain
+   added to that set via `_SCOPE_FOR_KIND`'s shared `"helpers"` scope, so no
+   placement-code change is needed.
+6. **Apply order / validation / ignore-glob:** apply order needs the new
+   domain added to `_KIND_ORDER` explicitly (see above — this is NOT a bare
+   `OBJECT_KINDS` membership check, unlike validation and the ignore-glob,
+   which are). Validation may need a genuinely new function if the domain has
+   a body field that references other entities (the way `group`'s `entities=`
+   does): nothing in the existing validator walks a helper object's own body
+   at all (`hassle.registry.extract.extract_references` only ever descends
+   into an object's `triggers`/`conditions`/`actions`, and neither template
+   nor group helpers have any of those sections) — `group`'s
+   `hassle.registry.validate._validate_group_entities` is the precedent to
+   follow if the new domain has an analogous field; check the new domain's
+   own schema shape rather than assuming it does.
 
-In short: steps 1-2 are the only places that see genuinely new code per
-domain (an IR shape + a DSL builder); steps 3-6 are membership-set additions
-into machinery this milestone already built generically. This is the
-concrete evidence for this milestone's "mechanical follow-ons" framing.
-
-**M21 update (the `group` follow-on, docs/internals/ha-api-notes.md §38): this
-prediction held for steps 1-5, almost exactly as written**, with the
-`step_id`-based sub-kind discrimination §38.2 flagged as a possible
-alternative found unnecessary in practice -- `_template_entry_domains`
-(renamed `_config_entry_entity_domains`, generalized since it was never
-template-specific) was reused verbatim, exactly as step 4 predicted. Two
-corrections to step 6's "zero code changes" framing, found while actually
-building the follow-on:
-
-- **Apply order is a literal ordered tuple (`_KIND_ORDER`), not a bare
-  `OBJECT_KINDS` membership check** — `_kind_sort_key`'s fallback for a kind
-  absent from the tuple is `len(_KIND_ORDER)`, which sorts AFTER `script`/
-  `automation` (the tuple's own last two entries), not merely "unordered
-  among the helpers". A domain merely added to `OBJECT_KINDS` without also
-  being added to `_KIND_ORDER` would apply dead last, after automations that
-  might reference its entities — silently wrong dependency order, not a
-  visible failure until something actually races on it. `GROUP_DOMAINS`
-  needed its twelve entries added to `_KIND_ORDER` explicitly (`hassle.sync.
-  apply`); this was already true of `TEMPLATE_DOMAINS` too (M10 added its
-  four to the same tuple) — step 6's text just didn't call the tuple out by
-  name, having listed "apply order" alongside "validation/ignore-glob" (which
-  genuinely ARE bare membership/string-matching) as if all three worked the
-  same way.
-- **Validation is NOT always "zero code changes for a new domain."** A group
-  helper's own `entities=` field is a literal list of member entity ids —
-  this milestone wants a nonexistent member flagged, and nothing in
-  the existing validator walks a helper object's own body at all
-  (`hassle.registry.extract.extract_references` only ever descends into an
-  object's `triggers`/`conditions`/`actions`, and neither template nor group
-  helpers have any of those sections) — so this needed a genuinely new
-  function, `hassle.registry.validate._validate_group_entities`, not a
-  membership-set addition. `threshold`/`derivative` (§13's other named
-  future domains) likely don't have an analogous "list of entity ids" field
-  the way `group` does, so this may be a `group`-specific step 6 addendum
-  rather than a universal one — worth checking against each new domain's
-  own schema shape rather than assuming it never applies.
+Steps 1–2 are the only places that see genuinely new code per domain (an IR
+shape + a DSL builder); steps 3–6 are membership-set additions into machinery
+that already exists generically.
 
 ## 4. Where things live
 
 - `hassle.backend` — `Backend` Protocol (`protocol.py`), `FakeBackend`
-  (`fake.py`, M5-only; `DirectBackend` arrives in M6 as a sibling module).
+  (`fake.py`), `DirectBackend` (`direct.py`).
 - `hassle.sync` — `PlanAction`/`Plan`/`PlanEntry`/`Conflict`/`ConflictKind`/
   `Manifest`/`ManifestEntry`/`ApplyResult`/`ApplyOutcome` (`models.py`),
-  `SourceWriter`/`WholeFileSourceWriter`/`RecordingSourceWriter`
-  (`source_writer.py`), `compute_plan` (`plan.py`), `apply_plan` (`apply.py`),
-  `apply_pull` (`pull.py`).
+  `SourceWriter`/`WholeFileSourceWriter`/`SplicingSourceWriter`/
+  `RecordingSourceWriter` (`source_writer.py`), `compute_plan` (`plan.py`),
+  `apply_plan` (`apply.py`), `apply_pull` (`pull.py`).

@@ -1,4 +1,4 @@
-# Home Assistant API notes — M0.V behavioral verification
+# Home Assistant API notes — behavioral verification
 
 **Purpose.** DESIGN §4 ("How Home Assistant stores these objects") was source-verified against HA
 core in July 2026. This document re-verifies it **behaviorally** against a live
@@ -15,7 +15,7 @@ Corrections are collected in **§10 — flagged loudly**. Read that section.
 
 ## 0. ⚠️ Environment caveat — verified on HA 2026.2.3, not 2026.7 (read this)
 
-The milestone says to use `ghcr.io/home-assistant/home-assistant:stable`. In this sandbox that
+The plan calls for `ghcr.io/home-assistant/home-assistant:stable`. In this sandbox that
 was **not possible**, and the reason is worth recording because it affects how much trust to put
 in the captures.
 
@@ -35,15 +35,15 @@ The egress proxy in this environment permits language package registries (PyPI, 
 HA 2026.7 bundles Python 3.14; the toolchain here tops out at the pre-installed **Python 3.13.12**,
 whose newest compatible HA is **2026.2.3**. That is what was stood up and verified.
 
-**Why the captures are still usable as M5 fixtures:** every row verified below exercises
+**Why the captures are still usable as sync-engine fixtures:** every row verified below exercises
 long-stable API surface. The single largest finding — plural `triggers/conditions/actions` schema
 normalization (§10.1) — landed in **HA 2024.10** and is therefore identical in 2026.2 and 2026.7.
 Storage-collection helper commands, the config REST endpoints, `skip_condition`, and the media
 gates have been stable for years.
 
-**Action for M6:** M6 integration tests run in CI against the real `stable` **and** `dev` Docker
-images (unrestricted registry there). M6 must re-confirm these captures against 2026.7, paying
-attention to anything in §10. Do not treat 2026.2.3 as authoritative for a 2026.7-specific detail.
+**Action for the live-integration suite:** it runs in CI against the real `stable` **and** `dev`
+Docker images (unrestricted registry there), and must re-confirm these captures against 2026.7,
+paying attention to anything in §10. Do not treat 2026.2.3 as authoritative for a 2026.7-specific detail.
 
 **Runtime used**
 - Home Assistant **2026.2.3** (`pip install homeassistant`, Python 3.13.12), config in a temp dir
@@ -70,7 +70,8 @@ script: !include scripts.yaml
 
 With a bare `automation:` key (no include), `POST` returns `{"result":"ok"}` and writes the file,
 but the entity never appears and reloads load nothing. HA's default config ships the includes; a
-real bundle target always has them. Flagged so M6's test harness configures HA correctly.
+real bundle target always has them. Flagged so the live-integration test harness configures HA
+correctly.
 
 ### 1.2 Onboarding → long-lived token (real captures)
 
@@ -252,7 +253,8 @@ Real area entry (onboarding seeds Living Room / Kitchen / Bedroom):
   "turn_off": { … }, "toggle": { … }, "reload": { "fields":{} } }
 ```
 
-The `fields` / `target` schemas are what M3 uses for stub generation and service-param validation.
+The `fields` / `target` schemas are what the registry/stub layer uses for stub generation and
+service-param validation.
 
 ---
 
@@ -439,11 +441,11 @@ The single most important finding for the round-trip invariant (I3).
   `POST`ing the plural form round-trips verbatim (read-back keys identical).
 - **`validate_config` requires the plural outer keys** and rejects singular (§6).
 - **Impact:**
-  - **IR / compiler (M1, §7.1):** the IR's canonical/serialized form that Hassle sends and hashes
+  - **IR / compiler (§7.1):** the IR's canonical/serialized form that Hassle sends and hashes
     should be the **plural** form, because that is what HA persists and returns. If the compiler
     emitted singular keys, `remote (plural) != local (singular)` and every object would look
     changed. Compile to plural; treat singular as input-only legacy.
-  - **Decompiler / round-trip (M2, I3):** `compile(decompile(remote))` must reproduce the plural
+  - **Decompiler / round-trip (I3):** `compile(decompile(remote))` must reproduce the plural
     remote JSON. Canonical JSON hashing (§8) must be computed on the plural form on both sides.
   - This normalization has existed since **HA 2024.10**, so it is the same on 2026.2 and 2026.7.
 
@@ -487,12 +489,12 @@ so the mirror never targets the bare root.
   **`<author>/motion_light.yaml`**, not a bare filename. The DSL surface can keep `inputs=` for
   ergonomics, but the compiler/decompiler IR must emit/read `use_blueprint.input` and the
   author-qualified `path`. Update §5.8's example (or note the DSL↔JSON mapping explicitly).
-- **M2 finding:** a stored blueprint automation also carries the usual top-level
+- **Decompiler finding:** a stored blueprint automation also carries the usual top-level
   `alias`/`description` fields alongside `use_blueprint` (see
-  `fixtures/configs/automation_blueprint_based.json`), which the M1
-  `blueprint_automation(id=, use_blueprint=, inputs=)` builder had no kwargs
-  for. Fixed as an F3 *addition* (widening, not a break, per docs/internals/dsl-extensions.md's
-  stability contract): `alias=`/`description=` optional kwargs added in M2 so
+  `fixtures/configs/automation_blueprint_based.json`), which the
+  `blueprint_automation(id=, use_blueprint=, inputs=)` builder originally had no kwargs
+  for. Fixed as a DSL-surface *addition* (widening, not a break, per docs/internals/dsl-extensions.md's
+  stability contract): `alias=`/`description=` optional kwargs were added so
   the decompiler can round-trip a blueprint automation's alias/description
   without falling back to `raw_automation`.
 
@@ -512,7 +514,7 @@ default live run mirrors a real trigger — exactly as the design states.
 
 ---
 
-## 11. Notes for M5 (FakeBackend fixtures)
+## 11. Notes for `FakeBackend` fixtures
 
 - Raw captures: [`ha-api-captures/rest-ws-core.json`](ha-api-captures/rest-ws-core.json)
   (automations, scripts, all 9 helper cycles, registries, `get_services`, `validate_config`),
@@ -522,46 +524,39 @@ default live run mirrors a real trigger — exactly as the design states.
   (trace/list, trace/get, skip_condition matrix). Media captures are inline in §9 (curl-driven).
 - **Model the plural schema (§10.1) in FakeBackend:** `list_remote` returns the plural form; the
   canonical hash is over the plural form; a `create/update` that receives singular input should
-  normalize to plural before hashing, mirroring HA. Otherwise M5's plan table will show spurious
+  normalize to plural before hashing, mirroring HA. Otherwise the plan table will show spurious
   `update`s.
 - Helper apply must use the `{domain}_id` key on update/delete (§4).
 - `apply` order helpers → scripts → automations (DESIGN §8.2) is independent of these findings.
 - FakeBackend's media mirror stub should reproduce **both** gates (upload Content-Type + download
-  extension) so M6's mirror tests exercise the real failure modes.
+  extension) so the live-integration mirror tests exercise the real failure modes.
 
 *Verified 2026-07-03 against Home Assistant 2026.2.3 (see §0 for why not 2026.7). Re-verify §10 on
-2026.7 in M6.*
+2026.7 against the live-integration suite.*
 
 ---
 
-## 12. M1 internal-api contract gap: helpers / raw_automation / @blueprint_automation
-not wired into `compile_bundle` (found by the templates/macros/object-types work item)
+## 12. Internal-api contract gap: helpers / raw_automation / @blueprint_automation
+not wired into `compile_bundle` (found while building the object-declaration builders)
 
-> **RESOLVED in the M1 integration pass (branch `m1/dsl-compiler`).** The
-> minimal fix sketched below was implemented as-is: `Registry.add_object(obj,
-> span)` (registry.py) registers a pre-built `IRObject` with no `func`;
-> `compile_registered` (bundle.py) drains a `prebuilt` stream and calls
-> `result.add(...)` directly, before the function-shaped registrations.
-> `helpers.py` and `raw_automation.py` builders now register into the active
-> bundle registry; `compile_bundle` resets their process-wide `_DECLARED` lists
-> per compile (R8). Public names (`input_boolean`…`schedule`, `raw_automation`,
-> `blueprint_automation`) are in `hassle.__all__`. Goldens:
+> **RESOLVED.** The minimal fix sketched below was implemented as-is:
+> `Registry.add_object(obj, span)` (registry.py) registers a pre-built
+> `IRObject` with no `func`; `compile_registered` (bundle.py) drains a
+> `prebuilt` stream and calls `result.add(...)` directly, before the
+> function-shaped registrations. `helpers.py` and `raw_automation.py` builders
+> now register into the active bundle registry; `compile_bundle` resets their
+> process-wide `_DECLARED` lists per compile (R8). Public names
+> (`input_boolean`…`schedule`, `raw_automation`, `blueprint_automation`) are in
+> `hassle.__all__`. Goldens:
 > `fixtures/dsl/{helper_declarations,raw_automation_legacy,blueprint_automation}`.
 > The rest of this section is retained as the original gap report.
->
-> **Also renamed 2026-07-03 (design decision, same integration pass):** the
-> `hassle-core` distribution collapsed its two top-level import packages
-> (`hassle_core` + a thin `hassle` facade) into one, `hassle`. Every
-> `hassle_core.*` path in the retained report below is now `hassle.*`; see
-> docs/internals/ir-format.md and docs/internals/dsl-extensions.md for the full rename note.
 
 **Not an HA-behavior finding — an internal extension-contract gap in
 docs/internals/compiler-api.md**, flagged here per CLAUDE.md's "if the internal-api
 contract is insufficient, stop and report rather than modifying core."
 
-`compile_bundle`/`compile_registered` (`packages/hassle-core/src/hassle/compiler/bundle.py`
--- path renamed 2026-07-03 from `hassle_core/compiler/bundle.py`, design decision, see
-docs/internals/ir-format.md; frozen for follow-on M1 workstreams) only drain `registry.Registry` -- a list of
+`compile_bundle`/`compile_registered` (`packages/hassle-core/src/hassle/compiler/bundle.py`;
+frozen per docs/internals/ir-format.md) only drain `registry.Registry` -- a list of
 `RegisteredObject`, each of which is compiled by opening a `Recorder` and calling
 `reg.func()` once, i.e. "run a function, record trigger/condition/action calls
 into it." That model fits automations, scripts, and (via a caller-side wrapper)
@@ -577,7 +572,7 @@ fit:
   `raw_action`, which fit the existing seam fine and are fully wired up).
 
 Getting either into `CompileResult.objects` requires a change to one of the
-two files the m1/templates work item was told not to edit:
+two files the trigger/condition and template builder modules were told not to edit:
 
 - `registry.py`: `RegisteredObject` requires a `func: Callable`; there is no
   registration path for a pre-built IR object today (only `automation()`/
@@ -590,8 +585,7 @@ two files the m1/templates work item was told not to edit:
   `AutomationConfig`.
 
 **What was built instead:** `hassle.compiler.helpers` and
-`hassle.compiler.raw_automation` (paths renamed 2026-07-03 from
-`hassle_core.compiler.*`) implement the full model/builder layer
+`hassle.compiler.raw_automation` implement the full model/builder layer
 correctly and with test coverage (`HelperConfig`/`AutomationConfig`
 construction, the nine helper domains, JSON-serializability validation for raw
 bodies, the DESIGN §5.8 `inputs=` -> stored `use_blueprint.input` singular-key
@@ -614,34 +608,35 @@ already produce the exact `IRObject` this would need — only the last
 
 ---
 
-## 13. M1 integration-pass DSL-surface decisions (branch `m1/dsl-compiler`)
+## 13. DSL-surface integration decisions
 
-Merging the three M1 workstreams (triggers, actions, templates) onto the core
-surfaced two public-name collisions and required API smoothing before the F3
-freeze. These are DSL-surface facts (not HA-behavior findings), recorded here
-per CLAUDE.md and backed by `packages/hassle-core/tests/test_integration_api.py`.
+Merging the trigger/condition, action/control-flow, and template builder
+families onto the compiler core surfaced two public-name collisions and
+required API smoothing before the DSL surface froze. These are DSL-surface
+facts (not HA-behavior findings), recorded here per CLAUDE.md and backed by
+`packages/hassle-core/tests/test_integration_api.py`.
 
 ### 13.1 `event` is the trigger; the fire-event action is `fire_event`
-Both the triggers workstream (event **trigger**, DESIGN §5.4) and the actions
-workstream (fire-event **action**) exported a public `event`. They are different
-functions and cannot share a name. Resolution: `event` = the trigger builder
-(DESIGN §5.4 lists it among triggers); the fire-event action was renamed
-`fire_event`. Both are public.
+Both the trigger builders (event **trigger**, DESIGN §5.4) and the action
+verbs (fire-event **action**) originally exported a public `event`. They are
+different functions and cannot share a name. Resolution: `event` = the
+trigger builder (DESIGN §5.4 lists it among triggers); the fire-event action
+was renamed `fire_event`. Both are public.
 
 ### 13.2 `template()` is one builder serving both contexts
-The triggers workstream exported `template()` → a template **trigger/condition**;
-the templates workstream exported `template()` → a raw-Jinja **value** string.
-DESIGN §5.4 sanctions both spellings of `template()`. Resolution: a single
-`str`-subclass `TemplateExpr` (templates.py) that also implements
-`to_trigger`/`to_condition`, so `template("{{…}}")` is a Jinja value as a bare
-expression and a template trigger/condition inside `when`/`only_if`. The
-triggers-module duplicate was deleted.
+The trigger builders originally exported `template()` → a template
+**trigger/condition**; the template expression builders exported `template()`
+→ a raw-Jinja **value** string. DESIGN §5.4 sanctions both spellings of
+`template()`. Resolution: a single `str`-subclass `TemplateExpr`
+(templates.py) that also implements `to_trigger`/`to_condition`, so
+`template("{{…}}")` is a Jinja value as a bare expression and a template
+trigger/condition inside `when`/`only_if`. The trigger-module duplicate was
+deleted.
 
-### 13.3 API smoothing folded two wrapper functions away (pre-F3)
-The workstreams honored the core freeze by shipping wrappers instead of editing
-`builders.py`/`actions.py`. The integration pass (which has core-edit rights)
-folded them in and deleted the wrappers so the public surface has one way to do
-each thing:
+### 13.3 API smoothing folded two wrapper functions away
+Each builder family originally shipped its own wrapper rather than editing
+`builders.py`/`actions.py` directly. A later integration pass folded them in
+and deleted the wrappers so the public surface has one way to do each thing:
 - `with_trigger_options(state(...), id=, enabled=, variables=, for_=)` →
   folded into `state().to(...)`/`.is_(...)`/`.with_options(...)`; wrapper deleted.
 - `service_ext(..., response_variable=, continue_on_error=)` → folded into
@@ -649,8 +644,8 @@ each thing:
 
 ### 13.4 `StateExpr.entity_id` is now public (deviation note retired)
 templates.py's `state(x).value` previously read `StateExpr`'s private
-`_entity_id` (a documented coupling / deviation, formerly noted here). The
-integration pass added a public read-only `StateExpr.entity_id` accessor and
+`_entity_id` (a documented coupling / deviation, formerly noted here). A
+later pass added a public read-only `StateExpr.entity_id` accessor and
 switched `.value`/`expr()` to use it; the private-attr coupling and its
 deviation note are gone.
 
@@ -661,14 +656,14 @@ or reg.func.__name__` unconditionally -- there is no DSL shape that produces an
 automation with no `id` at all; every `@automation`-decorated function compiles
 to an explicit `id` field (the decorator's `id=` kwarg, or the function name).
 
-This is a real constraint the M2 decompiler/round-trip test had to account for:
+This is a real constraint the decompiler/round-trip test had to account for:
 about 50 of the `fixtures/configs/automation_*.json` fixtures have **no** `id`
 field at all (they're hand-authored docs examples predating the corpus's
 identity convention; real HA always assigns an `id` on creation and returns it
 on every read, docs/internals/ha-api-notes.md §2). Decompiling one of these fixtures and
 recompiling it therefore always adds an explicit `id` (the fixture's filename
 stem, used as the synthesized identity) to the output -- correctly matching
-what a real HA automation would already have, not a lossy round-trip. M2's
+what a real HA automation would already have, not a lossy round-trip.
 `test_roundtrip_corpus` (`packages/hassle-core/tests/test_roundtrip_corpus.py`)
 compares against `normalize_ha(x)` **with that synthesized id added** for these
 fixtures specifically, rather than bare `normalize_ha(x)`.
@@ -680,26 +675,26 @@ HA would ever hand back) -- flagged here per CLAUDE.md's "record + flag" rule
 because it was non-obvious until the round-trip test was written against the
 real corpus.
 
-## 15. M2 correction: most of the corpus is legacy singular-form, not "two fixtures"
+## 15. Correction: most of the corpus is legacy singular-form, not "two fixtures"
 
-MILESTONES.md names ``automation_legacy_platform_naming`` and
+`docs/history/milestones.md` names ``automation_legacy_platform_naming`` and
 ``automation_service_call_longhand`` as "the cases where normalization
 applies," implying they are the exception. Checking the actual corpus:
 **48 of the 55 ``automation_*.json`` fixtures** use the legacy singular schema
 (`trigger`/`condition`/`action` outer keys, some with `service:`) -- the corpus
-was built before M0.1 added the 2026.7 purpose-vocabulary fixtures (which are
-plural by construction, since that vocabulary postdates the singular/plural
-split). Only 6 automation fixtures are already plural.
+predates the 2026.7 purpose-vocabulary fixtures (which are plural by
+construction, since that vocabulary postdates the singular/plural split).
+Only 6 automation fixtures are already plural.
 
 This doesn't change any test's correctness (`test_roundtrip_corpus` and
 `test_normalize_ha_is_identity_for_plural_fixtures`,
 `packages/hassle-core/tests/test_roundtrip_corpus.py`, are fixture-shape-driven,
-not hardcoded to the two named fixtures), but the milestone text's framing is
+not hardcoded to the two named fixtures), but the original plan text's framing is
 misleading for anyone reading it as "normalization is a rare edge case in this
 corpus" -- it is the majority case. Flagged here rather than silently
 worked around.
 
-## 16. M2 finding: typed trigger builders cannot reproduce a legacy `platform:` key
+## 16. Typed trigger builders cannot reproduce a legacy `platform:` key
 
 `normalize_ha` correctly preserves an inner `platform:` discriminator verbatim
 (§10.1, §14 above -- verified against real HA: it is never rewritten to
@@ -713,7 +708,7 @@ preservation.
 
 48 of the 55 corpus automation fixtures use `platform:` (see §15). Decompiling
 all of them to `raw_trigger` (to preserve the spelling exactly) would leave the
-M2 DSL-coverage metric far under the 90% gate, on a corpus that is mostly
+decompiler's DSL-coverage metric far under the 90% gate, on a corpus that is mostly
 legacy-form fixtures by historical accident (see §15) rather than
 representative of what a 2026.7 UI actually writes today.
 
@@ -726,37 +721,37 @@ the current schema, exactly as HA's own schema migrations behave when a config
 is re-saved through a newer editor. This is purely cosmetic (the trigger's
 meaning is unchanged) and does **not** touch `normalize_ha` itself, which stays
 byte-faithful to verified real-HA behavior for the sync engine's actual hashing
-(M5+ — `manifest.lock` still hashes exactly what HA stores). The test-local
+(`manifest.lock` still hashes exactly what HA stores). The test-local
 `_modernized()` helper in `test_roundtrip_corpus.py` documents and implements
 this narrowly (only at trigger positions, never conditions/actions, which have
 no such legacy synonym).
 
-## 17. M2 finding: the compiler always materializes `triggers`/`conditions`/`actions`
+## 17. The compiler always materializes `triggers`/`conditions`/`actions`
 
 `hassle.compiler.bundle._build_automation` sets all three keys unconditionally
 (`body["triggers"] = [...]`, etc., even when the corresponding DSL call was
 never made), so a compiled automation always has explicit `triggers: []`/
 `conditions: []`/`actions: []` for any block the DSL body didn't populate. This
-is already accepted M1 behavior (`fixtures/dsl/minimal/expected_ir.json` has
-`"triggers": []` for an automation with no `when(...)` call), not new M2
-behavior -- but it means a fixture with no `condition` key at all recompiles
-with an explicit `conditions: []`, which the M2 round-trip test's expectation
-must account for the same way (`test_roundtrip_corpus.py`'s `setdefault` calls
-before comparing).
+is already accepted compiler behavior (`fixtures/dsl/minimal/expected_ir.json` has
+`"triggers": []` for an automation with no `when(...)` call), not new
+decompiler-driven behavior -- but it means a fixture with no `condition` key at
+all recompiles with an explicit `conditions: []`, which the round-trip test's
+expectation must account for the same way (`test_roundtrip_corpus.py`'s
+`setdefault` calls before comparing).
 
-## 17. M6 behavioral re-verification (DirectBackend + real-HA integration)
+## 17. Behavioral re-verification (`DirectBackend` + real-HA integration)
 
 > Verified 2026-07-04 while building `DirectBackend`/`HaClient`. **Environment
 > caveat (same as §0):** Docker image *layers* are still 403-blocked in this
 > sandbox (the `stable`/`dev` manifests fetch, but blob pulls from
 > `pkg-containers.githubusercontent.com` 403), so local verification again ran
-> against **HA 2026.2.3** (pip, Python 3.13.12). The M6 CI `integration` job runs
+> against **HA 2026.2.3** (pip, Python 3.13.12). The live-integration CI job runs
 > the *same* `integration/`-marked suite against real `stable` **and** `dev`
 > containers (Docker works in CI) — that is where the 2026.7-specific rows below
 > are confirmed. Everything here exercises long-stable surface unless flagged.
 
-### 17.1 Inner `platform:` is NOT rewritten to `trigger:` on storage (M4 finding) ✅
-The open M4 question: does HA rewrite an inner legacy
+### 17.1 Inner `platform:` is NOT rewritten to `trigger:` on storage (simulator finding) ✅
+The open question: does HA rewrite an inner legacy
 `platform:` discriminator to `trigger:` when it stores an automation? **No.**
 POSTing `triggers:[{"platform":"state",…}]` (or legacy `trigger:` outer) reads
 back with the inner key **unchanged** (`"platform":"state"`); only the *outer*

@@ -1,13 +1,8 @@
-# F1 — Frozen IR interface (end of M0)
+# Frozen IR interface
 
 This is the frozen contract the compiler, decompiler, sync engine, and
 simulator all build against. Changing anything here requires updating this
 document in the same PR (CONTRIBUTING.md, "compatibility contracts").
-
-> **Module path renamed 2026-07-03 (design decision):** `hassle_core.ir` is now
-> `hassle.ir` — the `hassle-core` distribution collapsed its two top-level
-> import packages (`hassle_core` + `hassle`) into one (`hassle`). This is a
-> pure rename; the frozen contract below is otherwise identical.
 
 Module: `hassle.ir` (package `hassle-core`). Public surface (`hassle.ir.__all__`):
 
@@ -37,8 +32,9 @@ Module: `hassle.ir` (package `hassle-core`). Public surface (`hassle.ir.__all__`
 - `AutomationConfig`, `ScriptConfig`, `HelperConfig` — mirror HA's stored config.
   Common scalar options are declared; structural blocks
   (`trigger`/`condition`/`action`/`sequence`/`fields`/…) pass through verbatim as
-  native JSON in M0. **M1 tightens the typing of these blocks** (tagged unions per
-  DESIGN §7.1); that refinement is an allowed extension, not a break, so long as
+  native JSON (`Any`) — the typed compiler/decompiler layer that interprets them
+  is separate from this schema (DESIGN §7.1). A future typed refinement of these
+  blocks (e.g. tagged unions) is an allowed extension, not a break, so long as
   the round-trip and hashing contracts below still hold.
 
 ## parse / serialize (I3 — lossless round-trip)
