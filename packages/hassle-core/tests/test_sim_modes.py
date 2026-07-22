@@ -1,4 +1,4 @@
-"""M4 test 2: mode semantics (DESIGN §10.1) -- the heart of the simulator.
+"""Mode semantics (DESIGN §10.1) -- the heart of the simulator.
 
 restart cancels a pending delay (the canonical motion-light bug); single drops
 a re-trigger while running; queued runs the second trigger after the first

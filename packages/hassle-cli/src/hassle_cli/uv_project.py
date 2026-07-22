@@ -1,11 +1,11 @@
 """`hassle init`/`hassle pull` scaffold the bundle root as its own tiny uv
-project (MILESTONES M17): `pyproject.toml` declaring `dependencies =
+project: `pyproject.toml` declaring `dependencies =
 ["hassle-cli"]`, plus a `[tool.uv.sources]` local-path entry when a toolchain
 source checkout can be resolved -- so `uv run hassle ...` works standalone
 inside a bundle directory without the user knowing this is (or was generated
 from) a monorepo workspace member.
 
-**Never touches an existing `pyproject.toml`** (I6: pyproject is user
+**Never touches an existing `pyproject.toml`** (pyproject is user
 territory once created, unlike `.vscode/settings.json` which this project
 freely rewrites) -- existence is the only thing ever checked; the content is
 never parsed, so even a malformed existing file is left completely alone.
@@ -21,10 +21,10 @@ never parsed, so even a malformed existing file is left completely alone.
    that works once `hassle-cli` is published to PyPI).
 
 The auto-detected path is machine-specific BY DESIGN (documented here and in
-docs/ha-api-notes.md) -- callers that need deterministic output regardless of
+docs/internals/ha-api-notes.md) -- callers that need deterministic output regardless of
 the running machine's checkout layout (`hassle-dev acceptance-bundle`) pass
 ``suppress_sources=True`` to `scaffold_pyproject`, which always emits the
-bare-dependency shape (see that generator's module docstring for why).
+bare-dependency shape (see docs/internals/cli.md for why).
 """
 
 from __future__ import annotations
@@ -104,8 +104,8 @@ def _pyproject_text(*, project_name: str, toolchain_root: Path | None) -> str:
         lines += [
             "[tool.uv.sources]",
             "# This path is specific to the machine that ran `hassle init`/`hassle",
-            "# pull` -- it points at a local source checkout of Hassle (MILESTONES",
-            "# M17). Once `hassle-cli` is published to PyPI, delete this table (or",
+            "# pull` -- it points at a local source checkout of Hassle. Once",
+            "# `hassle-cli` is published to PyPI, delete this table (or",
             "# re-run init/pull after removing this file) to use the published package.",
             f'hassle-cli = {{ path = "{cli_path}", editable = true }}',
             "",
@@ -120,14 +120,15 @@ def scaffold_pyproject(
     suppress_sources: bool = False,
 ) -> PyprojectScaffoldResult:
     """Write `pyproject.toml` at `root` IF MISSING; never touch an existing
-    one (I6 -- see module docstring). `toolchain_path` is the already-loaded
+    one (no local or UI edit is ever silently lost -- see module docstring).
+    `toolchain_path` is the already-loaded
     `hassle.toml` ``toolchain_path`` config value (or `None`); auto-detection
     is consulted only when it's absent.
 
-    `suppress_sources=True` (used by `hassle-dev acceptance-bundle`, MILESTONES
-    M17 determinism requirement) always scaffolds the bare-dependency shape,
-    regardless of what `resolve_toolchain_path` would otherwise find -- so the
-    generator's output never embeds a machine/checkout-specific path.
+    `suppress_sources=True` (used by `hassle-dev acceptance-bundle`, for
+    byte-stable output across machines) always scaffolds the bare-dependency
+    shape, regardless of what `resolve_toolchain_path` would otherwise find --
+    so the generator's output never embeds a machine/checkout-specific path.
     """
     path = root / PYPROJECT_FILENAME
     if path.is_file():
@@ -161,7 +162,7 @@ def _sources_path_for_hassle_cli(pyproject_data: dict[str, object]) -> str | Non
 
 
 def doctor_report_lines(bundle_root: Path) -> list[str]:
-    """MILESTONES M17: `hassle doctor`'s uv-project status report -- three
+    """`hassle doctor`'s uv-project status report -- three
     OFFLINE, filesystem-only checks (never spawns `uv`, or any subprocess):
 
     1. Is `pyproject.toml` present at all?
@@ -182,8 +183,8 @@ def doctor_report_lines(bundle_root: Path) -> list[str]:
     except tomllib.TOMLDecodeError:
         return [
             "doctor: pyproject.toml exists but is not valid TOML -- Hassle never edits it "
-            "(I6), so this is unrelated to Hassle's own scaffolding; fix the syntax error to "
-            "use it with `uv run hassle`."
+            "once created, so this is unrelated to Hassle's own scaffolding; fix the syntax "
+            "error to use it with `uv run hassle`."
         ]
 
     sources_path = _sources_path_for_hassle_cli(data)

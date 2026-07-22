@@ -1,7 +1,7 @@
-"""The `SourceWriter` seam (F2) — DESIGN §7.3, §8.3.
+"""The frozen `SourceWriter` seam — DESIGN §7.3, §8.3.
 
 `SourceWriter` decouples the sync engine's pull-side (bundle-side) actions from
-M2's LibCST-based splicer. M5's pull engine (:mod:`hassle.sync.pull`) only
+the LibCST-based splicer. The pull engine (:mod:`hassle.sync.pull`) only
 depends on this Protocol. Three implementations:
 
 - `SplicingSourceWriter` — the real one (what `hassle pull` uses): `refresh`
@@ -11,12 +11,11 @@ depends on this Protocol. Three implementations:
   :mod:`hassle.decompiler.splice`.
 - `WholeFileSourceWriter` — a blunt, whole-file overwrite. Correct (if not
   surgical) for `adopt` (a brand new file has no "rest of file" to preserve).
-  It was the M5 stand-in for `refresh`/`drop` too — using it for those on a
-  file holding MORE than one object silently clobbers the siblings (the
-  `test_pull_refresh_splice.py` regression for refresh's whole-file rewrite,
-  `test_pull_drop_splice.py` for drop's whole-file `unlink`), so only ever
-  pass it to a pull apply when every touched file is single-object (or being
-  fully rewritten).
+  Using it for `refresh`/`drop` on a file holding MORE than one object
+  silently clobbers the siblings (the `test_pull_refresh_splice.py`
+  regression for refresh's whole-file rewrite, `test_pull_drop_splice.py`
+  for drop's whole-file `unlink`), so only ever pass it to a pull apply when
+  every touched file is single-object (or being fully rewritten).
 - `RecordingSourceWriter` — an in-memory test double that records every call
   without touching disk, used by the pull-engine unit tests.
 
@@ -31,8 +30,8 @@ textual 3-way marker block, deliberately NOT git's real conflict-marker syntax
     {remote config, pretty-printed}
     >>>>>>> remote
 
-M7 owns real conflict UX (rich 3-way DSL diff rendering); this is only the
-structured data plumbed through to a human/M7-readable placeholder.
+The CLI owns real conflict UX (rich 3-way DSL diff rendering); this is only
+the structured data plumbed through to a human-readable placeholder.
 """
 
 from __future__ import annotations
@@ -40,10 +39,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from hassle._markers import UI_SPLICE_MARKER_PREFIX
+
 
 @runtime_checkable
 class SourceWriter(Protocol):
-    """What the pull engine needs to mutate the working tree (F2)."""
+    """What the pull engine needs to mutate the working tree."""
 
     def write_whole_file(self, path: Path, content: str) -> None:
         """Create or fully overwrite ``path`` with ``content``."""
@@ -52,8 +53,8 @@ class SourceWriter(Protocol):
     def splice_object(self, path: Path, object_key: str, content: str) -> None:
         """Replace just the definition for ``object_key`` within ``path``.
 
-        M5's `WholeFileSourceWriter` implements this as a whole-file overwrite;
-        M2's real splicer replaces only the matching `def`/decorator block.
+        `WholeFileSourceWriter` implements this as a whole-file overwrite;
+        the real splicer replaces only the matching `def`/decorator block.
         """
         ...
 
@@ -73,9 +74,9 @@ class WholeFileSourceWriter:
     Correct only when every touched file holds a single object:
     `splice_object` overwrites and `delete_object` unlinks the WHOLE file, so
     on a multi-object file both silently destroy the sibling objects and
-    hand-written comments (I6 — the `test_pull_refresh_splice.py` /
-    `test_pull_drop_splice.py` regression pair). `hassle pull` uses
-    `SplicingSourceWriter` instead.
+    hand-written comments (the `test_pull_refresh_splice.py` /
+    `test_pull_drop_splice.py` regression pair -- no local or UI edit is ever
+    silently lost). `hassle pull` uses `SplicingSourceWriter` instead.
     """
 
     def write_whole_file(self, path: Path, content: str) -> None:
@@ -83,7 +84,7 @@ class WholeFileSourceWriter:
         path.write_text(content, encoding="utf-8")
 
     def splice_object(self, path: Path, object_key: str, content: str) -> None:
-        # M5 stand-in: no LibCST splicer available yet, so this overwrites the
+        # This implementation has no LibCST splicer, so it overwrites the
         # whole file. `object_key` is accepted (part of the Protocol) but
         # unused by this implementation.
         del object_key
@@ -96,19 +97,20 @@ class WholeFileSourceWriter:
 
 
 class SplicingSourceWriter(WholeFileSourceWriter):
-    """The real (M2 splicer-backed) writer `hassle pull` uses.
+    """The real (LibCST splicer-backed) writer `hassle pull` uses.
 
     ``refresh`` splices exactly one object's statement in place; ``drop``
     removes exactly one object's statement -- sibling objects and hand-written
-    comments in the same file survive byte-for-byte (I6). ``adopt`` (via
-    ``write_whole_file``) stays a whole-file write, inherited.
+    comments in the same file survive byte-for-byte (no local or UI edit is
+    ever silently lost). ``adopt`` (via ``write_whole_file``) stays a
+    whole-file write, inherited.
 
     ``updated_on`` is the ISO date stamped into the splice's ``# hassle:
     updated from UI on <date>`` marker -- a constructor parameter, never read
-    from the clock here (R8: no wall-clock in core logic; the CLI edge passes
+    from the clock here (no wall-clock in core logic; the CLI edge passes
     today's date, exactly like ``hassle_cli.manifest_io`` stamps `last_synced`).
 
-    ``reconcile_warnings`` (polish-batch item 3, additive): populated when
+    ``reconcile_warnings`` (additive): populated when
     ``splice_object`` takes the append path (module docstring: "stale
     manifest... append the refreshed definition") AND the file's CURRENT
     content (before the append) already compiles to an object with this same
@@ -120,7 +122,7 @@ class SplicingSourceWriter(WholeFileSourceWriter):
     (never the whole bundle -- this writer has no bundle root, only the one
     file being spliced) and checking whether ``object_key`` appears in the
     result; best-effort, deterministic given the same file content (no
-    wall-clock, no randomness -- R8).
+    wall-clock, no randomness).
     """
 
     def __init__(self, *, updated_on: str) -> None:
@@ -178,7 +180,8 @@ class SplicingSourceWriter(WholeFileSourceWriter):
         if target_name is None:
             # Stale manifest: the object is tracked against this file but no
             # longer defined in it. Append the refreshed definition -- never
-            # clobber what IS in the file (I6).
+            # clobber what IS in the file (no local or UI edit is ever
+            # silently lost).
             if self._is_metaprogrammed_object(file_source, object_key):
                 self.reconcile_warnings.append(
                     f"{object_key} in {path}: this object is generated by metaprogramming "
@@ -190,7 +193,7 @@ class SplicingSourceWriter(WholeFileSourceWriter):
                     "validate` (the bundle will not compile until the duplicate id is "
                     "resolved)."
                 )
-            marker = f"# hassle: updated from UI on {self._updated_on}\n"
+            marker = f"{UI_SPLICE_MARKER_PREFIX} {self._updated_on}\n"
             new_source = (
                 file_source.rstrip("\n") + "\n\n\n" + marker + object_source.strip("\n") + "\n"
             )

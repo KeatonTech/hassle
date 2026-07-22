@@ -2,6 +2,7 @@
 name = "hassle-dev"
 version = "0.0.0"
 description = "Hassle internal dev CLI: goldens, corpus-stats."
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "hassle-core",

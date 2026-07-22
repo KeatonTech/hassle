@@ -1,4 +1,4 @@
-"""test_pull_applies_bundle_side_actions (MILESTONES M5 test 2) — DESIGN §8.3.
+"""`hassle pull` applies bundle-side actions from the plan table (DESIGN §8.3).
 
 `hassle pull` computes the identical three-way table and applies the
 *bundle-side* actions only: refresh splices, adopt creates files, drop deletes

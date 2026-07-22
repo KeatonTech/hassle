@@ -1,7 +1,7 @@
-"""Actionable mobile notification recipe library (task #30,
-`ux/capture-notify-recipe`): `notify_mobile(...)` / `action(...)`.
+"""Actionable mobile notification recipe library:
+`notify_mobile(...)` / `action(...)`.
 
-Owner's target syntax::
+Target syntax::
 
     with notify_mobile(title="Title", message="Hello World"):
         with action("Open Blinds", icon="mdi:blinds-open"):
@@ -21,10 +21,10 @@ Compiles to (DESIGN §5.5/§5.6 sugar, one-way -- see
    ``var("wait.trigger['event']['data']['action']").eq(SLUG)`` -- HA's own Jinja
    context after a satisfied ``wait_for_trigger`` exposes the firing
    trigger's data as ``wait.trigger`` (the only spelling for a wait-variable
-   read documented anywhere in this DSL surface, docs/ha-api-notes.md §30) --
+   read documented anywhere in this DSL surface, docs/internals/ha-api-notes.md §30) --
    running that branch's captured body (built with the public
-   `capture_actions`/`emit_actions` seam, `hassle.compiler.recording`, task
-   #30) if the tapped button matches.
+   `capture_actions`/`emit_actions` seam, `hassle.compiler.recording`) if
+   the tapped button matches.
 
 Built ENTIRELY on the public DSL surface (`capture_actions`/`emit_actions`,
 `choose`, `wait_for`, `event`, `var`, `service`) -- no compiler-internal
@@ -57,11 +57,10 @@ def _wait_action_id_var() -> Any:
     supports both `AttrDict` styles) and renders to the same value at
     runtime; spelled this way ONLY to dodge a registry-validator false
     positive (`hassle.registry.extract._extract_entity_ids_from_jinja`'s
-    regex fallback, OUT OF SCOPE for this recipe/task -- see
-    docs/ha-api-notes.md §30): its known-ish-domain regex matches bare
-    `event.data` inside `wait.trigger.event.data.action` (because `event.*`
-    is itself a real HA entity domain) and misreports it as an unknown
-    entity id. Filed as a validator bug, not fixed here.
+    regex fallback -- see docs/internals/ha-api-notes.md §30): its known-ish-domain
+    regex matches bare `event.data` inside `wait.trigger.event.data.action`
+    (because `event.*` is itself a real HA entity domain) and misreports it
+    as an unknown entity id. Filed as a validator bug, not fixed here.
     """
     return var("wait.trigger['event']['data']['action']")
 
@@ -88,7 +87,7 @@ class _NotifyAction:
 
 class _NotifyMobileBuilder:
     """The object yielded by ``with notify_mobile(...) as n:`` (unused by the
-    owner's target syntax, which never binds ``as n:`` -- `action(...)`
+    target syntax above, which never binds ``as n:`` -- `action(...)`
     reaches the active builder via a context var, mirroring how `choose()`'s
     branches reach their `_ChooseBuilder` without the bundle author having to
     pass it explicitly to `when_`)."""
@@ -107,18 +106,18 @@ def notify_mobile(
     message: str,
     targets: list[str] | None = None,
     timeout: Any = DEFAULT_TIMEOUT,
-    notify_service: str = "notify.mobile_app_keaton",
+    notify_service: str = "notify.mobile_app_kai",
 ) -> Generator[None]:
     """``with notify_mobile(title=, message=, targets=, timeout=):`` -- send an
     actionable mobile notification and dispatch on whichever button (if any)
-    the user taps (task #30 cookbook recipe).
+    the user taps.
 
     ``targets=`` (default ``None``): a list of ``notify_service`` used one per
     target for multi-recipient delivery (HA has no single "targets" list on
     `notify.*` itself -- broadcasting to N phones is N service calls);
     ``None`` sends exactly one call to the ``notify_service`` given ("sensible
-    default" -- the owner's target syntax names no targets at all).
-    ``notify_service=`` (default ``"notify.mobile_app_keaton"``, matching this
+    default" -- the target syntax above names no targets at all).
+    ``notify_service=`` (default ``"notify.mobile_app_kai"``, matching this
     cookbook's own registry snapshot/convention, `lib/notify.py`): the notify
     service to call. ``timeout=`` (default :data:`DEFAULT_TIMEOUT`): how long to wait
     for a button tap before giving up (the automation simply continues past
@@ -156,8 +155,8 @@ def notify_mobile(
 @contextmanager
 def action(title: str, *, icon: str | None = None) -> Generator[None]:
     """``with action("Open Blinds", icon="mdi:blinds-open"): ...`` -- one
-    notification action button, and the actions to run if it is tapped
-    (task #30 cookbook recipe). Must be used inside ``with notify_mobile(...):``.
+    notification action button, and the actions to run if it is tapped.
+    Must be used inside ``with notify_mobile(...):``.
     """
     if not _ACTIVE:
         raise RuntimeError(

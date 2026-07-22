@@ -1,8 +1,8 @@
 """Helper declarations (DESIGN §5.7) -- the model/builder layer.
 
 These constructor functions build correct ``HelperConfig`` IR objects and a
-usable :class:`EntityRef`. The §12 registration path (M1 integration pass,
-``Registry.add_object`` + ``compile_registered``'s prebuilt stream) wires them
+usable :class:`EntityRef`. The §12 registration path (``Registry.add_object``
++ ``compile_registered``'s prebuilt stream) wires them
 into ``compile_bundle(...).objects``; see
 ``packages/hassle-core/tests/test_prebuilt_registration.py`` for the
 end-to-end golden coverage. These tests exercise the builder layer directly

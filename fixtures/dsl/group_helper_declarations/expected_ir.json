@@ -93,7 +93,7 @@
   "group_notify:all_phones": {
     "name": "All Phones",
     "entities": [
-      "notify.mobile_app_keaton",
+      "notify.mobile_app_kai",
       "notify.mobile_app_spouse"
     ],
     "hide_members": false

@@ -1,5 +1,5 @@
-"""Regression (PR #8 reviewer note N3): `compile_registered`'s dangling-
-declaration sweep must be self-cleaning.
+"""Regression: `compile_registered`'s dangling-declaration sweep must be
+self-cleaning.
 
 `compile_bundle` clears the pending-declaration list at the START of every
 compile, so the CLI path was always safe. But a DIRECT `compile_registered`

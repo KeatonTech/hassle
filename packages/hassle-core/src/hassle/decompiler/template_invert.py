@@ -1,4 +1,4 @@
-"""Bounded Jinja -> DSL inverter (M13, DESIGN §5.4/§7.3 extension).
+"""Bounded Jinja -> DSL inverter (DESIGN §5.4/§7.3 extension).
 
 Parses **only** the exact grammar :class:`~hassle.compiler.templates.TemplateExpr`
 (and :mod:`hassle.compiler.math_expr`) render -- literals, entity reads
@@ -6,8 +6,8 @@ Parses **only** the exact grammar :class:`~hassle.compiler.templates.TemplateExp
 functions/filters, arithmetic/comparison/boolean operators with the
 renderer's own precedence and parenthesization rules, ``var(...)`` reads, and
 ``concat``'s ``~``-joined strings. Nothing else: this is not a general Jinja
-parser and never tries to be one (bounded inversion, owner-approved fallback
-per MILESTONES M13).
+parser and never tries to be one -- bounded inversion is the deliberate
+design, not an oversight.
 
 **The acceptance rule is enforced here, not assumed:** :func:`invert_template`
 builds an actual runtime value (by calling the SAME builder functions the
@@ -17,8 +17,8 @@ BYTE-FOR-BYTE against the original Jinja text. Only on an exact match does it
 return a result; any parse failure, unsupported construct, or a successful
 parse whose re-rendering doesn't match byte-for-byte returns ``None`` --
 the caller (``hassle.decompiler.codegen``) falls back to the unchanged
-string-``state=`` call form. I3 holds trivially either way: the fallback is
-always available and never drops data.
+string-``state=`` call form. This holds trivially either way (compile(
+decompile(x)) == x): the fallback is always available and never drops data.
 
 Two things travel together for every parsed node: the RUNTIME value (a real
 :class:`TemplateExpr`, or a plain ``int``/``float``/``str``/``bool`` literal)
@@ -91,12 +91,12 @@ def _tokenize(text: str) -> list[_Token]:
 class _Node:
     value: Any  # TemplateExpr, or a plain int/float/str/bool literal
     source: str  # Python source text reproducing `value` when compiled
-    # M16: set only by `_call("states", ...)`, to the entity id, for a still-
+    # Set only by `_call("states", ...)`, to the entity id, for a still-
     # undecided bare `states('x')` read (source defaults to `state_of(...)`).
     # `_filtered`'s `| float` handling checks this to upgrade the SAME node to
-    # `expr(...)` (M1's original mapping) when the filter immediately
-    # follows; every other consumer just uses `.source`/`.value` as-is, so a
-    # non-`None` value here never leaks into a final result.
+    # `expr(...)` when the filter immediately follows; every other consumer
+    # just uses `.source`/`.value` as-is, so a non-`None` value here never
+    # leaks into a final result.
     bare_states_entity_id: str | None = None
 
 
@@ -177,7 +177,7 @@ class _Parser:
 
     `concat_expr`'s `~` sits looser than comparisons/arithmetic and tighter
     than and/or/not, matching Jinja's real precedence -- `concat(...)` is the
-    only DSL builder that emits it (M1.1: "`+` is not concat"), always with
+    only DSL builder that emits it (`+` is not concat), always with
     plain string/leaf operands in every golden case, so this parser accepts
     it at that slot without needing to be exhaustively precedence-tested
     against arithmetic mixed with `~` (the render-and-compare check catches
@@ -187,11 +187,11 @@ class _Parser:
     def __init__(self, tokens: list[_Token], *, field_names: frozenset[str] | None = None) -> None:
         self._tokens = tokens
         self._pos = 0
-        # MILESTONES M19: the enclosing `@shared_script`'s own declared field
-        # names, when inverting a template found INSIDE that script's body
-        # (None everywhere else -- ordinary automation/helper template
-        # inversion is unaffected). A bare name matching one of these inverts
-        # to the bare parameter read (`tag`, DESIGN's real case) instead of
+        # The enclosing `@shared_script`'s own declared field names, when
+        # inverting a template found INSIDE that script's body (None
+        # everywhere else -- ordinary automation/helper template inversion
+        # is unaffected). A bare name matching one of these inverts to the
+        # bare parameter read (`tag`, DESIGN's real case) instead of
         # `var("tag")` (a runtime `variables:` read -- the wrong construct
         # for a script's own field, and not what compiling `tag=tag` would
         # even produce).
@@ -279,7 +279,7 @@ class _Parser:
                 src = f"({left.source} {op_tok.text} {right.source})"
             return _Node(value, src)
         if self._peek().kind == "name" and self._peek().text == "in":
-            # `states('x') in ['a', 'b']` -- M16's `.in_([...])` membership.
+            # `states('x') in ['a', 'b']` -- `.in_([...])` membership.
             # The right side is always a literal list in the renderer's own
             # grammar (`TemplateExpr.in_`'s only emitted shape); a bare list
             # atom is exactly what `_atom`'s `[` branch already parses.
@@ -352,9 +352,9 @@ class _Parser:
         if name == "float":
             if operand.bare_states_entity_id is not None:
                 # `states('x') | float` immediately after a bare `states(...)`
-                # call -- the numeric-read leaf `expr`/`.value` emit (M1's
-                # original mapping), NOT `state_of(...)` (M16's default for
-                # an unfiltered bare `states(...)` read).
+                # call -- the numeric-read leaf `expr`/`.value` emit, NOT
+                # `state_of(...)` (the default for an unfiltered bare
+                # `states(...)` read).
                 entity_id = operand.bare_states_entity_id
                 return _Node(
                     TemplateExpr(f"states({entity_id!r}) | float"),
@@ -438,9 +438,9 @@ class _Parser:
             py_value = name == "true"
             return _Node(py_value, repr(py_value))
         if self._field_names is not None and name in self._field_names:
-            # MILESTONES M19 test 3: a bare read of the enclosing shared
-            # script's OWN field decompiles to the bare parameter name
-            # (`tag`, not `var("tag")`/`param("tag")`) -- `TemplateExpr(name)`
+            # A bare read of the enclosing shared script's OWN field
+            # decompiles to the bare parameter name (`tag`, not
+            # `var("tag")`/`param("tag")`) -- `TemplateExpr(name)`
             # here is exactly the runtime value `param(name)`/a bound `tag`
             # parameter would compile to (module docstring: value and source
             # always come from the same parse, so they can never disagree).
@@ -453,7 +453,7 @@ class _Parser:
             if len(args) != 1 or not isinstance(args[0].value, str):
                 raise _ParseError("states(...) needs exactly one string arg")
             entity_id = args[0].value
-            # Bare `states('x')` (M16: `state_of(...)`'s own grammar) is the
+            # Bare `states('x')` (`state_of(...)`'s own grammar) is the
             # DEFAULT interpretation; `_filter_call`'s `float` branch upgrades
             # this specific node to `expr(...)` (numeric read) when a `| float`
             # filter immediately follows, via `bare_states_entity_id`.
@@ -527,21 +527,19 @@ def invert_template(
     """Attempt to invert one ``{{ ... }}`` (or bare-inner) Jinja template to
     DSL Python source.
 
-    ``field_names`` (MILESTONES M19): the enclosing ``@shared_script``'s own
-    declared field names, when this template was found inside that script's
-    body -- a bare name matching one of these inverts to the bare parameter
-    read instead of ``var(name)`` (M19 test 3). ``None`` (the default) is
-    every other call site (automation conditions/templates, template-helper
-    ``state=``, ...): behavior is completely unchanged, so the M19 threading
-    can never leak into decompilation outside an actual shared-script body.
+    ``field_names``: the enclosing ``@shared_script``'s own declared field
+    names, when this template was found inside that script's body -- a bare
+    name matching one of these inverts to the bare parameter read instead of
+    ``var(name)``. ``None`` (the default) is every other call site
+    (automation conditions/templates, template-helper ``state=``, ...):
+    behavior is completely unchanged there.
 
     Returns ``None`` for anything outside the bounded grammar (`_Parser`'s
     docstring), OR when parsing nominally succeeds but the render-and-compare
     check fails (belt-and-suspenders -- should not happen if the grammar
     coverage above is accurate, but this is the actual acceptance gate, not
-    the grammar coverage itself; MILESTONES M13: "verified AT DECOMPILE TIME
-    (compute, compare, choose branch) -- never emit decorator form on
-    faith").
+    the grammar coverage itself: verified AT DECOMPILE TIME by computing and
+    comparing, never emitting the decorator form on faith).
     """
     text = jinja_text.strip()
     is_wrapped = text.startswith("{{") and text.endswith("}}")
@@ -555,15 +553,15 @@ def invert_template(
     rendered = _render_result(node.value)
     if rendered is None:
         return None
-    # Compare against the ORIGINAL, unstripped text (bug found while adding
-    # M16's bare-`states(...)` grammar coverage: comparing against
-    # `jinja_text.strip()` instead treats surrounding whitespace -- e.g. a
-    # leading/trailing newline around the `{{ ... }}` block, matched by real
-    # `template_sensor(state=...)` fixture data -- as a match even though the
-    # renderer never reproduces it, silently dropping it on inversion and
-    # violating I3. `render()`/`_render_result` always emits the canonical,
-    # unpadded form, so only a `jinja_text` with no such padding can ever
-    # legitimately match here.
+    # Compare against the ORIGINAL, unstripped text: comparing against
+    # `jinja_text.strip()` instead would treat surrounding whitespace -- e.g.
+    # a leading/trailing newline around the `{{ ... }}` block, matched by
+    # real `template_sensor(state=...)` fixture data -- as a match even
+    # though the renderer never reproduces it, silently dropping it on
+    # inversion (compile(decompile(x)) == x would no longer hold).
+    # `render()`/`_render_result` always emits the canonical, unpadded form,
+    # so only a `jinja_text` with no such padding can ever legitimately
+    # match here.
     if rendered != jinja_text:
         return None
     return InvertedTemplate(source=node.source)

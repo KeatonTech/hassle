@@ -18,4 +18,4 @@ def cookbook_start_kitchen_timer():
 def cookbook_kitchen_timer_done():
     when(state("timer.kitchen").to("idle"))
     only_if(state("input_boolean.armed").is_("on"))
-    service("notify.mobile_app_keaton", message="Kitchen timer finished")
+    service("notify.mobile_app_kai", message="Kitchen timer finished")

@@ -1,6 +1,6 @@
 # Fixture Corpus Provenance
 
-This file documents the source and purpose of each fixture in the corpus. All fixtures are valid Home Assistant JSON configurations extracted from or synthesized to cover the M0 milestone construct checklist.
+This file documents the source and purpose of each fixture in the corpus. All fixtures are valid Home Assistant JSON configurations extracted from or synthesized to cover the corpus's construct checklist.
 
 ## Trigger Automations
 
@@ -113,45 +113,45 @@ This file documents the source and purpose of each fixture in the corpus. All fi
 - **Scripts:** basic, fields/parameters, mode: queued
 - **Real-world:** legacy platform key naming, mixed key order preservation, trigger_id + trigger_variables
 
-## Purpose-Specific Triggers and Conditions (M0.1 addendum)
+## Purpose-Specific Triggers and Conditions
 
 | Fixture | Source | Construct |
 |---------|--------|-----------|
-| automation_purpose_trigger_entity_target.json | Shape from https://www.home-assistant.io/triggers/motion.detected/; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose trigger with entity_id target and for_ duration |
-| automation_purpose_trigger_area_behavior_first.json | Shape from https://www.home-assistant.io/triggers/motion.detected/ and https://www.home-assistant.io/blog/2026/07/01/release-20267/; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose trigger with area_id target and behavior first |
-| automation_purpose_trigger_label_behavior_all.json | Shape from https://www.home-assistant.io/blog/2026/07/01/release-20267/; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose trigger with label_id target and behavior all |
-| automation_purpose_trigger_floor_device.json | Shape from https://www.home-assistant.io/blog/2026/07/01/release-20267/; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose triggers with floor_id and device_id targets |
-| automation_purpose_condition.json | Shape from https://www.home-assistant.io/blog/2026/07/01/release-20267/; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose-specific condition (climate.is_target_temperature) |
-| automation_purpose_trigger_renamed_legacy_key.json | Real-world preserved broken config; battery.low is pre-2026.7 key renamed to battery.became_low without migration; M3 will flag with rename hint; to be re-verified against live 2026.7 in M6 (MILESTONES M6 test 8) | purpose trigger using deprecated/renamed pre-2026.7 key that still stores and deserializes but is no longer valid for new automations |
+| automation_purpose_trigger_entity_target.json | Shape from https://www.home-assistant.io/triggers/motion.detected/; to be re-verified against a live 2026.7 instance | purpose trigger with entity_id target and for_ duration |
+| automation_purpose_trigger_area_behavior_first.json | Shape from https://www.home-assistant.io/triggers/motion.detected/ and https://www.home-assistant.io/blog/2026/07/01/release-20267/; to be re-verified against a live 2026.7 instance | purpose trigger with area_id target and behavior first |
+| automation_purpose_trigger_label_behavior_all.json | Shape from https://www.home-assistant.io/blog/2026/07/01/release-20267/; to be re-verified against a live 2026.7 instance | purpose trigger with label_id target and behavior all |
+| automation_purpose_trigger_floor_device.json | Shape from https://www.home-assistant.io/blog/2026/07/01/release-20267/; to be re-verified against a live 2026.7 instance | purpose triggers with floor_id and device_id targets |
+| automation_purpose_condition.json | Shape from https://www.home-assistant.io/blog/2026/07/01/release-20267/; to be re-verified against a live 2026.7 instance | purpose-specific condition (climate.is_target_temperature) |
+| automation_purpose_trigger_renamed_legacy_key.json | Real-world preserved broken config; battery.low is pre-2026.7 key renamed to battery.became_low without migration; the registry validator flags it with a rename hint; to be re-verified against a live 2026.7 instance | purpose trigger using deprecated/renamed pre-2026.7 key that still stores and deserializes but is no longer valid for new automations |
 
-All fixtures are valid JSON per Home Assistant's schema as of July 2026 and exercise the full M0 construct checklist.
+All fixtures are valid JSON per Home Assistant's schema as of July 2026 and exercise the full construct checklist.
 
-## M2 addendum: HA-canonical stored shape (zero-transformation round-trip)
+## HA-canonical stored shape (zero-transformation round-trip)
 
 | Fixture | Source | Construct |
 |---------|--------|-----------|
-| automation_ha_canonical_modern.json | Synthesized to match the exact post-2024.10 HA storage shape verified in docs/ha-api-notes.md §10.1 (real POST->GET capture, docs/ha-api-captures/normalize-post-get-pair.json): string `id`, plural `triggers`/`conditions`/`actions`, modern `trigger:`/`action:` discriminators throughout (no `platform:`/`service:` anywhere), no scalar/string-form `delay`, nested `choose`/`default`. This is what a real live `GET /api/config/automation/config/{id}` returns for an automation authored in the current HA UI -- the fixture the decompiler's zero-transformation round-trip (`test_ha_canonical_zero_transformation_roundtrip`) is judged against. | plural schema + modern discriminators + nested choose, all in one already-canonical fixture |
+| automation_ha_canonical_modern.json | Synthesized to match the exact post-2024.10 HA storage shape verified in docs/internals/ha-api-notes.md §10.1 (real POST->GET capture, docs/ha-api-captures/normalize-post-get-pair.json): string `id`, plural `triggers`/`conditions`/`actions`, modern `trigger:`/`action:` discriminators throughout (no `platform:`/`service:` anywhere), no scalar/string-form `delay`, nested `choose`/`default`. This is what a real live `GET /api/config/automation/config/{id}` returns for an automation authored in the current HA UI -- the fixture the decompiler's zero-transformation round-trip (`test_ha_canonical_zero_transformation_roundtrip`) is judged against. | plural schema + modern discriminators + nested choose, all in one already-canonical fixture |
 
-## Real-world smoke-test addendum (task #5): mundane UI-authored shapes missed by the synthetic corpus
+## Real-world smoke-test addendum: mundane UI-authored shapes missed by the synthetic corpus
 
-Source: the owner's first live smoke test against a real 2026.7 Home Assistant instance surfaced
+Source: a live smoke test against a real 2026.7 Home Assistant instance surfaced
 118 granular `raw_*` decompiler fallbacks across 101 real objects, tracing to three root causes.
 Each is a mundane, extremely common shape the HA UI actually writes that the (hand-authored,
 docs-derived) synthetic corpus above never happened to exercise. All three fixtures below are
-already in plural/canonical schema (docs/ha-api-notes.md §10.1) with an explicit `id`, mirroring
+already in plural/canonical schema (docs/internals/ha-api-notes.md §10.1) with an explicit `id`, mirroring
 what `GET /api/config/automation/config/{id}` actually returns.
 
 | Fixture | Source | Construct |
 |---------|--------|-----------|
 | automation_action_metadata_ui_authored.json | Shape observed in a real 2026.7 UI-authored config: every action the HA UI saves is stamped with `"metadata": {}`, observed on all 87 raw actions in the smoke-test sample | actions carrying an empty `metadata: {}` dict alongside `target`+`data`, and a bare-data action with no `target` |
 | automation_state_trigger_list_valued_fields.json | Shape observed in a real 2026.7 UI-authored config: the HA UI always stores `entity_id`/`to`/`from` as lists, even for a single entity/value -- a singleton list is never collapsed to a scalar | `state` trigger with singleton-list `entity_id`/`to`/`from`, a second `state` trigger with genuinely multi-entry lists, and both a singleton-list and multi-entry-list `numeric_state` trigger `entity_id` |
-| automation_time_trigger_weekday_and_entity_at.json | Shape observed in a real 2026.7 UI-authored config: a weekday-scoped fixed-time trigger (the owner's schedule-driven wakeups), plus `at` referencing an `input_datetime` entity instead of a literal time string | `time` trigger with `weekday` (list of day abbreviations) alongside `at`, and a second `time` trigger whose `at` is an entity reference (`input_datetime.wakeup`) |
+| automation_time_trigger_weekday_and_entity_at.json | Shape observed in a real 2026.7 UI-authored config: a weekday-scoped fixed-time trigger (a real schedule-driven wakeup pattern), plus `at` referencing an `input_datetime` entity instead of a literal time string | `time` trigger with `weekday` (list of day abbreviations) alongside `at`, and a second `time` trigger whose `at` is an entity reference (`input_datetime.wakeup`) |
 
-## Residue coverage, round 2 (task #8): four more UI-authored shapes from the owner's live bundle
+## Residue coverage, round 2: four more UI-authored shapes from a real live bundle
 
-Source: a second live smoke test against the owner's real 2026.7 Home Assistant bundle (101
+Source: a second live smoke test against a real 2026.7 Home Assistant bundle (101
 objects) surfaced 12 more granular `raw_action` fallbacks, tracing to four root causes below --
-extending the round-1 pattern (task #5, directly above). All four fixtures are in plural/canonical
+extending the round-1 pattern (directly above). All four fixtures are in plural/canonical
 schema with an explicit `id`, same convention as round 1.
 
 | Fixture | Source | Construct |
@@ -161,9 +161,9 @@ schema with an explicit `id`, same convention as round 1.
 | automation_action_step_alias_and_enabled.json | Shape observed in a real 2026.7 UI-authored config: the UI names steps (`alias`) and toggles them (`enabled`) | a plain service call with `alias`, a `delay` with `alias`+`enabled: true`, and a service call with `alias`+`enabled: false` |
 | automation_container_recursion_ui_shapes.json | Shape observed in a real 2026.7 UI-authored config: containers (`if`/`else`, `choose`, `parallel`, `wait_for_trigger`) must decompile their inner steps through the same improved path -- a container must never fall back to `raw_action` merely because a child step carries `metadata`/`data_template`, a list-valued state condition, or `alias`/`enabled` | an `if`/`else` action whose `then`/`else` branches carry `metadata`+`alias` and `data_template`+`alias`+`enabled`; a `parallel` whose branches carry an `alias`+`metadata`+`enabled` step and a nested `choose` with a list-valued condition and an `alias`+`metadata` step; a `wait_for_trigger` with a list-valued `state` trigger |
 
-## Residue coverage, round 3 -- final (task #8 cont'd): field measurement 14 -> 7, 5 fixable
+## Residue coverage, round 3 -- final: field measurement 14 -> 7, 5 fixable
 
-Source: field measurement of the owner's real 2026.7 bundle after round 2 landed: `raw_action`
+Source: field measurement of a real 2026.7 bundle after round 2 landed: `raw_action`
 count dropped 14 -> 7. Of the remaining 7, five are fixable (traced to two decompiler root causes
 below, one of them a branch-level gap in both `choose` and `parallel`); two are device actions that
 stay raw by design (no stable cross-integration schema, same rationale as `device()`
@@ -176,7 +176,7 @@ convention as rounds 1-2.
 | automation_choose_numeric_state_attribute_condition.json | Shape observed in a real 2026.7 UI-authored config: a `choose` branch's `conditions` list carries a `numeric_state` condition with `attribute` -- a regression fixture confirming the nested-in-choose-conditions path resolves through the same `decompile_condition` dispatcher as the top-level path (no code change was needed; this pins the behavior) | `choose` with one branch whose `conditions` is a `numeric_state` condition with `attribute`+`above` |
 | automation_parallel_multistep_branch_composite.json | Shape observed in a real 2026.7 UI-authored config: a `parallel` branch running more than one step in its `sequence` (a script call with rich `data`, then a `delay` with all four duration units), alongside a sibling branch containing an `if`/`then` -- the multi-step branch shape (not the delay's `milliseconds` field or the if-block, both of which decompile fine standalone) is what forced the whole `parallel` to `raw_action` | `parallel` with one two-step branch (service call + delay) and one one-step branch (`if`/`then`) |
 
-**Root causes (docs/ha-api-notes.md §21):**
+**Root causes (docs/internals/ha-api-notes.md §21):**
 1. A `choose`/`parallel` **branch** carrying its own `alias`/`enabled` was rejected by each handler's
    exact-keys branch-shape check (`set(branch_dict) != {"conditions", "sequence"}` /
    `set(branch_dict) != {"sequence"}`) -- distinct from the round-2 container-level `alias`/`enabled`
@@ -191,15 +191,15 @@ convention as rounds 1-2.
    the compiler can author a multi-step branch, while a bare `with parallel(): action(); action():`
    with no `as` binding is unchanged (each action still becomes its own one-step branch, F3-additive).
 
-## DSL ergonomics round (owner feedback #1/#2/#4/#5, `ux/dsl-ergonomics`)
+## DSL ergonomics round
 
-Source: owner bug report, `scripts/misc.py` on the owner's real bundle -- `repeat.for_each` stored
+Source: a bug observed on a real bundle, `scripts/misc.py` -- `repeat.for_each` stored
 as a Jinja template STRING (renders to a list at runtime), not a literal list. `repeat_for_each()`'s
 `list(items)` silently exploded the template string into a list of individual characters (a `str`
 is an `Iterable[str]`) instead of passing it through verbatim; the char-explosion shape survived to
 disk because the pull self-check only verified "does the recompiled bundle compile", not "does it
-recompile to the same value" (docs/ha-api-notes.md, this workstream's finding).
+recompile to the same value" (docs/internals/ha-api-notes.md).
 
 | Fixture | Source | Construct |
 |---------|--------|-----------|
-| automation_repeat_for_each_template_string.json | Owner bug report shape, `scripts/misc.py` | `repeat` with `for_each` stored as a Jinja template string (not a list), proving the compiler passes it through verbatim and the decompiler emits `repeat_for_each("{{ ... }}")` |
+| automation_repeat_for_each_template_string.json | Bug observed on a real bundle, `scripts/misc.py` | `repeat` with `for_each` stored as a Jinja template string (not a list), proving the compiler passes it through verbatim and the decompiler emits `repeat_for_each("{{ ... }}")` |

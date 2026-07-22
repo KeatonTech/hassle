@@ -1,5 +1,5 @@
 """Error case: `fields=` is the superset source of truth for call-site kwarg
-validation, not just the Python signature (`ux/shared-script-rich-fields`).
+validation, not just the Python signature.
 
 ``notify_all`` declares a real Python parameter ``untracked`` that is NOT one
 of ``fields=``'s keys (an authoring mistake: added a parameter but forgot to
@@ -17,7 +17,7 @@ from hassle import automation, service, shared_script, state, when
     },
 )
 def notify_all(title=None, untracked=None):
-    service("notify.mobile_app_keaton", title=title)
+    service("notify.mobile_app_kai", title=title)
 
 
 @automation(id="garage_door_opened", alias="Garage door opened")

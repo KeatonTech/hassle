@@ -1,8 +1,8 @@
-"""Pull -> plan-noop invariant (docs/ha-api-notes.md §23): a fresh pull
+"""Pull -> plan-noop invariant (docs/internals/ha-api-notes.md §23): a fresh pull
 followed immediately by a plan, with zero edits on either side, must never
 show a `conflict` or a plain (non-modernization) `update` for an untouched
 object -- only `noop`, or an `update` that is schema-only modernization
-(DESIGN §8.2, MILESTONES M7 test 4b).
+(DESIGN §8.2).
 
 This module covers the two facts diagnosed at the IR/backend layer:
 
@@ -40,8 +40,8 @@ def _roundtrip_hash(object_key: str, kind: str, body: dict[str, object]) -> tupl
     `body` must already be in HA's modern plural-schema stored form (`triggers`/
     `conditions`/`actions`, `action:` not `service:`) -- this helper isolates
     FACT 1 (decompiler default-materialization) from the unrelated, already
-    separately-tested legacy-schema modernization case (DESIGN §8.2,
-    MILESTONES M7 test 4b; `test_modernization_labeling.py`), so a schema-only
+    separately-tested legacy-schema modernization case (DESIGN §8.2;
+    `test_modernization_labeling.py`), so a schema-only
     difference here would be a false positive for a bug this test isn't
     about.
     """

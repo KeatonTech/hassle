@@ -1,4 +1,4 @@
-"""Golden case: classic state trigger + purpose-specific condition (M1 test 10).
+"""Golden case: classic state trigger + purpose-specific condition.
 
 Mirrors fixtures/configs/automation_purpose_condition.json.
 """

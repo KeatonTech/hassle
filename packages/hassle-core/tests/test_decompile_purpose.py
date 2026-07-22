@@ -1,6 +1,6 @@
-"""M2 — 2026.7 purpose-specific triggers/conditions decompile to `on()`/`met()`
+"""2026.7 purpose-specific triggers/conditions decompile to `on()`/`met()`
 with the right target helper (area/floor/label/device_id/entity) -- never
-`raw_*` (per MILESTONES M2 hard requirements; these count toward the 90% gate).
+`raw_*` (these count toward the DSL-coverage 90% gate).
 
 The full hash-level round-trip for every one of these fixtures (incl. `id`
 synthesis and legacy `platform:` modernization) is already asserted by

@@ -1,14 +1,11 @@
-"""MILESTONES M21 test 2 (unit half) -- `DirectBackend`'s config-entry
-group-helper read-back/create/update, verified at the unit level against a
-fake `_client` that reproduces the real HA wire shapes docs/ha-api-notes.md
-§38 records -- mirrors `test_direct_backend_template_helpers.py` (M10).
+"""`DirectBackend`'s config-entry group-helper read-back/create/update,
+verified at the unit level against a fake `_client` that reproduces the real
+HA wire shapes docs/internals/ha-api-notes.md §38 records -- mirrors
+`test_direct_backend_template_helpers.py`.
 
-**CI-corrected (PR #35, HA stable + dev, §38.1 amended): the group
-options-flow schema does NOT include `name`, same as template (§26.7
-finding 2).** The original implementation read the owner's live capture note
-("options flows re-present the same form ... with current values as
-suggested values") as "the exact same schema, `name` included" -- CI found
-real HA 400s an options-flow submission that carries `name`
+**The group options-flow schema does NOT include `name`, same as template**
+(§38.1, §26.7 finding 2): submitting an options-flow update that carries
+`name` produces a real HA 400,
 (`{"errors": {"base": ["extra keys not allowed @ data['name']"]}}`), on both
 `stable` and `dev`. So, exactly like template's `_aupdate_template_helper`,
 `_aupdate_group_helper` strips `name` before submitting to the options flow,
@@ -16,11 +13,11 @@ and `_alist_group_helpers`'s read-back gets `name` back from `title` (the
 flow's create-time correlator) -- the options-flow's suggested values never
 carry it at all.
 
-This suite is unit-level (no network, R2): it monkeypatches
+This suite is unit-level (no network): it monkeypatches
 `DirectBackend._client` with a fake object exposing async `ws_command`/
 `rest_post`/`rest_delete`, and calls the private async `_alist_group_helpers`/
 `_aupdate_group_helper` coroutines directly via `asyncio.run`. The end-to-end
-path against real HA is `tests/integration/test_m21_group_flow.py`.
+path against real HA is `tests/integration/test_live_group_flow.py`.
 """
 
 from __future__ import annotations
@@ -35,7 +32,7 @@ from hassle.backend.errors import HaApiError
 
 
 class _FakeClient:
-    """Models the REAL wire shapes docs/ha-api-notes.md §38 records:
+    """Models the REAL wire shapes docs/internals/ha-api-notes.md §38 records:
 
     - `config_entries/get` (WS): `ConfigEntry.as_json_fragment`-shaped dicts
       -- `entry_id`/`domain`/`title`/... but never `options`/`data`.
@@ -252,9 +249,9 @@ def test_list_remote_ignores_entries_of_a_different_group_flavor() -> None:
 
 
 def test_update_strips_name_before_submitting_to_options_flow() -> None:
-    # CI-corrected (PR #35, docs/ha-api-notes.md §38.1 amended): the group
-    # options-flow schema does NOT include `name` -- `update()` still takes
-    # a full config dict (F2 unchanged) but must never forward `name` to the
+    # The group options-flow schema does NOT include `name` (docs/internals/ha-api-notes.md
+    # §38.1) -- `update()` still takes a full config dict (the frozen
+    # SourceWriter/plan seam unchanged) but must never forward `name` to the
     # options-flow submission.
     client = _FakeClient(
         entries={

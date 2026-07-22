@@ -1,4 +1,4 @@
-"""A small Levenshtein-distance "did you mean?" helper (MILESTONES M3 test 2).
+"""A small Levenshtein-distance "did you mean?" helper.
 
 No third-party dependency: a plain O(n*m) dynamic-programming edit distance is
 plenty fast for the short strings (entity ids, area/floor/label ids) this is

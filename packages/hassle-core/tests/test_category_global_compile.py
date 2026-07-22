@@ -1,53 +1,46 @@
-"""M12 -- reading the module-level `CATEGORY` global at compile time
-(MILESTONES M12, DESIGN §7.3's placement, reversed).
+"""Reading the module-level `CATEGORY` global at compile time (DESIGN §7.3's
+placement, reversed).
 
 `hassle.compiler.bundle.compile_bundle` reads `CATEGORY` off each imported
 bundle module's namespace (when present) and records it on `CompileResult`,
 keyed by the module's bundle-relative source path -- a sidecar map alongside
-the existing per-object span bookkeeping, never touching the frozen F1 IR
-shape or F2 plan/apply models (MILESTONES R5).
+the existing per-object span bookkeeping, never touching the frozen IR
+schema or plan/apply models.
 
 Covers:
 - `CATEGORY` present and a `str` -> recorded with its value and (when
   obtainable) the assignment's source span.
-- No `CATEGORY` at all -> the file simply has no entry (M12 test 3's
-  "humanize_slug fallback" path -- nothing for a downstream consumer to find).
+- No `CATEGORY` at all -> the file simply has no entry (the "humanize_slug
+  fallback" path -- nothing for a downstream consumer to find).
 - `CATEGORY` present but NOT a `str` (e.g. an int) -> a compile-time
-  `CompileError` (R6: what/where/fix, snapshot-tested), never silently
+  `CompileError` (what/where/fix, snapshot-tested), never silently
   coerced or ignored.
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
 
 from hassle.compiler.bundle import compile_bundle
 from hassle.compiler.errors import CompileError
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    import os
-
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 def _write_bundle(tmp_path: Path, filename: str, code: str) -> Path:
-    # MILESTONES M15 work item B: category-shaped files are root-level now
-    # (`<slug>.py`), not under a per-kind tree (`automations/<slug>.py`).
+    # Category-shaped files are root-level (`<slug>.py`), not under a
+    # per-kind tree (`automations/<slug>.py`).
     bundle = tmp_path / "bundle"
     bundle.mkdir(exist_ok=True)
     (bundle / filename).write_text(code, encoding="utf-8")

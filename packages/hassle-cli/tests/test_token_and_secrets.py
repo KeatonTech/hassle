@@ -1,5 +1,5 @@
-"""MILESTONES M7 test 6: `test_no_token_in_bundle` -- pull refuses/scrubs if a
-token appears in `hassle.toml`; doctor flags a committed token.
+"""`test_no_token_in_bundle` -- pull refuses/scrubs if a token appears in
+`hassle.toml`; doctor flags a committed token.
 
 DESIGN §14: keyring token storage, `HASSLE_TOKEN` env override; `hassle login`
 validates via GET /api/config (401 -> clean error with fix); pull refuses a
@@ -164,7 +164,7 @@ def test_resolve_token_falls_through_to_env_when_keyring_unavailable() -> None:
 def test_resolve_token_no_keyring_and_no_env_gives_clean_error() -> None:
     """No keyring backend AND no `HASSLE_TOKEN` -- must not leak the raw
     `NoKeyringError` traceback; must raise a what/where/fix `TokenResolutionError`
-    naming the headless-server fix (R6: error messages are product surface)."""
+    naming the headless-server fix (error messages are product surface)."""
     import keyring.errors as keyring_errors
 
     import hassle_cli.token as token_mod
@@ -260,7 +260,7 @@ def test_login_replaces_stale_ha_url(tmp_path: Path, cli, monkeypatch) -> None:
     bundle = tmp_path / "house"
     bundle.mkdir()
     (bundle / "hassle.toml").write_text(
-        'mirror = true\nha_url = "http://old-host:8123"\n', encoding="utf-8"
+        'ignore = []\nha_url = "http://old-host:8123"\n', encoding="utf-8"
     )
 
     result = cli(["login", "--url", "http://new-host:8123", "--token", "t"], cwd=bundle)
@@ -268,4 +268,4 @@ def test_login_replaces_stale_ha_url(tmp_path: Path, cli, monkeypatch) -> None:
     content = (bundle / "hassle.toml").read_text(encoding="utf-8")
     assert 'ha_url = "http://new-host:8123"' in content
     assert "old-host" not in content
-    assert "mirror = true" in content  # unrelated settings preserved
+    assert "ignore = []" in content  # unrelated settings preserved

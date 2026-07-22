@@ -1,12 +1,12 @@
 """Coordinator-flagged regression: a real HA `get_services` field schema
 mostly describes its shape via `selector: {<selector_type>: {...}}`, not a
-flat `type:` string (docs/ha-api-notes.md §6). The generated stub must never
+flat `type:` string (docs/internals/ha-api-notes.md §6). The generated stub must never
 emit a bare, unresolvable Python identifier as a type annotation for ANY
 selector type it doesn't specifically recognize -- `_field_type` must always
 resolve to a real, safe annotation (never a leaked raw selector-type word
 like a bare `location`).
 
-Regression-pinned with a `location` selector field (docs/ha-api-notes.md's
+Regression-pinned with a `location` selector field (docs/internals/ha-api-notes.md's
 own example of a selector-based field with no flat `type`), and proven via a
 standalone pyright check over the generated stub content (the class of test
 that would have caught this).

@@ -1,33 +1,65 @@
 # Hassle
 
+**H**ome **A**ssistant **S**cript **S**ync for **L**ocal **E**diting —
+Terraform for your home automations.
+
 Bring your Home Assistant automations, scripts, and helpers under version control —
 as a typed, testable Python DSL that compiles to native HA config, syncs both ways,
 and never writes a YAML file behind HA's back.
 
 ```python
-from hassle import automation, delay, only_if, service, state, sun, when
+from hassle import automation, delay, only_if, state, sun, when
+from hassle.registry import entities as e
 
-@automation(id="hall_light_on_motion", alias="Hallway: light on motion", mode="restart")
+@automation(
+    id="hall_light_on_motion",
+    alias="Hallway: light on motion",
+    mode="restart",
+    triggers=[state(e.binary_sensor.hall_motion).to("on")]
+)
 def hall_light_on_motion():
-    when(state("binary_sensor.hall_motion").to("on"))
-    only_if(state("input_boolean.guest_mode").is_("off"))
-    only_if(sun(after="sunset", after_offset="-00:30:00"))
-    service("light.turn_on", entity_id="light.hallway", brightness_pct=60)
-    delay(minutes=5)
-    service("light.turn_off", entity_id="light.hallway")
+    with only_if(e.input_boolean.guest_mode.state == "off"):
+        with only_if(sun(after="sunset", after_offset="-00:30:00")):
+            e.light.hallway.turn_on(brightness_pct=60)
+            delay(minutes=5)
+            e.light.hallway.turn_off()
 ```
+
+(`e` is the generated, typed entity registry — Pylance autocompletes your real
+entity ids and flags typos before anything runs.)
 
 This compiles to exactly the JSON Home Assistant's own UI would save — pull it,
 edit it, test it, push it back, and the UI can still edit it too.
 
 ## Why
 
-- **G3 (never lose UI-editability):** every write goes through the same config
+- **Never lose UI-editability:** every write goes through the same config
   APIs the HA frontend uses. No custom YAML packages, no shadow config. Delete
   Hassle entirely and every automation it manages keeps working exactly as-is.
-- **Python, not YAML-with-`{{ }}`-strings:** triggers/conditions/actions are typed
-  builder calls; a native Python `if` on a live entity state is a compile-time
-  error with a fix hint, not a bug you discover three weeks later (`DESIGN.md` §5.5).
+- **Python, not YAML-with-`{{ }}`-strings.** Here is "light on motion, but only
+  when it's dark enough" in HA's YAML:
+
+  ```yaml
+  condition:
+    - condition: template
+      value_template: "{{ (states('sensor.hall_lux') | float(999)) < 30 }}"
+  ```
+
+  and in Hassle:
+
+  ```python
+  from hassle import automation, only_if, state, when
+  from hassle.registry import entities as e
+
+  @automation(id="hall_night_light", triggers=[state(e.binary_sensor.hall_motion).to("on")])
+  def hall_night_light():
+      with only_if(e.sensor.hall_lux.state < 30):  # a typed comparison, not a quoted template
+          e.light.hallway.turn_on(brightness_pct=40)
+  ```
+
+  No quoting layers, no `| float(999)` fallback rituals, and mistakes fail at
+  compile time: a native Python `if` on a live entity state is a compile error
+  with a fix hint, not a bug you discover three weeks later.
 - **Real tests, in git, forever:** a deterministic simulator (fake clock, no real
   devices, no network) runs your automations' logic in milliseconds. Tests live in
   `tests/`, tracked by the same git history as the automations they cover.
@@ -36,7 +68,11 @@ edit it, test it, push it back, and the UI can still edit it too.
   and deletions are all detected and never silently clobbered.
 
 See [`DESIGN.md`](DESIGN.md) for the full design (goals table, invariants, DSL
-reference, sync semantics) and [`MILESTONES.md`](MILESTONES.md) for how it was built.
+reference, sync semantics). Each package under [`packages/`](packages/) has its
+own README describing what is — and is not — in its scope. Curious how it was
+built? The project was implemented test-first, milestone by milestone, largely
+by AI coding agents — the original plan and its acceptance contracts are
+preserved in [`docs/history/`](docs/history/).
 
 ## Install
 
@@ -63,7 +99,7 @@ hassle login --url http://homeassistant.local:8123 --token <a long-lived access 
 hassle pull                                  # adopt everything currently in HA
 git add -A && git commit -m "sync: initial pull"
 
-# ...edit automations/*.py, add a tests/*.py, whatever you want to change...
+# ...edit the pulled *.py files, add a tests/*.py, whatever you want to change...
 
 hassle validate && hassle test               # offline: compile + lint + simulate
 hassle push --yes                            # plan -> apply to HA -> manifest.lock updated
@@ -73,7 +109,7 @@ git add -A && git commit -m "push: <what you changed>"
 That's `init`, `login`, `pull`, `validate`, `test`, `push` — six `hassle` commands,
 one working bundle, fully round-trippable (a second `hassle pull` on a clean tree
 is a no-op). This exact loop is scripted as a CI-run regression test
-(`packages/hassle-cli/tests/test_done_gate_demo.py`), not just a README claim.
+(`packages/hassle-cli/tests/test_quickstart_demo.py`), not just a README claim.
 
 Get a long-lived access token from HA: **Profile → Security → Long-Lived Access
 Tokens**. It's stored in your OS keychain (`keyring`), never written into the
@@ -84,14 +120,20 @@ bundle — `hassle doctor` scans for one accidentally committed anyway.
 ```
 my-house/
 ├── hassle.toml              # HA URL (never the token), bundle_format, ignore globs
-├── automations/  scripts/  helpers/  lib/    # your DSL sources
+├── lighting.py  security.py  misc.py  ...    # your DSL sources, one file per category
+├── lib/                     # shared helpers imported by your DSL sources
 ├── tests/                   # pytest files against the deterministic simulator
-├── stubs/ + typings/        # generated .pyi -- Pylance autocompletion/typo-catching,
+├── typings/                 # generated .pyi -- Pylance autocompletion/typo-catching,
 │                             # zero editor configuration (.vscode/settings.json included)
 ├── .hassle/                 # manifest.lock, registry.json -- machine state, never hand-edit
 ├── AGENTS.md                 # generated: the workflow contract + hard rules for AI agents
 └── docs/DSL.md, docs/COOKBOOK.md   # generated reference + 20+ working recipes
 ```
+
+Source files are named after your
+[HA categories](https://www.home-assistant.io/docs/organizing/categories/)
+(`hassle pull` creates them on demand; uncategorized objects land in
+`misc.py`), and subdirectories work too — the bundle loader recurses.
 
 - **`AGENTS.md`** and **`docs/`** are regenerated by `hassle init`/`hassle pull` every
   time, so a bundle's own agent docs never drift behind the CLI version that reads
@@ -99,10 +141,10 @@ my-house/
   from real compiled golden pairs — it cannot describe behavior the compiler
   doesn't have) and [`docs/COOKBOOK.md`](docs/COOKBOOK.md) (22 complete recipes,
   each a real automation with a passing simulator test, checked in CI).
-- **VS Code**: layer 1 (typed autocompletion) needs no extension at all — just the
-  generated stubs. A thin extension (`vscode-extension/`, private install for now,
-  see its own README) adds Problems-pane diagnostics from `hassle validate --json`
-  and a "show compiled YAML" panel.
+- **VS Code**: typed autocompletion needs no extension at all — the generated
+  stubs give Pylance everything. A thin optional extension (`vscode-extension/`,
+  private install for now, see its own README) adds Problems-pane diagnostics
+  from `hassle validate --json` and a "show compiled YAML" panel.
 
 ## Feature overview
 
@@ -120,32 +162,36 @@ my-house/
 | `hassle explain <key>` / `hassle render <template>` | Show compiled YAML for one object / render a Jinja template offline. |
 | `hassle stubs [--refresh]` | Regenerate the typed `.pyi` stubs from the registry snapshot. |
 | `hassle fmt` | Run `ruff format` over the bundle's Python sources. |
-| `hassle mirror push/pull` | Optional: stash the bundle as a ZIP inside HA's own media storage (best-effort, off by default). |
 | `hassle doctor` | Committed-secret scan, orphaned shadow-automation sweep, HA tested-version-range check. |
 
-DSL coverage: automations, scripts (with typed `fields`), all 9 storage-collection
-helper domains, `@macro`/`@shared_script`, every classic trigger/condition type,
-2026.7+ purpose-specific triggers/conditions, full control flow
-(`if`/`choose`/`repeat_*`/`parallel`/`wait_for`/`wait_template`), a Jinja
-expression builder with a full math/datetime surface, blueprint automations, and a
-`raw_*` escape hatch so **no config is ever unrepresentable** — see the honest
-status section below for exactly when that escape hatch is unavoidable.
+The DSL covers: automations; scripts (with typed `fields`); every helper type
+HA stores as a collection (`input_boolean`, `input_number`, `input_text`,
+`input_select`, `input_datetime`, `input_button`, `counter`, `timer`,
+`schedule`); reusable logic via `@macro` (inlined at compile time) and
+`@shared_script` (compiles to a real HA script); every classic trigger and
+condition type; the purpose-based triggers HA introduced in 2026.7 (e.g.
+`motion.detected`); full control flow (`if`/`choose`/`repeat`/`parallel`/
+`wait`); a typed Jinja expression builder with math and datetime helpers; and
+blueprint automations. Anything the typed surface can't express still compiles,
+through a `raw_*` escape hatch, instead of being rejected — **any config HA can
+store, Hassle can manage**. The honest-status section below lists the four
+shapes that stay `raw_*` today.
 
 ## Honest status
 
 This is a from-scratch v1, built test-first against a real fixture corpus and (for
 the sync engine and live-run flow) a real, Dockerized Home Assistant. It is not
-a 1.0 in the "battle-tested by a community" sense yet — the owner's own house is
+a 1.0 in the "battle-tested by a community" sense yet — the author's own home is
 the first real deployment.
 
 **What's solid:**
 - The IR/compiler/decompiler round-trip is the most heavily tested part of the
-  codebase: `compile(decompile(x)) == x` for every fixture in the corpus (I3), no
+  codebase: `compile(decompile(x)) == x` for every fixture in the corpus, no
   exceptions, verified on a real 2026.7 HA export (101 objects) during the
-  decompiler's residue-coverage hardening passes (`docs/ha-api-notes.md` §19-21).
+  decompiler's coverage-hardening passes (`docs/internals/ha-api-notes.md` §19-21).
 - The sync engine (plan/apply/conflict detection) is table-driven directly off the
   design doc's plan-semantics table, plus a 1,000-iteration fuzz test proving no
-  edit is ever silently lost (I6).
+  edit is ever silently lost.
 - The simulator's trigger/mode semantics (`restart` cancelling a pending `delay`,
   the canonical motion-light bug; `numeric_state` firing only on the cross, not
   while already past threshold; etc.) are the actual behavior spec, not an
@@ -165,7 +211,8 @@ the first real deployment.
    duration) — the typed `delay()` builder only accepts int/str/dict duration
    forms; a runtime-templated delay falls back to `raw_action`.
 
-None of these lose data (I3 holds via the `raw_*` escape hatch); they just don't
+None of these lose data (the round-trip guarantee holds via the `raw_*` escape
+hatch); they just don't
 get a pretty typed builder. If you hit one, `hassle explain <key>` shows you
 exactly what's stored.
 
@@ -177,14 +224,13 @@ concurrent editing beyond conflict *detection* (no merge editor), and a Home
 Assistant add-on (proven unnecessary by design, §13 — everything here is a laptop
 CLI talking straight to HA's own APIs).
 
-**No PyPI publishing yet** — install-from-git only (owner's call on when/whether
-to publish a first tagged release).
+**No PyPI publishing yet** — install-from-git only, until a first tagged release.
 
 ## Development
 
 ```sh
 uv sync                       # install the workspace (hassle-core, hassle-cli, hassle-dev)
-uv run pytest -m "not integration"   # unit suite (no network, R2)
+uv run pytest -m "not integration"   # unit suite (never touches the network)
 uv run ruff format --check . && uv run ruff check .
 uv run pyright                # strict on hassle-core
 uv run hassle-dev corpus-stats       # fixture-corpus contract
@@ -196,6 +242,15 @@ Integration tests (`-m integration`) need a real Home Assistant instance
 (`HASSLE_TEST_HA_URL`/`HASSLE_TEST_HA_TOKEN`) — CI runs them against Docker
 `stable` and `dev` images; see `.github/workflows/ci.yml`.
 
+The code examples in this README are executed by
+`packages/hassle-cli/tests/test_readme_examples.py` — the DSL example is
+compiled and run on the simulator, and every documented CLI command is checked
+against the real command tree, so the README cannot drift from the code.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the engineering rules (tests
+first, golden-file discipline, compatibility contracts, error-message style)
+and the full set of verification gates.
+
 ## License
 
-TBD (owner's call).
+[MIT](LICENSE).

@@ -1,9 +1,9 @@
-"""Public capture seam (task #30, `ux/capture-notify-recipe`): `capture_actions()` /
+"""Public capture seam: `capture_actions()` /
 `emit_actions(...)` -- the minimal public pair that lets a `lib/` builder capture a
 `with`-block's actions and splice them into an action container it builds itself
 (DESIGN §5.6 macro/lib pattern), without reaching into the internal
 `Recorder.push_actions`/`RecordedNode`/`_require_active` seam that `if_then`/`choose`
-are built on (docs/m1-internal-api.md §2).
+are built on (docs/internals/compiler-api.md §2).
 
 `capture_actions()` is a context manager yielding a list of plain action-body dicts
 (the same shape `service(...)`/`if_then(...)`/etc. append to `rec.actions` today,
@@ -15,8 +15,6 @@ against the emitted actions point at the caller's line, never leak `RecordedNode
 
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
 
 import pytest
@@ -26,21 +24,17 @@ from hassle.compiler import NoRecordingContextError, capture_actions, emit_actio
 from hassle.compiler.bundle import compile_registered
 from hassle.compiler.recording import recording
 from hassle.compiler.registry import fresh
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 def test_capture_actions_yields_plain_action_body_dicts() -> None:

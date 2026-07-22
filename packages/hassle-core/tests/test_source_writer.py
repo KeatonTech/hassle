@@ -1,9 +1,9 @@
-"""F2 — the `SourceWriter` seam (docs/backend.md) — DESIGN §7.3, §8.3.
+"""The `SourceWriter` seam (docs/internals/backend-protocol.md) — DESIGN §7.3, §8.3.
 
-`SourceWriter` decouples the sync engine's pull-side actions from M2's LibCST
-splicer (a parallel, not-yet-merged branch). M5 ships two implementations:
-`WholeFileSourceWriter` (a blunt whole-file overwrite, good enough for `adopt`
-and an acceptable stand-in for `refresh`/`drop` until M2 lands) and
+`SourceWriter` decouples the sync engine's pull-side actions from the LibCST
+splicer. This module covers two implementations: `WholeFileSourceWriter` (a
+blunt whole-file overwrite, good enough for `adopt` and an acceptable
+stand-in for `refresh`/`drop` before the splicer lands) and
 `RecordingSourceWriter` (an in-memory test double used by the pull-engine tests).
 """
 
@@ -29,8 +29,9 @@ def test_whole_file_source_writer_creates_parent_dirs(tmp_path: Path) -> None:
 
 
 def test_whole_file_source_writer_splice_overwrites_whole_file(tmp_path: Path) -> None:
-    # M5 stand-in: splice_object on WholeFileSourceWriter is blunt — it overwrites
-    # the whole file rather than surgically replacing one def (that's M2's job).
+    # Stand-in: splice_object on WholeFileSourceWriter is blunt — it overwrites
+    # the whole file rather than surgically replacing one def (that's the
+    # LibCST splicer's job).
     writer = WholeFileSourceWriter()
     target = tmp_path / "automations" / "hallway.py"
     target.parent.mkdir(parents=True)

@@ -1,4 +1,4 @@
-"""M1 test 3 — `@shared_script` compiles to a script object + a call action.
+"""`@shared_script` compiles to a script object + a call action.
 
 DESIGN §5.6/§5.7: `@shared_script` registers a real HA script (fields derived
 from the function signature, defaults -> field defaults); calling the
@@ -7,7 +7,7 @@ decorated name from within another automation/script records a
 invoking a script — a plain `action: script.<object_id>` call), never a
 re-run of the function body. `param("name")` inside the body is a runtime
 reference to the script's own field; a `param()` for a name absent from the
-signature is a snapshot-tested error (M1 test 5).
+signature is a snapshot-tested error.
 """
 
 from __future__ import annotations

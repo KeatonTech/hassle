@@ -1,4 +1,4 @@
-"""Reviewer follow-up (M10 merge): `template_number`/`template_select` missing
+"""`template_number`/`template_select` missing
 their required write-target kwarg (`set_value=`/`select_option=`) used to only
 fail at APPLY time with a bare backend `ValueError` (`_check_required_fields`
 in `hassle.backend.direct`/`hassle.backend.fake`) -- `hassle validate` would
@@ -7,7 +7,7 @@ pass a bundle guaranteed to fail on push. `MissingTemplateHelperWriteTargetError
 builder itself (`hassle.compiler.template_helpers._declare_template_helper`),
 so it is caught the moment the bundle is compiled -- by `hassle validate`,
 `hassle plan`, and `hassle push` alike, all of which compile before anything
-else. Snapshot-tested per R6 (what/where/fix, one paragraph).
+else. Snapshot-tested (what/where/fix, one paragraph).
 
 The backend-side `_check_required_fields` checks are UNCHANGED and remain a
 second line of defense (they guard any non-DSL path that builds a
@@ -22,7 +22,6 @@ written in a real bundle (module scope, see
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
@@ -30,23 +29,17 @@ import pytest
 from hassle import template_binary_sensor, template_number, template_select, template_sensor
 from hassle.compiler import MissingTemplateHelperWriteTargetError
 from hassle.compiler.template_helpers import reset_declared_template_helpers
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    import os
-
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 @pytest.fixture(autouse=True)

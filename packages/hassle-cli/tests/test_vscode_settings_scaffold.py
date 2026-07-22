@@ -1,8 +1,8 @@
-"""M8 layer-1 ("verify, don't build"): `hassle init` (and `hassle pull`, when
-it scaffolds directories a bundle predating this change never had) writes
-`.vscode/settings.json` pointing pyright/Pylance at the stub location that
-actually makes autocompletion/typo-squiggles work with zero configuration
-(DESIGN §11 layer 1).
+"""`hassle init` (and `hassle pull`, when it scaffolds directories a bundle
+predating this change never had) writes `.vscode/settings.json` pointing
+pyright/Pylance at the stub location that actually makes
+autocompletion/typo-squiggles work with zero configuration (DESIGN §11
+layer 1).
 
 The layout that matters (verified against a *real* pyright run, not asserted
 by convention -- see `packages/hassle-core/tests/test_registry_stubs_pyright.py`
@@ -33,8 +33,7 @@ def test_init_writes_vscode_settings(tmp_path: Path) -> None:
 def test_vscode_settings_stub_path_matches_where_stubs_are_written(tmp_path: Path) -> None:
     # The load-bearing assertion: `python.analysis.stubPath` must literally be
     # the directory `hassle stubs` writes into (`typings/`), or pyright/Pylance
-    # never finds the generated types -- this is the exact mismatch M8 was
-    # asked to check for and fix.
+    # never finds the generated types.
     init_bundle(tmp_path)
     settings = json.loads((tmp_path / ".vscode" / "settings.json").read_text(encoding="utf-8"))
     assert settings["python.analysis.stubPath"] == "typings"
@@ -43,7 +42,7 @@ def test_vscode_settings_stub_path_matches_where_stubs_are_written(tmp_path: Pat
 def test_vscode_settings_extra_paths_includes_bundle_root(tmp_path: Path) -> None:
     # Cross-file imports (`from lib.x import y`, `from helpers.modes import
     # guest_mode`) are PEP 420 namespace packages rooted at the bundle root
-    # (DESIGN §6, docs/ha-api-notes.md §17.9) -- Pylance needs the bundle root
+    # (DESIGN §6, docs/internals/ha-api-notes.md §17.9) -- Pylance needs the bundle root
     # on its analysis path to resolve them the same way the compiler's loader
     # does (`sys.path` insertion at compile time).
     init_bundle(tmp_path)
@@ -79,12 +78,12 @@ def test_pull_writes_vscode_settings_when_scaffolding(
 
 
 def test_settings_default_interpreter_points_at_bundle_venv(tmp_path) -> None:
-    """Owner field report (2026-07-07): with the M17 uv-project scaffold in
-    place, VS Code's Python extension could sit on an interpreter with no
-    `hassle` installed -- every `from hassle import *` name squiggled as
-    undefined while the (interpreter-independent) entity stubs still
-    resolved. The generated settings must default the interpreter to the
-    bundle's own venv so a fresh checkout works with zero clicks."""
+    """Regression: with the bundle's uv-project scaffold in place, VS Code's
+    Python extension could sit on an interpreter with no `hassle` installed
+    -- every `from hassle import *` name squiggled as undefined while the
+    (interpreter-independent) entity stubs still resolved. The generated
+    settings must default the interpreter to the bundle's own venv so a
+    fresh checkout works with zero clicks."""
     import json
 
     from hassle_cli.init_cmd import scaffold_vscode_settings

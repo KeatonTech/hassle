@@ -1,8 +1,7 @@
-"""MILESTONES M15 §31.6.2 -- a mixed-kind category file whose scopes'
-category names diverge in HA (one scope renamed, another didn't) causes the
-next `hassle pull` to split it across new destination files, per object's
-OWN scope, and print a warning naming the scopes involved -- never guessing
-a winner.
+"""A mixed-kind category file whose scopes' category names diverge in HA
+(one scope renamed, another didn't) causes the next `hassle pull` to split
+it across new destination files, per object's OWN scope, and print a
+warning naming the scopes involved -- never guessing a winner.
 """
 
 from __future__ import annotations
@@ -87,8 +86,7 @@ def test_pull_warns_and_splits_when_scopes_diverge(
     # re-decompile/move for a category-only change, is a natural follow-on
     # this warning already prepares the ground for -- never guessing a
     # winner is the binding requirement; a same-run physical file split for
-    # an otherwise byte-identical object is not part of work item B's test
-    # contract, MILESTONES tests 4-7).
+    # an otherwise byte-identical object is out of scope here).
     snapshot.categories["script"] = {"cat_hvac_s": "Heating"}
 
     second = cli(["pull"], cwd=git_repo)

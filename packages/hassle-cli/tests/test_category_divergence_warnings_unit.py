@@ -1,13 +1,13 @@
-"""Unit tests for `hassle_cli.bundle_ops.category_divergence_warnings`
-(MILESTONES M15 §31.6.2's divergence policy), independent of a full pull
+"""Unit tests for `hassle_cli.bundle_ops.category_divergence_warnings`'s
+divergence policy, independent of a full pull
 (`test_pull_category_divergence.py` covers the CLI-level end-to-end case).
 
-Polish-batch item 4(a): the warning must only fire when the OLD shared path
-was ITSELF category-derived (`category_shaped_stem(old_path) is not None`).
-A user who hand-grouped a mixed-kind file under a name that doesn't slugify
-from any category (e.g. `misc.py`, or an arbitrary hand-picked stem the user
-chose with no HA category behind it) and later has ONE of those objects gain
-a real HA category must not see a "categories diverged" warning -- there was
+The warning must only fire when the OLD shared path was ITSELF
+category-derived (`category_shaped_stem(old_path) is not None`). A user who
+hand-grouped a mixed-kind file under a name that doesn't slugify from any
+category (e.g. `misc.py`, or an arbitrary hand-picked stem the user chose
+with no HA category behind it) and later has ONE of those objects gain a
+real HA category must not see a "categories diverged" warning -- there was
 never a shared category to diverge from; the object simply moved because it
 now has a placement of its own, exactly like ordinary re-categorization.
 """
@@ -36,7 +36,7 @@ def test_warns_when_a_real_category_shaped_shared_file_splits_across_scopes() ->
 
 
 def test_no_warning_when_the_old_shared_file_was_hand_grouped_not_category_shaped() -> None:
-    # Regression (polish-batch item 4a): the user manually put an automation
+    # Regression: the user manually put an automation
     # and a script together in a file that is NOT category-shaped at all
     # (e.g. "misc.py", the shared uncategorized fallback) -- one of them then
     # gains a real HA category and moves out. This is ordinary, expected

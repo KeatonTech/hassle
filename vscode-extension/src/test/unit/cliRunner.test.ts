@@ -70,7 +70,7 @@ describe("cliRunner: invocation building", () => {
   });
 });
 
-describe("cliRunner: fallback candidate chain (M8 polish-batch item 1)", () => {
+describe("cliRunner: fallback candidate chain", () => {
   it("an explicit hassle.executablePath setting wins outright -- no fallback candidates", () => {
     const candidates = buildCandidates("/custom/hassle", true);
     assert.strictEqual(candidates.length, 1);

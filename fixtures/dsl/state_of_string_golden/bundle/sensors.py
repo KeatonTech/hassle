@@ -1,4 +1,4 @@
-"""Golden case: `state_of(...)` string-state vocabulary (M16, DESIGN §5.4
+"""Golden case: `state_of(...)` string-state vocabulary (DESIGN §5.4
 extension). Exercises: bare string read, `.eq()`/`.ne()` string comparisons,
 `.in_([...])` membership, boolean composition (`&`/`|`/`~`), and both
 accepted argument shapes -- a plain entity id string and an `e.`-registry

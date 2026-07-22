@@ -1,4 +1,4 @@
-"""Golden case: bare `only_if(...)` call form (`ux/dsl-ergonomics`, item 1) --
+"""Golden case: bare `only_if(...)` call form --
 the pre-existing, unchanged behavior. Paired with `only_if_block_form/`'s
 `with only_if(...):` form to prove compile parity: both must produce
 byte-identical IR (same precedent as `triggers_in_decorator/` vs.

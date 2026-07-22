@@ -1,11 +1,11 @@
-"""M4 test 1: trigger semantics per type (DESIGN §10.1 v1 set).
+"""Trigger semantics per type (DESIGN §10.1 v1 set).
 
 state (incl. for_: must hold, reset on flap), to/from filters, numeric_state
 crossing (only on cross, not while above), time, time_pattern, sun (configured
 times), template (fires false->true only), event, zone.
 
-Every test is wall-clock free (a fake clock, R8) and must run in well under 1s
-(CI-enforced marker, per-test).
+Every test is wall-clock free (a fake clock, deterministic) and must run in
+well under 1s.
 """
 
 from __future__ import annotations
@@ -317,7 +317,7 @@ def test_sun_trigger_with_offset(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# sun *condition* (DESIGN §5.4/§10.1: F1 review finding -- distinct from the
+# sun *condition* (DESIGN §5.4/§10.1 -- distinct from the
 # sun trigger above; gates a state trigger's automation on time-of-day).
 # ---------------------------------------------------------------------------
 
@@ -525,12 +525,12 @@ def test_zone_trigger_fires_on_enter(tmp_path: Path) -> None:
 
         @automation(id="a", alias="a")
         def a():
-            when(zone("person.keaton", zone="zone.home", event="enter"))
+            when(zone("person.kai", zone="zone.home", event="enter"))
             service("notify.mobile_app", message="welcome home")
         """,
     )
-    sim.set_state("person.keaton", "not_home")
-    sim.state_change("person.keaton", "not_home", "zone.home")
+    sim.set_state("person.kai", "not_home")
+    sim.state_change("person.kai", "not_home", "zone.home")
     sim.assert_called("notify.mobile_app")
 
 
@@ -542,10 +542,10 @@ def test_zone_trigger_ignores_leave_when_configured_for_enter(tmp_path: Path) ->
 
         @automation(id="a", alias="a")
         def a():
-            when(zone("person.keaton", zone="zone.home", event="enter"))
+            when(zone("person.kai", zone="zone.home", event="enter"))
             service("notify.mobile_app", message="welcome home")
         """,
     )
-    sim.set_state("person.keaton", "zone.home")
-    sim.state_change("person.keaton", "zone.home", "not_home")
+    sim.set_state("person.kai", "zone.home")
+    sim.state_change("person.kai", "zone.home", "not_home")
     sim.assert_not_called("notify.mobile_app")

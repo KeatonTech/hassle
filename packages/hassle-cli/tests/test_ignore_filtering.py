@@ -1,10 +1,10 @@
-"""DESIGN §8.2 amendment (owner decision, `ux/pull-organization`): `hassle.toml`'s
-`ignore = [...]` globs (fnmatch on object keys) let a user permanently exclude
-objects Hassle must never touch -- e.g. UI-generated `input_boolean.material_you_*`
-helpers HA itself churns out. This REVISES §8.2's "first-ever pull adopts
-everything; nothing is ever unmanaged" -- ignored keys are the one deliberate
-exception, and the exclusion happens *before* `compute_plan` ever sees them, so
-the plan engine itself (F2, table-driven, MILESTONES M5) needs no change.
+"""DESIGN §8.2 amendment: `hassle.toml`'s `ignore = [...]` globs (fnmatch on
+object keys) let a user permanently exclude objects Hassle must never touch
+-- e.g. UI-generated `input_boolean.material_you_*` helpers HA itself churns
+out. This REVISES §8.2's "first-ever pull adopts everything; nothing is
+ever unmanaged" -- ignored keys are the one deliberate exception, and the
+exclusion happens *before* `compute_plan` ever sees them, so the plan engine
+itself (table-driven against the `Backend` protocol) needs no change.
 
 Semantics under test:
 1. An ignored key present only remotely (never adopted) produces NO plan entry,

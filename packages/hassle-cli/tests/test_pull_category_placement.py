@@ -1,11 +1,10 @@
 """End-to-end (FakeBackend): `hassle pull` places a newly-adopted, UI-categorized
 automation/script/helper into root-level `<slug(category)>.py` instead of the
-shared `misc.py` fallback (DESIGN §7.3, owner feedback after first real pull;
-MILESTONES M15 work item B: root-level, cross-kind layout replacing the
-per-kind-tree shape `automations/<slug>.py` / `scripts/<slug>.py`).
+shared `misc.py` fallback (DESIGN §7.3; root-level, cross-kind layout, not
+the per-kind-tree shape `automations/<slug>.py` / `scripts/<slug>.py`).
 
 Uses the same `fake_backend`/`toml_writer`/`git_repo` fixtures as the rest of
-the M7 CLI suite; the registry snapshot the backend serves (and that pull
+the CLI suite; the registry snapshot the backend serves (and that pull
 writes to `.hassle/registry.json`) is extended in-place with a category
 registry + an entity-registry row carrying that category for the seeded
 automation/script/helper.
@@ -117,9 +116,9 @@ def test_pull_places_categorized_script_by_category_name(
 def test_pull_places_categorized_helper_by_category_name(
     git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
-    """MILESTONES M15 work item B: helpers now get real category-shaped
-    placement too, under the shared `"helpers"` scope (§31.2/§31.6) --
-    extending the M12-era automation/script-only placement."""
+    """Helpers get real category-shaped placement too, under the shared
+    `"helpers"` scope (§31.2/§31.6) -- extending the earlier
+    automation/script-only placement."""
     backend, token = fake_backend
     toml_writer(git_repo, backend_token=token)
     _commit_toml_change(git_repo)

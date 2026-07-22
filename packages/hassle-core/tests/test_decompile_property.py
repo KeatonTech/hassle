@@ -1,8 +1,7 @@
-"""M2 test 5 — property test (hypothesis): random IR generated from the model
-schema round-trips through the decompiler (I3, generalized beyond the fixed
-corpus).
+"""Property test (hypothesis): random IR generated from the model schema
+round-trips through the decompiler (generalized beyond the fixed corpus).
 
-Kept seeded/deterministic in CI (MILESTONES M2): a fixed ``hypothesis.seed`` and
+Kept seeded/deterministic in CI: a fixed ``hypothesis.seed`` and
 ``derandomize=True`` mean the exact same examples run on every CI invocation, so
 a failure is always reproducible and the suite never flakes from example choice.
 
@@ -10,7 +9,7 @@ The strategy builds automation configs directly from the IR/DSL schema (random
 combinations of state/numeric_state triggers, state/template conditions, service
 and delay actions, `mode`), which is exactly the shape ``AutomationConfig``
 models and ``compile_bundle`` produces -- "generated from the model schema" per
-the milestone text.
+the original test contract.
 """
 
 from __future__ import annotations

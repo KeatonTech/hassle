@@ -1,8 +1,8 @@
-"""DESIGN §6 amendment (owner decision, `ux/pull-organization`): `hassle.toml`
-gains an `ignore` array of fnmatch globs on object keys (e.g.
-`"input_boolean:material_you_*"`). Purely config-parsing coverage here; the
-filtering *semantics* (never adopted/refreshed/deleted, local-declared-but-
-ignored warning, manifest migration) are covered in `test_ignore_filtering.py`.
+"""DESIGN §6 amendment: `hassle.toml` gains an `ignore` array of fnmatch
+globs on object keys (e.g. `"input_boolean:material_you_*"`). Purely
+config-parsing coverage here; the filtering *semantics* (never
+adopted/refreshed/deleted, local-declared-but-ignored warning, manifest
+migration) are covered in `test_ignore_filtering.py`.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ def test_load_config_parses_ignore_globs(tmp_path: Path) -> None:
     (tmp_path / "hassle.toml").write_text(
         'ha_url = "http://x"\n'
         "format_version = 1\n"
-        "mirror = false\n"
         'ignore = ["input_boolean:material_you_*", "sensor:*_debug"]\n',
         encoding="utf-8",
     )

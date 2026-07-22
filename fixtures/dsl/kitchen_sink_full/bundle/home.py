@@ -1,6 +1,6 @@
 """Integration smoke golden: >=15 distinct DSL constructs in one bundle.
 
-Exercises, across all three M1 workstreams, the constructs the corpus needs:
+Exercises the constructs the corpus needs, across three areas:
 
 triggers/conditions:  purpose trigger on(...) with area target + behavior + for_,
                       numeric_state trigger, state() trigger with options,
@@ -12,7 +12,7 @@ actions:              service (with response_variable), raw_action, fire_event,
 templates/objects:    template expression (state(x).value > n), macro call,
                       helper declaration + reference, @shared_script
 
-This is the M1 done-gate integration test: if the surfaces compose, it compiles.
+This is the core integration test: if the surfaces compose, it compiles.
 """
 
 from hassle import (

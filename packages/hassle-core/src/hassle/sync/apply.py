@@ -2,7 +2,7 @@
 
 Executes the push-side actions of a `Plan` (`create`/`update`/`delete`)
 against a `Backend`, in dependency order **helpers -> scripts -> automations**
-(DESIGN §8.2, docs/ha-api-notes.md §11), with two safety mechanisms:
+(DESIGN §8.2, docs/internals/ha-api-notes.md §11), with two safety mechanisms:
 
 - **Re-verification.** Before writing each object, its live remote hash is
   re-fetched and compared against `PlanEntry.remote_hash_at_plan` (the hash
@@ -18,30 +18,29 @@ against a `Backend`, in dependency order **helpers -> scripts -> automations**
 `manifest.lock` is only rewritten (returned via `ApplyResult.manifest`) when
 every entry succeeds; on any failure the caller keeps its old manifest
 (`test_manifest_updates_only_on_success`). `synced_at` is never computed here
-(R8) — it's supplied by the caller, defaulting to the incoming manifest's own
-value if the caller doesn't advance it explicitly.
+(no wall-clock in core logic) — it's supplied by the caller, defaulting to
+the incoming manifest's own value if the caller doesn't advance it explicitly.
 
-**M11: category write-back on CREATE.** Immediately after a CREATE succeeds
+**Category write-back on CREATE.** Immediately after a CREATE succeeds
 for an automation/script, `hassle.sync.category_writeback.
 attempt_category_writeback` is given a chance to assign the HA UI category
 implied by `PlanEntry.source_path` (DESIGN §7.3's placement, run in reverse).
-This never affects apply's own success/rollback bookkeeping (I6: it's pure
+This never affects apply's own success/rollback bookkeeping (it's pure
 metadata, and a failure here is surfaced as a warning in
-`ApplyResult.category_warnings`, never an aborted/rolled-back object,
-MILESTONES M11 test 3) and is never attempted for any action besides a
-freshly-succeeded CREATE (MILESTONES M11 test 4).
+`ApplyResult.category_warnings`, never an aborted/rolled-back object) and is
+never attempted for any action besides a freshly-succeeded CREATE.
 
-**M15 work item A: category-on-move sync on UPDATE.** Immediately after an
+**Category-on-move sync on UPDATE.** Immediately after an
 UPDATE succeeds, `hassle.sync.category_move.sync_category_on_move` three-way
 compares the object's local category (derived from `PlanEntry.source_path`),
 the manifest's recorded base category (`ManifestEntry.category`), and the
 live remote category, and pushes a category reassignment if the bundle moved
-the object to a different category file since base. Like M11's write-back,
-this is metadata-only and never affects `outcomes`/rollback for the object's
-own content update; a conflict (both sides changed, to different values) is
-reported via `ApplyResult.category_conflicts` (I6 -- never silently
-overwritten in either direction) and leaves the manifest's base category
-UNCHANGED so the next plan/push surfaces the identical conflict again.
+the object to a different category file since base. Like the write-back
+above, this is metadata-only and never affects `outcomes`/rollback for the
+object's own content update; a conflict (both sides changed, to different
+values) is reported via `ApplyResult.category_conflicts` (no local or UI
+edit is ever silently lost) and leaves the manifest's base category UNCHANGED
+so the next plan/push surfaces the identical conflict again.
 """
 
 from __future__ import annotations
@@ -65,9 +64,9 @@ from hassle.sync.models import (
     PlanEntry,
 )
 
-# Push-side apply order (DESIGN §8.2 / docs/ha-api-notes.md §11): storage
+# Push-side apply order (DESIGN §8.2 / docs/internals/ha-api-notes.md §11): storage
 # helper domains first (any order among themselves), then the config-entry
-# template-helper (M10) and group-helper (M21) domains -- also "helpers" from
+# template-helper and group-helper domains -- also "helpers" from
 # the dependency-ordering point of view: an automation/script may reference a
 # template/group helper's entity id, so it must exist first, exactly like the
 # storage helpers; a group may also nest another group's entity id, but that
@@ -127,18 +126,18 @@ def apply_plan(
 ) -> ApplyResult:
     """Apply the push-side actions of ``plan`` against ``backend``.
 
-    ``category_overrides`` (MILESTONES M12, additive): bundle-relative source
+    ``category_overrides`` (additive): bundle-relative source
     path -> exact category display name, sourced from that file's `CATEGORY`
     module global (`hassle_cli.bundle_ops`/`cli.py` build this from the
     compiled bundle's `CompileResult.category_globals`). Keyed by
     `PlanEntry.source_path` -- `CATEGORY` is a per-FILE global, matching
     DESIGN §7.3's placement being per-file too, never per-object. Threaded
     straight to `attempt_category_writeback`'s `category_override` for the
-    matching CREATE; a missing/absent entry behaves exactly like M11's
-    `humanize_slug` fallback (M12 test 3 -- byte-identical when no override
-    is supplied at all).
+    matching CREATE; a missing/absent entry behaves exactly like the
+    `humanize_slug` fallback (byte-identical when no override is supplied at
+    all).
 
-    ``on_progress`` (task #39, additive): called before each push entry is
+    ``on_progress`` (additive): called before each push entry is
     applied with ``(index, total, entry)`` (1-based) -- the CLI's visible
     heartbeat during a long apply. Never called for an empty plan.
     """
@@ -150,9 +149,9 @@ def apply_plan(
     # object didn't exist yet, e.g. a CREATE).
     snapshots: list[tuple[str, str, dict[str, object] | None, PlanAction]] = []
     applied: list[str] = []  # object_keys successfully applied, in apply order
-    category_warnings: list[str] = []  # M11: never fails/rolls back apply (I6)
-    category_conflicts: list[str] = []  # M15: never fails/rolls back apply (I6)
-    # M15: object_key -> the category slug ManifestEntry.category should
+    category_warnings: list[str] = []  # never fails/rolls back apply
+    category_conflicts: list[str] = []  # never fails/rolls back apply
+    # object_key -> the category slug ManifestEntry.category should
     # advance to (never touched at all for an object not in this dict --
     # `_advance_manifest` then falls back to the existing manifest entry's
     # own `category`, e.g. a plain content-only UPDATE with no category
@@ -177,8 +176,8 @@ def apply_plan(
                 return _abort(backend, entry, push_entries, outcomes, snapshots, applied)
             snapshots.append((entry.kind, identity, remote_now, entry.action))
         else:  # CREATE
-            # CREATE-collision drift detection (M5 review finding, MILESTONES M6
-            # test 5): at plan time nothing existed under this identity, so a
+            # CREATE-collision drift detection: at plan time nothing existed
+            # under this identity, so a
             # CREATE carries no `remote_hash_at_plan`. If some object has since
             # materialized under that identity (a UI create, or a racing client),
             # a blind create would silently overwrite it — that is drift too, and
@@ -198,14 +197,14 @@ def apply_plan(
             for kind, stuck_identity, _error in rollback_failures:
                 outcomes[f"{kind}:{stuck_identity}"] = ApplyOutcome.ROLLBACK_FAILED
             if not isinstance(exc, Exception):
-                # KeyboardInterrupt/SystemExit mid-apply (owner field report,
-                # 2026-07-14 false conflicts): roll back like any other
-                # failure, then let the interrupt propagate. An un-rolled-back
-                # partial push leaves the already-written objects live in HA
-                # while the manifest keeps their PRE-push bases -- the next
-                # plan then reports a false `both_edited` conflict against the
-                # owner's own pushed content once the local side is edited
-                # again. Rollback is best-effort (a second interrupt during
+                # KeyboardInterrupt/SystemExit mid-apply: roll back like any
+                # other failure, then let the interrupt propagate. An
+                # un-rolled-back partial push leaves the already-written
+                # objects live in HA while the manifest keeps their PRE-push
+                # bases -- the next plan then reports a false `both_edited`
+                # conflict against the user's own pushed content once the
+                # local side is edited again. Rollback is best-effort (a
+                # second interrupt during
                 # the rollback's own backend calls still escapes), and any
                 # objects it could NOT restore are reported by the next
                 # `hassle plan` rather than by this raise.
@@ -227,7 +226,7 @@ def apply_plan(
         applied.append(entry.object_key)
 
         if entry.action is PlanAction.CREATE:
-            # M11: metadata-only, best-effort -- never raises past this call
+            # Metadata-only, best-effort -- never raises past this call
             # (attempt_category_writeback catches everything internally) and
             # never affects `outcomes`/rollback for the object it just created.
             override = None
@@ -240,17 +239,18 @@ def apply_plan(
                 category_warnings.append(result.warning)
             elif result.attempted:
                 # The category slug just assigned becomes this object's base
-                # (M15 F2 amendment) -- so a FUTURE local move away from it is
-                # correctly detected as "local changed since base", not
-                # perpetually invisible.
+                # -- so a FUTURE local move away from it is correctly
+                # detected as "local changed since base", not perpetually
+                # invisible.
                 resolved_categories[entry.object_key] = local_category_for_source_path(
                     entry.kind, entry.source_path
                 )
 
         elif entry.action is PlanAction.UPDATE:
-            # M15 work item A: category-on-move sync -- metadata-only,
+            # Category-on-move sync -- metadata-only,
             # best-effort, never affects `outcomes`/rollback for the object's
-            # own content update that just succeeded (I6). Only attempted
+            # own content update that just succeeded (no local or UI edit is
+            # ever silently lost). Only attempted
             # when there IS a recorded manifest entry for this object: an
             # UPDATE with no manifest entry at all means there is no known
             # base to three-way against (in practice `compute_plan` never
@@ -302,9 +302,9 @@ class CreatedIdentityDivergedError(Exception):
     """`backend.create` derived a different identity than the bundle
     declares (HA ignores a helper create's supplied id and slugifies its
     NAME). Left alone, the manifest entry never matches the remote object
-    and every subsequent push silently creates another copy (owner field
-    report: `_degf`, `_degf_2`, `_degf_3`). The just-created object is
-    rolled back before this is raised."""
+    and every subsequent push silently creates another copy (e.g. `_degf`,
+    `_degf_2`, `_degf_3`). The just-created object is rolled back before
+    this is raised."""
 
     def __init__(self, declared: str, actual: str, source_path: str | None = None) -> None:
         self.declared = declared
@@ -324,7 +324,7 @@ def _apply_one(backend: Backend, entry: PlanEntry, identity: str) -> None:
         assert entry.local is not None
         actual = backend.create(entry.kind, entry.local)
         # Only the domains where HA itself assigns identity (storage helpers
-        # slugify the name; template helpers likewise, docs/ha-api-notes.md
+        # slugify the name; template helpers likewise, docs/internals/ha-api-notes.md
         # §17.5/§26.6) can diverge -- scripts/automations are caller-keyed
         # (the id rides in the config URL), so their create is always exact.
         if entry.kind not in _CALLER_KEYED_KINDS and actual != identity:
@@ -384,12 +384,12 @@ def _rollback(
 ) -> list[tuple[str, str, str]]:
     """Restore in reverse order of application. Returns the steps that could
     NOT be restored as ``(kind, identity, error)`` -- a failing step never
-    aborts the remaining restores (field crash, BrandtCamp 2026-07-14: the
-    first rollback step raised and every earlier object stayed un-restored,
-    with a raw traceback as the only output).
+    aborts the remaining restores: without this guard, the first rollback
+    step to raise would leave every earlier object un-restored, with a raw
+    traceback as the only output.
 
-    Config-entry caveat (reviewer, PR #39): a recreate here gets a FRESH
-    entry_id from HA (docs/ha-api-notes.md §26.3) while the on-disk manifest
+    Config-entry caveat: a recreate here gets a FRESH
+    entry_id from HA (docs/internals/ha-api-notes.md §26.3) while the on-disk manifest
     -- unchanged on a failed apply -- still records the old one. Not silent:
     the next `hassle plan` (which the failure message directs the user to
     run) re-reads entry ids from the live registry and surfaces any
@@ -405,7 +405,7 @@ def _rollback(
                 # errors on real HA -- restore by recreating. Slug-keyed kinds
                 # land back on the same identity (§17.5); config-entry kinds
                 # get a fresh entry_id (the documented rollback caveat,
-                # docs/ha-api-notes.md §26.3).
+                # docs/internals/ha-api-notes.md §26.3).
                 backend.create(kind, previous)  # type: ignore[arg-type]
             else:
                 backend.update(kind, identity, previous)
@@ -448,8 +448,8 @@ def _advance_manifest(
         else:
             # No category change this run (a plain content-only UPDATE, a
             # conflict, or a category-sync failure) -- carry the existing
-            # base forward unchanged (M15 F2 amendment: never silently
-            # advance past a conflict/failure, I6).
+            # base forward unchanged: never silently advance past a
+            # conflict/failure (no local or UI edit is ever silently lost).
             category = existing.category if existing is not None else None
         new_objects[entry.object_key] = ManifestEntry(
             source=existing.source if existing is not None else None,
@@ -467,11 +467,12 @@ def _advance_manifest(
 
 def _entry_id_of(backend: Backend, kind: str, identity: str) -> str | None:
     """The config entry's HA-assigned `entry_id` for a template-helper kind
-    (docs/ha-api-notes.md §26.5), tracked in the manifest -- `None` for every
-    other kind. `entry_id_for` is NOT part of the frozen `Backend` Protocol
-    (F2): it's an additive, defensively-probed extra method both `FakeBackend`
+    (docs/internals/ha-api-notes.md §26.5), tracked in the manifest -- `None` for every
+    other kind. `entry_id_for` is NOT part of the frozen `Backend` Protocol:
+    it's an additive, defensively-probed extra method both `FakeBackend`
     and `DirectBackend` happen to expose, the same pattern
-    `fetch_registry_snapshot` already established for non-F2 backend extras.
+    `fetch_registry_snapshot` already established for non-protocol backend
+    extras.
     """
     lookup = getattr(backend, "entry_id_for", None)
     if lookup is None:

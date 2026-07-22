@@ -1,4 +1,4 @@
-"""Generated agent-facing documentation (DESIGN §12, MILESTONES M9).
+"""Generated agent-facing documentation (DESIGN §12).
 
 Everything here is a pure function of the fixture corpus + `hassle.__all__`
 (no filesystem writes) -- the CLI (`hassle-cli`) and `hassle-dev` are

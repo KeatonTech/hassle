@@ -16,7 +16,7 @@ from hassle.compiler.bundle import compile_bundle
 
 class UnknownObjectKeyError(KeyError):
     """`hassle explain <object_key>` named a key not in the compiled bundle
-    (R6: what/where/fix -- M9 error-message audit finding)."""
+    (error messages state what/where/fix)."""
 
     def __init__(self, object_key: str, known: list[str]) -> None:
         self.object_key = object_key
@@ -29,7 +29,7 @@ class UnknownObjectKeyError(KeyError):
 
     def __str__(self) -> str:
         # KeyError.__str__ re-reprs its args (Python quirk); surface the
-        # built what/where/fix message directly instead (R6).
+        # built what/where/fix message directly instead.
         return self.args[0]
 
 

@@ -1,5 +1,5 @@
-"""``hassle.testing`` — the pytest simulator harness (DESIGN §10, F3-adjacent
-frozen surface: M7/M9 build against this).
+"""``hassle.testing`` — the pytest simulator harness (DESIGN §10), part of
+the frozen top-level DSL surface.
 
 ::
 
@@ -13,9 +13,9 @@ frozen surface: M7/M9 build against this).
         sim.advance(minutes=5)
         sim.assert_called("light.turn_off", entity_id="light.hallway")
 
-I5 (DESIGN §2): the simulator executes *compiled IR* -- a
-:class:`~hassle.compiler.bundle.CompileResult`, whatever produced it
-(:func:`~hassle.compiler.bundle.compile_bundle` for a
+Tests execute compiled IR, not DSL Python (DESIGN §2): the simulator executes
+*compiled IR* -- a :class:`~hassle.compiler.bundle.CompileResult`, whatever
+produced it (:func:`~hassle.compiler.bundle.compile_bundle` for a
 real bundle, or IR :func:`~hassle.ir.parse` directly for a corpus JSON config
 that never existed as DSL, :mod:`test_sim_runs_compiled_ir_only`) -- never DSL
 Python. :class:`Simulator` and :func:`simulate` accept only that IR-shaped
@@ -59,8 +59,8 @@ class Simulator:
     """Deterministic HA simulator over a compiled bundle (DESIGN §10.1).
 
     Construct directly from a :class:`~hassle.compiler.bundle.CompileResult`
-    (I5: only compiled IR is ever accepted), or via :func:`simulate` for the
-    common "compile this bundle directory" case.
+    (only compiled IR is ever accepted, never DSL Python), or via
+    :func:`simulate` for the common "compile this bundle directory" case.
     """
 
     def __init__(self, compiled: CompileResult) -> None:
@@ -72,9 +72,9 @@ class Simulator:
         self._sun_times_raw: dict[str, str] = {}
         self._engines: list[AutomationEngine] = []
         self._engines_by_key: dict[str, AutomationEngine] = {}
-        # Bundle scripts by slug, for blocking script-call expansion
-        # (task #35): a direct `script.<slug>` action inside any run expands
-        # into the callee's sequence, exactly like real HA.
+        # Bundle scripts by slug, for blocking script-call expansion: a
+        # direct `script.<slug>` action inside any run expands into the
+        # callee's sequence, exactly like real HA.
         self._scripts: dict[str, dict[str, Any]] = {
             key.removeprefix("script:"): obj.to_ha()
             for key, obj in compiled.objects.items()
@@ -125,7 +125,7 @@ class Simulator:
 
         Steps second-by-second internally so `time`/`time_pattern` triggers and
         `for:` holds landing at intermediate moments are never skipped over
-        (R8: deterministic, no wall-clock).
+        (deterministic, no wall-clock).
         """
         total = timedelta(hours=hours, minutes=minutes, seconds=seconds)
         remaining = int(total.total_seconds())
@@ -218,7 +218,7 @@ class Simulator:
             )
         engine.fire(trigger_ctx)
 
-    # -- introspection (M7 review cleanup: public accessors so callers outside
+    # -- introspection (public accessors so callers outside
     # this module never reach into `_calls`/`_engines_by_key` directly) -------
 
     def all_calls(self) -> list[ServiceCall]:

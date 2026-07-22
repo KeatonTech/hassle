@@ -7,13 +7,13 @@ drains the registry of ``@automation``/``@script`` objects, runs each inside a
 
 The result carries the IR objects keyed by object key, plus a span map so every
 downstream error (validation, plan conflict, simulator failure) can point at the
-user's Python line (M1 test 6). Duplicate object keys are rejected (M1 test 5).
+user's Python line. Duplicate object keys are rejected.
 
-The bundle is a package tree (M7.1, DESIGN §6/§7.3, docs/ha-api-notes.md §17.9
+The bundle is a package tree (DESIGN §6/§7.3, docs/internals/ha-api-notes.md §17.9
 RESOLVED): subdirectories are recursively imported as PEP 420 namespace
 packages, no ``__init__.py`` required anywhere.
 
-**Symlink policy (review finding F1): every symlink under the bundle
+**Symlink policy: every symlink under the bundle
 directory is skipped, silently, whether it points at a directory or a
 ``.py`` file.** Following one would let a file inside the bundle actually
 execute code living outside it -- a sandbox escape (§14) -- and would also
@@ -65,14 +65,13 @@ def _empty_decl_spans() -> dict[str, SourceSpan | None]:
 
 @dataclass(frozen=True)
 class CategoryGlobal:
-    """One bundle file's module-level ``CATEGORY`` global (MILESTONES M12):
-    its declared display-name value plus the assignment's source span (when
-    obtainable — a plain top-level `CATEGORY = "..."` executes at import
-    time with no Hassle DSL call involved, so it isn't captured by
+    """One bundle file's module-level ``CATEGORY`` global: its declared
+    display-name value plus the assignment's source span (when obtainable —
+    a plain top-level `CATEGORY = "..."` executes at import time with no
+    Hassle DSL call involved, so it isn't captured by
     :func:`hassle.compiler.spans.capture_span`; the span is instead found by
-    a lightweight `ast` scan of the module's own source, matching the
-    milestone's "file:line of the CATEGORY assignment if obtainable, else
-    file" wording)."""
+    a lightweight `ast` scan of the module's own source, giving "file:line
+    of the CATEGORY assignment if obtainable, else file")."""
 
     value: str
     span: SourceSpan | None
@@ -92,9 +91,9 @@ class CompileResult:
     # object_key -> the decoration-site span (for whole-object errors like duplicates).
     _decl_spans: dict[str, SourceSpan | None] = field(default_factory=_empty_decl_spans)
     # bundle-relative source path (POSIX, e.g. "automations/hvac.py") -> that
-    # file's module-level `CATEGORY` global, when it declares one (MILESTONES
-    # M12). A sidecar map, exactly like `_spans`/`_decl_spans` -- never part
-    # of the frozen F1 IR shape.
+    # file's module-level `CATEGORY` global, when it declares one. A sidecar
+    # map, exactly like `_spans`/`_decl_spans` -- never part of the frozen IR
+    # schema.
     _category_globals: dict[str, CategoryGlobal] = field(default_factory=_empty_category_globals)
 
     def add(
@@ -133,7 +132,7 @@ class CompileResult:
         losing index alignment with the IR block list), this returns the span
         for exactly ``obj.to_ha()[section][index]`` — ``None`` if that item has
         no span (e.g. a prebuilt object) or ``index`` is out of range. Purely
-        additive (M3): does not change ``spans_for``'s existing behavior.
+        additive: does not change ``spans_for``'s existing behavior.
         """
         key = obj.object_key()
         spans = self._spans.get(key, {}).get(section, [])
@@ -142,11 +141,11 @@ class CompileResult:
         return None
 
     def decl_span_for(self, object_key: str) -> SourceSpan | None:
-        """The declaration-site span for ``object_key`` (M7 addition).
+        """The declaration-site span for ``object_key``.
 
         The same span used to point a `DuplicateObjectError` at each
         conflicting declaration -- exposed publicly so whole-object findings
-        (e.g. the M7 helper-id/name-slug mismatch check) can point at *where
+        (e.g. a helper-id/name-slug mismatch check) can point at *where
         the helper/automation/script was declared*, not just at a
         trigger/condition/action line within it.
         """
@@ -154,7 +153,7 @@ class CompileResult:
 
     def set_category_global(self, source_path: str, category: CategoryGlobal) -> None:
         """Record ``source_path``'s (bundle-relative, POSIX) ``CATEGORY``
-        global (MILESTONES M12). Internal to the pipeline (called from
+        global. Internal to the pipeline (called from
         :func:`compile_bundle` while importing each bundle module); downstream
         consumers read via :meth:`category_global_for`/:attr:`category_globals`.
         """
@@ -239,12 +238,12 @@ def compile_registered(
         result.add(pre.obj, spans={}, decl_span=pre.span, duplicate_of=pre.span)
     for reg in registry_objects:
         with recording(kind=reg.kind, **reg.options) as rec:
-            # `@automation(triggers=[...])` (F3-additive, DESIGN §5.3/§5.5):
-            # the decorator's triggers were already built at decoration time --
-            # record them first, before running the body, so they land ahead
-            # of any `when()` calls inside the body (composition order, both
-            # docs/dsl-f3.md and this milestone's contract: "decorator list
-            # first, when() appends").
+            # `@automation(triggers=[...])` (additive to the frozen DSL
+            # surface, DESIGN §5.3/§5.5): the decorator's triggers were
+            # already built at decoration time -- record them first, before
+            # running the body, so they land ahead of any `when()` calls
+            # inside the body (composition order: "decorator list first,
+            # when() appends", also documented in docs/internals/dsl-extensions.md).
             for trig in reg.decorator_triggers:
                 record_trigger(trig, span=reg.span)
             reg.func()
@@ -256,13 +255,13 @@ def compile_registered(
             raise ValueError(f"unknown registered kind {reg.kind!r}")
         result.add(obj, spans, decl_span=reg.span, duplicate_of=reg.span)
 
-    # M13 reviewer finding B1: sweep for any `template_number`/`template_sensor`/
+    # Sweep for any `template_number`/`template_sensor`/
     # `template_binary_sensor`/`template_select` call that omitted `state=`
     # (the decorator-form signal) but was never actually applied as a
     # decorator over a function -- such a call builds/registers nothing, so
     # without this sweep it would compile clean with the object simply
-    # absent (a silent regression from the pre-M13 call form, and an I6
-    # hazard if the helper already exists in HA). Runs at the end of this
+    # absent (a silent regression, and a hazard of silently losing track of
+    # the helper if it already exists in HA). Runs at the end of this
     # shared core so both `compile_bundle` and any direct caller (e.g. a
     # single-file/fixture compile) are covered alike.
     from hassle.compiler.template_helpers import check_no_dangling_template_helper_declarations
@@ -275,14 +274,15 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
     """Import ``bundle_dir`` in isolation, collect registered objects, compile to IR.
 
     No network is touched (I/O is import + user code only). Each call installs a
-    fresh registry so repeated compiles are independent (R8 determinism).
+    fresh registry so repeated compiles are independent (compiled output
+    must be byte-stable).
     """
     bundle_path = Path(bundle_dir).resolve()
     if not bundle_path.is_dir():
         raise FileNotFoundError(f"bundle directory not found: {bundle_path}")
 
     # Reset the declarative builders' process-wide lists so a prior compile (or a
-    # bundle import in the same process) never bleeds objects into this one (R8).
+    # bundle import in the same process) never bleeds objects into this one.
     # These modules track declarations in module globals in addition to the
     # per-compile registry, so both must be cleared.
     from hassle.compiler.group_helpers import reset_declared_group_helpers
@@ -312,9 +312,9 @@ class _sandboxed_import:
 
     Isolation (§7.2/§14): only the bundle dir is added to the import path, and every
     module imported from it is removed from ``sys.modules`` on exit so a second
-    compile re-imports fresh (no cross-compile bleed, R8). No network is involved.
+    compile re-imports fresh (no cross-compile bleed). No network is involved.
 
-    M7.1: the bundle is now a package tree (subdirectories are importable as
+    The bundle is a package tree (subdirectories are importable as
     namespace packages, §17.9), so cleanup must also catch namespace-package
     module objects, which carry no ``__file__`` (only a ``__path__``) --
     ``getattr(mod, "__file__", None)`` alone would leave e.g. ``sys.modules
@@ -372,9 +372,9 @@ def _is_skipped_dir(name: str) -> bool:
 def _iter_bundle_source_files(bundle_path: Path) -> list[Path]:
     """Every ``*.py`` file in the bundle tree, at any depth, skipping reserved
     directories (sorted, stable -- so import order never depends on OS
-    directory-listing order, R8).
+    directory-listing order).
 
-    Symlink policy (review finding F1, docs/ha-api-notes.md §17.9): **every
+    Symlink policy (docs/internals/ha-api-notes.md §17.9): **every
     symlink is skipped, silently, whether it points at a directory or a
     ``.py`` file.** Following one would let a child inside the bundle
     resolve to code living *outside* it -- a sandbox escape (§7.2/§14: "the
@@ -412,8 +412,8 @@ def _dotted_module_name(bundle_path: Path, py: Path) -> str:
 
 def _category_global_span(py: Path) -> SourceSpan | None:
     """The source span of a top-level ``CATEGORY = ...`` assignment in ``py``,
-    or ``None`` if it can't be found (MILESTONES M12: "file:line of the
-    CATEGORY assignment if obtainable, else file").
+    or ``None`` if it can't be found ("file:line of the CATEGORY
+    assignment if obtainable, else file").
 
     ``CATEGORY`` executes as a plain module-level assignment at import time --
     no Hassle DSL call is involved, so :func:`hassle.compiler.spans.capture_span`
@@ -438,7 +438,7 @@ def _category_global_span(py: Path) -> SourceSpan | None:
 
 def _import_bundle_modules(bundle_path: Path) -> dict[str, CategoryGlobal]:
     """Import every ``*.py`` module in the bundle tree (sorted, stable), at
-    any depth under a subdirectory (M7.1, DESIGN §6/§7.3, docs/ha-api-notes.md
+    any depth under a subdirectory (DESIGN §6/§7.3, docs/internals/ha-api-notes.md
     §17.9 RESOLVED).
 
     Each file is imported under its dotted package-relative module name
@@ -454,34 +454,32 @@ def _import_bundle_modules(bundle_path: Path) -> dict[str, CategoryGlobal]:
     and re-executing it under a fresh module object here would run the user's
     module body twice (double side effects, duplicate registry entries).
 
-    Belt-and-suspenders (review finding F1): even though
-    ``_iter_bundle_source_files`` already skips any symlinked directory or
-    file, each accepted path is re-resolved and re-checked against
-    ``bundle_path.resolve()`` immediately before import -- defends against a
-    symlinked *intermediate* path component (e.g. a non-symlink leaf file
-    reached through a symlinked grandparent directory two levels up), which
-    ``child.is_symlink()`` on the leaf alone would not catch.
+    Belt-and-suspenders: even though ``_iter_bundle_source_files`` already
+    skips any symlinked directory or file, each accepted path is
+    re-resolved and re-checked against ``bundle_path.resolve()`` immediately
+    before import -- defends against a symlinked *intermediate* path
+    component (e.g. a non-symlink leaf file reached through a symlinked
+    grandparent directory two levels up), which ``child.is_symlink()`` on
+    the leaf alone would not catch.
 
-    **MILESTONES M12:** after each module executes, its namespace is checked
-    for a module-level ``CATEGORY`` global -- but ONLY for a file matching
+    After each module executes, its namespace is checked for a module-level
+    ``CATEGORY`` global -- but ONLY for a file matching
     :func:`hassle.ir.keys.category_shaped_stem`'s ``automations/<stem>.py`` /
-    ``scripts/<stem>.py`` shape (reviewer finding, PR #7 round 2: an
-    unscoped ``hasattr`` check was a regression against ordinary bundle code
-    that happened to use the name `CATEGORY` for something else entirely --
-    a `lib/constants.py` support module, an unrelated enum value -- which was
-    unremarkable before this milestone). The path-shape check runs BEFORE
-    even looking at the module's namespace for a non-category-shaped file,
-    so the non-``str`` guard below only ever fires for a category-shaped
-    file too -- a `CATEGORY = 5` in `lib/enums.py` is simply never looked at,
-    exactly as it was on `main`. A non-``str`` value in a category-shaped
-    file is a compile-time :class:`~hassle.compiler.errors.
-    InvalidCategoryGlobalError` (R6), raised immediately rather than carried
-    forward as a bad value some downstream consumer would have to
-    re-validate. Returned as a bundle-relative-POSIX-path ->
-    :class:`CategoryGlobal` map for :func:`compile_bundle` to attach to the
-    `CompileResult` it builds afterward (this function itself never touches
-    `CompileResult` -- it runs entirely inside `_sandboxed_import`, before
-    any recorder opens).
+    ``scripts/<stem>.py`` shape (an unscoped ``hasattr`` check would be a
+    false positive against ordinary bundle code that happens to use the name
+    `CATEGORY` for something else entirely -- a `lib/constants.py` support
+    module, an unrelated enum value). The path-shape check runs BEFORE even
+    looking at the module's namespace for a non-category-shaped file, so the
+    non-``str`` guard below only ever fires for a category-shaped file too --
+    a `CATEGORY = 5` in `lib/enums.py` is simply never looked at. A
+    non-``str`` value in a category-shaped file is a compile-time
+    :class:`~hassle.compiler.errors.InvalidCategoryGlobalError`
+    (what/where/fix), raised immediately rather than carried forward as a
+    bad value some downstream consumer would have to re-validate. Returned
+    as a bundle-relative-POSIX-path -> :class:`CategoryGlobal` map for
+    :func:`compile_bundle` to attach to the `CompileResult` it builds
+    afterward (this function itself never touches `CompileResult` -- it
+    runs entirely inside `_sandboxed_import`, before any recorder opens).
     """
     resolved_bundle_path = bundle_path.resolve()
     category_globals: dict[str, CategoryGlobal] = {}

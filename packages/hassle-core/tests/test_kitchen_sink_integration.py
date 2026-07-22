@@ -1,4 +1,4 @@
-"""M1 integration smoke: one bundle exercising >=15 constructs must compile
+"""Integration smoke: one bundle exercising >=15 constructs must compile
 cleanly and yield the expected object set + construct shapes.
 
 The golden pair (fixtures/dsl/kitchen_sink_full) is checked by the parametrized

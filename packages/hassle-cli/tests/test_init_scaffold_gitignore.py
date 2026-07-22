@@ -1,6 +1,6 @@
-"""Owner decision (2026-07-07): `typings/` (derived, regenerated every pull)
-and `.venv/` (the M17 bundle uv project's venv) must be gitignored by the
-scaffold -- a naive `git add -A` in a fresh bundle was about to commit both."""
+"""`typings/` (derived, regenerated every pull) and `.venv/` (the bundle uv
+project's venv) must be gitignored by the scaffold -- a naive `git add -A`
+in a fresh bundle was about to commit both."""
 
 from __future__ import annotations
 

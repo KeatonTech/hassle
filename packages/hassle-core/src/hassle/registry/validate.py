@@ -1,18 +1,17 @@
-"""The M3 validator (DESIGN §9 tiers 1-3): `validate_bundle(compile_result,
+"""The validator (DESIGN §9 tiers 1-3): `validate_bundle(compile_result,
 snapshot) -> list[Finding]`.
 
 Offline only (fixtures/registry snapshot); no network. Covers:
-- unknown entity/area/floor/label/device references (milestone test 1, 2b),
-  including references nested inside if/choose/repeat/parallel/
-  wait_for_trigger action containers (see `hassle.registry.extract`'s
-  recursive descent)
-- did-you-mean suggestions (test 2)
-- purpose-vocabulary validation + known-renames hints (test 2b)
-- bundle-declared helpers counting as existing (test 3)
-- service-call parameter validation: unknown/wrong-type/missing-required (test 4)
+- unknown entity/area/floor/label/device references, including references
+  nested inside if/choose/repeat/parallel/wait_for_trigger action containers
+  (see `hassle.registry.extract`'s recursive descent)
+- did-you-mean suggestions
+- purpose-vocabulary validation + known-renames hints
+- bundle-declared helpers counting as existing
+- service-call parameter validation: unknown/wrong-type/missing-required
 
-## Coverage boundaries (deliberate permissiveness; M9's docs generator
-sources this section for the agent-facing docs, so keep it accurate)
+## Coverage boundaries (deliberate permissiveness; the agent-facing docs
+generator sources this section, so keep it accurate)
 
 Two rules are intentionally permissive rather than strict, both because the
 IR shape this validator walks (`IRObject.to_ha()`) does not retain enough
@@ -79,7 +78,7 @@ _TEMPLATE_ENTITY_DOMAIN = {
 }
 
 #: Group-helper object kinds -> the REAL entity domain the created config
-#: entry produces (M21, mirrors `_TEMPLATE_ENTITY_DOMAIN`): a group's own
+#: entry produces (mirrors `_TEMPLATE_ENTITY_DOMAIN`): a group's own
 #: flavor IS its entity domain by construction (`group_cover:x` ->
 #: `cover.x`), so this is just the `"group_"` prefix stripped off each kind.
 _GROUP_ENTITY_DOMAIN = {domain: domain[len("group_") :] for domain in GROUP_DOMAINS}
@@ -87,17 +86,17 @@ _GROUP_ENTITY_DOMAIN = {domain: domain[len("group_") :] for domain in GROUP_DOMA
 
 def _bundle_declared_keys(result: CompileResult) -> set[str]:
     """``"<domain>:<id>"`` keys for every object this bundle itself declares:
-    helper domains (milestone test 3) plus automations/scripts (an automation
-    referencing its own or a sibling automation/script entity, e.g.
-    ``automation.turn_off`` targeting itself, or a ``script.<id>`` call,
-    counts as existing exactly like a bundle-declared helper).
+    helper domains plus automations/scripts (an automation referencing its
+    own or a sibling automation/script entity, e.g. ``automation.turn_off``
+    targeting itself, or a ``script.<id>`` call, counts as existing exactly
+    like a bundle-declared helper).
 
     Template AND group helpers additionally register the ENTITY their config
     entry creates (`template_binary_sensor:x` also declares
-    `binary_sensor:x`; `group_cover:x` also declares `cover:x`, M21) -- an
+    `binary_sensor:x`; `group_cover:x` also declares `cover:x`) -- an
     automation gating on the bundle's own fused template sensor (or a group
     nesting the bundle's own declared group) must not trip unknown-entity
-    before the first push (owner field case)."""
+    before the first push."""
     keys = set(result.objects)
     for key in result.objects:
         kind, _, object_id = key.partition(":")
@@ -109,8 +108,8 @@ def _bundle_declared_keys(result: CompileResult) -> set[str]:
 
 #: Core entities that exist in every HA instance but never appear in the
 #: entity REGISTRY (they predate it), so no registry snapshot can contain
-#: them -- referencing them is always legitimate (owner field report: a
-#: template reading state_attr('sun.sun', 'elevation') failed validate).
+#: them -- referencing them is always legitimate (a template reading
+#: state_attr('sun.sun', 'elevation') must not fail validate).
 _CORE_NON_REGISTRY_ENTITIES = frozenset({"sun.sun"})
 
 
@@ -334,7 +333,7 @@ def _matches_type(value: Any, type_name: str | None) -> bool:
 
 
 def _validate_unknown_services(result: CompileResult, snapshot: RegistrySnapshot) -> list[Finding]:
-    """M18 addition: an `{"action": "<domain>.<service>", ...}` that closely
+    """An `{"action": "<domain>.<service>", ...}` that closely
     resembles (but does not exactly match) a real `domain.service` in the
     registry snapshot gets an `unknown-service` Finding naming the close match
     -- the namespace form (`hassle.services.<domain>.<service>(...)`) and the
@@ -354,7 +353,7 @@ def _validate_unknown_services(result: CompileResult, snapshot: RegistrySnapshot
     domain's static services can be under-captured by a particular
     `get_services` snapshot (added in a newer HA release, or an integration
     simply not loaded when the snapshot was taken -- `cover`/`scene`/`siren`/
-    `weather`/`persistent_notification` all reproduced this against the M0
+    `weather`/`persistent_notification` all reproduced this against the
     fixture corpus's registry snapshot, which only enumerates the handful of
     domains its own entities span). None of that resembles an EXISTING
     `domain.service` string by edit distance, though -- a real typo (`ligth.
@@ -427,11 +426,10 @@ def _validate_service_params(result: CompileResult, snapshot: RegistrySnapshot) 
             if domain == "script" and f"script:{service_name}" in result.objects:
                 # A script declared in THIS bundle: its local field list is
                 # the truth. The snapshot's copy is the LAST PUSH's schema --
-                # a freshly added field would false-positive as unknown
-                # (owner field case: adjust_tdbu_blind's
-                # triggered_by_automation flag). The local declaration is
-                # already validated structurally at compile time, so skip
-                # the stale-schema comparison entirely.
+                # a freshly added field (e.g. a new flag on a locally edited
+                # script) would false-positive as unknown. The local
+                # declaration is already validated structurally at compile
+                # time, so skip the stale-schema comparison entirely.
                 continue
             service_def = snapshot.service_def(domain, service_name)
             if service_def is None or not service_def.fields:
@@ -509,7 +507,7 @@ def _validate_helper_slugs(
     snapshot: RegistrySnapshot,
     adopted_helper_keys: frozenset[str] = frozenset(),
 ) -> list[Finding]:
-    """M7 addition (docs/ha-api-notes.md §17.5, owner UX): a helper whose
+    """docs/internals/ha-api-notes.md §17.5: a helper whose
     ``id=`` does not match ``slugify(name)`` will silently get a *different*
     identity from real HA's WS-API storage-collection ``create``, which
     derives the item id by slugifying ``name`` and ignores any caller-supplied
@@ -520,14 +518,15 @@ def _validate_helper_slugs(
     otherwise); a `HelperConfig` with no `name` set is not this validator's
     concern.
 
-    **Scoped to NEW declarations (smoke #7 field evidence; §17.5 amended):**
-    the slug-derivation rule is a property of the WS-API *creation* path --
-    it says nothing about a helper that already exists. A live registry's
-    ``.storage`` can legitimately hold helpers created some other way (e.g. an
-    external integration writing ``.storage`` directly) whose id does not
-    equal ``slugify(name)``; those are adopted, already-live truth, and
-    telling the user to "fix" the id would break the bundle's mapping to a
-    real, pre-existing entity (I2). So: if ``<domain>.<supplied_id>`` is
+    **Scoped to NEW declarations (§17.5):** the slug-derivation rule is a
+    property of the WS-API *creation* path -- it says nothing about a helper
+    that already exists. A live registry's ``.storage`` can legitimately hold
+    helpers created some other way (e.g. an external integration writing
+    ``.storage`` directly) whose id does not equal ``slugify(name)``; those
+    are adopted, already-live truth, and telling the user to "fix" the id
+    would break the bundle's mapping to a real, pre-existing entity (an
+    existing object's HA id is never changed). So: if
+    ``<domain>.<supplied_id>`` is
     already present in the registry snapshot, this is an adopted helper, not
     a fresh `create` -- the slug rule never fires for it, so no Finding.
 
@@ -585,7 +584,7 @@ def _validate_helper_slugs(
                         f"helper to a `name` that slugifies to `{supplied_id}`), so the bundle's "
                         f"id matches what HA will actually assign. (This only applies to new "
                         f"helpers Hassle creates; an already-existing helper with this id is "
-                        f"exempt -- see docs/ha-api-notes.md §17.5.)"
+                        f"exempt -- see docs/internals/ha-api-notes.md §17.5.)"
                     ),
                 )
             )
@@ -602,7 +601,8 @@ def _validate_helper_slugs(
                         f"helper, Home Assistant's WS API will derive its real identity from "
                         f"the name slug and ignore the supplied id. No registry snapshot was "
                         f"available, so it's unknown whether `{entity_id}` already exists "
-                        f"(in which case this would not apply -- see docs/ha-api-notes.md "
+                        f"(in which case this would not apply -- see "
+                        f"docs/internals/ha-api-notes.md "
                         f"§17.5)."
                     ),
                     fix=(
@@ -617,7 +617,7 @@ def _validate_helper_slugs(
 
 
 def _validate_group_entities(result: CompileResult, snapshot: RegistrySnapshot) -> list[Finding]:
-    """MILESTONES M21 test 5: a group helper's own ``entities=`` member list
+    """A group helper's own ``entities=`` member list
     is checked against the registry snapshot exactly like a trigger/
     condition/action ``entity_id`` reference -- a member that doesn't exist
     (declared bundle objects count as existing too, `_bundle_declared_keys`,
@@ -629,8 +629,7 @@ def _validate_group_entities(result: CompileResult, snapshot: RegistrySnapshot) 
     never walked by `hassle.registry.extract.extract_references` at all (that
     walker only descends into ``triggers``/``conditions``/``actions``
     sections -- a group/template helper's IR body has none of those) -- this
-    is therefore new validation logic, not free reuse of the M3 walker, the
-    one M10-pattern touchpoint that genuinely didn't transfer (template
+    is therefore new validation logic, not free reuse of that walker (template
     helpers have no analogous "list of entity ids" field to check)."""
     findings: list[Finding] = []
     declared_helpers = _bundle_declared_keys(result)
@@ -660,15 +659,15 @@ def _validate_group_entities(result: CompileResult, snapshot: RegistrySnapshot) 
 
 
 def _validate_category_globals(result: CompileResult) -> list[Finding]:
-    """MILESTONES M12: a bundle file's ``CATEGORY`` global must slugify to
+    """A bundle file's ``CATEGORY`` global must slugify to
     that file's own stem (the same anchor `bundle_ops._category_source_path`/
     push-side write-back use to match a category by name) -- a mismatch means
     the declared display name and the file's placement disagree about which
     category this is, which is unresolvable without guessing, so it's flagged
     rather than silently trusted either way. Never blocks the object itself
-    from compiling/validating/applying (MILESTONES M11 test-3-style
-    isolation) -- write-back separately ignores a mismatched global with its
-    own warning (`hassle.sync.category_writeback`)."""
+    from compiling/validating/applying (this check is isolated from the rest
+    of validation) -- write-back separately ignores a mismatched global with
+    its own warning (`hassle.sync.category_writeback`)."""
     findings: list[Finding] = []
     for source_path, category in result.category_globals.items():
         stem = Path(source_path).stem
@@ -706,7 +705,7 @@ def validate_bundle(
     snapshot: RegistrySnapshot,
     adopted_helper_keys: frozenset[str] = frozenset(),
 ) -> list[Finding]:
-    """Run every M3 tier-2/3 check against a compiled bundle. Offline; no network.
+    """Run every tier-2/3 check (DESIGN §9) against a compiled bundle. Offline; no network.
 
     ``adopted_helper_keys``: object keys (``"input_boolean:x"``) known to be
     adopted from a pull (typically the manifest's helper keys) -- the

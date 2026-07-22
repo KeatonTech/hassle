@@ -1,5 +1,5 @@
-"""`hassle.toml`'s `ignore` globs (DESIGN §8.2/§6 amendment, owner decision,
-`ux/pull-organization`): a list of `fnmatch` patterns matched against object
+"""`hassle.toml`'s `ignore` globs (DESIGN §8.2/§6 amendment): a list of
+`fnmatch` patterns matched against object
 keys (e.g. `"input_boolean:material_you_*"`). This REVISES §8.2's "first-ever
 pull adopts everything; nothing is ever unmanaged" -- ignored keys are the one
 deliberate exception.
@@ -7,8 +7,9 @@ deliberate exception.
 Filtering happens **before** `hassle.sync.plan.compute_plan` ever runs (the CLI
 calls `apply_ignore_globs` on the freshly-compiled local objects and the
 freshly-fetched remote objects, then feeds the *filtered* maps to
-`compute_plan`) -- the plan engine itself (F2, table-driven, MILESTONES M5)
-needs no change and stays exactly the shape the M5 test suite pins.
+`compute_plan`) -- the plan engine itself (the frozen `Backend`
+protocol / plan-apply data model, table-driven) needs no change and stays
+exactly the shape its own test suite pins.
 
 Semantics:
 - A key matching an ignore glob is dropped from BOTH `local_objects` and

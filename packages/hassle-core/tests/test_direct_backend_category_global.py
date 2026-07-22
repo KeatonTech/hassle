@@ -1,9 +1,9 @@
-"""M12 test 1 (DirectBackend payload half) -- `attempt_category_writeback`'s
-`category_override`, when supplied, reaches `DirectBackend.create_category`
-(and so `config/category_registry/create`'s WS payload) as the EXACT string,
-never `humanize_slug`'d. `DirectBackend.create_category` itself already just
-forwards `name` verbatim (`test_direct_backend_category_writeback.py`'s
-`test_create_category_sends_scope_and_name`) -- this test proves the M12
+"""`attempt_category_writeback`'s `category_override`, when supplied, reaches
+`DirectBackend.create_category` (and so `config/category_registry/create`'s
+WS payload) as the EXACT string, never `humanize_slug`'d. `DirectBackend.
+create_category` itself already just forwards `name` verbatim
+(`test_direct_backend_category_writeback.py`'s
+`test_create_category_sends_scope_and_name`) -- this test proves the
 plumbing one level up actually supplies the CATEGORY string as that `name`
 argument instead of a slug-derived guess.
 

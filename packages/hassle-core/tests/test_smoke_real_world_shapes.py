@@ -1,6 +1,6 @@
-"""Smoke-test task #5 -- real-world decompiler/builder coverage.
+"""Smoke test -- real-world decompiler/builder coverage.
 
-The owner's first live smoke test against a real 2026.7 Home Assistant instance
+A live smoke test against a real 2026.7 Home Assistant instance
 surfaced 118 granular ``raw_*`` decompiler fallbacks across 101 real objects,
 tracing to three root causes -- all mundane, extremely common shapes the HA UI
 actually writes that the (hand-authored, docs-derived) synthetic corpus never
@@ -15,7 +15,8 @@ happened to exercise:
 Each gap gets: a builder-level unit test (this file), plus a new corpus fixture
 under ``fixtures/configs/`` that the existing parametrized round-trip
 (``test_roundtrip_corpus.py``) and coverage (``test_decompile_coverage.py``)
-tests pick up automatically. I3 (round-trip) requires the empty ``metadata: {}``
+tests pick up automatically. The round-trip invariant
+(compile(decompile(x)) == x) requires the empty ``metadata: {}``
 be preserved byte-stable -- dropping/eliding it would hash-drift every
 UI-authored action forever.
 """
@@ -134,7 +135,7 @@ def test_decompile_state_trigger_singleton_list_stays_a_list() -> None:
     src = decompile_trigger(body)
     assert src is not None
     assert "raw_trigger" not in src
-    # Entity position (DESIGN §7.3 owner feedback): entity_id renders through
+    # Entity position (DESIGN §7.3): entity_id renders through
     # the registry accessor; `to`/`from` are state *values*, never entity
     # positions, so they stay plain strings even when list-valued.
     assert src == "state([e.binary_sensor.x]).is_(['off']).to(['on'])"

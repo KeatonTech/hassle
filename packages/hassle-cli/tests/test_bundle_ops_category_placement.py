@@ -1,11 +1,10 @@
-"""MILESTONES M15 work item B: category-first bundle layout, root-level and
-cross-kind (docs/ha-api-notes.md §31.6). `default_source_path` places an
-object at root-level ``<slug(category_name)>.py`` derived from its OWN
-scope's category (`automation`/`script` scopes for those two kinds, the
-shared `"helpers"` scope for all 13 helper kinds -- §31.2) -- retiring the
-M11/M12-era per-kind-tree shape (``automations/<slug>.py`` /
-``scripts/<slug>.py``, helpers never actually reaching a category-shaped
-file at all).
+"""Category-first bundle layout, root-level and cross-kind (docs/
+ha-api-notes.md §31.6). `default_source_path` places an object at
+root-level ``<slug(category_name)>.py`` derived from its OWN scope's
+category (`automation`/`script` scopes for those two kinds, the shared
+`"helpers"` scope for all 13 helper kinds -- §31.2) -- not a per-kind-tree
+shape (``automations/<slug>.py`` / ``scripts/<slug>.py``, helpers never
+actually reaching a category-shaped file at all).
 
 Placement mapping mechanics (registry-aware):
   object key -> its entity-registry entry (match on `unique_id == identity`,
@@ -17,8 +16,8 @@ Placement mapping mechanics (registry-aware):
   else (no entry, or entry uncategorized) -> the shared root-level `misc.py`.
 
 Same category NAME across different scopes lands every object in the SAME
-root-level file (a mixed-kind category file, MILESTONES M15's headline
-scenario) -- covered by `test_same_slug_across_scopes_shares_one_file` below.
+root-level file (a mixed-kind category file) -- covered by
+`test_same_slug_across_scopes_shares_one_file` below.
 """
 
 from __future__ import annotations
@@ -90,9 +89,8 @@ def test_categorized_script_places_under_root_level_slug() -> None:
 
 
 def test_categorized_helper_places_under_root_level_slug() -> None:
-    # MILESTONES M15 work item B: helpers now get real category-shaped
-    # placement too (the shared "helpers" scope, §31.2/§31.6) -- no longer
-    # hardcoded to the flat helpers/misc.py fallback.
+    # Helpers get real category-shaped placement too (the shared "helpers"
+    # scope, §31.2/§31.6) -- not hardcoded to a flat helpers/misc.py fallback.
     path = default_source_path("input_number:tank_level", registry=_snapshot())
     assert path == "hvac.py"
 
@@ -124,11 +122,11 @@ def test_empty_registry_snapshot_behaves_like_no_registry() -> None:
 
 
 def test_same_slug_across_scopes_shares_one_file() -> None:
-    """MILESTONES M15 headline scenario: an automation, a script, and a
-    helper each carry a category that slugifies to "hvac" in their OWN scope
-    -- all three independently resolve to the SAME root-level `hvac.py`, with
-    no cross-scope coordination needed (each call only ever looks at its own
-    object's own scope)."""
+    """An automation, a script, and a helper each carry a category that
+    slugifies to "hvac" in their OWN scope -- all three independently
+    resolve to the SAME root-level `hvac.py`, with no cross-scope
+    coordination needed (each call only ever looks at its own object's own
+    scope)."""
     snapshot = _snapshot(
         categories={
             "automation": {"cat_hvac": "HVAC"},

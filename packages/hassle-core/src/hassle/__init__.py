@@ -2,12 +2,12 @@
 
 Bundle files write ``from hassle import automation, when, ...``. This package is
 the *public* face of the DSL; the machinery lives in :mod:`hassle`. Physical
-home (decision, M1): a second top-level package shipped inside the ``hassle-core``
+home: a second top-level package shipped inside the ``hassle-core``
 distribution (``packages/hassle-core/src/hassle``), so there is exactly one wheel
 to install and the public surface and its implementation version together.
 
-``__all__`` here is the **F3 freeze candidate** declared at the end of M1: additions
-are allowed in later milestones, changes are not (R5). See ``docs/dsl-f3.md``.
+``__all__`` here is the frozen top-level DSL surface: additions
+are allowed, changes are not. See ``docs/internals/dsl-extensions.md``.
 """
 
 from __future__ import annotations

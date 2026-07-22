@@ -1,17 +1,11 @@
-"""`hassle` -- the daily-driver CLI (MILESTONES M7; DESIGN §8.4, §10.4, §14).
+"""`hassle` -- the daily-driver CLI (DESIGN §8.4, §10.4, §14).
 
-**Framework choice: `click`, not `typer`** (documented per the milestone's
-"pick click or typer, document why in the package docstring" instruction --
-see the package docstring in `hassle_cli/__init__.py` for the full rationale;
-summary: click is the more minimal, more testable-via-`CliRunner` dependency,
-and this CLI's option surface is irregular enough across 14 subcommands
---yes/--plain/--accept-local KEY/--allow-dirty/--live -- that click's
-explicit `@click.option` declarations read clearer than typer's
-function-signature-as-CLI-surface convention).
+Framework choice (click, not typer) is documented in the `hassle_cli` package
+docstring and docs/internals/cli.md.
 
 Command surface (DESIGN §8.4 loop + §10.4 + §14):
   init, login, pull, status, plan, push, validate, test, run, fmt, stubs,
-  explain, render, mirror, doctor
+  explain, render, doctor
 """
 
 from __future__ import annotations
@@ -34,7 +28,7 @@ if TYPE_CHECKING:
 
 def _esc(value: object) -> str:
     """Escape ``str(value)`` for safe interpolation into a rich-markup
-    f-string passed to ``Console.print`` (polish-batch item 5).
+    f-string passed to ``Console.print``.
 
     Rich's default `Console.print` parses `[...]`-bracketed substrings as
     markup tags -- silently swallowing them (or raising, for a malformed
@@ -44,7 +38,8 @@ def _esc(value: object) -> str:
     embeds such data inside a still-markup-enabled `console.print(f"[style]...
     {data}...[/style]")` call must route ``data`` through this first. Static,
     Hassle-authored text (the surrounding `[style]`/`[/style]` tags and
-    plain English) is never escaped -- only the dynamic segment.
+    plain English) is never escaped -- only the dynamic segment. See
+    docs/internals/cli.md for the bug this discipline exists to prevent.
     """
     return _escape_markup(str(value))
 
@@ -58,10 +53,10 @@ def _bundle_root_or_fail(explicit: Path | None = None) -> Path:
             err=True,
         )
         raise SystemExit(2)
-    # MILESTONES M9 test 4: refuse a NEWER major bundle_format before doing ANY
-    # work (no partial operation) -- checked here, the single choke point every
-    # subcommand except `init`/`login` routes through, so there is no way to
-    # reach compile/validate/plan/push logic on an unrecognized format.
+    # Refuse a NEWER major bundle_format before doing ANY work (no partial
+    # operation) -- checked here, the single choke point every subcommand
+    # except `init`/`login` routes through, so there is no way to reach
+    # compile/validate/plan/push logic on an unrecognized format.
     bundle_format = load_config(root).bundle_format
     if bundle_format > CURRENT_BUNDLE_FORMAT:
         click.echo(
@@ -138,7 +133,7 @@ def _require_backend_config(root: Path) -> tuple[str, str]:
 
     from hassle_cli.token import TokenResolutionError, resolve_token_or_raise
 
-    # HASSLE_HA_URL + HASSLE_TOKEN env override (same convention as the M6
+    # HASSLE_HA_URL + HASSLE_TOKEN env override (same convention as the
     # integration suite's HASSLE_TEST_HA_URL/_TOKEN): lets `run --live`'s one
     # integration test point at a Dockerized HA without needing a hassle.toml
     # ha_url or a keyring entry.
@@ -248,15 +243,15 @@ def pull(allow_dirty: bool) -> None:
     """Merge UI-side edits into the working tree (never writes to HA)."""
     from hassle.ir.keys import OBJECT_KINDS
     from hassle.sync.plan import compute_plan
-    from hassle.sync.source_writer import SplicingSourceWriter
-    from hassle_cli import backend_factory
-    from hassle_cli.doctor import find_committed_tokens
-    from hassle_cli.git_support import commit_message_for_pull
-    from hassle_cli.pull_apply import (
+    from hassle.sync.pull_apply import (
         DecompiledBatchDoesNotCompileError,
         DecompiledValueMismatchError,
         apply_pull_with_decompiler,
     )
+    from hassle.sync.source_writer import SplicingSourceWriter
+    from hassle_cli import backend_factory
+    from hassle_cli.doctor import find_committed_tokens
+    from hassle_cli.git_support import commit_message_for_pull
 
     console = get_console()
     root = _bundle_root_or_fail()
@@ -298,8 +293,8 @@ def pull(allow_dirty: bool) -> None:
     scaffold_lib_and_tests_readmes(root)
     scaffold_vscode_settings(root)
     scaffold_agent_docs(root)
-    # MILESTONES M17: same idempotent-scaffold contract -- a bundle predating
-    # the bundle-as-uv-project change gets `pyproject.toml` on its first pull
+    # Same idempotent-scaffold contract -- a bundle predating the
+    # bundle-as-uv-project change gets `pyproject.toml` on its first pull
     # too, never overwriting one the user already created.
     for pyproject_step in scaffold_pyproject_file(root):
         console.print(f"[dim]{pyproject_step}[/dim]")
@@ -323,8 +318,8 @@ def pull(allow_dirty: bool) -> None:
 
     from contextlib import nullcontext
 
-    # Visible heartbeat for the slow compile+fetch phase (task #39) -- a big
-    # bundle plus a slow HA link used to look hung here.
+    # Visible heartbeat for the slow compile+fetch phase -- a big bundle plus
+    # a slow HA link used to look hung here.
     heartbeat = (
         console.status("pulling from Home Assistant...") if _interactive() else nullcontext()
     )
@@ -340,15 +335,15 @@ def pull(allow_dirty: bool) -> None:
             # objects (below).
             registry_snapshot = _write_registry_snapshot(backend, root)
 
-    # ux/stub-docstrings item 2: `typings/hassle/registry/__init__.pyi` is
-    # regenerated from the just-refreshed registry snapshot on every pull
-    # (write-if-changed, same convention as `_write_registry_snapshot`
-    # itself), so stubs can never go stale -- a bundle that never ran
-    # `hassle stubs` by hand used to have NO `typings/` dir at all, even
-    # after many pulls. `hassle stubs` stays available for a manual,
-    # on-demand refresh. Best-effort: skipped when the backend lacked the
-    # registry surface (`registry_snapshot is None`, same guard the
-    # category-placement code below uses).
+    # `typings/hassle/registry/__init__.pyi` is regenerated from the
+    # just-refreshed registry snapshot on every pull (write-if-changed, same
+    # convention as `_write_registry_snapshot` itself), so stubs can never go
+    # stale -- a bundle that never ran `hassle stubs` by hand used to have NO
+    # `typings/` dir at all, even after many pulls. `hassle stubs` stays
+    # available for a manual, on-demand refresh. Best-effort: skipped when the
+    # backend lacked the registry surface (`registry_snapshot is None`, same
+    # guard the category-placement code below uses). See docs/internals/cli.md
+    # for what the three generated stub files are and why.
     if registry_snapshot is not None:
         stub_changed = _stub_changed(registry_snapshot, root)
         stub_path = _write_stub_if_changed(registry_snapshot, root)
@@ -359,14 +354,14 @@ def pull(allow_dirty: bool) -> None:
             # absolute /tmp-in-tests or /home/user path in real UX.
             console.print(f"[cyan]hassle pull: wrote {_esc(stub_path.relative_to(root))}[/cyan]")
 
-    # MILESTONES M15 work item B: an old-layout bundle (the RETIRED
-    # `automations/`/`scripts/`/`helpers/` per-kind trees) is migrated into
-    # the new category-first, root-level layout on this pull -- BEFORE the
-    # rest of the pull pipeline runs, so every downstream step (plan,
-    # manifest advance) sees each migrated object already at its new home.
-    # Never touches HA or the manifest itself (source-only reorganization,
-    # DESIGN §7.3/§8.2: the plan diffs on compiled-JSON hash, never on
-    # `source_path`, so this is a pure no-op for compute_plan).
+    # An old-layout bundle (the retired `automations/`/`scripts/`/`helpers/`
+    # per-kind trees) is migrated into the category-first, root-level layout
+    # on this pull -- BEFORE the rest of the pull pipeline runs, so every
+    # downstream step (plan, manifest advance) sees each migrated object
+    # already at its new home. Never touches HA or the manifest itself
+    # (source-only reorganization, DESIGN §7.3/§8.2: the plan diffs on
+    # compiled-JSON hash, never on `source_path`, so this is a pure no-op for
+    # compute_plan). See docs/internals/cli.md for the full migration design.
     from hassle_cli.layout_migration import bundle_has_old_layout, migrate_old_layout
 
     if bundle_has_old_layout(root):
@@ -386,7 +381,7 @@ def pull(allow_dirty: bool) -> None:
         for orphan in migration_report.orphaned_category_globals:
             # markup=False + no [...]-bearing f-string: `orphan.path`/
             # `orphan.category` are bundle-controlled data, never trusted as
-            # rich markup (polish-batch item 5's rule).
+            # rich markup (see docs/internals/cli.md).
             console.print(
                 f"  kept {orphan.path} with an orphaned CATEGORY = {orphan.category!r} global "
                 "(no longer category-shaped under the new layout -- clean it up by hand; "
@@ -406,7 +401,7 @@ def pull(allow_dirty: bool) -> None:
                 bump_bundle_format(root)
                 console.print(
                     f"[cyan]hassle pull: bundle_format upgraded to {CURRENT_BUNDLE_FORMAT} "
-                    "(category-first layout, MILESTONES M15).[/cyan]"
+                    "(category-first layout).[/cyan]"
                 )
 
     ignore_result = apply_ignore_globs(
@@ -432,10 +427,10 @@ def pull(allow_dirty: bool) -> None:
         }
     )
 
-    # MILESTONES M15 §31.6.2: a mixed-kind category file that used to be
-    # shared by objects of different category-registry scopes may have split
-    # this pull, if HA-side renames made those scopes' category names
-    # diverge -- placement itself already handles the split correctly (each
+    # A mixed-kind category file that used to be shared by objects of
+    # different category-registry scopes may have split this pull, if
+    # HA-side renames made those scopes' category names diverge --
+    # placement itself already handles the split correctly (each
     # object is placed by its OWN scope, independently); this only detects
     # that it happened and warns, naming the scopes, never guessing a winner.
     # Checked over EVERY manifest-tracked object (not just this pull's plan
@@ -458,16 +453,17 @@ def pull(allow_dirty: bool) -> None:
         console.print(f"[yellow]{_esc(warning)}[/yellow]")
 
     # The REAL splicer-backed writer: REFRESH/DROP touch exactly one object's
-    # statement, so sibling objects sharing a source file survive (I6 -- the
-    # `test_pull_refresh_splice.py` regression: `WholeFileSourceWriter` here
-    # rewrote the whole file per refreshed object). The marker date is stamped
-    # at this CLI edge (R8 keeps wall-clock out of core logic only, same as
-    # `manifest_io`'s `last_synced`).
+    # statement, so sibling objects sharing a source file survive (no local
+    # or UI edit is ever silently lost -- the `test_pull_refresh_splice.py`
+    # regression: `WholeFileSourceWriter` here rewrote the whole file per
+    # refreshed object). The marker date is stamped at this CLI edge (core
+    # logic never calls a clock; the CLI edge is the one documented exception,
+    # same as `manifest_io`'s `last_synced`).
     from datetime import UTC, datetime
 
     writer = SplicingSourceWriter(updated_on=datetime.now(UTC).strftime("%Y-%m-%d"))
-    # MILESTONES M12: real HA display names for every categorized object in
-    # this plan, keyed by destination path -- `apply_pull_with_decompiler`
+    # Real HA display names for every categorized object in this plan, keyed
+    # by destination path -- `apply_pull_with_decompiler`
     # only actually emits `CATEGORY` for a path that doesn't exist on disk
     # yet (a brand-new category file), so harmlessly including
     # already-existing destinations here is fine. `registry_snapshot` is
@@ -482,10 +478,10 @@ def pull(allow_dirty: bool) -> None:
         else {}
     )
     # `apply_pull_with_decompiler` self-checks every ADOPT destination
-    # together BEFORE writing any of them (`hassle_cli.pull_apply` module
-    # docstring, coordinator task 4) -- a decompiler coordination bug here is
-    # caught pre-write, so nothing from this pull's adopt set has touched
-    # disk yet. Distinct from the post-write backstop below (which also
+    # together BEFORE writing any of them (`hassle.sync.pull_apply` module
+    # docstring) -- a decompiler coordination bug here is caught pre-write,
+    # so nothing from this pull's adopt set has touched disk yet. Distinct
+    # from the post-write backstop below (which also
     # covers REFRESH's single-object splice, the one path the pre-write
     # self-check can't cover -- see that module's docstring).
     try:
@@ -505,58 +501,48 @@ def pull(allow_dirty: bool) -> None:
         )
         raise SystemExit(1) from exc
 
-    # Polish-batch item 3: a loop-splice reconcile -- `writer.reconcile_
-    # warnings` (SplicingSourceWriter, `hassle.sync.source_writer`) is
-    # populated when a REFRESH's append path fired for a metaprogrammed
-    # object (a compile-time loop, so the splicer had no single literal
-    # statement to replace) -- the very next compile of this bundle will
-    # raise `DuplicateObjectError` (which also names this same reconcile
-    # flow) until the user reconciles it by hand. `markup=False` + no
-    # f-string interpolation into a `[...]`-bearing string: the warning text
-    # embeds a bundle-relative path and object key, neither escaped for rich
-    # markup (polish-batch item 5's rule -- interpolated user/bundle data is
-    # never trusted as markup).
+    # A loop-splice reconcile -- `writer.reconcile_warnings`
+    # (SplicingSourceWriter, `hassle.sync.source_writer`) is populated when a
+    # REFRESH's append path fired for a metaprogrammed object (a compile-time
+    # loop, so the splicer had no single literal statement to replace) -- the
+    # very next compile of this bundle will raise `DuplicateObjectError`
+    # (which also names this same reconcile flow) until the user reconciles
+    # it by hand. `markup=False` + no f-string interpolation into a
+    # `[...]`-bearing string: the warning text embeds a bundle-relative path
+    # and object key, neither escaped for rich markup -- interpolated
+    # user/bundle data is never trusted as markup (see docs/internals/cli.md).
     for warning in writer.reconcile_warnings:
         console.print(f"hassle pull: {warning}", style="yellow", markup=False)
 
-    # Safety backstop (``ux/shared-script-calls-fix``): pull just wrote real
-    # DSL source from the decompiler -- recompile the bundle it produced
-    # before trusting it (manifest bookkeeping below establishes the new
-    # three-way-merge baseline, so it must not run against a bundle that
-    # doesn't even compile). A coordination bug in the decompiler (the field
-    # failure this fix addresses: a caller rewritten to call a script whose
-    # own emitted signature can't accept it) raises here instead of silently
-    # leaving the user with a broken bundle discovered only on their next
-    # `hassle test`/`hassle push`. Files are left in place (never rolled
+    # Safety backstop: pull just wrote real DSL source from the decompiler --
+    # recompile the bundle it produced before trusting it (manifest
+    # bookkeeping below establishes the new three-way-merge baseline, so it
+    # must not run against a bundle that doesn't even compile). A
+    # coordination bug in the decompiler (a caller rewritten to call a script
+    # whose own emitted signature can't accept it) raises here instead of
+    # silently leaving the user with a broken bundle discovered only on their
+    # next `hassle test`/`hassle push`. Files are left in place (never rolled
     # back) -- the user needs them to file a useful bug report, and the fix
     # is always just a `hassle pull --allow-dirty` once it lands.
     #
-    # Widened to compare VALUES, not just "does it compile" (``ux/dsl-
-    # ergonomics``, item 4 investigation, `hassle_cli.pull_apply` module
-    # docstring): "does it compile" alone cannot catch a decompiler bug that
-    # compiles cleanly but silently changes an object's meaning. Every
-    # REFRESH/ADOPT entry's original stored `remote` config is compared
-    # against what the bundle just written recompiles to -- via
-    # `hassle_cli.pull_apply.values_match` (canonical-JSON value comparison,
-    # ``fix/self-check-value-compare``). This backstop used to call
-    # `is_modernization_only_diff`, which decompiles both sides to DSL TEXT --
-    # not context-free (the field failure `pull_apply`'s module docstring
-    # documents: the same value can decompile to different text depending on
-    # what else is in the same batch), and this exact code path is what
-    # produced it on the owner's live bundle. `values_match` is the single
-    # shared comparison both this backstop and the pre-write self-check use,
-    # so they can never disagree.
+    # Also compares VALUES, not just "does it compile": every REFRESH/ADOPT
+    # entry's original stored `remote` config is compared against what the
+    # bundle just written recompiles to, via
+    # `hassle.sync.pull_apply.values_match` (canonical-JSON value comparison)
+    # -- the single shared comparison this backstop and the pre-write
+    # self-check both use, so they can never disagree. See
+    # docs/internals/cli.md for why "does it compile" alone isn't enough.
     try:
         _, post_write_result = bundle_ops.compile_local_objects(root)
     except Exception as exc:
         from hassle.compiler.errors import DuplicateObjectError
 
-        # Polish-batch item 3: a `DuplicateObjectError` here for an object key
-        # this same pull already flagged in `writer.reconcile_warnings` is the
-        # EXPECTED consequence of a loop-splice reconcile (module docstring:
-        # the append path landed a UI edit next to its metaprogrammed
-        # original) -- never a Hassle bug. `DuplicateObjectError.object_key`
-        # names exactly which object collided.
+        # A `DuplicateObjectError` here for an object key this same pull
+        # already flagged in `writer.reconcile_warnings` is the EXPECTED
+        # consequence of a loop-splice reconcile (module docstring: the
+        # append path landed a UI edit next to its metaprogrammed original)
+        # -- never a Hassle bug. `DuplicateObjectError.object_key` names
+        # exactly which object collided.
         if isinstance(exc, DuplicateObjectError) and any(
             exc.object_key in warning for warning in writer.reconcile_warnings
         ):
@@ -575,14 +561,14 @@ def pull(allow_dirty: bool) -> None:
             "decompiler, not a mistake in your HA configuration -- the files just written "
             "are left in place for you to inspect. Fix: please report this (include the "
             "error above and, if possible, the object(s) involved) at "
-            "https://github.com/hassle-project/hassle/issues; once a fix lands, "
+            "https://github.com/KeatonTech/hassle/issues; once a fix lands, "
             "`hassle pull --allow-dirty` is safe to re-run and will overwrite the broken "
             "file(s).[/bold red]"
         )
         raise SystemExit(1) from exc
 
     from hassle.sync.models import ManifestEntry, PlanAction
-    from hassle_cli.pull_apply import values_match
+    from hassle.sync.pull_apply import values_match
 
     mismatched_keys = [
         entry.object_key
@@ -601,7 +587,7 @@ def pull(allow_dirty: bool) -> None:
             "Hassle's decompiler, not a mistake "
             "in your HA configuration -- the files just written are left in place for you to "
             "inspect. Fix: please report this (include the object(s) listed) at "
-            "https://github.com/hassle-project/hassle/issues; once a fix lands, "
+            "https://github.com/KeatonTech/hassle/issues; once a fix lands, "
             "`hassle pull --allow-dirty` is safe to re-run and will overwrite the broken "
             "file(s).[/bold red]"
         )
@@ -623,7 +609,7 @@ def pull(allow_dirty: bool) -> None:
     # `plan` would see "no base" and perpetually re-propose the same
     # adopt/create. Advancing the manifest for pull-side actions is this
     # CLI's own bookkeeping (no core-layer test covers it: `apply_pull`
-    # deliberately never accepts a manifest, MILESTONES M5 test 2).
+    # deliberately never accepts a manifest).
     from hassle.ir.canonical import sha256_hash, storage_canonical
     from hassle.sync.category_move import local_category_for_source_path
 
@@ -637,11 +623,11 @@ def pull(allow_dirty: bool) -> None:
                 source=source_path,
                 compiled_hash=sha256_hash(storage_canonical(entry.kind, entry.remote)),
                 kind=existing.kind if existing is not None else "dsl",
-                # M15 work item A: the base category this object was JUST
-                # placed under on this pull -- so the very next push's
-                # category-on-move sync (`hassle.sync.category_move`) starts
-                # from the right base instead of `None` (which would
-                # misfire as "local changed" even though nothing moved yet).
+                # The base category this object was JUST placed under on this
+                # pull -- so the very next push's category-on-move sync
+                # (`hassle.sync.category_move`) starts from the right base
+                # instead of `None` (which would misfire as "local changed"
+                # even though nothing moved yet).
                 category=local_category_for_source_path(entry.kind, source_path),
             )
         elif entry.action is PlanAction.DROP:
@@ -672,10 +658,10 @@ def pull(allow_dirty: bool) -> None:
 
 def _build_plan_with_compile_result(root: Path):
     """`_build_plan`'s implementation, additionally returning the
-    `CompileResult` the plan was computed from (MILESTONES M12: `push` needs
-    it to build `apply_plan`'s `category_overrides` from the bundle's
-    `CATEGORY` globals; `plan`/`status` just discard the second value via the
-    `_build_plan` wrapper below)."""
+    `CompileResult` the plan was computed from (`push` needs it to build
+    `apply_plan`'s `category_overrides` from the bundle's `CATEGORY` globals;
+    `plan`/`status` just discard the second value via the `_build_plan`
+    wrapper below)."""
     from hassle.compiler.errors import CompileError
     from hassle.ir.keys import OBJECT_KINDS
     from hassle.sync.plan import compute_plan
@@ -690,12 +676,12 @@ def _build_plan_with_compile_result(root: Path):
     try:
         local_objects, compile_result = bundle_ops.compile_local_objects(root)
     except CompileError as exc:
-        # Task #15 (reviewer follow-up to PR #4): `plan`/`status`/`push` all
-        # share this helper and all compile the bundle before doing anything
-        # else -- report a compile-time error the same clean way `validate`
-        # does (what/where/fix, exit 1, no raw traceback) instead of letting
-        # it escape uncaught. None of these three commands has a `--json`
-        # mode, so `as_json` stays at its default (plain-text only).
+        # `plan`/`status`/`push` all share this helper and all compile the
+        # bundle before doing anything else -- report a compile-time error
+        # the same clean way `validate` does (what/where/fix, exit 1, no raw
+        # traceback) instead of letting it escape uncaught. None of these
+        # three commands has a `--json` mode, so `as_json` stays at its
+        # default (plain-text only).
         _report_compile_error(exc, root)
     with backend_factory.connect(ha_url, token) as backend:
         remote_objects = bundle_ops.remote_objects_from_backend(backend, list(OBJECT_KINDS))
@@ -707,7 +693,7 @@ def _build_plan_with_compile_result(root: Path):
         local_objects=ignore_result.local_objects,
         remote_objects=ignore_result.remote_objects,
     )
-    # M11: `source_path` drives category write-back on CREATE (`hassle.sync.
+    # `source_path` drives category write-back on CREATE (`hassle.sync.
     # category_writeback`, via `apply_plan`) -- a CREATE always has a real
     # bundle source (it's local-only at plan time), so no registry snapshot
     # is needed here (unlike pull's adopt-placement fallback, which needs one
@@ -768,9 +754,9 @@ def status(ctx: click.Context) -> None:
 
 
 def _interactive() -> bool:
-    """A human is at the terminal: prompts beat flags (task #39). Both ends
-    must be TTYs -- piped stdin or redirected stdout means scripts/CI, where
-    behavior stays flag-driven and byte-compatible."""
+    """A human is at the terminal: prompts beat flags. Both ends must be
+    TTYs -- piped stdin or redirected stdout means scripts/CI, where behavior
+    stays flag-driven and byte-compatible."""
     import sys
 
     return sys.stdin.isatty() and sys.stdout.isatty()
@@ -809,13 +795,13 @@ def push(
     root = _bundle_root_or_fail()
     if _interactive() and not ctx.obj.get("plain", False):
         # The visible heartbeat for the slow phase (compile + remote fetch):
-        # without it a big bundle looks hung (owner report, task #39).
+        # without it a big bundle looks hung.
         with console.status("planning against Home Assistant..."):
             the_plan, compile_result = _build_plan_with_compile_result(root)
     else:
         the_plan, compile_result = _build_plan_with_compile_result(root)
-    # MILESTONES M12: `category_overrides` (bundle-relative source path ->
-    # exact display name) from every file's `CATEGORY` global that actually
+    # `category_overrides` (bundle-relative source path -> exact display
+    # name) from every file's `CATEGORY` global that actually
     # slugifies to its own file stem; a mismatched file's global is left out
     # (never trusted) and instead reported here as its own warning, alongside
     # a `category-slug-mismatch` Finding from `hassle validate`/`plan`.
@@ -827,8 +813,8 @@ def push(
 
     adopts = the_plan.entries_with_action(PlanAction.ADOPT)
     if adopts:
-        # Owner confusion (twice): adopt rows look actionable but push
-        # ignores them -- they are remote objects nothing local owns.
+        # Adopt rows look actionable but push ignores them -- they are
+        # remote objects nothing local owns (a common point of confusion).
         console.print(
             f"[yellow]{len(adopts)} object(s) exist in HA that this bundle doesn't "
             "manage (the `adopt` rows) -- not touched by push. `hassle pull` would "
@@ -844,7 +830,7 @@ def push(
     plan_already_rendered = False
     if unresolved_conflicts and _interactive() and not yes:
         # Resolve each conflict at the prompt instead of demanding
-        # --accept-local/--accept-remote round trips (task #39).
+        # --accept-local/--accept-remote round trips.
         render_plan(console, the_plan)
         plan_already_rendered = True
         accept_local, accept_remote = list(accept_local), list(accept_remote)
@@ -876,7 +862,7 @@ def push(
                 # conflict is -- which may be a deletion (local is None) or a
                 # recreate (remote is None), not only an edit. Hardcoding
                 # UPDATE here crashed mid-apply on `entry.local is not None`
-                # for a locally-deleted object (field crash, 2026-07-14).
+                # for a locally-deleted object -- regression-tested.
                 if entry.local is None:
                     resolved_action = PlanAction.DELETE
                 elif entry.remote is None:
@@ -891,11 +877,10 @@ def push(
 
     resolved_plan = Plan(entries=resolved_entries)
 
-    # Deletion gate over the RESOLVED plan (reviewer finding, PR #39): a
-    # keep-local conflict resolution can INTRODUCE a deletion, and DESIGN
-    # §8.2 says deletions always require the confirm step (or --yes) -- the
-    # gate must not consult the pre-resolution plan where that object was
-    # still a CONFLICT row.
+    # Deletion gate over the RESOLVED plan: a keep-local conflict resolution
+    # can INTRODUCE a deletion, and DESIGN §8.2 says deletions always require
+    # the confirm step (or --yes) -- the gate must not consult the
+    # pre-resolution plan where that object was still a CONFLICT row.
     has_deletions = bool(resolved_plan.entries_with_action(PlanAction.DELETE))
     if not yes and _interactive():
         # Plan-then-confirm at the terminal: deletions default to NO (they
@@ -923,7 +908,7 @@ def push(
 
     def _progress(index: int, total: int, entry: PlanEntry) -> None:
         # One honest line per applied entry -- TTY or not -- so a long apply
-        # is visibly alive (task #39).
+        # is visibly alive.
         console.print(f"[{index}/{total}] {entry.action.value} {_esc(entry.object_key)}")
 
     with backend_factory.connect(ha_url, token) as backend:
@@ -949,8 +934,9 @@ def push(
         # `apply_plan` -- there is nothing to push for them -- but they DO
         # resolve the conflict, so the manifest base must advance or the
         # IDENTICAL conflict re-surfaces on every subsequent plan forever
-        # (owner field report, 2026-07-14: false conflicts train the owner to
-        # stop reading conflict prompts, defeating I6). A kept remote is a
+        # (false conflicts train the user to stop reading conflict prompts,
+        # defeating the "no local or UI edit is ever silently lost" rule). A
+        # kept remote is a
         # remote-side edit accepted as-is: record base := the LOCAL side's
         # canonical hash, so the next plan reads the object as `refresh`
         # (pull-side; a `push --yes` never clobbers the kept remote, and
@@ -983,16 +969,17 @@ def push(
             new_manifest = new_manifest.model_copy(update={"objects": new_objects})
         manifest_io.save_manifest(root, new_manifest)
 
-    # M11: category write-back warnings are metadata-only (I6) -- the push
-    # already succeeded (checked above); these are printed, never fatal.
+    # Category write-back warnings are metadata-only (no local or UI edit is
+    # ever silently lost) -- the push already succeeded (checked above);
+    # these are printed, never fatal.
     for warning in result.category_warnings:
         console.print(f"[yellow]{_esc(warning)}[/yellow]")
 
-    # M15 work item A: category-on-move conflicts (I6 -- never silently
-    # resolved in either direction) are printed too, never fatal for a push
-    # that otherwise succeeded -- the object's own content update already
-    # applied; only its category grouping is left exactly as it was pending
-    # the user resolving which side should win.
+    # Category-on-move conflicts (never silently resolved in either
+    # direction) are printed too, never fatal for a push that otherwise
+    # succeeded -- the object's own content update already applied; only its
+    # category grouping is left exactly as it was pending the user resolving
+    # which side should win.
     for conflict_message in result.category_conflicts:
         console.print(f"[bold red]{_esc(conflict_message)}[/bold red]")
 
@@ -1012,7 +999,7 @@ def push(
     "as_json",
     is_flag=True,
     default=False,
-    help="Emit findings as JSON (the VS Code extension's Problems-pane contract, MILESTONES M8).",
+    help="Emit findings as JSON (the VS Code extension's Problems-pane contract).",
 )
 def validate(as_json: bool) -> None:
     """Compile + validate the bundle offline (DESIGN §9 tiers 1-3).
@@ -1022,9 +1009,8 @@ def validate(as_json: bool) -> None:
     regardless of exit code, and never any rich/plain-text banner lines
     (an editor extension parses this stdout directly). This is the schema
     `hassle_cli.tests.test_cli_commands::test_validate_json_reports_findings_with_stable_schema`
-    and the VS Code extension's `findingsSchema.ts` both snapshot-test
-    (MILESTONES M8 test 3) -- field-for-field, it mirrors
-    `hassle.registry.finding.Finding`.
+    and the VS Code extension's `findingsSchema.ts` both snapshot-test --
+    field-for-field, it mirrors `hassle.registry.finding.Finding`.
     """
     from hassle.compiler.bundle import compile_bundle
     from hassle.compiler.errors import CompileError
@@ -1037,13 +1023,13 @@ def validate(as_json: bool) -> None:
     try:
         result = compile_bundle(root)
     except CompileError as exc:
-        # Reviewer follow-up (M10 merge): a compile-time error (e.g. a
-        # template_number/template_select missing its required set_value=/
-        # select_option=) must be reported the same clean way a tier-2/3
-        # Finding is -- not let the exception escape as a raw traceback.
-        # `compile_bundle` runs before any Finding-producing check even
-        # starts, so this is the earliest possible exit point. Shared with
-        # `plan`/`status`/`push` via `_build_plan` (task #15 follow-up).
+        # A compile-time error (e.g. a template_number/template_select
+        # missing its required set_value=/select_option=) must be reported
+        # the same clean way a tier-2/3 Finding is -- not let the exception
+        # escape as a raw traceback. `compile_bundle` runs before any
+        # Finding-producing check even starts, so this is the earliest
+        # possible exit point. Shared with `plan`/`status`/`push` via
+        # `_build_plan`.
         _report_compile_error(exc, root, as_json=as_json)
     skip_notice: str | None = None
     if registry_path.is_file():
@@ -1156,18 +1142,10 @@ def fmt() -> None:
 )
 def stubs(refresh: bool) -> None:
     """Generate `typings/hassle/registry/__init__.pyi` AND
-    `typings/hassle/services.pyi` from the registry snapshot (DESIGN §11;
-    MILESTONES M18 added the services stub alongside the entities one).
+    `typings/hassle/services.pyi` from the registry snapshot (DESIGN §11).
 
-    **M8 layer-1 fix:** this used to write `.hassle/entities.pyi` -- a path no
-    pyright/Pylance configuration (including `hassle init`'s own
-    `.vscode/settings.json`) ever pointed at, so the generated types were
-    silently never picked up by a real editor. `typings/hassle/registry/__init__.pyi`
-    (with `.vscode/settings.json`'s `python.analysis.stubPath: "typings"`) is
-    the placement pyright actually prefers over the real runtime
-    `hassle.registry` module for that dotted path -- verified end-to-end in
-    `packages/hassle-core/tests/test_registry_stubs_pyright*.py`. See
-    docs/ha-api-notes.md.
+    See docs/internals/cli.md for why there are three generated stub files
+    and the path history behind where they live; and docs/internals/ha-api-notes.md.
     """
     from hassle.registry.snapshot import RegistrySnapshot
 
@@ -1206,21 +1184,20 @@ def _write_if_changed(path: Path, content: str) -> bool:
 
 def _write_stub_if_changed(snapshot: object, root: Path) -> Path:
     """Generate `typings/hassle/registry/__init__.pyi` (entity stub),
-    `typings/hassle/services.pyi` (MILESTONES M18: typed service namespaces),
-    AND `typings/hassle/__init__.pyi` (coordinator hardening, M18 round: a
-    re-export of every `hassle.__all__` name from its true defining module --
-    guards against pyright treating `hassle` as a namespace/partial stub
-    package once submodule stubs exist for it, which would otherwise hide the
-    real package's own top-level surface) from `snapshot`, each
-    write-if-changed (ux/stub-docstrings item 2 -- the same convention
+    `typings/hassle/services.pyi` (typed service namespaces), AND
+    `typings/hassle/__init__.pyi` (a re-export of every `hassle.__all__` name
+    from its true defining module -- guards against pyright treating
+    `hassle` as a namespace/partial stub package once submodule stubs exist
+    for it, which would otherwise hide the real package's own top-level
+    surface) from `snapshot`, each write-if-changed (the same convention
     `_write_registry_snapshot` uses for `.hassle/registry.json`, so an
     unchanged registry never dirties the tree / rewrites any of the files).
 
     Shared by both `hassle stubs` (manual refresh) and `hassle pull`
     (automatic, every pull) so the two commands can never disagree on what
-    "the stubs for this snapshot" look like. Returns the entities stub's path
-    (the caller's printed "wrote ..." message anchor, unchanged from pre-M18
-    behavior) -- the other two are written alongside it as a side effect.
+    "the stubs for this snapshot" look like. Returns the entities stub's
+    path (the caller's printed "wrote ..." message anchor) -- the other two
+    are written alongside it as a side effect. See docs/internals/cli.md.
     """
     from hassle.registry.stubs import (
         generate_entities_stub,
@@ -1391,40 +1368,6 @@ def run(target: str, live: bool, yes: bool, skip_conditions: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
-# mirror
-# ---------------------------------------------------------------------------
-
-
-@main.group()
-def mirror() -> None:
-    """DESIGN §8.5: optional in-HA mirror of the bundle."""
-
-
-@mirror.command(name="status")
-def mirror_status() -> None:
-    root = _bundle_root_or_fail()
-    config = load_config(root)
-    console = get_console()
-    if config.mirror:
-        console.print("[green]mirror: enabled[/green]")
-    else:
-        console.print(
-            "[dim]mirror: disabled (off by default; set mirror = true in hassle.toml)[/dim]"
-        )
-
-
-@mirror.command(name="push")
-def mirror_push() -> None:
-    root = _bundle_root_or_fail()
-    config = load_config(root)
-    console = get_console()
-    if not config.mirror:
-        console.print("[yellow]mirror is disabled; enable it in hassle.toml first[/yellow]")
-        raise SystemExit(1)
-    console.print("[dim]mirror push: not yet connected in this environment[/dim]")
-
-
-# ---------------------------------------------------------------------------
 # doctor
 # ---------------------------------------------------------------------------
 
@@ -1451,21 +1394,20 @@ def doctor(sweep_shadows: bool) -> None:
                 "system keyring, and rotate the exposed token in HA.[/red]"
             )
 
-    # MILESTONES M9 deliverable 4: "HA tested-version range surfaced in
-    # hassle doctor" -- the range itself is always shown (offline, a static
-    # constant, R2-safe). The LIVE instance's version is only ever checked
-    # when the caller explicitly opts into a connection (`--sweep-shadows`,
-    # the pre-existing connection gate) -- `doctor` must never make network
-    # I/O just because `ha_url` happens to be configured (R2; a bare
-    # `hassle doctor` is an offline diagnostic).
+    # "HA tested-version range surfaced in hassle doctor" -- the range itself
+    # is always shown (offline, a static constant, safe under the "unit tests
+    # never touch the network" rule). The LIVE instance's version is only
+    # ever checked when the caller explicitly opts into a connection
+    # (`--sweep-shadows`, the pre-existing connection gate) -- `doctor` must
+    # never make network I/O just because `ha_url` happens to be configured
+    # (a bare `hassle doctor` is an offline diagnostic).
     console.print(
         f"[dim]doctor: Hassle is tested against Home Assistant "
         f"{TESTED_HA_MIN}-{TESTED_HA_MAX}[/dim]"
     )
 
-    # MILESTONES M17: bundle-as-uv-project status -- filesystem-only, no `uv`
-    # subprocess ever spawned by this check (see `uv_project.doctor_report_lines`
-    # docstring).
+    # Bundle-as-uv-project status -- filesystem-only, no `uv` subprocess ever
+    # spawned by this check (see `uv_project.doctor_report_lines` docstring).
     for line in doctor_report_lines(root):
         console.print(f"[dim]{line}[/dim]")
 

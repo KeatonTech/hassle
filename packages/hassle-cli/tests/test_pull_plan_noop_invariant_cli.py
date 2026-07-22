@@ -1,19 +1,19 @@
-"""The permanent pull -> plan-noop invariant gate (docs/ha-api-notes.md §23).
+"""The permanent pull -> plan-noop invariant gate (docs/internals/ha-api-notes.md §23).
 
 Seeds every `fixtures/configs/*.json` corpus object into a fresh `FakeBackend`
-(keyed exactly like the M0 IR corpus loader does -- `hassle-core/tests/_corpus.py`'s
+(keyed exactly like the IR corpus loader does -- `hassle-core/tests/_corpus.py`'s
 filename convention, reimplemented here since cross-package test imports aren't
 wired up in this repo), runs the REAL CLI's `hassle pull` then `hassle plan`
 against it, and asserts every resulting entry is `noop` or an `update` that
 `is_modernization_only_diff` accepts (DESIGN §8.2's one-time legacy-schema
-exception, MILESTONES M7 test 4b) -- **zero** `conflict`, **zero** plain
-(non-modernization) `update`, **zero** `delete`/`create`/`adopt`/`refresh`
-survives past the first pull's manifest write.
+exception) -- **zero** `conflict`, **zero** plain (non-modernization)
+`update`, **zero** `delete`/`create`/`adopt`/`refresh` survives past the
+first pull's manifest write.
 
-Plus two focused variants named in the task: a mode-less automation, and the
-legacy `platform:` fixture (must be modernization-labeled, not noop -- it's a
+Plus two focused variants: a mode-less automation, and the legacy
+`platform:` fixture (must be modernization-labeled, not noop -- it's a
 whole-object `raw_automation` fallback whose stored form pre-dates HA's
-`action:`/`actions:` normalization, DESIGN §7.3/§8.2, MILESTONES M2 test 1).
+`action:`/`actions:` normalization, DESIGN §7.3/§8.2).
 """
 
 from __future__ import annotations
@@ -221,7 +221,7 @@ def test_legacy_platform_automation_is_modernization_labeled(
     # Seed directly into the store (bypassing `create()`'s own `normalize_ha`
     # call) -- this fixture models config that predates HA's `action:` ->
     # `actions:` pluralization and is already stored exactly as-is; real HA
-    # never re-normalizes stored config on its own (docs/ha-api-notes.md
+    # never re-normalizes stored config on its own (docs/internals/ha-api-notes.md
     # §17.1), it only normalizes what's freshly POSTed. Matches
     # `test_modernization_labeling.py`'s own seeding approach.
     backend._store["automation"]["legacy_platform_naming"] = {
@@ -297,7 +297,7 @@ def test_script_seeded_with_id_in_body_still_plans_noop(
     with a caller-supplied `id` key in the config (the natural mistake --
     automations/helpers both legitimately take one, so a test/seeding helper
     reaches for the same shape for a script) must NOT leak that `id` into
-    the stored remote body (docs/ha-api-notes.md §23.2) -- if it did, every
+    the stored remote body (docs/internals/ha-api-notes.md §23.2) -- if it did, every
     subsequent `hassle plan` on this untouched script would show a permanent
     `update` (local has no `id`, `ScriptConfig` has no such field; remote
     would keep it forever), never settling into `noop`."""

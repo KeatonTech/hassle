@@ -1,4 +1,4 @@
-"""Canonical JSON serialization and object hashing (F1, R8).
+"""Canonical JSON serialization and object hashing (part of the frozen IR schema; deterministic).
 
 The canonical form is deterministic and byte-stable across runs and platforms:
 
@@ -33,11 +33,12 @@ def sha256_hash(data: Any) -> str:
     return f"sha256:{digest}"
 
 
-#: HA storage-collection normalization parity (owner field report: every
-#: pushed helper diffed forever). HA coerces input_number numerics to float,
-#: fills these defaults when unset, and stores timer durations as H:MM:SS
-#: without hour zero-padding. Applied when COMPARING/HASHING for sync (never
-#: to compiled output -- I3 round-trips stay byte-exact).
+#: HA storage-collection normalization parity: without this, every pushed
+#: helper would show as changed on every subsequent plan, forever. HA coerces
+#: input_number numerics to float, fills these defaults when unset, and
+#: stores timer durations as H:MM:SS without hour zero-padding. Applied when
+#: COMPARING/HASHING for sync (never to compiled output -- compile(
+#: decompile(x)) round-trips stay byte-exact).
 _STORAGE_FLOAT_FIELDS = {"input_number": ("min", "max", "step", "initial")}
 _STORAGE_DEFAULTS = {
     "input_number": {"mode": "slider", "step": 1},
@@ -50,14 +51,14 @@ _STORAGE_DEFAULTS = {
 def storage_canonical(kind: str, config: dict[str, Any]) -> dict[str, Any]:
     """`config` as real HA would store it, for sync comparison. Identity for
     kinds without known normalization (automations, scripts, template
-    helpers -- the latter are already coerced at compile time, M10)."""
+    helpers -- the latter are already coerced at compile time)."""
     if kind not in _STORAGE_FLOAT_FIELDS and kind not in _STORAGE_DEFAULTS:
         return config
     out = dict(config)
     # Defaults FIRST, coercion second: a defaulted input_number step must
     # come out as HA's float 1.0, not int 1 -- dict equality treats them the
-    # same but canonical JSON (and therefore every hash) does not (PR #34
-    # delta review). Counter/input_text defaults stay int: those kinds are
+    # same but canonical JSON (and therefore every hash) does not.
+    # Counter/input_text defaults stay int: those kinds are
     # not in the float-fields map.
     for field, default in _STORAGE_DEFAULTS.get(kind, {}).items():
         out.setdefault(field, default)

@@ -1,4 +1,4 @@
-"""Reviewer note on PR #21: `_is_undefined_render_error` keys on two jinja2
+"""`_is_undefined_render_error` keys on two jinja2
 message substrings re-embedded through `TemplateEngine.render`'s `reason=`.
 Nothing pinned those shapes, so a future refactor of the error formatting
 would silently turn the timeout-path condition swallow back into a raise,

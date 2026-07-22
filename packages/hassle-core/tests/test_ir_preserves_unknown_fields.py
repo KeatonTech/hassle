@@ -1,4 +1,5 @@
-"""M0 test 2 — invented fields at every nesting level survive the round-trip (I3)."""
+"""Invented fields at every nesting level survive parse/serialize round-trip:
+compile(decompile(x)) == x for any config."""
 
 from __future__ import annotations
 

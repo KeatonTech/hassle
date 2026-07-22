@@ -1,10 +1,10 @@
-"""`ux/shared-script-calls` (owner feedback): the `@shared_script` caller-side
-wrapper must be able to carry `metadata`/`alias`/`enabled` step options on the
-recorded call action, so the decompiler's function-call rewrite (a caller
-`script.<id>` action becomes `<fn_name>(<data kwargs>, metadata={...})`) can
-recompile to a byte-identical `{"action": "script.<id>", "data": {...},
-"metadata": {...}}` shape (F3-additive extension of `ScriptCallAction`,
-`hassle/compiler/scripts.py`).
+"""The `@shared_script` caller-side wrapper must be able to carry
+`metadata`/`alias`/`enabled` step options on the recorded call action, so the
+decompiler's function-call rewrite (a caller `script.<id>` action becomes
+`<fn_name>(<data kwargs>, metadata={...})`) can recompile to a byte-identical
+`{"action": "script.<id>", "data": {...}, "metadata": {...}}` shape (an
+additive extension of `ScriptCallAction`, part of the frozen top-level DSL
+surface, `hassle/compiler/scripts.py`).
 """
 
 from __future__ import annotations

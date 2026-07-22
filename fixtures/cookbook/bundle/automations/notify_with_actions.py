@@ -1,10 +1,10 @@
-"""Cookbook recipe 4: actionable mobile notification (task #30).
+"""Cookbook recipe 4: actionable mobile notification.
 
 Sends an actionable notification with two buttons ("Open Blinds"/"Close
 Blinds") and opens/closes the upstairs blinds depending on which one the
 user taps -- built entirely on the `notify_mobile`/`action` recipe helpers
 (`lib/notify_actions.py`), which are themselves built on the public
-`capture_actions`/`emit_actions` seam (task #30, `hassle.compiler.recording`).
+`capture_actions`/`emit_actions` seam (`hassle.compiler.recording`).
 """
 
 from lib.notify_actions import action, notify_mobile

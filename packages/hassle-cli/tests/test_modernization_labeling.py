@@ -1,9 +1,9 @@
-"""MILESTONES M7 test 4b (M2 review finding): `test_plan_labels_modernization_diffs`.
+"""`test_plan_labels_modernization_diffs`.
 
 A legacy-form remote object (inner `platform:`/scalar `delay:`, or outer
 singular `trigger:`/`action:` + `service:`) adopted then re-pushed produces a
 ONE-TIME plan diff: Hassle compiles the modern (plural, `action:`) form, but
-HA stores whatever it was given verbatim thereafter (docs/ha-api-notes.md
+HA stores whatever it was given verbatim thereafter (docs/internals/ha-api-notes.md
 §17.1: HA does NOT rewrite inner `platform:` on storage). So after `adopt`,
 the bundle's compiled (modern) form differs from the remote's still-legacy
 form, purely as a schema/style difference -- not a behavior change. The plan
@@ -14,21 +14,16 @@ concurrent edit).
 
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
+
+from hassle_dev.snapshots import check_snapshot
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    actual = actual.rstrip("\n")
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def test_adopted_legacy_form_diff_labeled_modernization(

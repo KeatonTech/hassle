@@ -1,5 +1,5 @@
-"""MILESTONES M9 test 3 (build only -- the orchestrator runs the actual
-model sessions, never this agent): the agent-acceptance harness.
+"""The agent-acceptance harness (build only -- running actual model sessions
+against these tasks happens elsewhere).
 
 `emit_tasks(bundle_dir)` returns the 10 representative task prompts a fresh
 model session would be given (bundle + AGENTS.md only); `score_task` runs
@@ -7,7 +7,7 @@ the mechanical part of the rubric (`hassle validate && hassle test` against
 the modified bundle) and reports pass/fail -- the harness never itself
 judges whether the *diff* satisfies the task's intent, only whether the
 bundle is left in a valid, green state (the mechanically-checkable half of
-the milestone's acceptance bar).
+the acceptance bar).
 """
 
 from __future__ import annotations
@@ -127,9 +127,8 @@ def test_task_for_category_names_the_hallway_bundle_concretely(category: str) ->
 
 
 def test_harness_module_documents_orchestrator_usage() -> None:
-    """The module docstring must explain how the orchestrator runs one
-    session per task (MILESTONES M9: "Document how the orchestrator runs a
-    session per task")."""
+    """The module docstring must explain that each task maps to one model
+    session."""
     import hassle_dev.acceptance as mod
 
     assert mod.__doc__ is not None

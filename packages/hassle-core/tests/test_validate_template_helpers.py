@@ -1,10 +1,10 @@
-"""MILESTONES M10 test 5 (part 1/2) — bundle-declared template helpers count
+"""Bundle-declared template helpers count
 as existing in validation (the ignore-glob half lives in
 `packages/hassle-cli/tests/test_ignore_filtering_template_helpers.py`, next
 to `hassle_cli.ignore_filter`, which this module doesn't depend on).
 
-Mirrors `test_registry_validate.py::test_bundle_declared_helper_counts` (M3
-milestone test 3) for `template_number`, proving `hassle.registry.validate`
+Mirrors `test_registry_validate.py::test_bundle_declared_helper_counts`
+for `template_number`, proving `hassle.registry.validate`
 needed zero changes: `_bundle_declared_keys` is `set(result.objects)`, which
 already includes every prebuilt object regardless of kind.
 """

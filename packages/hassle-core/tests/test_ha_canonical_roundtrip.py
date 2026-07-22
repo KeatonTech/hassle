@@ -1,7 +1,7 @@
-"""M2 — the STRICT zero-transformation round-trip on already-HA-canonical input.
+"""The STRICT zero-transformation round-trip on already-HA-canonical input.
 
-``test_roundtrip_corpus.py`` proves the round-trip invariant (I3) holds over
-the *whole* corpus, but most of that corpus is legacy-form (docs/ha-api-notes.md
+``test_roundtrip_corpus.py`` proves compile(decompile(x)) == x holds over
+the *whole* corpus, but most of that corpus is legacy-form (docs/internals/ha-api-notes.md
 §15) and its expectation applies documented, narrow modernizations (id
 synthesis, `setdefault` for empty blocks, `platform:`->`trigger:`, scalar-delay
 ->dict-delay -- §14/§16/§17/§18). None of those transformations should ever be
@@ -54,7 +54,7 @@ def _has_platform_or_service_key(config: dict[str, Any]) -> bool:
 
 def _has_scalar_delay(config: dict[str, Any]) -> bool:
     """A ``delay`` value that isn't the canonical dict-of-units form (a bare
-    number or an "HH:MM:SS" string) -- see docs/ha-api-notes.md §18."""
+    number or an "HH:MM:SS" string) -- see docs/internals/ha-api-notes.md §18."""
     for node in _walk(config):
         if isinstance(node, dict) and "delay" in node and not isinstance(node["delay"], dict):
             return True

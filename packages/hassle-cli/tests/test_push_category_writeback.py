@@ -1,16 +1,16 @@
-"""M11 -- end-to-end (`FakeBackend`): `hassle push` creating a brand-new
+"""End-to-end (`FakeBackend`): `hassle push` creating a brand-new
 automation/script whose source file names a category assigns that category
 in HA, and a category-assignment failure surfaces as a warning without
-failing the push (I6: never silently dropped).
+failing the push (no local or UI edit is ever silently dropped).
 
-MILESTONES M15 work item B: category-shaped files are root-level now
-(`<slug>.py`), not under a per-kind tree (`automations/<slug>.py`) -- these
-end-to-end tests write directly at the bundle root. Note that the `git_repo`/
-`bundle_dir` fixture's OWN seed file, `hallway.py`, is itself category-shaped
-under the new layout (any root-level name other than `misc.py` implies a
-category) -- `test_push_create_from_misc_file_assigns_no_category` below
-therefore writes its new object at the actual `misc.py` fallback, not
-`hallway.py`, to test the "uncategorized" case honestly.
+Category-shaped files are root-level (`<slug>.py`), not under a per-kind
+tree (`automations/<slug>.py`) -- these end-to-end tests write directly at
+the bundle root. Note that the `git_repo`/`bundle_dir` fixture's OWN seed
+file, `hallway.py`, is itself category-shaped under this layout (any
+root-level name other than `misc.py` implies a category) --
+`test_push_create_from_misc_file_assigns_no_category` below therefore
+writes its new object at the actual `misc.py` fallback, not `hallway.py`,
+to test the "uncategorized" case honestly.
 """
 
 from __future__ import annotations

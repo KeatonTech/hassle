@@ -6,7 +6,8 @@ later drains the registry and invokes each function inside a :class:`Recorder`.
 
 Registration is process-global but scoped by the bundle loader: :func:`fresh`
 swaps in an empty registry around a bundle import so two compiles never bleed into
-each other (determinism, R8) and repeated imports in one process stay isolated.
+each other (compiled output must be byte-stable) and repeated imports in
+one process stay isolated.
 """
 
 from __future__ import annotations
@@ -37,8 +38,9 @@ class RegisteredObject:
     # The declared id (explicit ``id=`` or the function name default). The object
     # key is ``"<kind>:<declared_id>"``.
     declared_id: str
-    # `@automation(triggers=[...])` (DESIGN §5.3/§5.5, docs/dsl-f3.md,
-    # F3-additive): triggers evaluated at decoration time, recorded before the
+    # `@automation(triggers=[...])` (DESIGN §5.3/§5.5, docs/internals/dsl-extensions.md,
+    # additive to the frozen DSL surface): triggers evaluated at decoration
+    # time, recorded before the
     # function body runs (bundle.py's `compile_registered`) so they land first
     # and any `when()` calls inside the body compose after them, in order.
     # Always empty for `@script` (no `triggers` option exists there at all).
@@ -133,7 +135,8 @@ def automation(
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Register an automation (DESIGN §5.3). Accepts every HA automation option.
 
-    ``triggers=`` (F3-additive, docs/dsl-f3.md): a sequence of ``TriggerBuilder``
+    ``triggers=`` (additive to the frozen DSL surface,
+    docs/internals/dsl-extensions.md): a sequence of ``TriggerBuilder``
     objects -- the same objects ``when()`` accepts -- evaluated at decoration
     time (i.e. built when the ``@automation(...)`` line itself runs, before the
     compiler ever invokes the function body). This is the preferred, canonical
@@ -142,10 +145,10 @@ def automation(
     decorator list is recorded first, then any ``when()`` calls inside the body
     append after it, in call order (``bundle.py``'s ``compile_registered``).
     ``when()`` remains fully supported and is still the right tool for a
-    dynamically-built trigger list (F3 forbids removing it).
+    dynamically-built trigger list (the frozen DSL surface forbids removing it).
 
-    Widened ``list[TriggerBuilder]`` -> ``Sequence[TriggerBuilder]`` in the
-    task #28 annotation-truth pass: this is a type-annotation-only change (no
+    ``list[TriggerBuilder]`` is widened to ``Sequence[TriggerBuilder]``: this
+    is a type-annotation-only change (no
     behavior/interface change -- the implementation always just copies the
     given iterable via ``list(decorator_triggers)``, so anything iterable was
     already accepted at runtime), needed because ``list[TriggerBuilder]`` is

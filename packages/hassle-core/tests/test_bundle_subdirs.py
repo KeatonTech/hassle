@@ -1,4 +1,4 @@
-"""M7.1 — bundle subdirectory support (docs/ha-api-notes.md §17.9, DESIGN §6/§7.3).
+"""Bundle subdirectory support (docs/internals/ha-api-notes.md §17.9, DESIGN §6/§7.3).
 
 `compile_bundle` must treat the bundle directory as a package tree: files under
 `automations/`, `scripts/`, `helpers/`, `lib/`, or any other user directory are
@@ -45,7 +45,7 @@ def test_cross_package_imports_resolve(tmp_path: Path) -> None:
     """`from helpers.modes import guest_mode` / `from lib.notify import
     notify_adults` (DESIGN §5.3/§5.6 verbatim) must work with no `__init__.py`
     anywhere in the tree -- PEP 420 namespace packages, since the bundle root
-    is put on `sys.path` (decided + documented in docs/ha-api-notes.md §17.9).
+    is put on `sys.path` (decided + documented in docs/internals/ha-api-notes.md §17.9).
     """
     bundle = tmp_path / "bundle"
     (bundle / "helpers").mkdir(parents=True)
@@ -152,7 +152,7 @@ def test_sandboxed_import_cleans_up_package_modules() -> None:
     """Cleanup on exit must remove every module imported from the tree,
     INCLUDING the namespace packages themselves (`helpers`, `lib`,
     `automations`), so a second compile in the same process starts fresh
-    (R8: no cross-compile bleed) and the bundle's package names never leak
+    (no cross-compile bleed) and the bundle's package names never leak
     into later imports."""
     before = set(sys.modules)
     compile_bundle(TREE_CASE)
@@ -163,7 +163,7 @@ def test_sandboxed_import_cleans_up_package_modules() -> None:
 
 def test_repeated_compile_is_deterministic_with_tree_bundle() -> None:
     """Two independent compiles of the same tree bundle produce the same
-    object set (R8), exercising the cleanup-then-reimport path twice."""
+    object set, exercising the cleanup-then-reimport path twice."""
     first = compile_bundle(TREE_CASE)
     second = compile_bundle(TREE_CASE)
     assert set(first.objects) == set(second.objects)
@@ -171,7 +171,7 @@ def test_repeated_compile_is_deterministic_with_tree_bundle() -> None:
         assert first.objects[key].to_ha() == second.objects[key].to_ha()
 
 
-# -- symlink sandbox escape (review finding F1) ------------------------------
+# -- symlink sandbox escape ---------------------------------------------------
 #
 # A symlink inside the bundle -- to a directory OR a plain .py file -- must
 # never be followed: doing so executes code outside the bundle (sandbox
@@ -261,9 +261,9 @@ def test_symlinked_file_escape_is_never_followed(tmp_path: Path) -> None:
 
 def test_symlink_containing_bundle_compiles_deterministically(tmp_path: Path) -> None:
     """Two consecutive compiles of a bundle containing both kinds of escaping
-    symlink are identical (R8) and contain only the bundle's own objects --
-    the reviewer's exact repro (compile 1 yields {own, foreign}, compile 2
-    yields {own} only) must not reproduce."""
+    symlink are byte-stable and contain only the bundle's own objects -- a
+    previous bug let compile 1 yield {own, foreign} and compile 2 yield {own}
+    only, which must not reproduce."""
     outside = (tmp_path / "outside").resolve()
     _write_outside_automation(outside, object_id="foreign_dir_automation", filename="foreign.py")
     outside_py = _write_outside_automation(

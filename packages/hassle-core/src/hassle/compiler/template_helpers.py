@@ -1,48 +1,49 @@
-"""Template-helper declarations (M10, DESIGN §5.7 extended + §13's config-entry
+"""Template-helper declarations (DESIGN §5.7 extended + §13's config-entry
 plugin) -- the model/builder layer for the ``template`` config-entry domain.
 
 ``template_number(name="Active HVAC Zones", state="{{ ... }}", set_value=...,
 min=0, max=8, step=1)`` builds a
 :class:`~hassle.ir.models.TemplateHelperConfig` for one of the four template
-domains (``hassle.ir.TEMPLATE_DOMAINS``, F1-additive) and returns an
-:class:`~hassle.compiler.helpers.EntityRef`, exactly like the nine storage-
-collection helper builders in :mod:`hassle.compiler.helpers` -- same
+domains (``hassle.ir.TEMPLATE_DOMAINS``, additive to the frozen IR schema) and
+returns an :class:`~hassle.compiler.helpers.EntityRef`, exactly like the nine
+storage-collection helper builders in :mod:`hassle.compiler.helpers` -- same
 "import-and-reference pattern" (DESIGN §5.7), same prebuilt-object
 registration path into the active bundle registry.
 
-**Identity (redesigned 2026-07-05, docs/ha-api-notes.md §26.6): there is no
-``id=``/``unique_id=`` kwarg.** CI found the real `template` config flow's
-form schema rejects an unrecognized ``unique_id`` key outright -- a
-flow-created entry has no caller-settable unique id at all. Identity is
-derived from ``name`` (required), mirroring the nine storage helpers'
-"id is a slug of name" rule (``hassle.ir.keys.slugify``) -- except here it's
-the ONLY identity source; the object key is
-``"<template domain>:<slugify(name)>"``. The HA-assigned config ``entry_id``
-remains transport-side identity only (manifest-only, docs/backend.md).
+**Identity (docs/internals/ha-api-notes.md §26.6): there is no ``id=``/``unique_id=``
+kwarg.** The real `template` config flow's form schema rejects an
+unrecognized ``unique_id`` key outright -- a flow-created entry has no
+caller-settable unique id at all. Identity is derived from ``name``
+(required), mirroring the nine storage helpers' "id is a slug of name" rule
+(``hassle.ir.keys.slugify``) -- except here it's the ONLY identity source;
+the object key is ``"<template domain>:<slugify(name)>"``. The HA-assigned
+config ``entry_id`` remains transport-side identity only (manifest-only,
+docs/internals/backend-protocol.md).
 
 Storage truth: ``state=`` takes a literal Jinja template string (the config
 entry's actual stored ``state`` option). Expression-builder values (an `Expr`
-built via the M1.1 template surface) are also accepted -- rendered to Jinja
-at declaration time via ``str()`` -- since template strings are what HA's
-config entry stores and what the decompiler reproduces (DESIGN M1.1: "the
-expression sugar is one-way").
+built via the runtime-math expression surface) are also accepted -- rendered
+to Jinja at declaration time via ``str()`` -- since template strings are what
+HA's config entry stores and what the decompiler reproduces (the expression
+sugar is one-way).
 
-**Required write-target fields (CI finding, docs/ha-api-notes.md §26.6):** a
-template NUMBER's form schema requires ``set_value`` (the action sequence run
-when the entity is set from the UI/a service call -- a template number needs
-a write target, since ``state`` alone only computes the displayed value); a
-template SELECT likewise requires ``select_option`` (the sequence run when an
-option is chosen) alongside ``options`` (the Jinja-or-list of choices).
+**Required write-target fields (docs/internals/ha-api-notes.md §26.6):** a template
+NUMBER's form schema requires ``set_value`` (the action sequence run when the
+entity is set from the UI/a service call -- a template number needs a write
+target, since ``state`` alone only computes the displayed value); a template
+SELECT likewise requires ``select_option`` (the sequence run when an option
+is chosen) alongside ``options`` (the Jinja-or-list of choices).
 Sensor/binary_sensor need only ``state`` (they are read-only, no write
 target). ``set_value``/``select_option`` accept a single action dict or a
 list of action dicts (HA's own action-sequence shape); stored verbatim
-(I3 -- Hassle's DSL action builders are automation/script-scoped, not
-reusable here without a recording context, so these are raw HA action dicts,
-matching the ``raw_action`` escape hatch's shape).
+(compile(decompile(x)) must equal x for any config -- Hassle's DSL action
+builders are automation/script-scoped, not reusable here without a recording
+context, so these are raw HA action dicts, matching the ``raw_action``
+escape hatch's shape).
 
-**Omitting a required write-target field is a COMPILE-TIME error (reviewer
-follow-up on the M10 merge):** previously this only surfaced as a bare backend
-``ValueError`` at APPLY time (``hassle.backend.direct``/``hassle.backend.fake``'s
+**Omitting a required write-target field is a COMPILE-TIME error:**
+previously this only surfaced as a bare backend ``ValueError`` at APPLY time
+(``hassle.backend.direct``/``hassle.backend.fake``'s
 ``_check_required_fields``), so ``hassle validate``/``hassle plan`` would pass
 a bundle that was guaranteed to fail on push. ``_declare_template_helper``
 (below) now raises :class:`~hassle.compiler.errors.MissingTemplateHelperWriteTargetError`
@@ -50,18 +51,17 @@ the moment ``template_number``/``template_select`` is called without its
 required kwarg -- the backend checks are unchanged and remain a second line
 of defense for any non-DSL path that builds a `TemplateHelperConfig` directly.
 
-**``min``/``max``/``step`` are ``float``-coerced (CI round 4 finding,
-docs/ha-api-notes.md §26.10):** HA's ``template_number`` form schema types
-these three fields as ``NumberSelector``, whose validator
-(``homeassistant/helpers/selector.py``) unconditionally runs every submitted
-value through ``vol.Coerce(float)`` -- the config entry's stored options
-always have these as floats, however they were submitted. ``template_number``
-coerces them at declaration time (``_coerce_number_field``) so the compiled
-local IR is byte-identical to the remote config either way; nothing else
-across the four template domains has a numeric field HA coerces (confirmed
-by reading every ``template_config_flow.py`` schema for
-number/sensor/binary_sensor/select -- only ``template_number``'s three
-fields use ``NumberSelector``).
+**``min``/``max``/``step`` are ``float``-coerced (docs/internals/ha-api-notes.md
+§26.10):** HA's ``template_number`` form schema types these three fields as
+``NumberSelector``, whose validator (``homeassistant/helpers/selector.py``)
+unconditionally runs every submitted value through ``vol.Coerce(float)`` --
+the config entry's stored options always have these as floats, however they
+were submitted. ``template_number`` coerces them at declaration time
+(``_coerce_number_field``) so the compiled local IR is byte-identical to the
+remote config either way; nothing else across the four template domains has
+a numeric field HA coerces (confirmed by reading every
+``template_config_flow.py`` schema for number/sensor/binary_sensor/select --
+only ``template_number``'s three fields use ``NumberSelector``).
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ from hassle.ir.keys import slugify
 from hassle.ir.models import TemplateHelperConfig
 
 # Write-target fields HA's `template` config-flow form schema requires beyond
-# `name`/`state` (docs/ha-api-notes.md §26.6, mirrors `hassle.backend.direct`/
+# `name`/`state` (docs/internals/ha-api-notes.md §26.6, mirrors `hassle.backend.direct`/
 # `hassle.backend.fake`'s `_TEMPLATE_REQUIRED_FIELDS`): a template NUMBER
 # needs `set_value` (the action run when the number is written), a template
 # SELECT needs `select_option` (the action run when an option is chosen).
@@ -110,8 +110,8 @@ class _PendingDeclaration:
     """Bookkeeping for one ``state=``-omitted (decorator-form-signaling)
     builder call, tracked from creation until either consumed as a decorator
     (``TemplateHelperDeclaration.__call__`` -> ``_finalize``, which flips
-    ``consumed``) or swept as dangling at compile end (reviewer finding B1
-    on the M13 PR, module docstring's ``_build_or_defer`` note)."""
+    ``consumed``) or swept as dangling at compile end (see
+    ``_build_or_defer`` below)."""
 
     builder: str
     name: str
@@ -133,11 +133,11 @@ def reset_declared_template_helpers() -> None:
 
 
 def check_no_dangling_template_helper_declarations() -> None:
-    """Compile-end sweep (reviewer finding B1 on the M13 PR): raise
+    """Compile-end sweep: raise
     :class:`~hassle.compiler.errors.DanglingTemplateHelperDeclarationError`
-    for the FIRST still-unconsumed pending declaration (deterministic, R8 --
-    creation order), or return silently if every pending declaration was
-    consumed as a decorator.
+    for the FIRST still-unconsumed pending declaration (deterministic --
+    creation order, since compiled output must be byte-stable), or return
+    silently if every pending declaration was consumed as a decorator.
 
     Called from :mod:`hassle.compiler.bundle`'s ``compile_registered`` (the
     shared core both ``compile_bundle`` and any direct caller go through),
@@ -145,12 +145,12 @@ def check_no_dangling_template_helper_declarations() -> None:
     also covers a single-file/fixture compile path (golden error-case
     fixtures included), not just the whole-bundle loader.
 
-    Self-cleaning (reviewer note N3 on the same PR): the pending list is
-    cleared in a ``finally`` whether the sweep raises or not. Without this,
-    a DIRECT ``compile_registered`` caller (the CLI path is protected by
-    ``compile_bundle``'s start-of-compile reset) would leak an unconsumed
-    entry into the next compile in the same process, turning one dangling
-    declaration into a false positive for every later, clean compile.
+    Self-cleaning: the pending list is cleared in a ``finally`` whether the
+    sweep raises or not. Without this, a DIRECT ``compile_registered``
+    caller (the CLI path is protected by ``compile_bundle``'s
+    start-of-compile reset) would leak an unconsumed entry into the next
+    compile in the same process, turning one dangling declaration into a
+    false positive for every later, clean compile.
     """
     try:
         for pending in _PENDING:
@@ -168,8 +168,8 @@ def declared_template_helpers() -> list[TemplateHelperConfig]:
 
 
 def _render_state(state: Any) -> Any:
-    """Accept either a literal Jinja string or an M1.1 expression-builder
-    value (an `Expr`, which renders via `str()`) -- template strings are the
+    """Accept either a literal Jinja string or an expression-builder value
+    (an `Expr`, which renders via `str()`) -- template strings are the
     storage truth either way (module docstring)."""
     if state is None or isinstance(state, str):
         return state
@@ -177,8 +177,8 @@ def _render_state(state: Any) -> Any:
 
 
 def _coerce_number_field(value: Any) -> Any:
-    """Coerce a `template_number` `min`/`max`/`step` value to `float` (CI
-    round 4, docs/ha-api-notes.md §26.10): HA's `NumberSelector.__call__`
+    """Coerce a `template_number` `min`/`max`/`step` value to `float`
+    (docs/internals/ha-api-notes.md §26.10): HA's `NumberSelector.__call__`
     (`homeassistant/helpers/selector.py`) runs every submitted `min`/`max`/
     `step` value through `vol.Coerce(float)` unconditionally and stores the
     result -- so the config entry's stored options always have these three
@@ -225,29 +225,28 @@ def _declare_template_helper(
 
 
 # ---------------------------------------------------------------------------
-# M13: decorator form -- `@template_number(name=..., ...)` over a zero-arg
+# Decorator form -- `@template_number(name=..., ...)` over a zero-arg
 # function returning a `TemplateExpr`/`str` (DESIGN §5.4/§5.7 extension).
 #
 # `template_number`/`template_sensor`/`template_binary_sensor`/`template_select`
-# already take only kwargs (F3: no new names, only new *usage* of the existing
-# four). Detecting decorator use is done by the RETURNED object's shape, not
-# by inspecting the call site: when `state=` is omitted, the call returns a
-# `TemplateHelperDeclaration` (an `EntityRef` subclass -- so it is still a
-# valid plain string/entity-id value if never called) that is ALSO a
-# one-argument callable. Using it as `@template_number(...)` immediately calls
-# it with the decorated function, at which point the function is invoked ONCE
-# (like `@automation`/`@script`, DESIGN §7.2 -- the compiler doesn't defer
-# this; template-helper declarations are prebuilt objects, not a recording
-# registration), its return value is validated and rendered to Jinja text via
-# `_render_state`, and the real `TemplateHelperConfig` is built and registered
-# at THAT point -- not at the original `template_number(...)` call.
+# already take only kwargs (the frozen DSL surface stays the same names, only
+# new *usage* of the existing four). Detecting decorator use is done by the
+# RETURNED object's shape, not by inspecting the call site: when `state=` is
+# omitted, the call returns a `TemplateHelperDeclaration` (an `EntityRef`
+# subclass -- so it is still a valid plain string/entity-id value if never
+# called) that is ALSO a one-argument callable. Using it as
+# `@template_number(...)` immediately calls it with the decorated function,
+# at which point the function is invoked ONCE (like `@automation`/`@script`,
+# DESIGN §7.2 -- the compiler doesn't defer this; template-helper
+# declarations are prebuilt objects, not a recording registration), its
+# return value is validated and rendered to Jinja text via `_render_state`,
+# and the real `TemplateHelperConfig` is built and registered at THAT point
+# -- not at the original `template_number(...)` call.
 #
-# When `state=` IS given (the existing call form), the object is built and
-# registered immediately, exactly as before this milestone; the returned
-# `TemplateHelperDeclaration` is still technically callable but calling it
-# would double-register the object, so no decorator syntax ever does that in
-# practice (nothing in this workstream needs to guard against a user
-# deliberately misusing the returned value that way).
+# When `state=` IS given (the call form), the object is built and registered
+# immediately; the returned `TemplateHelperDeclaration` is still technically
+# callable but calling it would double-register the object, so no decorator
+# syntax ever does that in practice.
 # ---------------------------------------------------------------------------
 
 
@@ -256,7 +255,7 @@ def _validate_decorator_body(
 ) -> Any:
     """Run ``func`` (zero args) and return its ``TemplateExpr``/``str`` value,
     or raise :class:`~hassle.compiler.errors.TemplateHelperDecoratorBodyError`
-    (M13 test 5) for any of the three ways a decorator body can misbehave:
+    for any of the three ways a decorator body can misbehave:
     declared parameters, a non-``TemplateExpr``/``str`` return, or (naturally,
     via :class:`~hassle.compiler.errors.NoRecordingContextError` -- calling
     the function here runs it with no active recorder) a recording verb
@@ -265,8 +264,8 @@ def _validate_decorator_body(
     A plain (non-:class:`~hassle.compiler.errors.CompileError`) exception
     raised from inside the function body -- e.g. a user ``ZeroDivisionError``/
     ``ValueError``/assertion -- is chained under
-    :class:`TemplateHelperDecoratorBodyError` (reviewer N2 on the M13 PR) so
-    the helper's ``@template_...(name=..., ...)`` file:line is visible in the
+    :class:`TemplateHelperDecoratorBodyError` so the helper's
+    ``@template_...(name=..., ...)`` file:line is visible in the
     traceback, not just the bare exception from deep inside the user's
     function; the original exception and traceback are preserved via ``raise
     ... from exc``. Any :class:`~hassle.compiler.errors.CompileError` (e.g.
@@ -313,11 +312,10 @@ def _validate_decorator_body(
 class TemplateHelperDeclaration(EntityRef):
     """The value ``template_number(...)``/``template_sensor(...)``/etc. return.
 
-    Behaves exactly like the plain :class:`~hassle.compiler.helpers.EntityRef`
-    they used to return (a string usable as an entity id) in every case where
-    ``state=`` was given -- the object is already fully built and registered
-    by the time this is constructed, matching the pre-M13 call form
-    byte-for-byte. Additionally callable: ``@template_number(...)`` (no
+    Behaves exactly like a plain :class:`~hassle.compiler.helpers.EntityRef`
+    (a string usable as an entity id) in every case where ``state=`` was
+    given -- the object is already fully built and registered by the time
+    this is constructed. Additionally callable: ``@template_number(...)`` (no
     ``state=``) applies this as a decorator over a zero-arg function, which
     finalizes the declaration using the function's return value as ``state=``.
     """
@@ -355,10 +353,10 @@ class TemplateHelperDeclaration(EntityRef):
 def _build_or_defer(
     domain: str, name: str, state: Any, fields: dict[str, Any]
 ) -> TemplateHelperDeclaration:
-    """Shared entry point for all four public builders (M13): dispatches
-    between the pre-M13 call form (``state=`` given -- build + register right
+    """Shared entry point for all four public builders: dispatches
+    between the call form (``state=`` given -- build + register right
     now, span points at the ``template_number(...)``/etc. call site) and the
-    new decorator form (``state=`` omitted -- return a callable
+    decorator form (``state=`` omitted -- return a callable
     :class:`TemplateHelperDeclaration` whose ``__call__`` finalizes the
     declaration when applied to the decorated function, span points at the
     ``def ...():`` line via the decoration-site capture, matching how
@@ -380,13 +378,12 @@ def _build_or_defer(
     # `_build_or_defer` time is simplest and correct for both.
     decoration_span = capture_span(depth=2)
 
-    # Reviewer finding B1 (M13 PR): track this `state=`-omitted call as
-    # PENDING the moment it's created -- if it's never applied as a
-    # decorator, the compile-end sweep
+    # Track this `state=`-omitted call as PENDING the moment it's created --
+    # if it's never applied as a decorator, the compile-end sweep
     # (`check_no_dangling_template_helper_declarations`) must catch it,
-    # rather than the call silently doing nothing (I6 hazard: a helper that
-    # already exists in HA would otherwise vanish from the compiled set and
-    # get scheduled for DELETE).
+    # rather than the call silently doing nothing: a helper that already
+    # exists in HA would otherwise vanish from the compiled set and get
+    # scheduled for DELETE, silently losing track of it.
     pending = _PendingDeclaration(builder=domain, name=name, span=decoration_span)
     _PENDING.append(pending)
 
@@ -414,8 +411,8 @@ def template_number(
     icon: str | None = None,
     **fields: Any,
 ) -> TemplateHelperDeclaration:
-    """Declare a ``template_number`` helper (M10, DESIGN §5.7): the owner's
-    driving case, e.g. ``number.active_hvac_zones``.
+    """Declare a ``template_number`` helper (DESIGN §5.7), e.g.
+    ``number.active_hvac_zones``.
 
     ``set_value`` is REQUIRED by HA's form schema (module docstring): the
     action (a raw HA action dict, or a list of them) run when the number is
@@ -425,13 +422,14 @@ def template_number(
     :class:`~hassle.compiler.errors.MissingTemplateHelperWriteTargetError`
     at compile time (module docstring).
 
-    ``min``/``max``/``step`` are coerced to ``float`` (docs/ha-api-notes.md
+    ``min``/``max``/``step`` are coerced to ``float`` (docs/internals/ha-api-notes.md
     §26.10): HA's form schema (``NumberSelector``) always stores them as
     floats regardless of what's submitted, so a compiled ``int`` literal
     (the natural way to write ``min=0``) would otherwise never byte-match
-    the remote config -- a permanent, spurious plan UPDATE (I3/plan-noop).
+    the remote config -- a permanent, spurious plan UPDATE (a plan-noop
+    requires compile(decompile(x)) == x).
 
-    **Decorator form (M13):** omit ``state=`` and apply the return value as a
+    **Decorator form:** omit ``state=`` and apply the return value as a
     decorator over a zero-arg function returning a ``TemplateExpr``/``str`` --
     ``set_value``/``min``/``max``/``step``/etc. are still passed as decorator
     kwargs exactly as in the call form::
@@ -468,10 +466,10 @@ def template_sensor(
     icon: str | None = None,
     **fields: Any,
 ) -> TemplateHelperDeclaration:
-    """Declare a ``template_sensor`` helper (M10, DESIGN §5.7). Read-only
+    """Declare a ``template_sensor`` helper (DESIGN §5.7). Read-only
     (no write-target field -- ``state`` alone is HA's required schema).
 
-    **Decorator form (M13):** see :func:`template_number`'s docstring --
+    **Decorator form:** see :func:`template_number`'s docstring --
     omit ``state=`` and apply the return value as a decorator instead.
     """
     return _build_or_defer(
@@ -495,10 +493,10 @@ def template_binary_sensor(
     icon: str | None = None,
     **fields: Any,
 ) -> TemplateHelperDeclaration:
-    """Declare a ``template_binary_sensor`` helper (M10, DESIGN §5.7).
+    """Declare a ``template_binary_sensor`` helper (DESIGN §5.7).
     Read-only, like ``template_sensor``.
 
-    **Decorator form (M13):** see :func:`template_number`'s docstring --
+    **Decorator form:** see :func:`template_number`'s docstring --
     omit ``state=`` and apply the return value as a decorator instead.
     """
     return _build_or_defer(
@@ -522,19 +520,20 @@ def template_select(
     icon: str | None = None,
     **fields: Any,
 ) -> TemplateHelperDeclaration:
-    """Declare a ``template_select`` helper (M10, DESIGN §5.7).
+    """Declare a ``template_select`` helper (DESIGN §5.7).
 
     ``options`` is a Jinja template string rendering to a list (HA's own
     ``template_select`` options field shape) -- a plain Python list literal is
     also accepted for convenience and passed straight through unmodified
-    (extra="allow" preserves it verbatim like any other IR field, I3).
+    (extra="allow" preserves it verbatim like any other IR field, since
+    compile(decompile(x)) must equal x for any config).
     ``select_option`` is REQUIRED by HA's form schema (module docstring): the
     action (or list of actions) run when an option is chosen, analogous to
     ``template_number``'s ``set_value``. Omitting it raises
     :class:`~hassle.compiler.errors.MissingTemplateHelperWriteTargetError`
     at compile time (module docstring).
 
-    **Decorator form (M13):** see :func:`template_number`'s docstring --
+    **Decorator form:** see :func:`template_number`'s docstring --
     omit ``state=`` and apply the return value as a decorator instead;
     ``options=``/``select_option=`` are still passed as decorator kwargs.
     """

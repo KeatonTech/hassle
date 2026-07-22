@@ -1,4 +1,4 @@
-"""Owner work item (task #39): interactive CLI.
+"""Interactive CLI.
 
 At a real terminal, `push` prompts instead of demanding flags: deletions get
 a render-plan-then-confirm (default NO), ordinary plans a summary confirm
@@ -124,10 +124,9 @@ def test_conflict_prompt_accept_remote(
 def test_accept_local_records_base_so_later_edit_replans_as_update(
     interactive, git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
-    """Field report (BrandtCamp bundle, 2026-07-14): after a keep-local
-    resolution is pushed, the manifest base must equal the pushed read-back --
-    a LATER local edit re-plans as a plain update, never a repeat conflict
-    against the owner's own previous push."""
+    """Regression: after a keep-local resolution is pushed, the manifest base
+    must equal the pushed read-back -- a LATER local edit re-plans as a plain
+    update, never a repeat conflict against the previous push."""
     from hassle.sync.models import PlanAction
     from hassle_cli.cli import _build_plan
 
@@ -151,11 +150,11 @@ def test_accept_local_records_base_so_later_edit_replans_as_update(
 def test_accept_remote_records_base_so_replan_is_refresh_not_conflict(
     interactive, git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
-    """Field report hypothesis (1), confirmed: an interactive [r] resolution
-    recorded NOTHING -- `ManifestEntry.compiled_hash` kept the stale
-    pre-conflict base, so the identical conflict re-surfaced on every
-    subsequent plan forever (I6 damage: trains the owner to stop reading
-    conflict prompts). A kept remote is a remote-side edit accepted as-is:
+    """Regression: an interactive [r] resolution recorded NOTHING --
+    `ManifestEntry.compiled_hash` kept the stale pre-conflict base, so the
+    identical conflict re-surfaced on every subsequent plan forever (training
+    the user to stop reading conflict prompts -- a UI edit silently lost).
+    A kept remote is a remote-side edit accepted as-is:
     the base must advance to the LOCAL side, so the next plan reads
     `refresh` (pull-side -- push never clobbers the kept remote) until
     `hassle pull` reconciles the bundle, after which everything is noop."""
@@ -194,7 +193,7 @@ def test_conflict_abort_keeps_conflict_pending(
     interactive, git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
     """[a] resolves nothing, so the SAME conflict must re-surface on the next
-    plan -- unlike [r], nothing may be recorded (I6: the divergence is still
+    plan -- unlike [r], nothing may be recorded (the divergence is still
     real and unresolved)."""
     from hassle.sync.models import PlanAction
     from hassle_cli.cli import _build_plan
@@ -264,9 +263,9 @@ def _make_local_deletion_conflict(git_repo: Path, cli, backend, token, toml_writ
 def test_conflict_accept_local_deletion_pushes_the_delete(
     interactive, git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
-    """Field crash (BrandtCamp push, 2026-07-14): keep-local where local is
-    DELETED was hardcoded to UPDATE and died on `assert entry.local is not
-    None` deep in the apply engine, mid-push. It must push the deletion."""
+    """Regression: keep-local where local is DELETED was hardcoded to UPDATE
+    and died on `assert entry.local is not None` deep in the apply engine,
+    mid-push. It must push the deletion."""
     backend, token = fake_backend
     _make_local_deletion_conflict(git_repo, cli, backend, token, toml_writer)
 
@@ -312,8 +311,8 @@ def test_conflict_accept_local_recreates_a_remotely_deleted_object(
 def test_conflict_accept_local_recreates_a_remotely_deleted_helper(
     interactive, git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
-    """Reviewer finding (PR #39): the automation variant of this test was
-    vacuous -- automations upsert on update, storage helpers do NOT. A
+    """The automation variant of this test was vacuous -- automations upsert
+    on update, storage helpers do NOT. A
     locally-edited input_boolean whose remote was UI-deleted must resolve
     keep-local to a CREATE (an UPDATE against the missing id errors on real
     HA's WS command, and now on FakeBackend too)."""
@@ -339,8 +338,8 @@ def test_conflict_accept_local_recreates_a_remotely_deleted_helper(
 def test_accept_local_deletion_flag_requires_yes(
     git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
-    """Reviewer finding (PR #39): a keep-local resolution can INTRODUCE a
-    deletion, and DESIGN §8.2's gate must consult the RESOLVED plan --
+    """A keep-local resolution can INTRODUCE a deletion, and DESIGN §8.2's
+    gate must consult the RESOLVED plan --
     non-interactive --accept-local on a locally-deleted object refuses
     without --yes, and deletes with it."""
     backend, token = fake_backend

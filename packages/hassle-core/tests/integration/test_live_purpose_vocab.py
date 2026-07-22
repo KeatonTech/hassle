@@ -1,13 +1,13 @@
-"""MILESTONES M6 test 8 — purpose-vocabulary enumeration WS API (DESIGN §4).
+"""Purpose-vocabulary enumeration WS API (DESIGN §4).
 
-M0.V (HA 2026.2.3) could not capture the enumeration API. M6 finds it: the
-2026.7 UI enumerates purpose-specific trigger/condition types via the WS
+An earlier capture against HA 2026.2.3 could not find the enumeration API.
+The 2026.7 UI enumerates purpose-specific trigger/condition types via the WS
 subscriptions **`trigger_platforms/subscribe`** and
 **`condition_platforms/subscribe`** — each acks with a `result`, then pushes an
 `event` whose payload is `{type_string: description}`. The vocabulary is the set
 of keys. (Source: `homeassistant/components/websocket_api/commands.py`,
 `handle_subscribe_trigger_platforms`; captured behaviorally — see
-docs/ha-api-notes.md §17.)
+docs/internals/ha-api-notes.md §17.)
 
 On HA < 2026.7 the payload is empty (the purpose vocabulary does not exist yet),
 so the vocabulary-content assertions skip; the shape and wiring are still
@@ -37,8 +37,8 @@ def test_purpose_vocabulary_enumeration_shape(ha: DirectBackend) -> None:
     # Every enumerated type is a namespaced `<domain>.<event>` string (§4).
     for type_string in [*vocab.triggers, *vocab.conditions]:
         assert "." in type_string, f"purpose type {type_string!r} is not namespaced"
-    # On 2026.7+ the vocabulary MUST be populated — this is the headline M6
-    # deliverable, and CI (stable/dev) is where it is really exercised. Asserting
+    # On 2026.7+ the vocabulary MUST be populated, and CI (stable/dev) is
+    # where it is really exercised. Asserting
     # non-empty here (rather than skip-on-empty) keeps the check falsifiable: a
     # broken enumeration fails CI instead of passing vacuously.
     if _is_2026_7_or_newer(ha):
@@ -47,8 +47,9 @@ def test_purpose_vocabulary_enumeration_shape(ha: DirectBackend) -> None:
 
 def test_registry_snapshot_uses_enumerated_vocabulary(ha: DirectBackend) -> None:
     # The snapshot the CLI commits wires the enumerated vocabulary into its
-    # `purpose_vocabulary` field (replacing the provisional M0.1 fixture shape;
-    # the field shape — lists of type strings — is unchanged, so no R5 break).
+    # `purpose_vocabulary` field (replacing an earlier provisional fixture
+    # shape; the field shape — lists of type strings — is unchanged, so no
+    # schema break).
     vocab = ha.fetch_purpose_vocabulary()
     snapshot = ha.fetch_registry_snapshot()
     assert snapshot.purpose_vocabulary.triggers == vocab.triggers

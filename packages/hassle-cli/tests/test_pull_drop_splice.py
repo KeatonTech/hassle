@@ -1,12 +1,12 @@
 """Regression: `hassle pull`'s DROP must remove ONLY the deleted object's
-statement (M2's LibCST splicer, DESIGN §7.3), never unlink the whole file.
+statement (the LibCST splicer, DESIGN §7.3), never unlink the whole file.
 
-Same class as the REFRESH clobber (`test_pull_refresh_splice.py`, found on
-main at 748b461): `hassle_cli.pull_apply._drop` calls
-`SourceWriter.delete_object`, and `WholeFileSourceWriter.delete_object` -- the
-writer `hassle_cli.cli.pull` handed it -- unlinked the ENTIRE file
-(`path.unlink()`), even when sibling objects and hand-written comments lived
-in it. I6: deleting one automation in the HA UI silently destroyed every
+Same class as the REFRESH clobber (`test_pull_refresh_splice.py`):
+`hassle.sync.pull_apply._drop` calls `SourceWriter.delete_object`, and
+`WholeFileSourceWriter.delete_object` -- the writer `hassle_cli.cli.pull`
+handed it -- unlinked the ENTIRE file (`path.unlink()`), even when sibling
+objects and hand-written comments lived in it. No local or UI edit may be
+silently lost: deleting one automation in the HA UI silently destroyed every
 local sibling sharing its source file.
 """
 
@@ -86,8 +86,9 @@ def test_pull_drop_preserves_sibling_objects_in_same_file(
     after = (git_repo / "hallway.py").read_text(encoding="utf-8")
     assert after == EXPECTED_AFTER_DROP, after
 
-    # The survivor still compiles from disk under its original id (I2); the
-    # dropped object is really gone.
+    # The survivor still compiles from disk under its original id (an
+    # existing object's HA id must never change); the dropped object is
+    # really gone.
     compiled = compile_bundle(git_repo)
     assert "automation:porch_light_on_motion" in compiled.objects, sorted(compiled.objects)
     assert "automation:hall_light_on_motion" not in compiled.objects, sorted(compiled.objects)

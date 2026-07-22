@@ -1,8 +1,7 @@
-"""MILESTONES M21 test 6 -- the config-entry group-helper flow verified
-end-to-end against real Home Assistant (M6 pattern, mirrors
-`test_m10_template_flow.py`): this suite is the AUTHORITATIVE verification of
-the flow shapes documented in docs/ha-api-notes.md §38; any mismatch found
-here supersedes the doc, updated in the same PR as the fix.
+"""The config-entry group-helper flow verified end-to-end against real Home
+Assistant (mirrors `test_live_template_flow.py`): this suite is the
+AUTHORITATIVE verification of the flow shapes documented in
+docs/internals/ha-api-notes.md §38; any mismatch found here supersedes the doc.
 
 Does NOT run in unit CI (see `tests/integration/conftest.py`'s ``ha`` fixture
 -- skips whole-suite without ``HASSLE_TEST_HA_URL``/``HASSLE_TEST_HA_TOKEN``).
@@ -18,12 +17,11 @@ Covers:
   resolves the sensor-flavor version caveat (§38.3) by asserting against
   whatever the CI HA image's schema actually returns.
 - the §38.3 optional sensor fields (`ignore_non_numeric`/
-  `unit_of_measurement`/`device_class`/`state_class`,
-  `m21/sensor-group-fields`): probes the live sensor form schema and
-  exercises whichever subset this HA image advertises.
+  `unit_of_measurement`/`device_class`/`state_class`): probes the live sensor
+  form schema and exercises whichever subset this HA image advertises.
 - plan/apply integration: compute_plan + apply_plan drive a real create, and
-  a second push is a no-op (round-trip byte-stable, I3 applied to options
-  bodies).
+  a second push is a no-op (round-trip byte-stable, compile(decompile(x)) ==
+  x applied to options bodies).
 - CREATE-collision + rollback against the real config-entry apply path.
 """
 
@@ -54,8 +52,9 @@ _BUILDERS = {
 
 
 def _compiled(domain: str, **kwargs: Any) -> dict[str, Any]:
-    """Produce a group-helper config through the real DSL builder (I5's
-    spirit: tests exercise compiled IR, not a hand-typed approximation)."""
+    """Produce a group-helper config through the real DSL builder (in the
+    spirit of the simulator executing compiled IR, not DSL Python: tests
+    exercise compiled IR, not a hand-typed approximation)."""
     reset_declared_group_helpers()
     _BUILDERS[domain](**kwargs)
     (helper,) = declared_group_helpers()
@@ -122,7 +121,8 @@ def test_group_cover_create_read_update_delete_cycle(ha: DirectBackend) -> None:
     updated = ha.list_remote("group_cover")[identity]
     assert updated["entities"] == ["cover.entryway_top_probe_member", "cover.another_member"]
     assert updated["hide_members"] is True
-    # I2 analog: entry_id unchanged across an options-flow update.
+    # Analogous to never changing an existing object's HA id: entry_id
+    # unchanged across an options-flow update.
     assert ha.entry_id_for("group_cover", identity) == entry_id_before
 
     ha.delete("group_cover", identity)
@@ -195,7 +195,7 @@ def test_group_sensor_optional_fields_live(ha: DirectBackend) -> None:
     if not advertised:
         pytest.skip(
             "sensor flavor schema has no optional fields on this HA image "
-            f"(the §38.3 owner-HA-era shape): {sorted(schema_fields)}"
+            f"(§38.3): {sorted(schema_fields)}"
         )
 
     identity = ha.create(

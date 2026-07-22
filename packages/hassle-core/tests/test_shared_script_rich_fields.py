@@ -1,6 +1,6 @@
-"""`ux/shared-script-rich-fields` (owner feedback): `@shared_script` gains a
-``fields=`` kwarg carrying full stored HA field metadata (name/description/
-selector/...), F3-additive. When present it wins VERBATIM over the
+"""`@shared_script` gains a ``fields=`` kwarg carrying full stored HA field
+metadata (name/description/selector/...), an additive extension of the
+frozen top-level DSL surface. When present it wins VERBATIM over the
 signature-derived fields dict -- byte-stability by construction, since the
 decompiler must be able to re-emit the exact same ``fields=`` literal it
 decompiled from.

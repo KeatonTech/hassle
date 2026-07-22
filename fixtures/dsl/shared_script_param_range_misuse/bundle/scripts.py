@@ -1,11 +1,11 @@
-"""Error case (M19 test 2): `range(times)` on a bound shared-script parameter.
+"""Error case: `range(times)` on a bound shared-script parameter.
 
-Since M19, `times` inside the body IS the runtime `param("times")` marker
+`times` inside the body IS the runtime `param("times")` marker
 (bound from the signature regardless of its declared default), not the
 Python default -- `range(times)` can't honestly work at compile time. This
-must fail loudly with an R6 what/where/fix error teaching the honest
-alternatives (owner amendment: no `param_default()` escape hatch -- that
-design was rejected for baking a stale compile-time value into the compiled
+must fail loudly with a what/where/fix error teaching the honest
+alternatives (a `param_default()` escape hatch was considered and rejected
+for baking a stale compile-time value into the compiled
 sequence while the field still exists): `with repeat_count(times):` for a
 genuinely runtime count (see `shared_script_repeat_count_marker` for that
 blessed pattern's own golden case), or a module constant / `@macro` argument

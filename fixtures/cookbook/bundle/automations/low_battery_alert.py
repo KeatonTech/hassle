@@ -11,4 +11,4 @@ from hassle import automation, on, service, when
 @automation(id="cookbook_low_battery_alert", alias="Cookbook: low battery alert")
 def cookbook_low_battery_alert():
     when(on("battery.became_low", target="binary_sensor.laundry_door"))
-    service("notify.mobile_app_keaton", message="A sensor's battery is low")
+    service("notify.mobile_app_kai", message="A sensor's battery is low")

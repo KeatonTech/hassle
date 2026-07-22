@@ -1,5 +1,6 @@
-"""`hassle-dev docs [--update]` (MILESTONES M9 tests 1-2; mirrors
-`hassle-dev goldens`'s check/--update convention, R3).
+"""`hassle-dev docs [--update]` (mirrors
+`hassle-dev goldens`'s check/--update convention -- golden files are
+regenerated, never hand-edited).
 
 Builds `docs/DSL.md` (from `fixtures/dsl/`, gated on `hassle.__all__`
 coverage) and `docs/COOKBOOK.md` (from `fixtures/cookbook/`, gated on the
@@ -78,21 +79,21 @@ def _run_cookbook_tests(cookbook_bundle: Path) -> tuple[bool, str]:
 
 
 def _static_dir(repo_root: Path) -> Path:
-    """The `hassle` package's own bundled copy (MILESTONES M9: `hassle
+    """The `hassle` package's own bundled copy (`hassle
     init`/`hassle pull` write these into every bundle, but the installed
     package doesn't carry `fixtures/` -- so a checked-in copy ships as
     package data, refreshed by this same `--update` run, same golden-file
-    convention as `expected_ir.json` (R3): never hand-edited)."""
+    convention as `expected_ir.json`: never hand-edited)."""
     return repo_root / "packages" / "hassle-core" / "src" / "hassle" / "docs" / "_static"
 
 
 def run_docs(repo_root: Path, *, update: bool) -> DocsReport:
-    """Run the M9 docs gate against ``repo_root``.
+    """Run the docs gate against ``repo_root``.
 
     ``update``: write `docs/DSL.md`/`docs/COOKBOOK.md` in place (creating
     `docs/` if needed), AND refresh the packaged static copy under
     `hassle/docs/_static/` that `hassle init`/`hassle pull` ship into every
-    user bundle. Golden-file convention (R3): both copies are only ever
+    user bundle. Golden-file convention: both copies are only ever
     written through this path.
     """
     report = DocsReport()

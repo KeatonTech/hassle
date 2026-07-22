@@ -1,12 +1,12 @@
-"""M13 reviewer finding B1 (PR #8) -- dangling `state=`-omitted template-helper
-declaration guard.
+"""Dangling `state=`-omitted template-helper declaration guard.
 
 A `template_number`/`template_sensor`/`template_binary_sensor`/`template_select`
-call that omits `state=` (the M13 decorator-form signal) but is never applied
-as a decorator over a function builds and registers NOTHING. On the pre-M13
+call that omits `state=` (the decorator-form signal) but is never applied
+as a decorator over a function builds and registers NOTHING. On the older
 call form the same bare call registered a (degenerate, `state=None`) object;
-after M13 added decorator detection this became a silent no-op -- a behavior
-regression AND an I6 hazard: if the helper already exists in HA, its
+after decorator detection was added this became a silent no-op -- a behavior
+regression AND a hazard for the "no edit is silently lost" invariant: if the
+helper already exists in HA, its
 declaration vanishing from the compiled set schedules a DELETE of the live
 object on the next plan/push. `template_number`/`template_select` are
 accidentally protected already (the write-target guard,
@@ -25,8 +25,6 @@ like every other compile-time DSL error.
 
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
 
 import pytest
@@ -36,6 +34,7 @@ from hassle.compiler import DanglingTemplateHelperDeclarationError
 from hassle.compiler.bundle import compile_bundle
 from hassle.compiler.registry import fresh
 from hassle.compiler.template_helpers import reset_declared_template_helpers
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 FIXTURE = (
     Path(__file__).resolve().parents[3]
@@ -45,20 +44,16 @@ FIXTURE = (
     / "bundle"
 )
 
+
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 @pytest.fixture(autouse=True)
@@ -165,20 +160,20 @@ def test_golden_fixture_compiles_via_compile_bundle_and_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
-# (c) regression test: the ON-MAIN behavior for a state-less call (silently
+# Regression test: the previous behavior for a state-less call (silently
 # registering a degenerate object for template_sensor/template_binary_sensor,
-# or -- pre-M13 -- being unreachable for template_number/template_select
+# or being unreachable for template_number/template_select
 # since a plain call always had `state=` as a real kwarg) is now an ERROR for
-# BOTH the "never decorated" call-form omission mistake. This is the new
+# the "never decorated" call-form omission mistake. This is the new
 # contract: omitting `state=` without either supplying it OR decorating a
 # function is always wrong, not silently accepted.
 # ---------------------------------------------------------------------------
 
 
 def test_state_less_never_decorated_call_no_longer_silently_registers(tmp_path: Path) -> None:
-    """Direct regression pin for the reviewer's B1 report: this exact
+    """Direct regression pin: this exact
     snippet used to compile clean (with the object silently absent from the
-    compiled set on this branch, or present-but-degenerate on main) -- it
+    compiled set, or present-but-degenerate) -- it
     must now raise, for every read-only template-helper domain."""
     bundle_dir = tmp_path / "bundle"
     bundle_dir.mkdir()

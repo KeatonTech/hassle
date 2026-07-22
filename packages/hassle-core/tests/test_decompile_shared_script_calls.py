@@ -1,5 +1,5 @@
-"""`ux/shared-script-calls` (owner feedback): scripts decompile as
-`@shared_script` (not `@script`) whenever the script's own shape allows it, and
+"""Scripts decompile as `@shared_script` (not `@script`) whenever the
+script's own shape allows it, and
 a caller's `{"action": "script.<id>", ...}` action decompiles to a real
 function call `<fn_name>(<data as kwargs>, metadata={...})` when `<id>` is a
 MANAGED script in the same decompile batch and every condition holds --
@@ -13,8 +13,8 @@ Covers:
    recompiles to the identical script IR -- the terse form, no explicit
    `fields=` kwarg (DESIGN §5.6/§5.7 parity). A richer `fields` shape (e.g.
    `name`/`description`/`example`/`selector`) ALSO decompiles to
-   `@shared_script` (widened, `ux/shared-script-rich-fields`, owner
-   feedback), just with `fields=` emitted verbatim and every parameter
+   `@shared_script` (widened), just with `fields=` emitted verbatim and every
+   parameter
    `None`-defaulted -- see `test_decompile_shared_script_rich_fields.py` for
    that widened coverage. The `@script` fallback is now rare: only a field
    name that isn't a valid Python identifier, or a malformed `fields` value.
@@ -85,14 +85,13 @@ def test_shared_script_decompile_recompiles_to_identical_ir() -> None:
 
 
 def test_script_with_rich_field_metadata_decompiles_as_shared_script() -> None:
-    # Widened (`ux/shared-script-rich-fields`, owner feedback): a field
-    # carrying name/description/example (not just default) now ALSO
-    # decompiles to @shared_script -- fields= is emitted verbatim (byte-
-    # stability by construction) and the parameter is `TemplateExpr`-annotated,
-    # required (no default -- M19, owner-directed typing resolution: every
-    # field-named parameter is a runtime template marker in the body, never
-    # its Python default's type, and the compiler always binds it regardless
-    # of whether the signature declares a default at all).
+    # Widened: a field carrying name/description/example (not just default)
+    # now ALSO decompiles to @shared_script -- fields= is emitted verbatim
+    # (byte-stability by construction) and the parameter is
+    # `TemplateExpr`-annotated, required (no default: every field-named
+    # parameter is a runtime template marker in the body, never its Python
+    # default's type, and the compiler always binds it regardless of whether
+    # the signature declares a default at all).
     config = {
         "alias": "Script With Fields",
         "fields": {
@@ -361,8 +360,8 @@ def test_unknown_script_ref_stays_service_even_with_refs_table() -> None:
 
 def test_corpus_fixture_pair_rewrite_round_trips_byte_identical() -> None:
     """`fixtures/configs/automation_calls_script_with_metadata.json` +
-    `fixtures/configs/script_dismiss_notification.json` (mirrors the owner's
-    real dismiss_notification shape), decompiled TOGETHER so the caller
+    `fixtures/configs/script_dismiss_notification.json` (mirrors a
+    real-world dismiss_notification shape), decompiled TOGETHER so the caller
     rewrite actually fires -- compile(decompile(x)) stays byte-identical."""
     import json
     import tempfile
@@ -389,8 +388,8 @@ def test_corpus_fixture_pair_rewrite_round_trips_byte_identical() -> None:
 
     from hassle.ir import normalize_ha
 
-    # Compared against normalize_ha(x), exactly like test_roundtrip_corpus (I3
-    # promises compile(decompile(x)) == normalize_ha(x); these two corpus
+    # Compared against normalize_ha(x), exactly like test_roundtrip_corpus
+    # (compile(decompile(x)) == normalize_ha(x); these two corpus
     # fixtures use the legacy `service:` key, which normalizes to `action:`
     # regardless of this feature).
     assert sha256_hash(result.objects["automation:dismiss_reminder_automation"].to_ha()) == (
@@ -402,7 +401,7 @@ def test_corpus_fixture_pair_rewrite_round_trips_byte_identical() -> None:
 
 
 def test_rich_field_corpus_fixture_pair_rewrite_round_trips_byte_identical() -> None:
-    """`ux/shared-script-rich-fields`, task 3: the owner-shape fixture --
+    """A real-world-shape fixture --
     `fixtures/configs/script_call_to_action_notification.json` (every field
     carries selector/name/description, mirroring `call_to_action_
     notification`'s real shape) + `fixtures/configs/

@@ -4,15 +4,15 @@ A ``@automation`` decorator *registers* a function; the compiler later invokes i
 once inside an active :class:`Recorder` context. Inside that context:
 
 - ``when(...)`` appends triggers, ``only_if(...)`` appends conditions,
-- action builders (service calls, ``delay``, and — from the follow-on workstream —
-  ``if_then``/``choose``/``repeat``/…) append actions,
+- action builders (service calls, ``delay``, and — from builder families built
+  on top of this seam — ``if_then``/``choose``/``repeat``/…) append actions,
 
 each carrying a source span captured at the call site. The context is a stack (a
-``ContextVar``) so nested contexts (``with if_then(...)`` — a follow-on workstream)
-push a child action target and pop it on exit; plain module-level DSL inside a body
+``ContextVar``) so nested contexts (``with if_then(...)``) push a child
+action target and pop it on exit; plain module-level DSL inside a body
 needs no explicit context argument.
 
-This module owns the extension seam the other M1 workstreams build against
+This module owns the extension seam other builder families build against
 (``record_trigger``/``record_condition``/``record_action`` + ``push_actions`` for
 nested contexts). It does not import any builder family — builders depend on it.
 """
@@ -41,7 +41,7 @@ from hassle.compiler.spans import SourceSpan, capture_span
 # ---------------------------------------------------------------------------
 # HA automation/script option allow-lists (DESIGN §5.3/§5.7). `id`/`alias` are
 # always accepted; the rest is HA's automation option surface. New options land
-# here (with a MILESTONES note if they widen the F3 surface).
+# here (and widen the frozen DSL surface additively).
 # ---------------------------------------------------------------------------
 _AUTOMATION_OPTIONS: frozenset[str] = frozenset(
     {
@@ -84,10 +84,10 @@ class Recorder:
     """Accumulates the triggers/conditions/actions of one automation or script.
 
     ``action_stack`` is the nested-context target stack: the top list is where the
-    next recorded action lands. ``push_actions`` (used by ``with if_then(...)`` in
-    the follow-on workstream) pushes a child list and pops it on exit.
+    next recorded action lands. ``push_actions`` (used by ``with if_then(...)``)
+    pushes a child list and pops it on exit.
 
-    ``_only_if_block_closed_at`` (``ux/dsl-ergonomics``, item 1): set once a
+    ``_only_if_block_closed_at``: set once a
     ``with only_if(...):`` block has closed, to the number of top-level actions recorded so far
     (i.e. the block's own actions) -- so :func:`record_action` can reject any FURTHER top-level
     action as "outside the block" (the "all actions inside the block" invariant). ``None`` means
@@ -120,7 +120,7 @@ class Recorder:
 
     def only_if_block_has_closed(self) -> bool:
         """True once a ``with only_if(...):`` block has closed on this recorder
-        (``ux/dsl-ergonomics``, item 1) -- the public seam :func:`record_action`
+        -- the public seam :func:`record_action`
         uses to check the "all actions inside the block" invariant, so it never
         has to reach into the private ``_only_if_block_closed_at`` field."""
         return self._only_if_block_closed_at is not None
@@ -184,8 +184,7 @@ def record_trigger(builder: TriggerBuilder, *, span: SourceSpan | None = None) -
 def record_condition(builder: ConditionBuilder, *, span: SourceSpan | None = None) -> None:
     rec = _require_active("only_if")
     resolved_span = span or capture_span(depth=1)
-    # R6 bool-guard (M20, entity-first conditions milestone, absorbed scope
-    # item (c)): a plain `bool` here is always the classic `==`/`!=` mistake
+    # Bool guard: a plain `bool` here is always the classic `==`/`!=` mistake
     # (`only_if(x.state == "on" and other_thing)` collapsing to a bare bool,
     # or simply passing a Python comparison of two ordinary values) -- catch
     # it before it reaches `builder.to_condition()`, which would otherwise
@@ -194,7 +193,7 @@ def record_condition(builder: ConditionBuilder, *, span: SourceSpan | None = Non
     # pyright statically sees `bool` can never satisfy `ConditionBuilder`
     # (`to_condition()`), so this looks "unnecessary" against the declared
     # type -- it defends a caller who ignored/couldn't satisfy that
-    # annotation at runtime (the documented typing dance, M20 spec).
+    # annotation at runtime, since Python itself does not enforce it.
     if isinstance(builder, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise ConditionArgumentTypeError("only_if", builder, resolved_span)
     rec.conditions.append(RecordedNode(builder.to_condition(), resolved_span))
@@ -203,7 +202,7 @@ def record_condition(builder: ConditionBuilder, *, span: SourceSpan | None = Non
 def record_action(builder: ActionBuilder, *, span: SourceSpan | None = None) -> None:
     rec = _require_active("action")
     resolved_span = span or capture_span(depth=1)
-    # `with only_if(...):` coverage check (item 1, ``ux/dsl-ergonomics``): once a block has
+    # `with only_if(...):` coverage check: once a block has
     # opened and closed on this recorder, every subsequent TOP-LEVEL action is "outside" it --
     # a nested container's own actions (recorded via `push_actions`, so `current_actions` is not
     # `rec.actions` itself) are unaffected, since they were necessarily opened from inside the
@@ -224,11 +223,11 @@ def when(*triggers: TriggerBuilder) -> None:
 
 
 class OnlyIfBlock:
-    """The object ``only_if(...)`` returns -- usable bare (F3, unchanged) or as
-    ``with only_if(...):`` (``ux/dsl-ergonomics``, item 1, DESIGN §5.3/§5.5).
+    """The object ``only_if(...)`` returns -- usable bare (unchanged) or as
+    ``with only_if(...):`` (DESIGN §5.3/§5.5).
 
     The conditions are recorded at CALL time (``only_if(...)`` itself), before ``__enter__``
-    ever runs -- so the bare-call form is byte-for-byte the pre-existing behavior (F3: a bundle
+    ever runs -- so the bare-call form is byte-for-byte the pre-existing behavior (a bundle
     that never writes ``with`` in front of the call cannot tell this object exists at all,
     since nothing about the recorded IR or the call's side effects changed). ``__enter__`` only
     arms the "every action must be inside this block" check; ``__exit__`` disarms recording and
@@ -265,12 +264,12 @@ class OnlyIfBlock:
 def only_if(*conditions: ConditionBuilder) -> OnlyIfBlock:
     """Register one or more conditions on the active automation (DESIGN §5.3).
 
-    Dual-form (``ux/dsl-ergonomics``, item 1): a bare call (``only_if(cond1, cond2)``, no
+    Dual-form: a bare call (``only_if(cond1, cond2)``, no
     ``with``) keeps the exact pre-existing behavior -- it records the conditions and its return
     value is ignored, exactly as when this returned ``None``. Used as ``with only_if(...):``
     instead, it ALSO requires that every action the automation records lives inside that block --
     HA has no notion of a conditional subset of an automation's actions, so a bare `only_if` call
-    that "looks like an empty if" (owner feedback) is clarified by making the block form show,
+    that "looks like an empty if" is clarified by making the block form show,
     visually, exactly what it gates: everything.
     """
     span = capture_span(depth=0)
@@ -282,12 +281,11 @@ def only_if(*conditions: ConditionBuilder) -> OnlyIfBlock:
 @contextlib.contextmanager
 def capture_actions() -> Generator[list[dict[str, Any]]]:
     """``with capture_actions() as bodies:`` -- capture a block's actions as
-    plain action-body dicts, WITHOUT appending them to the enclosing sequence
-    (task #30, ``ux/capture-notify-recipe``).
+    plain action-body dicts, WITHOUT appending them to the enclosing sequence.
 
     The public counterpart of ``push_actions`` for ``lib/`` recipe builders
     that cannot legitimately reach the internal ``Recorder``/``RecordedNode``
-    seam ``if_then``/``choose`` are built on (docs/m1-internal-api.md §2):
+    seam ``if_then``/``choose`` are built on (docs/internals/compiler-api.md §2):
     a builder wants to record a block of actions once and then splice the
     SAME bodies into one or more containers it assembles itself (e.g. one
     notification action list reused across several ``choose()`` branches
@@ -301,8 +299,9 @@ def capture_actions() -> Generator[list[dict[str, Any]]]:
     bodies into the CURRENT recording context, each re-wrapped with a span
     captured at the ``emit_actions(...)`` call site.
 
-    Requires an active recording context (R6, same style as every other
-    recording verb): raises :class:`NoRecordingContextError` otherwise.
+    Requires an active recording context (what/where/fix, same style as
+    every other recording verb): raises :class:`NoRecordingContextError`
+    otherwise.
     """
     # `depth=2` (not the default 1): this generator is itself
     # `@contextlib.contextmanager`-decorated, so the frame between here and the
@@ -321,7 +320,7 @@ def capture_actions() -> Generator[list[dict[str, Any]]]:
 
 def emit_actions(bodies: list[dict[str, Any]], *, span: SourceSpan | None = None) -> None:
     """Splice previously captured action bodies (:func:`capture_actions`) into
-    the CURRENT recording context (task #30, ``ux/capture-notify-recipe``).
+    the CURRENT recording context.
 
     Each body is appended, in order, to ``rec.current_actions`` (so this
     respects whatever nested container -- ``if_then``, a ``choose()`` branch,
@@ -334,7 +333,7 @@ def emit_actions(bodies: list[dict[str, Any]], *, span: SourceSpan | None = None
     captured list more than once (e.g. into two different branches) is
     supported and produces independent, equal-but-distinct action entries.
 
-    Requires an active recording context (R6): raises
+    Requires an active recording context (what/where/fix): raises
     :class:`NoRecordingContextError` otherwise.
     """
     rec = _require_active("emit_actions")
@@ -344,7 +343,7 @@ def emit_actions(bodies: list[dict[str, Any]], *, span: SourceSpan | None = None
 
 
 def check_options(kind: str, options: dict[str, Any], span: SourceSpan | None) -> None:
-    """Reject any option not in HA's automation/script option set (M1 test 5)."""
+    """Reject any option not in HA's automation/script option set."""
     allowed = _AUTOMATION_OPTIONS if kind == "automation" else _SCRIPT_OPTIONS
     for key in options:
         if key not in allowed:

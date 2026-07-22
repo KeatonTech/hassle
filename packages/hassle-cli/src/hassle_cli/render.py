@@ -1,5 +1,5 @@
-"""Rich output with a plain-text capture mode (NO_COLOR/--plain, MILESTONES M7:
-"Rich output must have a plain-text capture mode for snapshot tests").
+"""Rich output with a plain-text capture mode (NO_COLOR/--plain): rich output
+must have a plain-text capture mode for snapshot tests.
 
 `get_console()` builds a `rich.console.Console` honoring both the `NO_COLOR`
 env var (https://no-color.org, checked by Rich itself) and an explicit
@@ -33,9 +33,8 @@ def get_console(*, force_plain: bool = False, file: io.IOBase | None = None) -> 
 
 def render_plain(fn: Callable[[Console], None]) -> str:
     """Run `fn(console)` against an in-memory plain-text console and return
-    the captured output (no ANSI codes) -- the plain-capture helper the
-    milestone asks for, usable directly in unit tests without going through
-    a full CLI invocation."""
+    the captured output (no ANSI codes) -- usable directly in unit tests
+    without going through a full CLI invocation."""
     buffer = io.StringIO()
     console = Console(file=buffer, no_color=True, force_terminal=False, width=SNAPSHOT_WIDTH)
     fn(console)

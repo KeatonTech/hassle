@@ -1,9 +1,8 @@
-"""M1 actions/control-flow work item, item 6: span tests pinning file:line for
-actions recorded inside nested contexts (if inside repeat inside choose, and
-if/then/else at one level).
+"""Span tests pinning file:line for actions recorded inside nested contexts
+(if inside repeat inside choose, and if/then/else at one level).
 
 `CompileResult.spans_for(obj, "actions")` returns the *top-level* action-list
-spans (per docs/m1-internal-api.md §2: "For M1-core, spans are tracked per
+spans (per docs/internals/compiler-api.md §2: "For M1-core, spans are tracked per
 top-level block"). Every construct in this module is itself a top-level
 action (the `if`/`choose`/`repeat`/`parallel` container), so its span must
 point at its own `with construct(...):` line -- not at any of its nested

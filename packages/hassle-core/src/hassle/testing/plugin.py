@@ -3,7 +3,7 @@
 Registered as a ``pytest11`` entry point on the ``hassle-core`` distribution
 (see ``packages/hassle-core/pyproject.toml``), so any environment with
 hassle-core installed gets the ``sim`` fixture automatically -- "plain
-`pytest` works too" (DESIGN §10.2); `hassle test` (M7) is just `pytest` with
+`pytest` works too" (DESIGN §10.2); `hassle test` is just `pytest` with
 this plugin, which is already always loaded.
 
 Bundle discovery: a real bundle's `tests/` directory sits one level below the
@@ -25,8 +25,8 @@ from hassle.testing import Simulator, simulate
 
 def _bundle_dir_for(request: pytest.FixtureRequest) -> Path:
     # `request.node` / `Node.get_closest_marker` are loosely typed in pytest's
-    # own stubs (Unknown) -- silenced at this one boundary (pyright --strict
-    # on hassle-core, R7) rather than throughout the function.
+    # own stubs (Unknown) -- silenced at this one boundary (pyright is strict
+    # on hassle-core) rather than throughout the function.
     node = request.node  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
     marker = cast(
         "pytest.Mark | None",

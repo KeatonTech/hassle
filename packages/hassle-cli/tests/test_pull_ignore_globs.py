@@ -1,6 +1,6 @@
 """End-to-end (FakeBackend): `hassle.toml`'s `ignore` globs actually keep
 `pull`/`plan`/`push` from ever adopting, refreshing, or deleting a matching
-object -- DESIGN §8.2 amendment, owner decision.
+object -- DESIGN §8.2 amendment.
 """
 
 from __future__ import annotations

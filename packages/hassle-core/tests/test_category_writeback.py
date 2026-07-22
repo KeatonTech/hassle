@@ -1,15 +1,14 @@
-"""M11 — category write-back on push-create (MILESTONES M11, DESIGN §7.3/§9.2).
+"""Category write-back on push-create (DESIGN §7.3/§9.2).
 
-Pull-side placement (`ux/pull-organization`, docs/ha-api-notes.md §22,
-updated to the M15 work item B root-level shape) maps an HA UI category ->
-root-level `<slug(category)>.py`. M11 is the reverse: when `hassle push`
+Pull-side placement (docs/internals/ha-api-notes.md §22) maps an HA UI category ->
+root-level `<slug(category)>.py`. Push is the reverse: when `hassle push`
 CREATEs a brand-new object whose source file lives at that same `<slug>.py`
 shape, Hassle assigns the matching HA category to the new object's
-entity-registry entry -- first registry WRITE (I1: the same
-`config/entity_registry/update` + `config/category_registry/*` WS commands the
-UI itself uses).
+entity-registry entry -- first registry WRITE (every HA write goes through
+the APIs the UI uses: the same `config/entity_registry/update` +
+`config/category_registry/*` WS commands the UI itself uses).
 
-Covers the milestone's four required tests:
+Covers four required behaviors:
 
 1. `test_push_create_assigns_matching_category_from_source_file`
 2. `test_push_create_creates_missing_category_then_assigns` +
@@ -17,19 +16,19 @@ Covers the milestone's four required tests:
 3. `test_category_assignment_failure_does_not_fail_or_rollback_apply`
 4. `test_existing_update_never_touches_categories`
 
-All against `FakeBackend` (R2: no network in unit tests) -- the FakeBackend
-category-registry/entity-registry model this milestone adds, described in
-`hassle.backend.fake`'s module docstring addendum.
+All against `FakeBackend` (no network in unit tests) -- the FakeBackend
+category-registry/entity-registry model, described in `hassle.backend.fake`'s
+module docstring addendum.
 
-**M15 work item A** (docs/ha-api-notes.md §31): §31.5a source-confirms HA's
-category registry was never actually restricted to the `automation`/`script`
-scopes -- ALL 13 helper kinds (9 storage-collection + 4 template config-entry)
-carry categories under the shared frontend scope `"helpers"`, and `helpers`
-IS now a scope `_SCOPE_FOR_KIND` maps to.
+**Category registry scopes** (docs/internals/ha-api-notes.md §31): §31.5a
+source-confirms HA's category registry was never actually restricted to the
+`automation`/`script` scopes -- ALL 13 helper kinds (9 storage-collection + 4
+template config-entry) carry categories under the shared frontend scope
+`"helpers"`, and `helpers` IS a scope `_SCOPE_FOR_KIND` maps to.
 
-**M15 work item B**: bundle PLACEMENT for helpers is no longer the flat
-`helpers/misc.py` -- `category_shaped_stem` is root-level and kind-independent
-now, so a helper CREATEd at a root-level category-shaped file DOES take a
+**Bundle placement**: bundle PLACEMENT for helpers is no longer the flat
+`helpers/misc.py` -- `category_shaped_stem` is root-level and kind-independent,
+so a helper CREATEd at a root-level category-shaped file DOES take a
 category action (`test_push_create_helper_assigns_matching_category_under_helpers_scope`),
 under the shared `"helpers"` scope; `test_scope_for_kind_covers_all_13_helper_kinds`
 still pins the underlying scope map directly, independent of placement.
@@ -183,12 +182,11 @@ def test_push_create_with_no_source_path_takes_no_category_action() -> None:
 
 
 def test_push_create_helper_assigns_matching_category_under_helpers_scope() -> None:
-    """MILESTONES M15 work item B: bundle PLACEMENT for helpers now uses the
-    same root-level category-shaped shape as automations/scripts
-    (`category_shaped_stem` is kind-independent and root-level as of work
-    item B) -- so a helper CREATEd at a category-shaped root-level file DOES
-    take a category action now, under the shared `"helpers"` scope
-    (§31.2/§31.6), extending the work-item-A scope map to real placement."""
+    """Bundle PLACEMENT for helpers uses the same root-level category-shaped
+    shape as automations/scripts (`category_shaped_stem` is kind-independent
+    and root-level) -- so a helper CREATEd at a category-shaped root-level
+    file DOES take a category action, under the shared `"helpers"` scope
+    (§31.2/§31.6), extending the scope map to real placement."""
     backend = FakeBackend()
     backend.seed_category("helpers", "cat_hvac", "HVAC")
 
@@ -223,10 +221,9 @@ def test_push_create_helper_from_misc_file_takes_no_category_action() -> None:
 
 
 def test_scope_for_kind_covers_all_13_helper_kinds() -> None:
-    """MILESTONES M15 work item A test 1 (unit half): every one of the 13
-    helper kinds (9 storage-collection + 4 template config-entry) maps to the
-    shared `"helpers"` scope, not the pre-M15 `None` ("no category scope at
-    all") gate -- §31.2/§31.6."""
+    """Every one of the 13 helper kinds (9 storage-collection + 4 template
+    config-entry) maps to the shared `"helpers"` scope, not the earlier
+    `None` ("no category scope at all") gate -- §31.2/§31.6."""
     helper_kinds = HELPER_DOMAINS | TEMPLATE_DOMAINS
     assert len(helper_kinds) == 13
     for kind in helper_kinds:
@@ -303,16 +300,15 @@ def test_category_assignment_failure_does_not_rollback_other_objects_this_run() 
 
 
 def test_existing_update_never_touches_categories() -> None:
-    """M11's original claim ("no category action for ANY update") is
-    superseded by M15 work item A's category-on-move sync (`test_category_move.py`)
-    -- but only once there is a recorded BASE category to compare against
-    (`ManifestEntry.category`, the M15 F2 amendment). This test's manifest has
-    NO entry at all for `auto_hvac_1` (as if the object was never synced
-    through `hassle`'s own manifest before) -- with no base to compare
-    against, category-move sync conservatively takes no action, exactly the
-    same "don't guess which side is right" rule M11 itself already applies
-    elsewhere. `test_category_move.py` covers the case where a base IS on
-    record."""
+    """The original "no category action for ANY update" claim is superseded
+    by category-on-move sync (`test_category_move.py`) -- but only once there
+    is a recorded BASE category to compare against (`ManifestEntry.category`,
+    a SourceWriter/plan seam amendment). This test's manifest has NO entry at
+    all for `auto_hvac_1` (as if the object was never synced through
+    `hassle`'s own manifest before) -- with no base to compare against,
+    category-move sync conservatively takes no action, exactly the same
+    "don't guess which side is right" rule applied elsewhere.
+    `test_category_move.py` covers the case where a base IS on record."""
     backend = FakeBackend()
     backend.seed_category("automation", "cat_hvac", "Automatic HVAC")
     identity = backend.create("automation", {"id": "auto_hvac_1", "alias": "Old alias"})
@@ -367,14 +363,14 @@ def test_adopt_action_never_touches_categories() -> None:
     assert backend.categories_for("automation", identity) == {}
 
 
-# -- MILESTONES M15 item 3: config/category_registry/delete -----------------
+# -- config/category_registry/delete -----------------------------------------
 
 
 def test_delete_category_removes_row_and_clears_assignments() -> None:
-    """MILESTONES M15 item 3: `config/category_registry/delete` is now
-    confirmed to exist (docs/ha-api-notes.md §31.5c) -- it removes the
-    category registry row AND strips the assignment from every entity
-    carrying it (real HA's `async_clear_category_id`, §31.3)."""
+    """`config/category_registry/delete` is confirmed to exist
+    (docs/internals/ha-api-notes.md §31.5c) -- it removes the category registry row AND
+    strips the assignment from every entity carrying it (real HA's
+    `async_clear_category_id`, §31.3)."""
     backend = FakeBackend()
     category_id = backend.create_category("automation", "Automatic HVAC")
     identity = backend.create("automation", {"id": "auto_hvac_1", "alias": "Keep temp steady"})

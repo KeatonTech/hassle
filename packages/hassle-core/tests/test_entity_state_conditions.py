@@ -1,21 +1,21 @@
-"""MILESTONES M20 -- entity-first conditions (`entity.state != ""`).
+"""Entity-first conditions (`entity.state != ""`).
 
-`EntityRef.state` is a defined property (wins over M18's service-method
+`EntityRef.state` is a defined property (wins over the service-method
 `__getattr__`) returning a comparison accessor:
   - `==`/`!=`         -> native `state` condition (`is_`/`is_not` equivalents)
   - `>`/`>=`/`<`/`<=`  -> `numeric_state` above/below (HA has no inclusive
-    form; `>=`/`<=` raise a clear R6 error naming the exclusive equivalent
-    rather than silently emitting a wrong bound)
+    form; `>=`/`<=` raise a clear what/where/fix error naming the exclusive
+    equivalent rather than silently emitting a wrong bound)
   - `.in_([...])`      -> `state` condition with a list value
 
-Also covers the SCOPE EXPANSION items absorbed into this milestone:
+Also covers:
   (a) `StateExpr.is_not(v)` (mirrors `.is_()` exactly, compiles to
       `not_(state(x).is_(v))`'s condition shape byte-identically);
   (b) real `__eq__`/`__ne__` on the `.state` accessor object (NOT on
       `StateExpr`/`EntityRef` themselves -- those stay plain string-subclass
       types with normal string equality, same rule `TemplateExpr` follows,
       see `hassle/compiler/templates.py`);
-  (c) an R6 bool-guard in every condition-accepting entry point (`only_if`,
+  (c) a bool-guard in every condition-accepting entry point (`only_if`,
       `choose` branches, `if_then`, `repeat_while`/`repeat_until`) so a plain
       `bool` argument (the classic `==`/`!=` typo) raises a teaching error
       instead of a bare `AttributeError`.
@@ -23,7 +23,6 @@ Also covers the SCOPE EXPANSION items absorbed into this milestone:
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
@@ -36,23 +35,17 @@ from hassle.compiler.helpers import input_text
 from hassle.compiler.recording import only_if, recording
 from hassle.compiler.triggers import numeric_state
 from hassle.registry import entities as e
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    import os
-
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 # ---------------------------------------------------------------------------
@@ -130,9 +123,8 @@ def test_state_in_condition_matches_state_is_list_builder_form() -> None:
 
 
 def test_state_accessor_also_works_on_helper_declaration_refs() -> None:
-    """The owner's actual driving case: a helper-declaration handle (not an
-    `e.`-registry ref) also gets the `.state` accessor -- one implementation,
-    wherever `EntityRef` appears."""
+    """A helper-declaration handle (not an `e.`-registry ref) also gets the
+    `.state` accessor -- one implementation, wherever `EntityRef` appears."""
     with recording(alias="x", id="x"):
         last_shown_notification = input_text(id="last_shown_notification")
     accessor_result = (last_shown_notification.state != "").to_condition()
@@ -145,7 +137,7 @@ def test_state_accessor_also_works_on_helper_declaration_refs() -> None:
 # (verified against the IR model, hassle/compiler/triggers.py::NumericStateExpr
 # -- no inclusive form exists). Silently mapping `>=`/`<=` onto the exclusive
 # fields would compile a WRONG condition (off-by-the-boundary-value), so both
-# raise a clear R6 error naming the honest exclusive rewrite instead.
+# raise a clear what/where/fix error naming the honest exclusive rewrite instead.
 # ---------------------------------------------------------------------------
 
 
@@ -179,7 +171,7 @@ def test_state_le_error_is_snapshot_tested() -> None:
 
 # ---------------------------------------------------------------------------
 # Test 2: the `in`-operator trap -- `x.state in ["a"]` inside a condition
-# context raises the R6 error naming `.in_()`; snapshot-tested.
+# context raises a what/where/fix error naming `.in_()`; snapshot-tested.
 # ---------------------------------------------------------------------------
 
 
@@ -211,7 +203,7 @@ def test_bare_bool_of_state_accessor_also_traps() -> None:
 
 # ---------------------------------------------------------------------------
 # Test 3: trigger/expression non-confusion -- `.state` accessor used where a
-# TRIGGER is expected raises a clear error; `state_of()` (M16) remains the
+# TRIGGER is expected raises a clear error; `state_of()` remains the
 # template-string read, `.state` is the native-condition read.
 # ---------------------------------------------------------------------------
 
@@ -244,7 +236,7 @@ def test_state_accessor_used_as_when_trigger_raises_clear_error() -> None:
 def test_entity_ref_remains_hashable_and_dict_keyable() -> None:
     """`EntityRef` itself never gained an `__eq__` override (only the new
     `.state` ACCESSOR object did) -- so it stays usable as a dict key/in a
-    set, exactly as any `str` is, unaffected by this milestone."""
+    set, exactly as any `str` is, unaffected by the accessor feature."""
     d = {e.sensor.temp: "ok"}
     assert d[e.sensor.temp] == "ok"
     assert e.sensor.temp in {e.sensor.temp, e.sensor.other}
@@ -267,7 +259,7 @@ def test_state_accessor_result_is_not_hashed_but_has_explicit_dunder() -> None:
 
 
 # ---------------------------------------------------------------------------
-# (c) R6 bool-guard sweep: a plain `bool` argument to every condition-
+# (c) bool-guard sweep: a plain `bool` argument to every condition-
 # accepting entry point raises a teaching what/where/fix error (today: a raw
 # `AttributeError: 'bool' object has no attribute 'to_condition'`).
 # ---------------------------------------------------------------------------
@@ -409,7 +401,7 @@ def test_if_then_real_condition_unaffected() -> None:
 
 # ---------------------------------------------------------------------------
 # Test 4: stubs -- generated entity classes type the `.state` accessor; the
-# M28 decompiled-bundle pyright gate stays zero (exercised in full by
+# decompiled-bundle pyright gate stays zero (exercised in full by
 # packages/hassle-dev/tests/test_annotation_truth_pyright_gate.py, which
 # already builds/pyrights a real decompiled bundle against these generated
 # stubs). These pin the generator's own output shape.

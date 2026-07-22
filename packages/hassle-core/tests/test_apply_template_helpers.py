@@ -1,17 +1,16 @@
-"""MILESTONES M10 test 4 — plan/apply for the config-entry template-helper
-domain: apply order (after storage helpers, before scripts/automations),
-CREATE-collision drift + rollback (§8.2 semantics unchanged), and
-options-flow UPDATE going through the same re-verify-before-write path as
-every other kind.
+"""Plan/apply for the config-entry template-helper domain: apply order (after
+storage helpers, before scripts/automations), CREATE-collision drift +
+rollback (§8.2 semantics unchanged), and options-flow UPDATE going through the
+same re-verify-before-write path as every other kind.
 
 The apply engine (`hassle.sync.apply.apply_plan`) is kind-agnostic — it calls
 `Backend.create`/`update`/`delete` addressed by `(kind, identity)` exactly the
 same way regardless of what kind of HA object is behind it. These tests prove
 the template-helper kind slots into that existing machinery with ZERO changes
 to the plan/apply decision logic, only the `_KIND_ORDER` dependency-ordering
-tuple (M10 addition).
+tuple.
 
-**Identity (docs/ha-api-notes.md §26.6):** there is no `unique_id` -- identity
+**Identity (docs/internals/ha-api-notes.md §26.6):** there is no `unique_id` -- identity
 is derived from `name` (slugified). `name` is kept CONSTANT across
 create/update pairs below (an update addresses the existing identity; it
 does not re-derive one), matching how the real options flow can change other
@@ -159,7 +158,8 @@ def test_template_helper_update_reverifies_hash_and_uses_options_flow() -> None:
     assert result.succeeded is True
     stored = backend.list_remote("template_number")[identity]
     assert stored["state"] == "{{ 2 }}"
-    # Options-flow update: same entry_id, never a recreate (I2 analog).
+    # Options-flow update: same entry_id, never a recreate (analogous to never
+    # changing an existing object's HA id).
     assert backend.entry_id_for("template_number", identity) == entry_id_before
 
 
@@ -224,22 +224,21 @@ def test_template_helper_delete_reverifies_and_removes_entry() -> None:
 
 
 def test_template_helper_plan_apply_create_then_noop_on_repush() -> None:
-    # CI round 3 finding (docs/ha-api-notes.md §26.7): a `list_remote` that
-    # doesn't carry back a template helper's full stored config (name +
-    # options) makes a re-plan see `remote={}` and plan UPDATE instead of
-    # NOOP forever, even with nothing actually changed. This is the
-    # FakeBackend/plan-level regression for the DirectBackend fix (the real
-    # end-to-end proof is the integration suite's
+    # A `list_remote` that doesn't carry back a template helper's full stored
+    # config (name + options, docs/internals/ha-api-notes.md §26.7) makes a re-plan see
+    # `remote={}` and plan UPDATE instead of NOOP forever, even with nothing
+    # actually changed. This is the FakeBackend/plan-level regression for the
+    # DirectBackend fix (the real end-to-end proof is the integration suite's
     # `test_template_helper_plan_apply_create_then_noop_on_repush`).
     #
     # `min`/`max`/`step` are written as floats here (not the DSL author's
     # natural `int` literals) because this file exercises the plan/apply
     # engine directly against a hand-written "already-compiled" config, not
     # the compiler itself -- a real compile always produces floats for these
-    # three fields (CI round 4, docs/ha-api-notes.md §26.10; the compiler-
-    # level coercion is covered by
-    # `test_template_helper_float_coercion.py`). Using `int` literals here
-    # would test a local config the real compiler can never actually produce.
+    # three fields (docs/internals/ha-api-notes.md §26.10; the compiler-level coercion
+    # is covered by `test_template_helper_float_coercion.py`). Using `int`
+    # literals here would test a local config the real compiler can never
+    # actually produce.
     backend = FakeBackend()
     manifest = Manifest(synced_at="base", ha_version="test", objects={})
     local_config = {

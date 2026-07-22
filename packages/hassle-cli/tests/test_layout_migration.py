@@ -1,22 +1,22 @@
-"""MILESTONES M15 work item B, test 5 -- migrating an old-layout bundle (the
-RETIRED `automations/`/`scripts/`/`helpers/` per-kind trees) into the new
-category-first, root-level layout.
+"""Migrating an old-layout bundle (the retired `automations/`/`scripts/`/
+`helpers/` per-kind trees) into the category-first, root-level layout.
 
 Covers:
 - `test_bundle_has_old_layout_detects_populated_retired_trees` /
   `test_bundle_has_old_layout_false_for_new_layout_bundle` -- detection.
 - `test_migration_preserves_user_content_in_kept_old_file` -- an old file
   with a user comment + a custom (non-Hassle) `def` alongside the managed
-  object: the managed object moves out, but the FILE ITSELF is kept (I6 --
-  the comment/def are never lost).
+  object: the managed object moves out, but the FILE ITSELF is kept (no
+  local or UI edit is silently lost -- the comment/def are never lost).
 - `test_migration_deletes_old_file_with_no_remaining_user_content` -- an old
   file holding ONLY the managed object (plus its own imports): after the
   object moves out, the file is deleted entirely (nothing left worth
   keeping).
 - `test_migration_reports_every_move` -- `MigrationReport.moves` names every
   migrated object with its old/new path.
-- `test_migrated_objects_compile_identically` -- I3/byte-stability precursor:
-  the migrated objects compile to the exact same IR after the move.
+- `test_migrated_objects_compile_identically` -- compile(decompile(x)) == x /
+  byte-stability precursor: the migrated objects compile to the exact same
+  IR after the move.
 """
 
 from __future__ import annotations
@@ -184,11 +184,11 @@ tank_level = input_number(id="tank_level", name="Tank level", min=0, max=100, st
 def test_migration_report_flags_a_kept_old_file_with_an_orphaned_category_global(
     tmp_path: Path,
 ) -> None:
-    """Polish-batch item 4(b): an old-layout file may carry a leftover
-    `CATEGORY = "..."` global from the M12 era (when `automations/<stem>.py`
-    was itself category-shaped) -- M15's `category_shaped_stem` no longer
-    recognizes ANY nested path as category-shaped, so this global is now
-    inert, but it's still a top-level statement `remove_object` doesn't touch
+    """An old-layout file may carry a leftover `CATEGORY = "..."` global
+    from when `automations/<stem>.py` was itself category-shaped --
+    `category_shaped_stem` no longer recognizes ANY nested path as
+    category-shaped, so this global is now inert, but it's still a
+    top-level statement `remove_object` doesn't touch
     (it isn't the migrated object's own statement) -- the file survives
     migration with just that orphaned global (and its now-possibly-unused
     import) left behind. The migration report must call this out explicitly
@@ -229,7 +229,7 @@ def test_migration_report_no_orphan_flag_for_a_file_with_ordinary_kept_content(
     tmp_path: Path,
 ) -> None:
     # Regression/contrast: a kept old file WITHOUT a CATEGORY global (the
-    # ordinary I6 case, already covered by
+    # ordinary no-edit-lost case, already covered by
     # test_migration_preserves_user_content_in_kept_old_file) must not be
     # flagged as an orphaned-category case.
     bundle = tmp_path / "bundle"

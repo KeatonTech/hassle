@@ -1,5 +1,5 @@
-"""M4 done-gate: a seeded logic bug in an example bundle is caught by a test
-encoding the intended behavior (MILESTONES M4 "Done when" clause).
+"""A seeded logic bug in an example bundle is caught by a test
+encoding the intended behavior.
 
 `fixtures/sim/hallway_bundle_buggy/hallway.py` inverts the guest_mode
 condition from the clean example bundle (`.is_("on")` instead of `.is_("off")`).

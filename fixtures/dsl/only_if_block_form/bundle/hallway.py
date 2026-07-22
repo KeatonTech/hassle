@@ -1,5 +1,5 @@
-"""Golden case: `with only_if(...):` block form (`ux/dsl-ergonomics`, item 1) --
-the NEW context-manager usage. Paired with `only_if_bare_form_parity/`'s bare
+"""Golden case: `with only_if(...):` block form --
+the context-manager usage. Paired with `only_if_bare_form_parity/`'s bare
 call to prove compile parity: both must produce byte-identical IR. Every
 action lives inside the block (the "all actions must be inside" invariant).
 """

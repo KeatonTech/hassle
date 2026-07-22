@@ -1,14 +1,12 @@
-"""M1 done-gate: goldens closing the expressibility gaps found in the audit.
-
-The corpus-expressibility checklist (integration report) turned up three fixture
-shapes with no backing golden even though the DSL could express them:
+"""Goldens closing expressibility gaps: fixture shapes with no backing golden
+even though the DSL could express them.
 
 - standalone ``@script`` objects (script_basic / script_mode_queued /
   script_with_fields) — the only script golden was ``shared_script_call``;
 - a purpose trigger with a renamed pre-2026.7 key (``battery.low``) passed
   through verbatim;
 - a scalar/string ``delay`` shape, which the ergonomic ``delay()`` cannot emit
-  but ``raw_action`` expresses faithfully (I3 backstop).
+  but ``raw_action`` expresses faithfully (the raw escape hatch backstop).
 
 These tests pin those shapes so the corpus is fully covered.
 """
@@ -59,7 +57,7 @@ def test_renamed_purpose_key_passes_through() -> None:
 def test_string_delay_expressible_via_raw_action() -> None:
     # delay() only emits dict form; the corpus's "HH:MM:SS"/scalar delay shapes
     # (automation_delay_hh_mm_ss / automation_delay_numeric / mixed_key_order)
-    # are expressed with raw_action, the I3 backstop.
+    # are expressed with raw_action, the raw escape hatch backstop.
     with recording(kind="automation", id="x") as rec:
         raw_action({"delay": "00:05:30"})
         raw_action({"delay": 30})

@@ -3,7 +3,7 @@
  * (packages/hassle-cli/src/hassle_cli/cli.py, backed by `hassle.registry.finding.Finding` --
  * packages/hassle-core/src/hassle/registry/finding.py).
  *
- * MILESTONES M8 test 3: this schema is snapshot-tested on BOTH sides --
+ * This schema is snapshot-tested on BOTH sides --
  * `packages/hassle-cli/tests/test_cli_commands.py::test_validate_json_reports_findings_with_stable_schema`
  * on the Python side, `src/test/unit/findingsSchema.test.ts` here.
  *
@@ -30,7 +30,7 @@ export interface ValidateJsonPayload {
 export class MalformedValidateJsonError extends Error {}
 
 /** Builds the error message shown when `hassle validate --json`'s output
- * can't be turned into diagnostics (M8 polish-batch item 1).
+ * can't be turned into diagnostics.
  *
  * Two distinct situations share this call site but need different messages:
  *   - stdout was non-empty and genuinely failed to parse as the documented

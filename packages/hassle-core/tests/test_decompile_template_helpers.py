@@ -1,41 +1,31 @@
-"""MILESTONES M10 test 3 — decompile/adopt of template-helper objects into
-`helpers/`, with I3 round-trip byte-stability applied to the config-entry
-options body.
+"""Decompile/adopt of template-helper objects into `helpers/`, with
+compile(decompile(x)) == x round-trip byte-stability applied to the
+config-entry options body.
 
 `TemplateHelperConfig` decompiles to the matching builder call
 (`hassle.decompiler.codegen._template_helper_source`): there is no identity
 kwarg to rename -- `TemplateHelperConfig` has no `id`/`unique_id` field at
-all (docs/ha-api-notes.md §26.6: real HA's config-flow form schema rejects
+all (docs/internals/ha-api-notes.md §26.6: real HA's config-flow form schema rejects
 an unrecognized `unique_id` key outright). Identity is derived from `name`
 (slugified) at both compile and decompile time. Placement follows the same
 category/misc rule as the nine storage-collection helpers
 (`test_bundle_ops_placement.py::test_default_source_path_places_template_helpers_under_helpers_misc`).
 
-**M13 update:** `_template_helper_source` now tries the bounded Jinja
-inverter first (`hassle.decompiler.template_invert`) and only falls back to
-the call form asserted here when a `state=` Jinja string is outside the
-inverter's bounded grammar. Of this fixture's four objects,
-`template_sensor:average_temp`'s state (`(states('sensor.a') | float +
-states('sensor.b') | float) / 2`) is inside that grammar -- the other two
-(`is_state(...)`/a `selectattr` filter chain) are not, and fall back. See
-`test_template_helper_decorator_form.py` for the decorator-form-specific
-contract (M13 tests 1-5).
-
-**M16 update:** a bare `states(...)` read (no `| float`) is now ALSO inside
-the bounded grammar (`state_of(...)`, DESIGN §5.4 extension) --
-`template_select:house_scene`'s state (`states('input_select.house_mode')`)
-inverts cleanly too, so three of the four objects invert now; only
-`template_binary_sensor:any_door_open`'s `is_state(...)` call form still
-falls back (documented one-time-canonicalization behavior, docs/dsl-f3.md).
-
-**M14 update:** the fallback branch is ALSO the decorator form now (owner
-feedback) -- the other three objects decompile to `@builder(...)` / `def
-<ident>(): return "<verbatim Jinja>"` instead of the pre-M14 call form. See
+`_template_helper_source` tries the bounded Jinja inverter first
+(`hassle.decompiler.template_invert`) and falls back to a decorator form
+(`@builder(...)` / `def <ident>(): return "<verbatim Jinja>"`) when a
+`state=` Jinja string is outside the inverter's bounded grammar. Of this
+fixture's four objects: `template_sensor:average_temp`'s state
+(`(states('sensor.a') | float + states('sensor.b') | float) / 2`) and
+`template_select:house_scene`'s state (`states('input_select.house_mode')`,
+a bare read with no `| float`) both invert cleanly via `expr(...)` /
+`state_of(...)` (DESIGN §5.4 extension); only
+`template_binary_sensor:any_door_open`'s `is_state(...)` call form falls back
+to the verbatim decorator body (documented one-time-canonicalization
+behavior, docs/internals/dsl-extensions.md). See `test_template_helper_decorator_form.py`
+for the decorator-form-specific contract and
 `test_template_helper_decorator_fallback.py` for the fallback-form-specific
-contract (M14 tests 1-5); this file's own assertions are updated in place to
-match (no test here NEEDED the call form as such -- they asserted the
-builder name and a round trip, both of which the decorator form also
-satisfies).
+contract.
 """
 
 from __future__ import annotations
@@ -55,7 +45,7 @@ FIXTURE = (
 
 
 def test_decompile_template_number_produces_matching_builder_decorator() -> None:
-    """M14: the fallback branch is ALSO the decorator form -- `state=` moves
+    """The fallback branch is ALSO the decorator form -- `state=` moves
     into the `return` body instead of staying a decorator kwarg; every other
     kwarg is unaffected and still rendered in the decorator's argument list."""
     result = compile_bundle(FIXTURE)
@@ -69,11 +59,11 @@ def test_decompile_template_number_produces_matching_builder_decorator() -> None
     assert "id=" not in source  # no identity kwarg at all (§26.6)
     assert "unique_id=" not in source
     assert "set_value=" in source
-    # `state=` is never a decorator kwarg any more (M14) -- it's the
-    # `return`ed string body instead.
+    # `state=` is never a decorator kwarg -- it's the `return`ed string body
+    # instead.
     decorator_line = source.split("\n", 1)[0]
     assert "state=" not in decorator_line
-    # min/max/step decompile as floats (CI round 4, docs/ha-api-notes.md
+    # min/max/step decompile as floats (docs/internals/ha-api-notes.md
     # §26.10): HA's NumberSelector always stores these as floats, and the
     # compiler now coerces to match -- `render_literal`'s `repr()` renders
     # them accordingly.
@@ -82,8 +72,8 @@ def test_decompile_template_number_produces_matching_builder_decorator() -> None
 
 def test_decompile_every_template_domain_uses_matching_builder_name() -> None:
     """Each object's source names its matching builder as the decorator form's
-    `@builder(...)` (M14: both the invertible branch, `average_temp`, and the
-    fallback branch, the other three objects -- module docstring)."""
+    `@builder(...)` -- both the invertible branch, `average_temp`, and the
+    fallback branch, the other three objects (see module docstring)."""
     result = compile_bundle(FIXTURE)
     expected_builder = {
         "template_number:active_hvac_zones": "template_number",
@@ -100,14 +90,14 @@ def test_decompile_every_template_domain_uses_matching_builder_name() -> None:
 def test_decompile_recompile_round_trip_is_byte_stable_for_options_body(
     tmp_path: Path,
 ) -> None:
-    """I3 applied to a config-entry options body: compile(decompile(x)) == x."""
+    """Applied to a config-entry options body: compile(decompile(x)) == x."""
     result = compile_bundle(FIXTURE)
     original_ir = {key: obj.to_ha() for key, obj in result.objects.items()}
 
     lines = [
         "from hassle import (",
-        "    expr,",  # M13: average_temp now decompiles to the decorator form
-        "    state_of,",  # M16: house_scene now decompiles to the decorator form too
+        "    expr,",  # average_temp decompiles to the decorator form
+        "    state_of,",  # house_scene decompiles to the decorator form too
         "    template_binary_sensor,",
         "    template_number,",
         "    template_select,",
@@ -117,9 +107,9 @@ def test_decompile_recompile_round_trip_is_byte_stable_for_options_body(
         # -shaped strings, which the decompiler's `render_literal` (DESIGN
         # §7.3's entity-reference cosmetic rewrite) emits as `e.<domain>.<id>`
         # -- needs this import, exactly like any generated bundle would carry.
-        # M13: the inverted `average_temp` decorator body also references `e.`
-        # entities directly (`expr(e.sensor.a)`). M16: `house_scene`'s inverted
-        # body does too (`state_of(e.input_select.house_mode)`). M14: the
+        # The inverted `average_temp` decorator body also references `e.`
+        # entities directly (`expr(e.sensor.a)`); `house_scene`'s inverted
+        # body does too (`state_of(e.input_select.house_mode)`). The
         # remaining fallback decorator body is `return "<raw string>"` -- no
         # `expr`/`e.` reference needed for that one, but the import stays
         # harmless (unused-import isn't checked by this test).
@@ -139,11 +129,11 @@ def test_decompile_recompile_round_trip_is_byte_stable_for_options_body(
 
 
 def test_decompiled_write_target_helpers_recompile_without_error(tmp_path: Path) -> None:
-    """Defensive I3 test (reviewer follow-up, `MissingTemplateHelperWriteTargetError`):
+    """Defensive round-trip test for `MissingTemplateHelperWriteTargetError`:
     the DECOMPILER must never produce a `template_number`/`template_select` call that
-    then fails the new compile-time required-write-target check. Golden-fixture pulled
-    template helpers always carry their `set_value`/`select_option` keys (M10
-    CI-verified) -- this test recompiles the decompiled source for exactly those two
+    then fails the compile-time required-write-target check. Golden-fixture pulled
+    template helpers always carry their `set_value`/`select_option` keys -- this
+    test recompiles the decompiled source for exactly those two
     write-target-bearing objects and asserts it raises nothing, and that the emitted
     source textually carries the required kwarg (so a future decompiler change that
     silently dropped it would fail loudly here, not just via a values-differ diff).
@@ -162,7 +152,7 @@ def test_decompiled_write_target_helpers_recompile_without_error(tmp_path: Path)
         bundle_dir = tmp_path / key.replace(":", "_")
         bundle_dir.mkdir()
         (bundle_dir / "helpers.py").write_text(
-            # M16: house_scene's inverted body references state_of(e....).
+            # house_scene's inverted body references state_of(e....).
             "from hassle import state_of, template_number, template_select\n"
             "from hassle.registry import entities as e\n\n" + source + "\n",
             encoding="utf-8",

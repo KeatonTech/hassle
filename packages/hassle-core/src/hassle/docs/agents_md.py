@@ -1,4 +1,4 @@
-"""`AGENTS.md` generator (DESIGN §12, MILESTONES M9 deliverable 1).
+"""`AGENTS.md` generator (DESIGN §12).
 
 Bundle-specific, short, imperative agent instructions: the workflow contract
 (edit -> validate -> test -> plan), hard rules an agent (or a careless human)
@@ -25,7 +25,7 @@ def generate_agents_md(*, bundle_name: str) -> str:
     return f"""\
 # AGENTS.md — {bundle_name}
 
-This is a [Hassle](https://github.com/hassle-project/hassle) bundle: Python source
+This is a [Hassle](https://github.com/KeatonTech/hassle) bundle: Python source
 that compiles to Home Assistant automations/scripts/helpers. This file is
 **generated** by `hassle init`/`hassle pull` — re-run those to refresh it, don't
 hand-edit (your own notes belong in `lib/README.md` or a project README instead).

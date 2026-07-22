@@ -1,7 +1,7 @@
-"""Golden case: `param()` is a composable Expr (M1.1 deliverable).
+"""Golden case: `param()` is a composable Expr.
 
 `param("sun_angle") / 360 * 2 * PI` inside a `@shared_script` body composes
-exactly like any other TemplateExpr leaf (MILESTONES M1.1 acceptance example).
+exactly like any other TemplateExpr leaf.
 """
 
 from hassle import service, shared_script

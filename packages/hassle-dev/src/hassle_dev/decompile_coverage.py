@@ -1,9 +1,9 @@
-"""`hassle-dev decompile-coverage` — the M2 DSL-coverage CI artifact.
+"""`hassle-dev decompile-coverage` — the DSL-coverage CI artifact.
 
-Parses every fixture in ``fixtures/configs/`` to IR, runs the M2 coverage
+Parses every fixture in ``fixtures/configs/`` to IR, runs the decompiler's coverage
 analysis (``hassle.decompiler.analyze_coverage``), and writes a machine-readable
 JSON report (per-fixture ``raw_*`` node counts + the overall clean fraction).
-Exits non-zero when the corpus is below the >= 90% gate (MILESTONES M2 test 3),
+Exits non-zero when the corpus is below the >= 90% gate,
 so CI fails loudly rather than silently regressing DSL coverage over time.
 """
 

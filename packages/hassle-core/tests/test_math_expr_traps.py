@@ -1,4 +1,4 @@
-"""M1.1 test 3 -- trap boundary (MILESTONES M1.1 test 3).
+"""Trap boundary for stdlib `math` calls on template expressions.
 
 `math.cos(state(x).value)` (Python's stdlib `math` module applied to a
 TemplateExpr) must raise a CompileTimeBranchError-family teaching error --

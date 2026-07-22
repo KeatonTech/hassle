@@ -1,10 +1,10 @@
-"""Shared helpers for the M4 simulator test spec.
+"""Shared helpers for the simulator test suite.
 
 ``compile_source`` writes a DSL snippet to a throwaway bundle directory and
-compiles it through the real M1 pipeline (``compile_bundle``), then builds a
-:class:`~hassle.testing.Simulator` from the result -- so every simulator test
-exercises the same DSL-to-IR-to-simulator path a real bundle would (I5: the
-simulator consumes compiled IR, never DSL Python directly; going through
+compiles it through the real compiler pipeline (``compile_bundle``), then
+builds a :class:`~hassle.testing.Simulator` from the result -- so every
+simulator test exercises the same DSL-to-IR-to-simulator path a real bundle
+would. The simulator executes compiled IR, never DSL Python: going through
 ``compile_bundle`` here is a *test convenience* for authoring concise DSL
 snippets, not a violation -- the simulator itself is handed only the
 ``CompileResult`` it produces, exactly as :func:`test_sim_runs_compiled_ir_only`

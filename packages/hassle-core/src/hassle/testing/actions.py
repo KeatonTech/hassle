@@ -7,7 +7,7 @@ Modeled as a Python generator (:func:`run_actions`) so `delay`/`wait_for_trigger
 a matching state change/event arrives. This is what lets `mode: restart` cancel
 a run mid-`delay` by simply discarding its generator (Python generators clean
 up via `.close()`, and nothing here holds external resources) -- no thread, no
-real sleep, fully deterministic (R8).
+real sleep, fully deterministic.
 """
 
 from __future__ import annotations
@@ -71,9 +71,10 @@ Suspend = SuspendDelay | SuspendWaitForTrigger | SuspendWaitTemplate
 class EventOccurrence:
     """One fired event (``Simulator.fire_event``), the event-carrying
     counterpart of :class:`~hassle.testing.state.StateChange` -- the other
-    shape a pending ``SuspendWaitForTrigger`` can be resumed with (task #32,
-    docs/ha-api-notes.md §36.2 gap 1: a `wait_for_trigger([event(...)])` step
-    previously could only ever be resumed by a state change or a timeout).
+    shape a pending ``SuspendWaitForTrigger`` can be resumed with
+    (docs/internals/ha-api-notes.md §36.2 gap 1: a `wait_for_trigger([event(...)])`
+    step must be resumable by a fired event, not only a state change or a
+    timeout).
     """
 
     event_type: str
@@ -95,7 +96,7 @@ def _empty_scripts() -> dict[str, dict[str, Any]]:
     return {}
 
 
-#: Callee-nesting cap for script-call expansion (task #35) -- far above any
+#: Callee-nesting cap for script-call expansion -- far above any
 #: real bundle's call chain, low enough that mutual script->script recursion
 #: fails fast with a clear error instead of exhausting the stack.
 _MAX_SCRIPT_CALL_DEPTH = 10
@@ -119,8 +120,8 @@ class ActionContext:
     sun_times: SunTimesProvider = no_sun_times
     #: Bundle scripts by slug (`script:<slug>` object key minus the prefix),
     #: each the script's full HA config -- a direct `script.<slug>` service
-    #: call expands into its `sequence`, blocking, exactly like real HA
-    #: (task #35). Empty map = no expansion (the pre-#35 opaque behavior).
+    #: call expands into its `sequence`, blocking, exactly like real HA.
+    #: Empty map = no expansion (the opaque, non-expanding behavior).
     scripts: dict[str, dict[str, Any]] = field(default_factory=_empty_scripts)
     #: Current script-call nesting depth (recursion guard).
     script_call_depth: int = 0
@@ -169,9 +170,9 @@ def evaluate_condition(condition: dict[str, Any], ctx: ActionContext) -> bool:
         expected = condition.get("state")
         if isinstance(expected, list):
             # HA: `state: [a, b]` matches ANY of the listed states -- the
-            # shape `.state.in_([...])`/`state(x).is_([...])` compiles to
-            # (task #35; previously compared the current state to the list
-            # itself, silently false forever).
+            # shape `.state.in_([...])`/`state(x).is_([...])` compiles to.
+            # Comparing the current state to the list itself would silently
+            # be false forever.
             return current in expected
         return current == expected
     if kind == "numeric_state":
@@ -214,7 +215,7 @@ def _evaluate_template_condition(value_template: str, ctx: ActionContext) -> boo
     """A ``condition: template``'s ``value_template`` -- rendered like any
     other template, EXCEPT an undefined-name/attribute render failure here is
     swallowed to ``False`` rather than propagated as
-    :class:`UnsupportedTemplateError` (task #32).
+    :class:`UnsupportedTemplateError`.
 
     Mirrors real HA's script engine: `async_condition_from_config`'s template
     condition logs a render error and treats the condition as not satisfied,
@@ -371,8 +372,8 @@ def _run_one(
         # branch's plain `stop`/early-exit affects another (unlike
         # `then`/`sequence`), matching HA's isolation semantics for
         # `parallel`. An ERROR stop is different: real HA fails the whole
-        # parallel step when any branch errors, so it must halt this sequence
-        # too (PR #27 review) -- and the flag is scoped per branch so a
+        # parallel step when any branch errors, so it must halt this
+        # sequence too -- and the flag is scoped per branch so a
         # branch's error is never misattributed to a later unrelated halt.
         prior_error = ctx.halted_by_error
         any_branch_error = False
@@ -386,8 +387,8 @@ def _run_one(
         return (yield from _run_wait_for_trigger(action, ctx))
     if "wait_template" in action:
         return (yield from _run_wait_template(action, ctx))
-    # Unknown/unmodeled action shape: no-op (forward-compatible; validation
-    # tier catches genuinely malformed bundles, out of M4 scope).
+    # Unknown/unmodeled action shape: no-op (forward-compatible; the
+    # validator catches genuinely malformed bundles, out of scope here).
     return True
 
 
@@ -395,7 +396,7 @@ def _maybe_expand_script_call(
     action: dict[str, Any], ctx: ActionContext
 ) -> Generator[Suspend, WaitResumeValue, bool]:
     """Expand a direct ``script.<slug>`` call into the callee's sequence,
-    blocking, matching real HA (task #35): the caller resumes only when the
+    blocking, matching real HA: the caller resumes only when the
     callee finishes, the call's rendered ``data`` becomes the callee's
     variables (HA: script fields are run variables), a plain ``stop`` in the
     callee is a normal completion for the caller, and a ``stop`` with
@@ -463,9 +464,8 @@ def _duration(value: dict[str, Any] | str) -> timedelta:
     verbatim by the compiler (unlike `for_=`, it is never routed through
     ``normalize_duration``, see ``hassle.compiler.control_flow.wait_for``), so
     a bundle author writing ``wait_for(..., timeout="00:10:00")`` (exactly
-    what ``fixtures/dsl/wait_for_trigger`` golden-compiles) previously crashed
-    the simulator with an ``AttributeError`` (M9 regression, found via the
-    cookbook recipe ``wait_then_lock_reminder``:
+    what ``fixtures/dsl/wait_for_trigger`` golden-compiles) must not crash
+    the simulator with an ``AttributeError`` (regression test:
     `packages/hassle-core/tests/test_sim_wait_for_trigger.py::
     test_wait_for_trigger_accepts_plain_string_timeout`).
     """
@@ -550,7 +550,7 @@ def _evaluate_condition_with_repeat(
 def _wait_trigger_namespace(occurrence: StateChange | EventOccurrence) -> dict[str, Any]:
     """The satisfying trigger's data, shaped like HA's real post-`wait_for_trigger`
     `wait.trigger` variable for the occurrence kind that satisfied the wait
-    (task #32, docs/ha-api-notes.md §36.2 gap 2). Only the `event` shape is
+    (docs/internals/ha-api-notes.md §36.2 gap 2). Only the `event` shape is
     modeled today (`{"event": {"event_type": ..., "data": {...}}}`, mirroring
     `AutomationEngine.on_event`'s own top-level `trigger.event.data` shape) --
     a state-satisfied wait gets an empty namespace rather than a fabricated
@@ -564,10 +564,10 @@ def _wait_trigger_namespace(occurrence: StateChange | EventOccurrence) -> dict[s
 def _set_wait_satisfied(ctx: ActionContext, occurrence: StateChange | EventOccurrence) -> None:
     """Populate ``ctx.variables["wait"]`` after a `wait_for_trigger` step is
     SATISFIED, so later actions' templates can read ``wait.completed`` /
-    ``wait.trigger.*`` (task #32, docs/ha-api-notes.md §36.2 gap 2 --
-    previously never populated at all, so any such template hit an
-    `UnsupportedTemplateError` for the undefined `wait` name). `wait.trigger`
-    carries the satisfying occurrence's data and `wait.completed` is true.
+    ``wait.trigger.*`` (docs/internals/ha-api-notes.md §36.2 gap 2 -- without this, any
+    such template would hit an `UnsupportedTemplateError` for the undefined
+    `wait` name). `wait.trigger` carries the satisfying occurrence's data and
+    `wait.completed` is true.
     """
     trigger_ns = _TriggerNamespace(_wait_trigger_namespace(occurrence))
     ctx.variables["wait"] = _AttrDict({"completed": True, "trigger": trigger_ns})
@@ -586,8 +586,8 @@ def _run_wait_for_trigger(
 ) -> Generator[Suspend, WaitResumeValue, bool]:
     # HA renders a wait_for_trigger's config (limited templates) when the
     # step executes -- a templated `event_data` filter like
-    # `{{ tag ~ '_ACTION' }}` must match fired events by its RENDERED value
-    # (task #35; previously compared literally and never matched).
+    # `{{ tag ~ '_ACTION' }}` must match fired events by its RENDERED value,
+    # never the literal template text.
     triggers = ctx.render(action["wait_for_trigger"])
     timeout = _duration(action["timeout"]) if "timeout" in action else None
     continue_on_timeout = action.get("continue_on_timeout", True)

@@ -17,11 +17,12 @@ object_id both as an attribute (``e.sensor.hall_motion``) and by indexing
 helper declarations already return — accepted anywhere the DSL expects an
 entity id).
 
-This module is the M1 *runtime* shape only. M3 layers typed ``.pyi`` stub classes
-(generated from the registry snapshot) on top of the same attribute/index surface
-so pyright can catch a typo (``e.light.halway``) before any tool runs; nothing
-here depends on a registry snapshot — it works for any domain/object_id name,
-the "universal escape hatch" DESIGN §5.2 describes.
+This module is the *runtime* shape only. `hassle.registry.stubs` layers typed
+``.pyi`` stub classes (generated from the registry snapshot) on top of the
+same attribute/index surface so pyright can catch a typo (``e.light.halway``)
+before any tool runs; nothing here depends on a registry snapshot — it works
+for any domain/object_id name, the "universal escape hatch" DESIGN §5.2
+describes.
 
 **Digit-leading object_id rule (DESIGN §5.2):** a real HA object_id matches
 ``(?!_)[\\da-z_]+(?<!_)`` — it may start with a digit but never with (or end
@@ -52,7 +53,8 @@ class _DomainAccessor:
     """``entities.<domain>`` — attribute *and* index access to one HA domain.
 
     Both forms build the same :class:`EntityRef` for a given object_id; neither
-    form validates the object_id against a live registry (that is M3's job).
+    form validates the object_id against a live registry (that is the
+    validator's job -- `hassle.registry.validate`).
     """
 
     def __init__(self, domain: str) -> None:
@@ -78,9 +80,10 @@ class _DomainAccessor:
 class _EntitiesRegistry:
     """``entities`` — ``entities.<domain>`` returns a :class:`_DomainAccessor`.
 
-    Domains are open-ended in M1 (no registry snapshot backs this); any
-    attribute name is accepted as a domain. M3's generated stubs give this the
-    same shape but with real, typed domain/entity classes.
+    Domains are open-ended at runtime (no registry snapshot backs this); any
+    attribute name is accepted as a domain. The generated stubs
+    (`hassle.registry.stubs`) give this the same shape but with real, typed
+    domain/entity classes.
     """
 
     def __getattr__(self, domain: str) -> _DomainAccessor:

@@ -1,28 +1,30 @@
-"""M19 -- shared-script parameters are real template values.
+"""Shared-script parameters are real template values.
 
-MILESTONES M19 ("Write these tests first"):
+Covers:
 
 1. Golden: a body written with `tag=tag` and a composed `concat(tag, ...)`
    compiles to the exact `"{{ tag }}"` / `"{{ tag ~ '...' }}"` IR the
    `param()` string form produces (byte-identical to the `param()` form).
-2. Marker misuse: `range(times)` / `if tag:` in a body -> R6 error teaching
-   the honest alternatives (owner amendment: the originally-planned
-   `param_default()` escape hatch was REJECTED -- it would bake a stale
-   compile-time value into the compiled sequence while the HA field still
-   exists and still invites callers to pass other values, making the field a
-   lie. The blessed alternatives are a runtime construct HA itself supports
-   (`with repeat_count(times):`, which accepts the marker directly) for a
-   genuinely runtime value, or a module constant / `@macro` argument for a
-   genuinely compile-time one -- see `test_repeat_count_positive.py` for the
-   blessed pattern's own golden case).
-4. `param()` remains valid and equivalent (back-compat, F3).
-6. Simulator parity (I5) for marker-bound bodies.
+2. Marker misuse: `range(times)` / `if tag:` in a body -> compile error
+   stating what/where/fix, teaching the honest alternatives. (The
+   originally-planned `param_default()` escape hatch was REJECTED -- it
+   would bake a stale compile-time value into the compiled sequence while
+   the HA field still exists and still invites callers to pass other
+   values, making the field a lie. The blessed alternatives are a runtime
+   construct HA itself supports (`with repeat_count(times):`, which
+   accepts the marker directly) for a genuinely runtime value, or a
+   module constant / `@macro` argument for a genuinely compile-time one --
+   see `test_repeat_count_positive.py` for the blessed pattern's own
+   golden case).
+4. `param()` remains valid and equivalent (back-compat with the frozen
+   top-level DSL surface).
+6. Simulator parity for marker-bound bodies.
 
-(Test 3, the decompiler round-trip, lives in
-`test_decompile_shared_script_real_params.py`; test 5, the corpus/docs
-migration audit, is covered by the existing `hassle-dev goldens`/`docs` gates
-plus the fixture corpus audit itself -- every pre-M19 shared-script fixture
-in this PR still compiles byte-identically, no golden regenerated for them.)
+(The decompiler round-trip lives in
+`test_decompile_shared_script_real_params.py`; the corpus/docs migration
+audit is covered by the existing `hassle-dev goldens`/`docs` gates plus the
+fixture corpus audit itself -- every pre-existing shared-script fixture
+still compiles byte-identically, no golden regenerated for them.)
 """
 
 from __future__ import annotations
@@ -57,7 +59,7 @@ def test_bare_param_composes_with_the_expression_surface() -> None:
 
 
 def test_bare_param_form_byte_identical_to_param_form() -> None:
-    """The owner's real shape (`tag=tag`) and the pre-M19 `param("tag")`
+    """The bare `tag=tag` shape and the pre-existing `param("tag")`
     spelling must compile to the exact same IR -- proven directly by
     compiling both `shared_script_bare_param` (bare) and
     `shared_script_call_metadata` (param()) and comparing the analogous
@@ -74,8 +76,8 @@ def test_bare_param_form_byte_identical_to_param_form() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 2 -- marker misuse: range()/if on a bound parameter is a loud R6
-# error teaching the honest alternatives (repeat_count(...) for a runtime
+# Marker misuse: range()/if on a bound parameter is a loud compile error
+# teaching the honest alternatives (repeat_count(...) for a runtime
 # value, a module constant/@macro argument for a compile-time one).
 # ---------------------------------------------------------------------------
 
@@ -106,11 +108,10 @@ def test_if_on_bound_param_raises_shared_script_misuse_error() -> None:
 
 
 def test_param_default_is_gone() -> None:
-    """Owner amendment (MILESTONES M19): `param_default` was rejected and
-    removed entirely -- it bakes a stale compile-time value into the
-    compiled sequence while the HA field still exists, making the field a
-    lie. Neither the module-internal function nor its error class exist
-    anymore."""
+    """`param_default` was rejected and removed entirely -- it bakes a stale
+    compile-time value into the compiled sequence while the HA field still
+    exists, making the field a lie. Neither the module-internal function nor
+    its error class exist anymore."""
     import hassle.compiler.scripts as scripts_module
 
     assert not hasattr(scripts_module, "param_default")
@@ -120,8 +121,8 @@ def test_param_default_is_gone() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 2 (reviewer finding, M19 PR review): container dunders. `param()`'s
-# marker is a `str` subclass, so `for x in marker:` / `"a" in marker` /
+# Container dunders. `param()`'s marker is a `str` subclass, so
+# `for x in marker:` / `"a" in marker` /
 # `len(marker)` / `marker[0]` would otherwise sail through SILENTLY WRONG
 # (iterating/checking/measuring the literal `"{{ name }}"` Jinja text)
 # instead of raising at all -- trapped the same way the numeric/boolean
@@ -191,7 +192,8 @@ def test_str_and_composition_unaffected_by_container_traps() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 4 -- param() remains valid and equivalent (back-compat, F3).
+# param() remains valid and equivalent (back-compat with the frozen
+# top-level DSL surface).
 # ---------------------------------------------------------------------------
 
 
@@ -205,7 +207,7 @@ def test_param_still_works_and_matches_bare_form() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 6 -- simulator parity (I5): the simulator only ever sees compiled IR,
+# Simulator parity: the simulator only ever sees compiled IR,
 # and marker-bound vs param()-bound bodies compile to indistinguishable IR,
 # so simulated behavior is identical either way.
 # ---------------------------------------------------------------------------
@@ -221,9 +223,10 @@ def test_simulator_parity_for_marker_bound_shared_script_call() -> None:
 
 def test_simulator_parity_matches_param_form_call() -> None:
     """The pre-existing param()-bound fixture behaves identically under the
-    simulator -- I5 parity isn't a new code path, just proof the M19 binding
-    change never leaks into what the simulator (which only ever consumes
-    compiled IR/HA-JSON, `test_sim_runs_compiled_ir_only.py`) can observe."""
+    simulator -- this isn't a new code path, just proof the bare-parameter
+    binding change never leaks into what the simulator (which only ever
+    consumes compiled IR/HA-JSON, `test_sim_runs_compiled_ir_only.py`) can
+    observe."""
     from hassle.testing import simulate
 
     sim = simulate(FIXTURES / "shared_script_call_metadata" / "bundle")
@@ -232,9 +235,9 @@ def test_simulator_parity_matches_param_form_call() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Typing investigation (MILESTONES M19, owner pre-merge design feedback):
-# `@shared_script`'s signature now annotates every field `TemplateExpr`
-# (body-true typing) with `field_default(...)`-typed defaults. The COMPILE-
+# Typing investigation: `@shared_script`'s signature now annotates every
+# field `TemplateExpr` (body-true typing) with `field_default(...)`-typed
+# defaults. The COMPILE-
 # TIME net for a bad call-site kwarg is what actually protects a bundle
 # author (pyright can't -- the caller wrapper is `(*args: Any, **kwargs:
 # Any) -> None`, fully decoupled from the def's own annotations, verified
@@ -267,10 +270,10 @@ def test_unknown_kwarg_rejected_for_signature_derived_script(tmp_path: Path) -> 
 
 def test_unknown_kwarg_rejected_for_explicit_fields_script() -> None:
     """Explicit `fields=` script: the net IS `UnknownFieldError` (`fields=`'s
-    keys are the superset source of truth, `ux/shared-script-rich-fields`) --
+    keys are the superset source of truth) --
     the pre-existing coverage this test module cross-references, confirmed
-    still reachable post-M19/typing-amendment (the call-recording layer is
-    untouched by either change)."""
+    still reachable after the bare-parameter/typing changes (the
+    call-recording layer is untouched by either change)."""
     from hassle.compiler import UnknownFieldError
 
     with pytest.raises(UnknownFieldError, match="untracked"):

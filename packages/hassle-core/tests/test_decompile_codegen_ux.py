@@ -1,6 +1,6 @@
-"""Decompiler codegen UX (owner feedback after first real pull, DESIGN §7.3).
+"""Decompiler codegen UX, refined after real-world pulls (DESIGN §7.3).
 
-Four output-style changes, all cosmetic (I3-preserving -- compiled IR must stay
+Four output-style changes, all cosmetic (round-trip-preserving -- compiled IR must stay
 byte-identical; `EntityRef` is a `str` subclass so `e.<domain>.<object_id>`
 compiles to the exact same string as the quoted literal it replaces):
 
@@ -16,18 +16,17 @@ compiles to the exact same string as the quoted literal it replaces):
    strings are untouched.
 3. `from hassle import *` replaces the enumerated builder import. The
    `entities as e` import stays explicit.
-4. Section comments -- introduced, then REMOVED (`ux/dsl-ergonomics`, owner
-   amendment; DESIGN §7.3's dated note): originally, `# --- conditions ---` /
-   `# --- actions ---` preceded each non-empty section in an automation body,
-   and `# --- sequence ---` preceded a script's sequence when non-empty
-   (triggers never got one at all -- they're the `triggers=` decorator kwarg,
-   `ux/triggers-in-decorator`). Once conditions ALSO moved out of the body
-   (the `with only_if(...):` block form, item 1 of `ux/dsl-ergonomics`, wraps
-   every action whenever any conditions exist), the remaining comments no
-   longer disambiguated anything -- the body's structure (decorator = when,
-   only_if block = gate, plain statements = do) is self-describing on its
-   own. A freshly decompiled automation/script body now carries NO
-   `# --- ... ---` comments at all; see the tests below.
+4. Section comments -- introduced, then REMOVED (DESIGN §7.3's dated note):
+   originally, `# --- conditions ---` / `# --- actions ---` preceded each
+   non-empty section in an automation body, and `# --- sequence ---` preceded
+   a script's sequence when non-empty (triggers never got one at all --
+   they're the `triggers=` decorator kwarg). Once conditions ALSO moved out
+   of the body (the `with only_if(...):` block form wraps every action
+   whenever any conditions exist), the remaining comments no longer
+   disambiguated anything -- the body's structure (decorator = when, only_if
+   block = gate, plain statements = do) is self-describing on its own. A
+   freshly decompiled automation/script body now carries NO `# --- ... ---`
+   comments at all; see the tests below.
 """
 
 from __future__ import annotations
@@ -53,7 +52,8 @@ def test_automation_name_derived_from_alias_not_id() -> None:
     source = decompile_bundle({obj.object_key(): obj})
 
     assert "def hallway_light_on_motion():" in source
-    # I2: the id kwarg must still be present verbatim, untouched.
+    # Never change an existing object's HA id: the id kwarg must still be
+    # present verbatim, untouched.
     assert 'id="1769413455954"' in source
     assert "def _1769413455954" not in source
 
@@ -175,8 +175,8 @@ def test_numeric_state_entity_id_uses_registry_accessor() -> None:
 
 
 def test_target_entity_id_uses_registry_accessor() -> None:
-    # Updated (`ux/dsl-ergonomics`, item 3: bare entity target sugar): a
-    # single-key `{"entity_id": ...}` target now decompiles to the bare form
+    # Bare entity target sugar: a
+    # single-key `{"entity_id": ...}` target decompiles to the bare form
     # (`target=e.light.hallway`), not the dict form -- still using the
     # registry accessor either way. The dict form's own entity-ref rendering
     # (for a target that ISN'T single-key) is covered separately, see
@@ -304,7 +304,7 @@ def test_helper_declaration_ref_used_as_entity_uses_registry_accessor() -> None:
 
 def test_entity_ref_compiles_byte_identical_ir() -> None:
     """EntityRef is a str subclass: recompiling the e.-ref form must produce
-    IR that hashes identically to the original (zero drift, I3)."""
+    IR that hashes identically to the original (zero drift)."""
     config = {
         "id": "1",
         "alias": "Hallway Light On Motion",
@@ -346,8 +346,7 @@ def test_bundle_emits_star_import_and_explicit_entities_import() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. section comments -- removed entirely (`ux/dsl-ergonomics`, owner
-# amendment; see module docstring's dated note)
+# 4. section comments -- removed entirely (see module docstring's dated note)
 # ---------------------------------------------------------------------------
 
 
@@ -412,7 +411,7 @@ def test_script_sequence_omits_section_comment_when_empty() -> None:
 
 
 # ---------------------------------------------------------------------------
-# stability under the new style (R8)
+# stability under the new style (byte-stable, deterministic output)
 # ---------------------------------------------------------------------------
 
 

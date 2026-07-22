@@ -1,7 +1,7 @@
-"""Regression for the owner-smoke-test clobber: adopting N objects of one kind
-wrote each to the SAME default file via write_whole_file, so only the last
-survived (101 adopted, 3 persisted). Adopts targeting one destination file
-must be batched into a single multi-object module write.
+"""Regression: adopting N objects of one kind wrote each to the SAME default
+file via write_whole_file, so only the last survived (101 adopted, 3
+persisted). Adopts targeting one destination file must be batched into a
+single multi-object module write.
 """
 
 from __future__ import annotations
@@ -53,8 +53,8 @@ def test_pull_adopts_all_objects_of_a_kind(git_repo: Path, cli, fake_backend, to
 
 def test_adopt_batching_writes_each_destination_once(tmp_path: Path) -> None:
     from hassle.sync.models import Plan, PlanAction, PlanEntry
+    from hassle.sync.pull_apply import apply_pull_with_decompiler
     from hassle.sync.source_writer import RecordingSourceWriter
-    from hassle_cli.pull_apply import apply_pull_with_decompiler
 
     def entry(ident: str) -> PlanEntry:
         return PlanEntry(

@@ -1,11 +1,12 @@
-"""M1 test 8 — entity indexing form (DESIGN §5.2/§5.3).
+"""Entity indexing form (DESIGN §5.2/§5.3).
 
 `e.sensor["3d_printer"]` and `e.sensor._3d_printer` (attribute form, via the
 digit-leading underscore-prefix rule) must compile to the same entity
 reference. `hassle.registry.entities` is the runtime object `from hassle.registry
-import entities as e` binds to; M3 layers *typed* stub classes on top of this
-same runtime shape (this module is not itself generated/registry-driven — it
-works for any domain/object_id, per DESIGN §5.2's "universal escape hatch").
+import entities as e` binds to; the registry stub generator layers *typed*
+stub classes on top of this same runtime shape (this module is not itself
+generated/registry-driven — it works for any domain/object_id, per DESIGN
+§5.2's "universal escape hatch").
 """
 
 from __future__ import annotations
@@ -70,8 +71,8 @@ def test_domain_accessor_is_stable_and_reusable() -> None:
 @pytest.mark.parametrize("case", ["entity_attr_form", "entity_index_form"])
 def test_attr_and_index_forms_compile_to_identical_ir(case: str) -> None:
     # End-to-end: two bundles, one using e.sensor.hall_motion (attr form), one
-    # using e.sensor["hall_motion"] (index form), must compile to byte-identical
-    # IR (M1 test 8's "compile to the same entity reference").
+    # using e.sensor["hall_motion"] (index form), must compile to the same
+    # byte-identical entity reference in the IR.
     result = compile_bundle(_DSL / case / "bundle")
     (obj,) = result.objects.values()
     body = obj.to_ha()

@@ -1,4 +1,4 @@
-"""Loader for the M1 DSL golden cases under ``fixtures/dsl/``.
+"""Loader for the DSL golden cases under ``fixtures/dsl/``.
 
 Each case is a directory:
 
@@ -9,7 +9,7 @@ Each case is a directory:
 
 The compiler emits the plural HA schema (§7.1); ``expected_ir.json`` is stored in
 that canonical plural form. Golden files change only via
-``hassle-dev goldens --update`` (R3).
+``hassle-dev goldens --update``, never hand-edited.
 """
 
 from __future__ import annotations

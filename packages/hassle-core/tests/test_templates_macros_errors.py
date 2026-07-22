@@ -1,4 +1,4 @@
-"""R6 error snapshots for the templates/macros/scripts workstream.
+"""Error snapshots for templates/macros/scripts.
 
 Same pattern as test_compile_errors.py: each user-facing error states *what*,
 *where* (file:line), and *the fix*, in one paragraph, snapshot-tested under
@@ -7,8 +7,6 @@ tests/snapshots/errors/.
 
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
 
 import pytest
@@ -19,23 +17,19 @@ from hassle.compiler import (
     UnknownParamError,
     compile_bundle,
 )
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "dsl"
+
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    """Replace absolute paths with a stable basename so snapshots are portable."""
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 def test_macro_outside_context_error_message() -> None:
@@ -97,7 +91,7 @@ def test_shared_script_param_if_misuse_error_message() -> None:
 
 
 def test_shared_script_param_iteration_misuse_error_message() -> None:
-    # Reviewer finding (M19 PR review): container dunders (`for`/`in`/`len`/
+    # Container dunders (`for`/`in`/`len`/
     # indexing) get the same specialized error, with the iteration-flavored
     # fix text (`repeat_for_each`), not the numeric/boolean one.
     from hassle.compiler import SharedScriptParamMisuseError

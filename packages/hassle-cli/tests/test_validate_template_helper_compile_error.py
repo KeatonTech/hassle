@@ -1,5 +1,5 @@
-"""Reviewer follow-up (M10 merge): a `template_number`/`template_select`
-declaration missing its required write-target kwarg (`set_value=`/
+"""A `template_number`/`template_select` declaration missing its required
+write-target kwarg (`set_value=`/
 `select_option=`) used to only fail at APPLY time with a bare backend
 `ValueError` -- `hassle validate` would happily report "no findings" on a
 bundle that was guaranteed to fail on push.
@@ -28,7 +28,7 @@ def _write_bundle(root: Path, registry_snapshot_json: dict) -> None:
     (root / ".hassle" / "registry.json").write_text(
         json.dumps(registry_snapshot_json), encoding="utf-8"
     )
-    (root / "hassle.toml").write_text("format_version = 1\nmirror = false\n", encoding="utf-8")
+    (root / "hassle.toml").write_text("format_version = 1\n", encoding="utf-8")
 
 
 def test_validate_reports_missing_set_value_as_a_clean_finding(

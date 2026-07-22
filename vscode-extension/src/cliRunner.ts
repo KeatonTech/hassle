@@ -1,7 +1,7 @@
 /**
  * Resolves and shells out to the Hassle CLI (packages/hassle-cli, cli.py).
  *
- * CLI invocation fallback chain (M8 polish-batch item 1; supersedes the
+ * CLI invocation fallback chain (supersedes the
  * original single-shot "always `uv run hassle`" design):
  *   1. `hassle.executablePath` workspace setting, if non-empty -- used as the
  *      literal command (split on whitespace, first token is the executable).
@@ -10,7 +10,7 @@
  *   2. `uv run hassle`, invoked with `cwd` set to the workspace root --
  *      ONLY tried when the workspace root contains a `pyproject.toml` (a bare
  *      non-bundle folder, or a bundle laid out without its own uv project --
- *      see M17 `bundle-as-uv-project` -- has no `uv` project to run against,
+ *      see `hassle-cli`'s bundle-as-uv-project scaffolding -- has no `uv` project to run against,
  *      and shelling `uv run` there either fails confusingly or resolves the
  *      wrong environment).
  *   3. Bare `hassle` resolved from PATH -- the fallback when `uv run hassle`

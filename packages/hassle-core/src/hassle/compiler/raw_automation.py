@@ -2,7 +2,7 @@
 layer, wired into ``compile_bundle(...).objects`` (see the Registration note
 below).
 
-**Deviation from DESIGN §5.8 (recorded in docs/ha-api-notes.md):** the design
+**Deviation from DESIGN §5.8 (recorded in docs/internals/ha-api-notes.md):** the design
 text shows::
 
     @raw_automation(id="1687201958261")
@@ -16,7 +16,7 @@ over a zero-arg function returning the dict (mirroring ``@automation``'s own
 shape, so it slots into the same registration model below), and a plain-call
 form taking the dict directly.
 
-**Registration (§12 fix, M1 integration) -- same path as ``helpers.py``:** a
+**Registration (§12 fix) -- same path as ``helpers.py``:** a
 raw/blueprint automation is a whole bundle-level *object* (it appears in
 ``CompileResult.objects`` under ``"automation:<id>"``), not a trigger/condition/
 action *inside* one. Each builder registers the validated ``AutomationConfig``
@@ -47,7 +47,7 @@ _DECLARED: list[AutomationConfig] = []
 
 class RawAutomationNotJSONSerializableError(CompileError):
     """A ``raw_automation``/``@blueprint_automation`` body contains a value
-    that cannot round-trip as JSON (M1 test 5 / scope item 6)."""
+    that cannot round-trip as JSON."""
 
     def __init__(self, automation_id: str, detail: str, span: SourceSpan | None) -> None:
         where = f" at {span.file}:{span.line}" if span is not None else ""
@@ -137,14 +137,14 @@ def blueprint_automation(
 
     Maps the DSL's ergonomic ``inputs=`` to the stored JSON shape
     ``use_blueprint: {"path": ..., "input": ...}`` (singular ``input`` --
-    docs/ha-api-notes.md §10.5, quirk #4). A blueprint automation stores only
+    docs/internals/ha-api-notes.md §10.5, quirk #4). A blueprint automation stores only
     ``use_blueprint`` plus (optionally) the usual ``alias``/``description``
     top-level fields HA still allows a blueprint-based automation to carry (a
     real stored blueprint automation's ``alias``/``description`` sit alongside
     ``use_blueprint``, not inside it) -- no ``triggers/conditions/actions``
     (the blueprint is applied at runtime by HA). ``alias=``/``description=``
-    are an F3 *addition* (M2, widening this signature with new optional
-    keywords, docs/dsl-f3.md's stability contract). Wired into
+    are an addition to the frozen DSL surface (widening this signature with
+    new optional keywords, docs/internals/dsl-extensions.md's stability contract). Wired into
     ``compile_bundle`` via the module docstring's Registration note
     (``Registry.add_object``).
     """

@@ -1,19 +1,19 @@
-"""UX feedback (owner, post-first-real-pull): DESIGN §7.3 says placement should
-follow HA's UI category registry, but that was never implemented -- pull always
-fell back to ``automations/misc.py`` / ``scripts/misc.py`` (`bundle_ops.
-default_source_path`). This is the registry-model half of the fix:
+"""DESIGN §7.3 says placement should follow HA's UI category registry, but
+that was never implemented -- pull always fell back to ``automations/misc.py``
+/ ``scripts/misc.py`` (`bundle_ops.default_source_path`). This is the
+registry-model half of the fix:
 
 - `RegistrySnapshot` gains an additive `categories` field: `{scope: {category_id:
   name}}` (WS `config/category_registry/list` is called once per scope, e.g.
-  `{"scope": "automation"}`; DESIGN §7.3, docs/ha-api-notes.md new §22).
+  `{"scope": "automation"}`; DESIGN §7.3, docs/internals/ha-api-notes.md new §22).
 - `EntityInfo` gains `unique_id` (== the automation/script/helper config id,
-  docs/ha-api-notes.md §2 "id <-> unique_id") and a per-scope `categories` map
+  docs/internals/ha-api-notes.md §2 "id <-> unique_id") and a per-scope `categories` map
   (`{scope: category_id}`) already present on entity-registry rows but never
   parsed by the snapshot model.
 
 Both additions are additive (`extra="allow"` + new fields with safe defaults)
-so every pre-existing fixture/snapshot round-trips unchanged -- no F1/F2/F3
-break.
+so every pre-existing fixture/snapshot round-trips unchanged -- no frozen
+interface breaks.
 """
 
 from __future__ import annotations

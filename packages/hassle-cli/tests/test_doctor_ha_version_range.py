@@ -1,12 +1,11 @@
-"""MILESTONES M9 deliverable 4: "HA tested-version range surfaced in `hassle
-doctor` (data already exists from M6's version check)".
+"""HA tested-version range surfaced in `hassle doctor`.
 
 `hassle doctor` always prints the tested range (offline, no connection
-needed -- it's a static constant, R2-safe). A LIVE instance's reported
-version is only checked when the caller opts into a connection via
+needed -- it's a static constant, safe for unit tests). A LIVE instance's
+reported version is only checked when the caller opts into a connection via
 `--sweep-shadows` (the pre-existing connection gate -- `doctor` must never
 make network I/O just because `ha_url` happens to be configured), using the
-exact `hassle.backend.version.version_warning` logic M6 already wrote.
+`hassle.backend.version.version_warning` logic.
 """
 
 from __future__ import annotations
@@ -46,7 +45,7 @@ def test_doctor_silent_about_version_when_instance_in_range(
 
 
 def test_doctor_without_sweep_shadows_never_connects(bundle_dir: Path, cli, toml_writer) -> None:
-    """R2: a bare `hassle doctor` (no `--sweep-shadows`) must never attempt a
+    """A bare `hassle doctor` (no `--sweep-shadows`) must never attempt a
     connection, even with a real (unreachable-in-tests) `ha_url` configured
     -- it stays a pure offline diagnostic."""
     (bundle_dir / "hassle.toml").write_text(

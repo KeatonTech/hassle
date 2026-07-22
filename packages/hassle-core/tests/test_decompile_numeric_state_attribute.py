@@ -1,13 +1,12 @@
-"""M2.1 — teach the decompiler numeric_state's `attribute=` field (M1.1 addition).
+"""The decompiler reproduces numeric_state's `attribute=` field.
 
-M1.1 added ``attribute=`` to the ``numeric_state()`` builder (both trigger and
-condition forms, ``hassle.compiler.triggers.NumericStateExpr`` -- reads an
-entity attribute instead of its main state) after M2 branched, so the M2
-decompiler never learned to reproduce it: a stored ``numeric_state`` trigger/
-condition carrying ``attribute`` currently falls back to ``raw_trigger``/
-``raw_condition``, costing ``fixtures/configs/automation_math_shade_sun.json``
-its spot in the DSL-coverage clean set even though the compile side has
-supported it since M1.1.
+``attribute=`` on the ``numeric_state()`` builder (both trigger and
+condition forms, ``hassle.compiler.triggers.NumericStateExpr``) reads an
+entity attribute instead of its main state. Without decompiler support, a
+stored ``numeric_state`` trigger/condition carrying ``attribute`` falls back
+to ``raw_trigger``/``raw_condition``, costing
+``fixtures/configs/automation_math_shade_sun.json`` its spot in the
+DSL-coverage clean set even though the compile side supports it.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
-"""Error case: an action recorded BEFORE a `with only_if(...):` block opens
-(`ux/dsl-ergonomics`, item 1) -- the block form requires every action to be
-inside it; one already recorded earlier can never retroactively become
-"inside" the block.
+"""Error case: an action recorded BEFORE a `with only_if(...):` block opens.
+
+The block form requires every action to be inside it; one already recorded
+earlier can never retroactively become "inside" the block.
 """
 
 from hassle import automation, only_if, service, state

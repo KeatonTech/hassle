@@ -1,15 +1,15 @@
-"""Golden case: `math_expr_reference` (M9 docs-coverage gap fill).
+"""Golden case: `math_expr_reference`.
 
-`shade_tracks_sun` already goldens `cos`/`round_`/`PI` (MILESTONES M1.1 test
-4); this fixture exists purely so **every remaining** `hassle.compiler.math_expr`
-builder has a real DSL<->compiled-YAML golden pair backing its docs/DSL.md
-section (M9 test 1: the docs build fails if any `hassle.__all__` name lacks a
-documented pair) -- `sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
+`shade_tracks_sun` already goldens `cos`/`round_`/`PI`; this fixture exists
+purely so **every remaining** `hassle.compiler.math_expr` builder has a real
+DSL<->compiled-YAML golden pair backing its docs/DSL.md section (the docs
+build fails if any `hassle.__all__` name lacks a documented pair) --
+`sin`/`tan`/`asin`/`acos`/`atan`/`atan2`/`sqrt`/`log`/
 `abs_`/`min_`/`max_`, the `E_`/`TAU` constants, the datetime helpers
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-f3.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (

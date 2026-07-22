@@ -1,4 +1,4 @@
-"""M4 done-gate fixture: a deliberately seeded logic bug.
+"""Sim fixture: a deliberately seeded logic bug.
 
 Copy of `fixtures/sim/hallway_bundle/hallway.py`'s `hall_light_on_motion`
 (same day/night `sun` gate) with the guest_mode condition inverted --

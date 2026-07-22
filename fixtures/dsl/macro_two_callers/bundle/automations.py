@@ -1,4 +1,4 @@
-"""Golden case: one macro used by two automations (M1 test 2).
+"""Golden case: one macro used by two automations.
 
 Both automations' action lists must contain the macro's expansion.
 """

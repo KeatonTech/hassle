@@ -1,5 +1,5 @@
 """`hassle doctor`: committed-secret scan + orphaned shadow-automation sweep
-(DESIGN §10.4 point 4; DESIGN §14; MILESTONES M7 test 6).
+(DESIGN §10.4 point 4; DESIGN §14).
 """
 
 from __future__ import annotations

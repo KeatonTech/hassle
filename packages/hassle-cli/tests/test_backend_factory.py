@@ -1,5 +1,5 @@
-"""M7 review cleanup (M7.1 item 5a): `connect()` on an unregistered `fake://`
-URL must raise a clean what/where/fix error instead of falling through to
+"""`connect()` on an unregistered `fake://` URL must raise a clean
+what/where/fix error instead of falling through to
 `DirectBackend`, which would try to open a real connection to the literal
 string `fake://<token>` and surface an ugly stack trace instead of a helpful
 message. This is a test-only seam (docs: `hassle_cli.backend_factory`), but
