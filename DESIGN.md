@@ -130,7 +130,7 @@ hassle/
 │   ├── hassle-core/          # the shared library (most of the code lives here)
 │   └── hassle-cli/
 ├── vscode-extension/
-├── fixtures/                 # corpus of real HA JSON configs + registry snapshots (see MILESTONES M0)
+├── fixtures/                 # corpus of real HA JSON configs + registry snapshots
 ├── docs/                     # DSL reference, cookbook, agent docs templates, ha-api-notes.md
 ├── DESIGN.md  CONTRIBUTING.md   # milestone plan preserved in docs/history/
 └── pyproject.toml            # uv workspace; ruff + pyright strict on hassle-core
@@ -144,7 +144,8 @@ This is the substrate everything sits on. All facts below were verified against 
 and official docs in July 2026 (config REST handlers in `homeassistant/components/config/view.py`,
 storage collections in `helpers/collection.py`, media source in
 `components/media_source/local_source.py`, etc.). Implementing agents: **still re-verify
-behaviorally in M0.V against a live HA instance** (see MILESTONES); HA versions drift.
+behaviorally against a live HA instance** (docs/history/milestones.md, M0.V); HA
+versions drift.
 
 | Object | Native storage | Read | Write/Delete |
 |---|---|---|---|
@@ -527,7 +528,7 @@ in place by the next `hassle pull` — see the migration bullet below.
   raises a `declared-but-ignored` warning (almost always a mistake — the user probably meant to
   ignore something else). If a glob starts matching a `manifest.lock` entry that predates it, the
   next `hassle pull` drops that entry from the manifest (never touching HA) and prints a one-time
-  notice. See `hassle_cli.ignore_filter` for the implementation and MILESTONES-equivalent test
+  notice. See `hassle_cli.ignore_filter` for the implementation and its test
   coverage (`packages/hassle-cli/tests/test_ignore_filtering.py`,
   `test_pull_ignore_globs.py`).
 
@@ -553,7 +554,7 @@ union), `Condition`, `Action` (tagged union incl. `choose/if/repeat/parallel/wai
   the plan would show perpetual spurious diffs.
 
 Pipelines: `DSL —(trace)→ IR —(serialize)→ HA JSON` and `HA JSON —(parse)→ IR —(codegen)→ DSL`.
-The IR is the frozen interface between workstreams (see MILESTONES: freeze point F1).
+The IR is the frozen interface between the two pipelines (docs/ir-format.md).
 
 ### 7.2 Compiler
 
@@ -956,8 +957,8 @@ Every bundle ships self-contained agent docs (no internet needed):
 - **`.hassle/registry.json`** doubles as the machine-readable entity inventory
   (agents grep it instead of guessing entity ids).
 - Error messages are part of the docs surface: every Hassle error states *what*, *where*
-  (file:line), and *the fix*, in one paragraph. MILESTONES gates this with error-message
-  snapshot tests.
+  (file:line), and *the fix*, in one paragraph — enforced with error-message
+  snapshot tests (CONTRIBUTING.md).
 - Acceptance test for the docs themselves (M9): a fresh model session, given only a pulled
   bundle, must complete representative edit tasks correctly — docs iterate until it does.
 
