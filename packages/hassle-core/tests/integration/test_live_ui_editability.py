@@ -2,7 +2,7 @@
 
 After apply, the automation's config is fetchable via the config API and the
 automation entity exists in the entity registry with `unique_id == config id`
-(docs/ha-api-notes.md §2: `unique_id == config id` is the identity anchor —
+(docs/internals/ha-api-notes.md §2: `unique_id == config id` is the identity anchor —
 the same identity the UI edits through). This proves the object Hassle wrote
 is one the UI can edit, without driving a browser.
 """

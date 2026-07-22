@@ -196,7 +196,7 @@ class AutomationEngine:
 
     def on_event(self, event_type: str, event_data: dict[str, Any]) -> None:
         # First, resume any run waiting on a matching wait_for_trigger (task
-        # #32, docs/ha-api-notes.md §36.2 gap 1: this previously only ever
+        # #32, docs/internals/ha-api-notes.md §36.2 gap 1: this previously only ever
         # started NEW runs via `_start_or_queue` below, so a run already
         # suspended inside `wait_for_trigger([event(...)])` was never woken
         # by a fired event -- mirrors `on_state_change`'s own

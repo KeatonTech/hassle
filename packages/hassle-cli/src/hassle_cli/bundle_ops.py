@@ -3,7 +3,7 @@ sync engine (`compute_plan`/`apply_plan`) expects: `object_key -> (kind, config)
 
 Also resolves each object's `source_path` (bundle-relative) from its
 declaration-site span (`CompileResult.decl_span_for`), for `PlanEntry.source_path`
-(routes the pull engine's `SourceWriter` calls, docs/backend.md).
+(routes the pull engine's `SourceWriter` calls, docs/internals/backend-protocol.md).
 """
 
 from __future__ import annotations
@@ -81,9 +81,9 @@ def source_path_for(bundle_root: Path, result: CompileResult, object_key: str) -
 
 def _category_source_path(object_key: str, registry: RegistrySnapshot) -> str | None:
     """DESIGN §7.3's placement default, the category-registry half
-    (root-level, cross-kind layout, docs/ha-api-notes.md §31.6): an object's
+    (root-level, cross-kind layout, docs/internals/ha-api-notes.md §31.6): an object's
     entity-registry entry (matched by `unique_id ==
-    identity`, the id<->unique_id anchor, docs/ha-api-notes.md §2) may carry a
+    identity`, the id<->unique_id anchor, docs/internals/ha-api-notes.md §2) may carry a
     UI category for its OWN scope (``"automation"``/``"script"`` for those two
     kinds, the shared ``"helpers"`` scope for all 13 helper kinds); if so,
     place it under root-level ``<slug(category name)>.py`` instead of the
@@ -287,7 +287,7 @@ def _module_path_for(source_path: str) -> str:
     ``import`` statement would use (``"scripts/notify.py"`` ->
     ``"scripts.notify"``) -- the bundle loader imports every bundle file this
     way (recursive PEP 420 namespace packages, no ``__init__.py`` needed,
-    docs/ha-api-notes.md §17.9 RESOLVED), so this is just that same mapping
+    docs/internals/ha-api-notes.md §17.9 RESOLVED), so this is just that same mapping
     run forward instead of backward."""
     posix = Path(source_path).as_posix()
     if posix.endswith(".py"):

@@ -285,7 +285,7 @@ def capture_actions() -> Generator[list[dict[str, Any]]]:
 
     The public counterpart of ``push_actions`` for ``lib/`` recipe builders
     that cannot legitimately reach the internal ``Recorder``/``RecordedNode``
-    seam ``if_then``/``choose`` are built on (docs/compiler-api.md §2):
+    seam ``if_then``/``choose`` are built on (docs/internals/compiler-api.md §2):
     a builder wants to record a block of actions once and then splice the
     SAME bodies into one or more containers it assembles itself (e.g. one
     notification action list reused across several ``choose()`` branches

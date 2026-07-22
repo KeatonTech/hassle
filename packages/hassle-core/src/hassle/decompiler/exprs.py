@@ -2,7 +2,7 @@
 
 Each ``decompile_*`` function returns a Python source snippet (a single
 expression, no trailing newline) that reproduces the given HA dict via the
-frozen DSL surface (docs/dsl-extensions.md), or returns ``None`` when the
+frozen DSL surface (docs/internals/dsl-extensions.md), or returns ``None`` when the
 shape isn't modeled -- the caller falls back to the granular ``raw_*`` escape
 hatch (DESIGN §5.8).
 
@@ -352,7 +352,7 @@ def _trig_time(body: dict[str, Any]) -> str | None:
     parts = [f"at={render_literal(body['at'])}"]
     if "weekday" in body:
         # HA's `time` trigger schema also accepts `weekday`
-        # (docs/ha-api-notes.md), though it was originally documented
+        # (docs/internals/ha-api-notes.md), though it was originally documented
         # condition-only.
         parts.append(f"weekday={render_literal(body['weekday'])}")
     call = f"time({', '.join(parts)})"
@@ -561,7 +561,7 @@ def _cond_state(body: dict[str, Any]) -> str | None:
     if not set(body) <= known or "entity_id" not in body:
         return None
     entity_id = body["entity_id"]
-    # `entity_id` (and `state`) accept a list too (docs/ha-api-notes.md §20):
+    # `entity_id` (and `state`) accept a list too (docs/internals/ha-api-notes.md §20):
     # the HA UI stores a state CONDITION's fields as lists even for a single
     # entity/value, mirroring the trigger fix (`_is_entity_id_shape`) -- a
     # singleton list must stay a list, never normalized to a scalar

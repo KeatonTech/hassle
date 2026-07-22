@@ -1,9 +1,9 @@
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 

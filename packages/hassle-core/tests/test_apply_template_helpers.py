@@ -10,7 +10,7 @@ the template-helper kind slots into that existing machinery with ZERO changes
 to the plan/apply decision logic, only the `_KIND_ORDER` dependency-ordering
 tuple.
 
-**Identity (docs/ha-api-notes.md §26.6):** there is no `unique_id` -- identity
+**Identity (docs/internals/ha-api-notes.md §26.6):** there is no `unique_id` -- identity
 is derived from `name` (slugified). `name` is kept CONSTANT across
 create/update pairs below (an update addresses the existing identity; it
 does not re-derive one), matching how the real options flow can change other
@@ -225,7 +225,7 @@ def test_template_helper_delete_reverifies_and_removes_entry() -> None:
 
 def test_template_helper_plan_apply_create_then_noop_on_repush() -> None:
     # A `list_remote` that doesn't carry back a template helper's full stored
-    # config (name + options, docs/ha-api-notes.md §26.7) makes a re-plan see
+    # config (name + options, docs/internals/ha-api-notes.md §26.7) makes a re-plan see
     # `remote={}` and plan UPDATE instead of NOOP forever, even with nothing
     # actually changed. This is the FakeBackend/plan-level regression for the
     # DirectBackend fix (the real end-to-end proof is the integration suite's
@@ -235,7 +235,7 @@ def test_template_helper_plan_apply_create_then_noop_on_repush() -> None:
     # natural `int` literals) because this file exercises the plan/apply
     # engine directly against a hand-written "already-compiled" config, not
     # the compiler itself -- a real compile always produces floats for these
-    # three fields (docs/ha-api-notes.md §26.10; the compiler-level coercion
+    # three fields (docs/internals/ha-api-notes.md §26.10; the compiler-level coercion
     # is covered by `test_template_helper_float_coercion.py`). Using `int`
     # literals here would test a local config the real compiler can never
     # actually produce.

@@ -21,8 +21,8 @@ Review checklist, in priority order:
    automatic block.
 3. **Invariants:** scan for violations of DESIGN.md §2 (direct YAML writes, mutated ids,
    dropped unknown fields, tests running DSL instead of compiled IR, silent-clobber paths).
-4. **Compatibility contracts:** any change to the surfaces in docs/ir-format.md,
-   docs/backend.md, or docs/dsl-extensions.md without a matching update to that document is an
+4. **Compatibility contracts:** any change to the surfaces in docs/internals/ir-format.md,
+   docs/internals/backend-protocol.md, or docs/internals/dsl-extensions.md without a matching update to that document is an
    automatic block; removals or changes (vs. additions) are blocks even with one.
 5. **Run it:** execute `pytest`, `ruff check`, `pyright` yourself. Trust nothing reported to you.
 6. **Correctness of the interesting 20%:** read the core logic (not boilerplate) adversarially —

@@ -1,4 +1,4 @@
-"""The `SourceWriter` seam (docs/backend.md) — DESIGN §7.3, §8.3.
+"""The `SourceWriter` seam (docs/internals/backend-protocol.md) — DESIGN §7.3, §8.3.
 
 `SourceWriter` decouples the sync engine's pull-side actions from the LibCST
 splicer. This module covers two implementations: `WholeFileSourceWriter` (a

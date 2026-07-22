@@ -3,7 +3,7 @@
 Proves normalize_ha runs on the raw body: the bundle writes the pre-2024.10
 singular schema (trigger/condition/action + service:), and the compiler stores
 the canonical plural form (triggers/conditions/actions + action:), exactly as
-HA normalizes on storage (docs/ha-api-notes.md §10.1).
+HA normalizes on storage (docs/internals/ha-api-notes.md §10.1).
 """
 
 from hassle import raw_automation

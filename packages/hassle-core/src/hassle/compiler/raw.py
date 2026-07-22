@@ -5,13 +5,13 @@ can reach.
 ``raw_trigger({...})`` / ``raw_condition({...})`` / ``raw_action({...})`` pass
 a verbatim dict through into the recorded stream of the *currently active*
 automation/script, exactly like any other trigger/condition/action builder
-(docs/compiler-api.md §1/§2: "any object with ``to_trigger()``"). The
+(docs/internals/compiler-api.md §1/§2: "any object with ``to_trigger()``"). The
 containing object's whole-body ``normalize_ha`` pass (already applied by
 ``compile_registered``/``_build_automation`` in the core) normalizes them
 exactly as HA itself would on storage -- e.g. a raw action given in legacy
 ``service:`` form comes out as ``action:`` -- with no extra work here; a raw
 trigger's inner ``platform:`` discriminator is preserved verbatim (HA does not
-rewrite it on storage, docs/ha-api-notes.md §10.1), which these passthrough
+rewrite it on storage, docs/internals/ha-api-notes.md §10.1), which these passthrough
 builders get for free by not touching the dict at all.
 
 **Scope note:** ``@raw_automation`` (a whole raw automation as a bundle-level
@@ -20,7 +20,7 @@ whole top-level objects (a different registration shape than "run a function,
 record trigger/condition/action calls into it") and live in
 ``hassle.compiler.raw_automation`` instead, alongside the ``Registry.
 add_object`` path (registry.py) that lands them in ``CompileResult.objects``.
-This was originally a reported contract gap (docs/ha-api-notes.md §12);
+This was originally a reported contract gap (docs/internals/ha-api-notes.md §12);
 see that module's docstring.
 """
 

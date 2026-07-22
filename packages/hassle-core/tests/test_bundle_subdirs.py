@@ -1,4 +1,4 @@
-"""Bundle subdirectory support (docs/ha-api-notes.md §17.9, DESIGN §6/§7.3).
+"""Bundle subdirectory support (docs/internals/ha-api-notes.md §17.9, DESIGN §6/§7.3).
 
 `compile_bundle` must treat the bundle directory as a package tree: files under
 `automations/`, `scripts/`, `helpers/`, `lib/`, or any other user directory are
@@ -45,7 +45,7 @@ def test_cross_package_imports_resolve(tmp_path: Path) -> None:
     """`from helpers.modes import guest_mode` / `from lib.notify import
     notify_adults` (DESIGN §5.3/§5.6 verbatim) must work with no `__init__.py`
     anywhere in the tree -- PEP 420 namespace packages, since the bundle root
-    is put on `sys.path` (decided + documented in docs/ha-api-notes.md §17.9).
+    is put on `sys.path` (decided + documented in docs/internals/ha-api-notes.md §17.9).
     """
     bundle = tmp_path / "bundle"
     (bundle / "helpers").mkdir(parents=True)

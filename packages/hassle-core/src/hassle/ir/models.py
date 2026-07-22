@@ -130,14 +130,14 @@ class TemplateHelperConfig(IRObject):
     binary_sensor/select config entry holds (DESIGN §13's config-entry helper
     plugin).
 
-    **Identity: there is no ``unique_id`` field** (docs/ha-api-notes.md
+    **Identity: there is no ``unique_id`` field** (docs/internals/ha-api-notes.md
     §26.6). The `template` config flow's
     form schema rejects an unrecognized ``unique_id`` key outright (real HA
     returned ``400 {"errors": {"base": ["extra keys not allowed @
     data['unique_id']"]}}``) — a flow-created entry has no caller-settable
     unique id at all. Identity is instead **derived from ``name``**, exactly
     mirroring the nine storage helpers' "id is a slug of name" rule
-    (``hassle.ir.keys.slugify``, docs/ha-api-notes.md §4/§17.5) — except here
+    (``hassle.ir.keys.slugify``, docs/internals/ha-api-notes.md §4/§17.5) — except here
     it's the ONLY identity source (no override), since the flow gives us
     nothing else stable to key on locally; on the wire, HA's own correlator
     is the entry's ``title`` (which the flow sets from the submitted
@@ -186,9 +186,9 @@ class GroupHelperConfig(IRObject):
     template-helper config-entry domains).
 
     **Identity: there is no ``unique_id`` field**, exactly mirroring
-    ``TemplateHelperConfig`` (docs/ha-api-notes.md §26.6): the `group`
+    ``TemplateHelperConfig`` (docs/internals/ha-api-notes.md §26.6): the `group`
     config flow's form schema rejects an unrecognized ``unique_id`` key
-    outright (docs/ha-api-notes.md §38.1) -- a flow-created entry has no
+    outright (docs/internals/ha-api-notes.md §38.1) -- a flow-created entry has no
     caller-settable unique id at all. Identity is derived from ``name``
     (``hassle.ir.keys.slugify``), the ONLY identity source, same as template
     helpers; on the wire, HA's own correlator is the entry's ``title`` (set

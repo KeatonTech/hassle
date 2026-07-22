@@ -1,5 +1,5 @@
 """Decompiler emits `triggers=` in the decorator as the canonical form
-(DESIGN §5.3/§5.5/§7.3, docs/dsl-extensions.md).
+(DESIGN §5.3/§5.5/§7.3, docs/internals/dsl-extensions.md).
 
 The decompiler no longer emits `when(...)` in the automation body: triggers
 become a `triggers=[...]` kwarg on `@automation(...)` (multi-line formatted

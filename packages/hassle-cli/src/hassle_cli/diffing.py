@@ -51,7 +51,7 @@ def is_modernization_only_diff(
     Compares the *decompiled DSL* of both sides rather than the raw JSON:
     the compiler always emits the modern inner discriminator (`trigger:`/
     `action:`), but real HA never rewrites a legacy inner `platform:`/
-    `service:` discriminator on storage (docs/ha-api-notes.md §17.1) -- so an
+    `service:` discriminator on storage (docs/internals/ha-api-notes.md §17.1) -- so an
     adopted legacy-authored object's compiled (modern) form and its still-
     legacy remote form will keep differing at the JSON level even though
     they describe the exact same automation. The decompiler doesn't care

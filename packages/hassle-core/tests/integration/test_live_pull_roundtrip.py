@@ -30,7 +30,7 @@ def _seed(ha: DirectBackend) -> None:
     # Author in the modern plural / `trigger:`/`action:` schema — what the 2026.7
     # UI writes and what the compiler emits — so `compile(decompile(remote))` is
     # byte-exact. (A legacy `platform:`-form remote round-trips only up to the
-    # decompiler's documented one-time modernization, docs/ha-api-notes.md §16;
+    # decompiler's documented one-time modernization, docs/internals/ha-api-notes.md §16;
     # that is a separate, offline concern, exercised there.)
     ha.create("input_boolean", {"id": "guest_mode", "name": "Guest Mode"})
     ha.create(

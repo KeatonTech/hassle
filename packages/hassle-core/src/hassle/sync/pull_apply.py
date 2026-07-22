@@ -3,11 +3,11 @@ content (DESIGN §8.3).
 
 `hassle.sync.pull.apply_pull` hardcodes a JSON-comment placeholder for
 `refresh`/`adopt` content -- explicitly documented as a stand-in for a real
-`SourceWriter` implementation (docs/backend.md). This module is that
+`SourceWriter` implementation (docs/internals/backend-protocol.md). This module is that
 implementation: it re-implements `apply_pull`'s action dispatch, but with
 real decompiled DSL source (`hassle.decompiler.decompile_bundle`) instead of
 the placeholder, while keeping the exact same conflict-marker format
-(docs/backend.md's `<<<<<<< local` block) so a conflict written by this CLI
+(docs/internals/backend-protocol.md's `<<<<<<< local` block) so a conflict written by this CLI
 looks identical to one written by `RecordingSourceWriter`-based unit tests.
 
 Before any ADOPT destination is written, `apply_pull_with_decompiler` runs a
@@ -205,7 +205,7 @@ def values_match(recompiled: IRObject, original: dict[str, Any]) -> bool:
 
     - An automation ``original`` with no ``id`` at all gets ``recompiled.identity``
       backfilled (the compiler always materializes an explicit ``id`` --
-      `options.get("id") or func.__name__`, docs/ha-api-notes.md -- so a
+      `options.get("id") or func.__name__`, docs/internals/ha-api-notes.md -- so a
       stored automation missing `id` entirely only ever arises from a
       docs-example fixture whose identity is extrinsic, a ``key_hint``).
     - A TYPED ``@automation`` always materializes ``triggers``/``conditions``/

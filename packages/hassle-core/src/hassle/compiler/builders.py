@@ -66,7 +66,7 @@ class StateExpr(_NoBool):
     single-entity form is unaffected): the HA UI always stores these as
     *lists*, even for a single entity/value, and a singleton list must
     round-trip as a list — never normalized to a scalar (compile(decompile(x))
-    must equal x for any config, docs/ha-api-notes.md).
+    must equal x for any config, docs/internals/ha-api-notes.md).
     """
 
     def __init__(self, entity_id: str | Sequence[str]) -> None:
@@ -342,7 +342,7 @@ class ServiceAction:
     live at the top level, not inside ``data``); passing them keeps this the one
     service-call builder (no separate ``service_ext``).
 
-    ``metadata=`` (real-world smoke-test addition, docs/ha-api-notes.md §19): the
+    ``metadata=`` (real-world smoke-test addition, docs/internals/ha-api-notes.md §19): the
     HA UI stamps ``"metadata": {}`` on every action it saves. It is emitted
     whenever passed, **including when empty** — a real UI-authored config always
     carries it, so eliding an empty ``metadata`` would hash-drift every such
@@ -350,7 +350,7 @@ class ServiceAction:
     equal x for any config). ``None`` (the default) omits the field
     entirely, for DSL-authored actions that never had one.
 
-    ``data_template=`` (docs/ha-api-notes.md §20): the legacy templated-data
+    ``data_template=`` (docs/internals/ha-api-notes.md §20): the legacy templated-data
     key. HA still stores it verbatim on a real UI-authored action; it is a
     *sibling* of ``data``, never folded into it — a real config may carry
     ``data_template`` alone, ``data`` alone, or (rarely) both, and each
@@ -429,7 +429,7 @@ class DelayAction:
     The dict form (rather than an ``HH:MM:SS`` string) is deterministic and is what
     HA accepts natively; it round-trips without ambiguity.
 
-    ``alias=``/``enabled=`` (docs/ha-api-notes.md §20): the UI names and
+    ``alias=``/``enabled=`` (docs/internals/ha-api-notes.md §20): the UI names and
     toggles individual steps, including a bare ``delay``. Same
     additive treatment as :class:`ServiceAction`'s — keyword-only so they never
     collide with a duration unit passed via ``**duration``.

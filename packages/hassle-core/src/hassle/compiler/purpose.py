@@ -3,7 +3,7 @@
 HA 2026.7 made a new namespaced trigger/condition vocabulary
 (``trigger: <domain>.<event>``, e.g. ``motion.detected``) the UI default: one
 *generic* typed builder rather than 200+ hand-written ones, since the
-vocabulary is validated as data (docs/compiler-api.md §1), not hardcoded here.
+vocabulary is validated as data (docs/internals/compiler-api.md §1), not hardcoded here.
 ``on(type_string, target=..., behavior=..., for_=..., **options)`` builds a
 trigger; ``met(type_string, target=...)`` builds a condition. Both compile to
 the exact stored shape pinned by ``fixtures/configs/automation_purpose_*.json``:
@@ -118,7 +118,8 @@ def normalize_target(target: Any) -> dict[str, Any] | None:
 
     - a bare entity ref/string, or a list of them -- ``{"entity_id": ...}`` (list shape
       preserved: a singleton list stays a list, matching the same "never collapse a stored
-      list to a scalar" rule DESIGN §5.4/docs/ha-api-notes.md §19.2 already established for
+      list to a scalar" rule DESIGN §5.4 / docs/internals/ha-api-notes.md §19.2
+      already established for
       ``state()``'s ``entity_id``);
     - an ``area(...)``/``floor(...)``/``label(...)``/``device_id(...)`` target helper object
       (already used by ``on()``/``met()``, DESIGN §5.4) -- ``{"area_id": ...}`` etc.

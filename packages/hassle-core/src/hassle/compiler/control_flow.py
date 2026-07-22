@@ -3,11 +3,11 @@
 Python ``if``/``for`` run at compile time (DESIGN §5.5); *runtime* branching on a
 live HA state must go through these context managers, which compile to HA's
 ``if``/``choose``/``repeat``/``parallel`` action containers. Built entirely on the
-extension seam documented in docs/compiler-api.md §2
+extension seam documented in docs/internals/compiler-api.md §2
 (``Recorder.push_actions``/``current_actions``/``record_action``) — this module
 never reaches into ``_CONTEXT_STACK`` and never edits ``recording.py``.
 
-Span depth note (docs/compiler-api.md §2 flagged this as unverified): every
+Span depth note (docs/internals/compiler-api.md §2 flagged this as unverified): every
 construct here is a ``@contextlib.contextmanager``-decorated generator function.
 Empirically (see the depth probe run before writing this file), the frame chain
 at the point ``capture_span`` is called *inside* such a generator, walking
@@ -49,7 +49,7 @@ from hassle.compiler.spans import capture_span
 _CM_DEPTH = 2
 
 # ``_require_active`` is the extension seam's sanctioned cross-module name
-# (docs/compiler-api.md §2: "import it from hassle.compiler.recording"),
+# (docs/internals/compiler-api.md §2: "import it from hassle.compiler.recording"),
 # underscore-prefixed by module-internal convention rather than by true
 # privacy; ``_RawAction`` is this module's own adapter, shared between its
 # two sibling modules. Both trip pyright's reportPrivateUsage in --strict
@@ -94,7 +94,7 @@ def if_then(
 ) -> Generator[None]:
     """``with if_then(cond): ...`` -> HA ``{"if": [...], "then": [...]}``.
 
-    ``alias=``/``enabled=`` (docs/ha-api-notes.md §20): the UI names/toggles
+    ``alias=``/``enabled=`` (docs/internals/ha-api-notes.md §20): the UI names/toggles
     the whole ``if`` block, not just leaf actions.
     Both land on the assembled container body, same key names HA stores.
     """
@@ -196,7 +196,7 @@ class _ChooseBuilder:
     ``with c.default(): ...`` sets the ``default`` sequence (HA allows at most
     one; a second call overwrites, matching "last wins" elsewhere in the DSL).
 
-    ``with c.when_(cond, alias=, enabled=): ...`` (docs/ha-api-notes.md §21):
+    ``with c.when_(cond, alias=, enabled=): ...`` (docs/internals/ha-api-notes.md §21):
     names/toggles *that branch* specifically — the
     HA UI names individual ``choose`` branches, distinct from the whole
     ``choose`` block's own ``alias``/``enabled`` (``choose()``'s kwargs of the
@@ -270,7 +270,7 @@ def choose(*, alias: str | None = None, enabled: bool | None = None) -> Generato
     exactly: a list of ``{conditions, sequence}`` branches plus an optional
     trailing ``default`` sequence.
 
-    ``alias=``/``enabled=`` (docs/ha-api-notes.md §20): names/toggles the
+    ``alias=``/``enabled=`` (docs/internals/ha-api-notes.md §20): names/toggles the
     whole ``choose`` block.
     """
     rec = _require_active("choose")
@@ -376,7 +376,7 @@ class _ParallelBuilder:
     one explicit branch and optionally names/toggles *that branch* (distinct
     from any of its steps' own ``alias``/``enabled``) — the shape a real
     UI-authored ``parallel`` with a multi-step branch actually stores
-    (docs/ha-api-notes.md §21).
+    (docs/internals/ha-api-notes.md §21).
     """
 
     def __init__(self, rec: Any, nodes: list[RecordedNode]) -> None:
@@ -416,7 +416,7 @@ def parallel(
     multiple steps, or naming/toggling one branch — both interleave with
     bare actions in declaration order.
 
-    ``alias=``/``enabled=`` (docs/ha-api-notes.md §20): names/toggles the
+    ``alias=``/``enabled=`` (docs/internals/ha-api-notes.md §20): names/toggles the
     whole ``parallel`` block.
     """
     rec = _require_active("parallel")
@@ -455,7 +455,7 @@ def wait_for(
 ) -> None:
     """Record a ``wait_for_trigger`` action (DESIGN §5.5).
 
-    ``alias=``/``enabled=`` (docs/ha-api-notes.md §20): names/toggles the
+    ``alias=``/``enabled=`` (docs/internals/ha-api-notes.md §20): names/toggles the
     whole ``wait_for_trigger`` step.
     """
     body: dict[str, Any] = {}

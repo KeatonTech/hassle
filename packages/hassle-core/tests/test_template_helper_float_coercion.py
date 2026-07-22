@@ -1,6 +1,6 @@
 """Regression — `template_number`'s
 `min`/`max`/`step` must compile to `float`, matching what real HA's
-`NumberSelector` form field always stores (docs/ha-api-notes.md §26.10).
+`NumberSelector` form field always stores (docs/internals/ha-api-notes.md §26.10).
 
 **The observed failure, verbatim** (`test_template_helper_plan_apply_create_then_noop_on_repush`):
 

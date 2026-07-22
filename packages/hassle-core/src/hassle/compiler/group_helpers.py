@@ -10,7 +10,7 @@ collection helper builders in :mod:`hassle.compiler.helpers` -- same
 registration path into the active bundle registry.
 
 **Identity:** there is no ``id=``/``unique_id=`` kwarg, mirroring template
-helpers (docs/ha-api-notes.md §26.6/§38.1) -- real HA's `group` config flow
+helpers (docs/internals/ha-api-notes.md §26.6/§38.1) -- real HA's `group` config flow
 form schema rejects an unrecognized `unique_id` key outright. Identity is
 derived from ``name`` (required), mirroring the nine storage helpers' "id is
 a slug of name" rule -- the object key is ``"<group domain>:<slugify(name)>"``.
@@ -19,7 +19,7 @@ a slug of name" rule -- the object key is ``"<group domain>:<slugify(name)>"``.
 helper has no Jinja `state=` field to defer -- every group builder call is
 the plain, immediate call form: build + register right now, at the call site.
 
-**Three schema shapes (docs/ha-api-notes.md §38.1):** every flavor takes
+**Three schema shapes (docs/internals/ha-api-notes.md §38.1):** every flavor takes
 ``name=``/``entities=``/``hide_members=`` (default ``False``); three flavors
 (``group_binary_sensor``/``group_light``/``group_switch``) additionally take
 ``all=`` (default ``False``); ``group_sensor`` additionally takes a required
@@ -31,7 +31,7 @@ this keeps a single canonical compiled form (a plan-noop requires
 compile(decompile(x)) == x, the same one-canonical-form rule §38.1
 documents).
 
-**Optional sensor fields (docs/ha-api-notes.md §38.3):** newer HA versions'
+**Optional sensor fields (docs/internals/ha-api-notes.md §38.3):** newer HA versions'
 `sensor` flavor schema has grown four OPTIONAL fields --
 ``ignore_non_numeric``/``unit_of_measurement``/``device_class``/
 ``state_class`` -- which ``group_sensor`` models as explicit kwargs. Unlike
@@ -59,7 +59,7 @@ default (unlike ``hide_members=``/``all=``) -- Python itself raises
 required-field check" pattern every ``hassle.compiler.helpers`` builder
 already uses for its own required ``id=`` kwarg. This differs from
 `template_number`/`template_select`'s `set_value=`/`select_option=`
-(docs/ha-api-notes.md §26.11), which needed a dedicated compile-time
+(docs/internals/ha-api-notes.md §26.11), which needed a dedicated compile-time
 ``CompileError`` subclass because those two kwargs had to stay optional at
 the Python level (both call and decorator forms share one signature); a
 group builder has no decorator form to accommodate, so a required
@@ -153,7 +153,7 @@ def group_binary_sensor(
     all: bool = False,
     **fields: Any,
 ) -> EntityRef:
-    """Declare a ``group_binary_sensor`` helper (docs/ha-api-notes.md §38.1).
+    """Declare a ``group_binary_sensor`` helper (docs/internals/ha-api-notes.md §38.1).
 
     ``all=True`` mirrors HA's group "all entities must match" toggle (the
     group is ``on`` only when every member is ``on``, instead of the default
@@ -172,7 +172,7 @@ def group_binary_sensor(
 def group_button(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_button`` helper (docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_button`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_button", name, entities=entities, hide_members=hide_members, **fields
     )
@@ -181,7 +181,7 @@ def group_button(
 def group_cover(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_cover`` helper (docs/ha-api-notes.md §38.1).
+    """Declare a ``group_cover`` helper (docs/internals/ha-api-notes.md §38.1).
 
     Groups may nest: a `group_cover`'s own ``entities=`` may name another
     group's entity id (e.g. a `cover.entryway_top` group could contain
@@ -195,7 +195,7 @@ def group_cover(
 def group_event(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_event`` helper (docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_event`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_event", name, entities=entities, hide_members=hide_members, **fields
     )
@@ -204,7 +204,7 @@ def group_event(
 def group_fan(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_fan`` helper (docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_fan`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_fan", name, entities=entities, hide_members=hide_members, **fields
     )
@@ -218,7 +218,7 @@ def group_light(
     all: bool = False,
     **fields: Any,
 ) -> EntityRef:
-    """Declare a ``group_light`` helper (docs/ha-api-notes.md §38.1).
+    """Declare a ``group_light`` helper (docs/internals/ha-api-notes.md §38.1).
 
     ``all=True`` mirrors HA's group "all entities must match" toggle (see
     :func:`group_binary_sensor`'s docstring).
@@ -231,7 +231,7 @@ def group_light(
 def group_lock(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_lock`` helper (docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_lock`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_lock", name, entities=entities, hide_members=hide_members, **fields
     )
@@ -240,7 +240,7 @@ def group_lock(
 def group_media_player(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_media_player`` helper (docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_media_player`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_media_player", name, entities=entities, hide_members=hide_members, **fields
     )
@@ -249,7 +249,7 @@ def group_media_player(
 def group_notify(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_notify`` helper (docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_notify`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_notify", name, entities=entities, hide_members=hide_members, **fields
     )
@@ -267,7 +267,7 @@ def group_sensor(
     state_class: str | None | _UnsetType = _UNSET,
     **fields: Any,
 ) -> EntityRef:
-    """Declare a ``group_sensor`` helper (docs/ha-api-notes.md §38.1).
+    """Declare a ``group_sensor`` helper (docs/internals/ha-api-notes.md §38.1).
 
     ``type=`` is REQUIRED (no default): the aggregation kind HA's form schema
     requires -- one of ``"min"``/``"max"``/``"mean"``/``"median"``/
@@ -278,7 +278,7 @@ def group_sensor(
 
     ``ignore_non_numeric``/``unit_of_measurement``/``device_class``/
     ``state_class`` are the OPTIONAL sensor-flavor fields newer HA schemas
-    carry (docs/ha-api-notes.md §38.3; the CI integration matrix is the
+    carry (docs/internals/ha-api-notes.md §38.3; the CI integration matrix is the
     authority on which HA versions accept them, §0). Omitted -> absent from
     the compiled options body; passed -> stored verbatim, including an
     explicit ``None`` (a stored null round-trips byte-stable -- see the
@@ -306,7 +306,7 @@ def group_switch(
     all: bool = False,
     **fields: Any,
 ) -> EntityRef:
-    """Declare a ``group_switch`` helper (docs/ha-api-notes.md §38.1).
+    """Declare a ``group_switch`` helper (docs/internals/ha-api-notes.md §38.1).
 
     ``all=True`` mirrors HA's group "all entities must match" toggle (see
     :func:`group_binary_sensor`'s docstring).
@@ -319,7 +319,7 @@ def group_switch(
 def group_valve(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_valve`` helper (docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_valve`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_valve", name, entities=entities, hide_members=hide_members, **fields
     )

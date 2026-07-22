@@ -3,7 +3,7 @@
 A macro is *just a Python function* that calls DSL recording verbs
 (``when``/``only_if``/``service``/``delay``/...) in its body. Those verbs
 always record into whichever :class:`~hassle.compiler.recording.Recorder`
-is active (a `ContextVar` stack, `docs/compiler-api.md` §4) -- so calling a
+is active (a `ContextVar` stack, `docs/internals/compiler-api.md` §4) -- so calling a
 plain function from inside an ``@automation``/``@script`` body already splices
 its recorded actions into the caller, with zero extra machinery: nested Python
 calls share the same active recorder. ``@macro`` therefore does not need to
@@ -15,7 +15,7 @@ intercept or re-dispatch anything; it exists to:
   context active at all (a bundle bug: a macro was called at module scope
   instead of from inside an automation/script body), reusing the core's
   ``NoRecordingContextError`` for that so the message/what/where/fix rubric
-  and its snapshot test are inherited for free (docs/compiler-api.md §5).
+  and its snapshot test are inherited for free (docs/internals/compiler-api.md §5).
 
 Nesting (a macro calling another macro) and args (ordinary Python parameters,
 resolved at compile time before any DSL verb runs) fall out of "it's just a
@@ -28,7 +28,7 @@ import functools
 from collections.abc import Callable
 from typing import Any
 
-# `_require_active` is private to recording.py, but docs/compiler-api.md §2
+# `_require_active` is private to recording.py, but docs/internals/compiler-api.md §2
 # explicitly sanctions importing it ("import it from
 # `hassle.compiler.recording`"): pyright's cross-module private-access
 # check is silenced here for that one documented reason.

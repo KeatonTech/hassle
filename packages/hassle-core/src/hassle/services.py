@@ -6,7 +6,7 @@
     cover.close_cover(target=e.cover.x, position=60)
 
 A **non-star module** (NOT part of ``from hassle import *`` -- see
-docs/dsl-extensions.md): domains are instance-dynamic
+docs/internals/dsl-extensions.md): domains are instance-dynamic
 (this instance's registry snapshot decides what exists), the same reason
 ``hassle.registry.entities`` gets its own import rather than joining
 ``hassle.__all__``.

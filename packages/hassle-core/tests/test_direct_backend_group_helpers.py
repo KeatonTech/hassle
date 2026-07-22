@@ -1,6 +1,6 @@
 """`DirectBackend`'s config-entry group-helper read-back/create/update,
 verified at the unit level against a fake `_client` that reproduces the real
-HA wire shapes docs/ha-api-notes.md §38 records -- mirrors
+HA wire shapes docs/internals/ha-api-notes.md §38 records -- mirrors
 `test_direct_backend_template_helpers.py`.
 
 **The group options-flow schema does NOT include `name`, same as template**
@@ -32,7 +32,7 @@ from hassle.backend.errors import HaApiError
 
 
 class _FakeClient:
-    """Models the REAL wire shapes docs/ha-api-notes.md §38 records:
+    """Models the REAL wire shapes docs/internals/ha-api-notes.md §38 records:
 
     - `config_entries/get` (WS): `ConfigEntry.as_json_fragment`-shaped dicts
       -- `entry_id`/`domain`/`title`/... but never `options`/`data`.
@@ -249,7 +249,7 @@ def test_list_remote_ignores_entries_of_a_different_group_flavor() -> None:
 
 
 def test_update_strips_name_before_submitting_to_options_flow() -> None:
-    # The group options-flow schema does NOT include `name` (docs/ha-api-notes.md
+    # The group options-flow schema does NOT include `name` (docs/internals/ha-api-notes.md
     # §38.1) -- `update()` still takes a full config dict (the frozen
     # SourceWriter/plan seam unchanged) but must never forward `name` to the
     # options-flow submission.

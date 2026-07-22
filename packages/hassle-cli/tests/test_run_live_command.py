@@ -1,4 +1,4 @@
-"""Regression (docs/ha-api-notes.md §29): `hassle run --live` used to
+"""Regression (docs/internals/ha-api-notes.md §29): `hassle run --live` used to
 silently print "shadow run complete" and nothing else when `trace/list`
 raced HA's async trace persistence and came back empty -- `execute_live_run`
 (hassle_cli.commands.run_live_command) never checked *why* `result.trace`
@@ -37,7 +37,7 @@ class _StubTraceBackend:
     doesn't need to BE a `FakeBackend`.
 
     `states()` deliberately reproduces the real (and, before this fix,
-    Hassle-mishandled) HA quirk docs/ha-api-notes.md §10.2 documents:
+    Hassle-mishandled) HA quirk docs/internals/ha-api-notes.md §10.2 documents:
     `entity_id` is `slug(alias)`, NOT `slug(id)` -- so a stub that just used
     `automation.{id}` here would make `test_execute_live_run_uses_bare_
     automation_id_not_entity_id_for_trace_lookup`'s entity_id assertion
@@ -198,7 +198,7 @@ def test_execute_live_run_uses_bare_automation_id_not_entity_id_for_trace_lookup
     `"automation.hassle_skipcond"`).
 
     Also pins the §29 addendum fix: `automation.trigger`'s service call must
-    target the REAL entity_id -- `slug(alias)`, docs/ha-api-notes.md §10.2 --
+    target the REAL entity_id -- `slug(alias)`, docs/internals/ha-api-notes.md §10.2 --
     resolved via `/api/states`, not the naive-and-wrong `automation.{shadow_id}`
     (the actual root cause of the missing-trace symptom: that entity never
     existed, so the trigger silently hit nothing)."""

@@ -7,7 +7,7 @@ subscriptions **`trigger_platforms/subscribe`** and
 `event` whose payload is `{type_string: description}`. The vocabulary is the set
 of keys. (Source: `homeassistant/components/websocket_api/commands.py`,
 `handle_subscribe_trigger_platforms`; captured behaviorally — see
-docs/ha-api-notes.md §17.)
+docs/internals/ha-api-notes.md §17.)
 
 On HA < 2026.7 the payload is empty (the purpose vocabulary does not exist yet),
 so the vocabulary-content assertions skip; the shape and wiring are still

@@ -21,7 +21,7 @@ never parsed, so even a malformed existing file is left completely alone.
    that works once `hassle-cli` is published to PyPI).
 
 The auto-detected path is machine-specific BY DESIGN (documented here and in
-docs/ha-api-notes.md) -- callers that need deterministic output regardless of
+docs/internals/ha-api-notes.md) -- callers that need deterministic output regardless of
 the running machine's checkout layout (`hassle-dev acceptance-bundle`) pass
 ``suppress_sources=True`` to `scaffold_pyproject`, which always emits the
 bare-dependency shape (see docs/internals/cli.md for why).

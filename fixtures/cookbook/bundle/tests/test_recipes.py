@@ -91,7 +91,7 @@ def test_notify_with_actions_sends_actionable_notification_on_unlock() -> None:
 
 
 def test_notify_with_actions_open_blinds_branch_dispatches_on_matching_action() -> None:
-    """Full branch dispatch (closing docs/ha-api-notes.md §36.2's
+    """Full branch dispatch (closing docs/internals/ha-api-notes.md §36.2's
     STOP): tapping the "Open Blinds" notification action fires
     `mobile_app_notification_action` with `action: OPEN_BLINDS`, which must
     resume the recipe's pending `wait_for(event(...))` and run ONLY the

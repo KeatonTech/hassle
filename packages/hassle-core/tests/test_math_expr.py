@@ -6,7 +6,7 @@ round_/min_/max_/abs_), constants (PI/E_/TAU) rendering to Jinja names (never
 folded to a Python float literal), `.attr()` entity-attribute access, `var()`
 runtime-variable references, and `param()` upgraded to a composable Expr.
 Everything here is an ADDITION to the frozen top-level DSL surface
-(docs/dsl-extensions.md); no existing name changes.
+(docs/internals/dsl-extensions.md); no existing name changes.
 
 Test 1 (acceptance examples, verbatim) and test 2 (reflected-operator/
 precedence torture test) live here. Test 3 (trap boundary) lives in

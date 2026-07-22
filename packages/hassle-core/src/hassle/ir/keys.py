@@ -8,7 +8,7 @@ used by the manifest and the plan/apply engine (DESIGN §8.1).
 The object-key *format* itself never changes when a new domain vocabulary is
 added; ``OBJECT_KINDS`` (the enumerated domain vocabulary) widens to include
 the four config-entry template-helper domains (``TEMPLATE_DOMAINS``), exactly as
-it would for any future helper domain. See docs/ha-api-notes.md §26 and DESIGN
+it would for any future helper domain. See docs/internals/ha-api-notes.md §26 and DESIGN
 §13's plugin-protocol amendment for the config-entry apply model these domains
 use (flow-based create/update, entry removal for delete) instead of the
 storage-collection WS API the nine ``HELPER_DOMAINS`` use.
@@ -36,12 +36,13 @@ HELPER_DOMAINS: frozenset[str] = frozenset(
 # The template-helper config-entry domains (DESIGN §13's "config-entry
 # helpers" plugin). Unlike HELPER_DOMAINS these are backed by
 # a config entry (REST flow create, REST options-flow update, REST entry
-# removal delete -- docs/ha-api-notes.md §26.0) rather than a WS storage
-# collection — see docs/ha-api-notes.md §26 and docs/backend.md's config-entry
+# removal delete -- docs/internals/ha-api-notes.md §26.0) rather than a WS storage
+# collection — see docs/internals/ha-api-notes.md §26 and the config-entry
+# sections of docs/internals/backend-protocol.md
 # addendum. Object identity is derived from the declared `name` (slugified,
 # mirroring HELPER_DOMAINS' "id is a slug of name" rule) -- NOT a caller-set
 # unique id: real HA's config flow rejects an unrecognized `unique_id` field
-# outright (docs/ha-api-notes.md §26.6), so there is no settable unique id at
+# outright (docs/internals/ha-api-notes.md §26.6), so there is no settable unique id at
 # all here. The HA-assigned `entry_id` lives only in the manifest, never in
 # the object key or DSL body.
 TEMPLATE_DOMAINS: frozenset[str] = frozenset(
@@ -100,7 +101,7 @@ def object_key(kind: str, identity: str) -> str:
 
 
 def slugify(name: str) -> str:
-    """HA's storage-collection helper-id derivation rule (docs/ha-api-notes.md
+    """HA's storage-collection helper-id derivation rule (docs/internals/ha-api-notes.md
     §4/§17.5), matched EXACTLY by delegating to the same library HA's own
     ``homeassistant.util.slugify`` wraps (python-slugify): unicode is
     TRANSLITERATED, not collapsed -- "°F" -> "degf", "Café" -> "cafe". A
@@ -125,7 +126,7 @@ def category_shaped_stem(source_path: str) -> str | None:
     / ``scripts/<stem>.py`` / ``helpers/<stem>.py``, now just ordinary nested
     paths like any other), or the ``misc`` fallback file.
 
-    **Category-first bundle layout (docs/ha-api-notes.md §31.6): root-level,
+    **Category-first bundle layout (docs/internals/ha-api-notes.md §31.6): root-level,
     not per-kind-tree.** Every kind's category-shaped file is
     `<slug(category_name)>.py` directly at the bundle root -- a mixed-kind
     file holding an automation, a script, and a helper that all share one

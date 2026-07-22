@@ -27,7 +27,7 @@ The record uses internal shorthand. Decoder ring:
 | **"done gate"** | A milestone's final acceptance demonstration — an end-to-end test proving the milestone's goal. |
 | **R1 – R8** | The global engineering rules. Still in force; restated for contributors in [CONTRIBUTING.md](../../CONTRIBUTING.md). |
 | **I1 – I6** | The design invariants ([DESIGN.md](../../DESIGN.md) §2) — e.g. I3 is `compile(decompile(x)) == x`, I6 is "no edit is silently lost". |
-| **F1 – F3** | Interface freeze points that let workstreams run in parallel: F1 the IR schema (now [docs/ir-format.md](../ir-format.md)), F2 the Backend/plan seam (now [docs/backend.md](../backend.md)), F3 the top-level DSL surface (now [docs/dsl-extensions.md](../dsl-extensions.md)). |
+| **F1 – F3** | Interface freeze points that let workstreams run in parallel: F1 the IR schema (now [docs/internals/ir-format.md](../internals/ir-format.md)), F2 the Backend/plan seam (now [docs/internals/backend-protocol.md](../internals/backend-protocol.md)), F3 the top-level DSL surface (now [docs/internals/dsl-extensions.md](../internals/dsl-extensions.md)). |
 | **G1 – G12** | The product goals table (DESIGN.md §1). |
 | **"workstream"** | One of the parallel implementation tracks (e.g. triggers/conditions vs. actions/control-flow) that shared only frozen interfaces. |
 | **"work item A/B"** | Sub-tasks within a milestone. |
@@ -39,4 +39,4 @@ The record uses internal shorthand. Decoder ring:
 | **"field report" / "BrandtCamp"** | Bug reports from the author's own live deployment — the first real installation. BrandtCamp was its bundle name (entity names since anonymized to the "kai" persona). |
 | **coordinator / implementer / reviewer / fixture-wrangler** | The agent roles: an orchestrating session, milestone implementers, a review agent, and a fixtures/boilerplate agent. |
 | **`ux/<topic>`, `fix/<topic>`, `m<N>/<topic>`** | Branch-naming conventions for DSL-ergonomics work, bug fixes, and milestone work respectively. |
-| **§N references** | Sections of DESIGN.md (design) or [docs/ha-api-notes.md](../ha-api-notes.md) (empirical HA API findings, still a living reference). |
+| **§N references** | Sections of DESIGN.md (design) or [docs/internals/ha-api-notes.md](../internals/ha-api-notes.md) (empirical HA API findings, still a living reference). |

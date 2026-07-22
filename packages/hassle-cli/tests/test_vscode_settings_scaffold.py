@@ -42,7 +42,7 @@ def test_vscode_settings_stub_path_matches_where_stubs_are_written(tmp_path: Pat
 def test_vscode_settings_extra_paths_includes_bundle_root(tmp_path: Path) -> None:
     # Cross-file imports (`from lib.x import y`, `from helpers.modes import
     # guest_mode`) are PEP 420 namespace packages rooted at the bundle root
-    # (DESIGN §6, docs/ha-api-notes.md §17.9) -- Pylance needs the bundle root
+    # (DESIGN §6, docs/internals/ha-api-notes.md §17.9) -- Pylance needs the bundle root
     # on its analysis path to resolve them the same way the compiler's loader
     # does (`sys.path` insertion at compile time).
     init_bundle(tmp_path)

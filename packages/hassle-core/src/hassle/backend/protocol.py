@@ -6,7 +6,7 @@ so that `FakeBackend` (in-memory) and `DirectBackend` (real REST + WebSocket
 transport) can each be built and tested independently against the same
 contract — neither needs to inherit from anything.
 
-Scope (deliberately minimal — see docs/backend.md for the full rationale):
+Scope (deliberately minimal — see docs/internals/backend-protocol.md for the full rationale):
 
 - `list_remote(kind)` — every object of a given kind, already in HA's stored
   plural/normalized form (or the backend normalizes internally, since
@@ -15,7 +15,7 @@ Scope (deliberately minimal — see docs/backend.md for the full rationale):
   step needs, keyed by the object's *identity* (the part of the object key
   after ``"<kind>:"`` — e.g. an automation's ``id``, a script's object_id, a
   helper's ``id``). Helper domains' `{domain}_id` payload-key convention
-  (docs/ha-api-notes.md §4) is a `DirectBackend`/`FakeBackend` *internal*
+  (docs/internals/ha-api-notes.md §4) is a `DirectBackend`/`FakeBackend` *internal*
   implementation detail — it does not leak into this Protocol's signatures.
 
 Deliberately NOT here (`DirectBackend`-only concerns, unrelated to sync):

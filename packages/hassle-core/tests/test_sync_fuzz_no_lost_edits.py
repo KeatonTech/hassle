@@ -271,7 +271,7 @@ def test_i6_fuzz_runs_exactly_1000_seeds() -> None:
 
 # -- Fuzz extension for the config-entry template-helper kind ---------------
 #
-# Identity redesign (docs/ha-api-notes.md §26.6): a template helper's
+# Identity redesign (docs/internals/ha-api-notes.md §26.6): a template helper's
 # identity is DERIVED from `name` (slugified) -- there is no separate,
 # stable `id` field the way automation/script/storage-helper kinds have.
 # `name` must therefore stay CONSTANT across every "distinct edit" in this

@@ -4,7 +4,7 @@ The compiler core records triggers, conditions and actions into the active
 automation via three small, stable extension points. Other builder families
 (e.g. triggers/conditions, actions/control-flow) add themselves by
 implementing these protocols — they never touch the recorder, the span machinery,
-or the pipeline. See docs/compiler-api.md.
+or the pipeline. See docs/internals/compiler-api.md.
 
 Serialization contract: a builder emits a plain ``dict[str, Any]`` in HA's **plural
 canonical schema** (§7.1) — ``{"trigger": "<type>", ...}`` for triggers,

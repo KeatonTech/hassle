@@ -255,7 +255,7 @@ def _automation_source(
     # express at all -- e.g. the ancient inline single-trigger form (`platform`/
     # `entity_id`/`to` directly at the automation's top level, no `trigger:`
     # wrapper -- fixtures/configs/automation_legacy_platform_naming.json,
-    # docs/ha-api-notes.md). `@automation`'s option set has no room for
+    # docs/internals/ha-api-notes.md). `@automation`'s option set has no room for
     # arbitrary top-level fields like this; decompiling the whole object to
     # `raw_automation` is the only lossless option (DESIGN §5.8: compile(decompile(x))
     # must equal x for any config).
@@ -301,7 +301,7 @@ def _automation_source(
     actions = body.pop("actions", [])
 
     # `triggers=` decorator metadata is the canonical decompiled form
-    # (DESIGN §5.3/§5.5, docs/dsl-extensions.md): subscription metadata lives
+    # (DESIGN §5.3/§5.5, docs/internals/dsl-extensions.md): subscription metadata lives
     # in the decorator, Python-idiom style (cf. `@app.route`).
     # Only TYPED triggers can be nested as a kwarg's list-literal expression --
     # `raw_trigger(...)` is a recording *verb* (it calls `record_trigger` itself
@@ -601,7 +601,7 @@ def _group_helper_source(obj: GroupHelperConfig, ident: str) -> str:
     decorator body, so no decorator form exists here at all.
 
     ``entities``'s member entity ids (which may themselves be another
-    group's entity id -- nested groups, docs/ha-api-notes.md §38.1) decompile
+    group's entity id -- nested groups, docs/internals/ha-api-notes.md §38.1) decompile
     as PLAIN string literals via ``render_literal``, never the `e.<domain>.
     <id>` cosmetic entity-reference form (`hassle.decompiler.exprs.
     render_entity_position`): plain entity references, no ordering games,
@@ -622,7 +622,7 @@ def _template_helper_call_form_source(obj: TemplateHelperConfig, ident: str) -> 
     -- kept because the call form stays valid DSL input (the frozen DSL
     surface only ever grows; nothing is removed from it). There is no
     identity kwarg to rename, ``TemplateHelperConfig`` has no ``id``/
-    ``unique_id`` field at all (docs/ha-api-notes.md §26.6). Identity is
+    ``unique_id`` field at all (docs/internals/ha-api-notes.md §26.6). Identity is
     derived from ``name`` (slugified) at both compile and decompile time."""
     body = dict(obj.to_ha())
     domain = obj.kind()

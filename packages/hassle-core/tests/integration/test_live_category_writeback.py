@@ -4,7 +4,7 @@ Assistant.
 The unit suite (`test_category_writeback.py`, `test_direct_backend_
 category_writeback.py`) proves the plan/apply-level logic and the exact WS
 payload shapes `DirectBackend` sends; THIS suite is what actually proves those
-two inferred WS commands (docs/ha-api-notes.md §30) work against real HA --
+two inferred WS commands (docs/internals/ha-api-notes.md §30) work against real HA --
 `config/category_registry/create` and `config/entity_registry/update`'s
 `categories` field. Source-inferred flow shapes have differed from reality
 before (§26.0-§26.10), and that is exactly the risk class this suite exists
@@ -39,7 +39,7 @@ Covers:
 Every test owns its own category (globally-unique, randomized name, so
 concurrent/rerun CI jobs against a persistent instance never collide) and
 deletes it during teardown via `DirectBackend.delete_category`
-(`config/category_registry/delete`, confirmed to exist, docs/ha-api-notes.md
+(`config/category_registry/delete`, confirmed to exist, docs/internals/ha-api-notes.md
 §31.5c).
 
 5. `test_push_create_with_category_global_uses_exact_display_name` -- a
@@ -49,7 +49,7 @@ deletes it during teardown via `DirectBackend.delete_category`
    `config/category_registry/list`, instead of the `humanize_slug`-derived
    guess.
 
-**Helper category scopes** (docs/ha-api-notes.md §31, source-verified --
+**Helper category scopes** (docs/internals/ha-api-notes.md §31, source-verified --
 corrects §22/§30's "helpers have no category scope" belief):
 
 6. `test_helper_category_assign_and_readback_storage_and_template` --
@@ -107,7 +107,7 @@ def _unique_slug(prefix: str) -> str:
 @pytest.fixture
 def cleanup_category(ha: DirectBackend):
     """Category cleanup for a (scope, category_id) pair -- `config/
-    category_registry/delete` is now CONFIRMED to exist (docs/ha-api-notes.md
+    category_registry/delete` is now CONFIRMED to exist (docs/internals/ha-api-notes.md
     §31.5c, source-verified: `websocket_delete_category`), so teardown calls
     it for real via `DirectBackend.delete_category` -- no more
     `contextlib.suppress`-masked no-op (§30's addendum flagged this exact
@@ -218,7 +218,7 @@ def test_push_create_script_scope_assigns_category(ha: DirectBackend, cleanup_ca
     """Does a `script.<object_id>` entity's
     entity-registry `unique_id` actually equal the script's object id, the
     same way an automation's `unique_id` equals its config `id`
-    (docs/ha-api-notes.md §2)? `DirectBackend._aassign_category` (and
+    (docs/internals/ha-api-notes.md §2)? `DirectBackend._aassign_category` (and
     `_afetch_categories`/pull placement, §22) all assume so; this is the
     live proof for the script side specifically."""
     slug = _unique_slug("chores")
@@ -423,7 +423,7 @@ def test_push_create_with_category_global_uses_exact_display_name(
 def test_helper_category_assign_and_readback_storage_and_template(
     ha: DirectBackend, cleanup_category
 ) -> None:
-    """The shared `"helpers"` scope (docs/ha-api-notes.md §31.2)
+    """The shared `"helpers"` scope (docs/internals/ha-api-notes.md §31.2)
     round-trips for BOTH a storage-collection helper (`input_boolean`,
     anchored by `unique_id == object_id`) and a template config-entry helper
     (`template_number`, anchored by `unique_id == entry_id` -- §31.6/§31.8,

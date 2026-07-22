@@ -38,10 +38,10 @@ def service(
     ``metadata=`` (real-world smoke-test addition): the HA UI stamps
     ``"metadata": {}`` on every action it saves; passing it (even as ``{}``)
     round-trips byte-stable (compile(decompile(x)) must equal x for any
-    config, docs/ha-api-notes.md). Omitted by
+    config, docs/internals/ha-api-notes.md). Omitted by
     default for DSL-authored actions that never had one.
 
-    ``data_template=`` (docs/ha-api-notes.md §20):
+    ``data_template=`` (docs/internals/ha-api-notes.md §20):
     the legacy templated-data key, a sibling of ``data`` — never merged into
     it, so it round-trips exactly as HA stores it.
 
@@ -72,7 +72,7 @@ def service(
 def delay(*, alias: str | None = None, enabled: bool | None = None, **duration: Any) -> None:
     """Record a ``delay`` action (DESIGN §5.3), e.g. ``delay(minutes=5)``.
 
-    ``alias=``/``enabled=`` (docs/ha-api-notes.md §20): per-step name/toggle,
+    ``alias=``/``enabled=`` (docs/internals/ha-api-notes.md §20): per-step name/toggle,
     keyword-only so they never collide with a duration unit passed via
     ``**duration``.
     """

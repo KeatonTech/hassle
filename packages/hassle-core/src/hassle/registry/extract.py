@@ -27,7 +27,7 @@ Nested blocks do not carry their own per-item span in `CompileResult` (the
 recording machinery gives the *container* action one span at its own
 `with if_then(...):`-style call site; the bodies nested inside it are folded
 into that single recorded node with no separate span retained per inner
-item, docs/compiler-api.md §2) -- so every reference found while recursing
+item, docs/internals/compiler-api.md §2) -- so every reference found while recursing
 inherits the *container's* span. This is coarser than a top-level reference's
 span (it points at the `with if_then(...):` line, not the exact nested
 `service(...)` call), but it is still a real, correct file:line rather than
@@ -121,7 +121,7 @@ _KNOWN_ISH_DOMAINS = {
     "group",
 }
 
-# §36.1 fix (docs/ha-api-notes.md): matches the WHOLE dotted identifier chain
+# §36.1 fix (docs/internals/ha-api-notes.md): matches the WHOLE dotted identifier chain
 # a candidate `domain.object_id` pair sits in (`[ident.]*domain.object_id`,
 # greedy on the leading part), so the code can reject a candidate that is
 # merely the last two segments of a LONGER chain -- a Jinja *variable path*

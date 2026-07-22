@@ -2,7 +2,7 @@
 
 Executes the push-side actions of a `Plan` (`create`/`update`/`delete`)
 against a `Backend`, in dependency order **helpers -> scripts -> automations**
-(DESIGN §8.2, docs/ha-api-notes.md §11), with two safety mechanisms:
+(DESIGN §8.2, docs/internals/ha-api-notes.md §11), with two safety mechanisms:
 
 - **Re-verification.** Before writing each object, its live remote hash is
   re-fetched and compared against `PlanEntry.remote_hash_at_plan` (the hash
@@ -64,7 +64,7 @@ from hassle.sync.models import (
     PlanEntry,
 )
 
-# Push-side apply order (DESIGN §8.2 / docs/ha-api-notes.md §11): storage
+# Push-side apply order (DESIGN §8.2 / docs/internals/ha-api-notes.md §11): storage
 # helper domains first (any order among themselves), then the config-entry
 # template-helper and group-helper domains -- also "helpers" from
 # the dependency-ordering point of view: an automation/script may reference a
@@ -324,7 +324,7 @@ def _apply_one(backend: Backend, entry: PlanEntry, identity: str) -> None:
         assert entry.local is not None
         actual = backend.create(entry.kind, entry.local)
         # Only the domains where HA itself assigns identity (storage helpers
-        # slugify the name; template helpers likewise, docs/ha-api-notes.md
+        # slugify the name; template helpers likewise, docs/internals/ha-api-notes.md
         # §17.5/§26.6) can diverge -- scripts/automations are caller-keyed
         # (the id rides in the config URL), so their create is always exact.
         if entry.kind not in _CALLER_KEYED_KINDS and actual != identity:
@@ -389,7 +389,7 @@ def _rollback(
     traceback as the only output.
 
     Config-entry caveat: a recreate here gets a FRESH
-    entry_id from HA (docs/ha-api-notes.md §26.3) while the on-disk manifest
+    entry_id from HA (docs/internals/ha-api-notes.md §26.3) while the on-disk manifest
     -- unchanged on a failed apply -- still records the old one. Not silent:
     the next `hassle plan` (which the failure message directs the user to
     run) re-reads entry ids from the live registry and surfaces any
@@ -405,7 +405,7 @@ def _rollback(
                 # errors on real HA -- restore by recreating. Slug-keyed kinds
                 # land back on the same identity (§17.5); config-entry kinds
                 # get a fresh entry_id (the documented rollback caveat,
-                # docs/ha-api-notes.md §26.3).
+                # docs/internals/ha-api-notes.md §26.3).
                 backend.create(kind, previous)  # type: ignore[arg-type]
             else:
                 backend.update(kind, identity, previous)
@@ -467,7 +467,7 @@ def _advance_manifest(
 
 def _entry_id_of(backend: Backend, kind: str, identity: str) -> str | None:
     """The config entry's HA-assigned `entry_id` for a template-helper kind
-    (docs/ha-api-notes.md §26.5), tracked in the manifest -- `None` for every
+    (docs/internals/ha-api-notes.md §26.5), tracked in the manifest -- `None` for every
     other kind. `entry_id_for` is NOT part of the frozen `Backend` Protocol:
     it's an additive, defensively-probed extra method both `FakeBackend`
     and `DirectBackend` happen to expose, the same pattern

@@ -1,4 +1,4 @@
-"""The permanent pull -> plan-noop invariant gate (docs/ha-api-notes.md §23).
+"""The permanent pull -> plan-noop invariant gate (docs/internals/ha-api-notes.md §23).
 
 Seeds every `fixtures/configs/*.json` corpus object into a fresh `FakeBackend`
 (keyed exactly like the IR corpus loader does -- `hassle-core/tests/_corpus.py`'s
@@ -221,7 +221,7 @@ def test_legacy_platform_automation_is_modernization_labeled(
     # Seed directly into the store (bypassing `create()`'s own `normalize_ha`
     # call) -- this fixture models config that predates HA's `action:` ->
     # `actions:` pluralization and is already stored exactly as-is; real HA
-    # never re-normalizes stored config on its own (docs/ha-api-notes.md
+    # never re-normalizes stored config on its own (docs/internals/ha-api-notes.md
     # §17.1), it only normalizes what's freshly POSTed. Matches
     # `test_modernization_labeling.py`'s own seeding approach.
     backend._store["automation"]["legacy_platform_naming"] = {
@@ -297,7 +297,7 @@ def test_script_seeded_with_id_in_body_still_plans_noop(
     with a caller-supplied `id` key in the config (the natural mistake --
     automations/helpers both legitimately take one, so a test/seeding helper
     reaches for the same shape for a script) must NOT leak that `id` into
-    the stored remote body (docs/ha-api-notes.md §23.2) -- if it did, every
+    the stored remote body (docs/internals/ha-api-notes.md §23.2) -- if it did, every
     subsequent `hassle plan` on this untouched script would show a permanent
     `update` (local has no `id`, `ScriptConfig` has no such field; remote
     would keep it forever), never settling into `noop`."""

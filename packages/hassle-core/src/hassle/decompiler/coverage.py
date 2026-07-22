@@ -10,7 +10,7 @@ the CI artifact (``hassle-dev decompile-coverage``) are judged against.
 Each exception is also tagged with a human-readable ``justification`` string
 (:func:`_justify`) so the tracked artifact (``hassle-dev decompile-coverage``'s
 JSON output) is self-describing rather than a bare, mysterious node count --
-sourced from the same reasons recorded in docs/ha-api-notes.md §14-§18 and the
+sourced from the same reasons recorded in docs/internals/ha-api-notes.md §14-§18 and the
 corresponding builder-module docstrings/comments.
 """
 
@@ -64,11 +64,12 @@ def _find_raw_nodes(source: str) -> list[tuple[str, str]]:
 
 
 # Justification strings, one per recognized raw-node shape, sourced verbatim
-# (paraphrased for brevity) from docs/ha-api-notes.md and the builder-module
+# (paraphrased for brevity) from docs/internals/ha-api-notes.md and the builder-module
 # comments that first noted each gap.
 _JUSTIFICATION_DEVICE_TRIGGER = (
     "device trigger: no stable cross-integration schema (DESIGN §5.4 -- "
-    "hassle.compiler.triggers._trig_device), always raw by design, docs/ha-api-notes.md §5.4 note"
+    "hassle.compiler.triggers._trig_device), always raw by design, "
+    "docs/internals/ha-api-notes.md §5.4 note"
 )
 _JUSTIFICATION_DEVICE_CONDITION = (
     "device condition: no stable cross-integration schema (DESIGN §5.4 -- "
@@ -78,12 +79,12 @@ _JUSTIFICATION_INLINE_LEGACY_AUTOMATION = (
     "whole-object raw_automation fallback: this config uses the ancient inline "
     "single-trigger form (bare platform/entity_id/to at the automation's top level, no "
     "trigger:/triggers: wrapper at all) -- no @automation shape can express top-level "
-    "fields outside its option set (docs/ha-api-notes.md §14/§16)"
+    "fields outside its option set (docs/internals/ha-api-notes.md §14/§16)"
 )
 _JUSTIFICATION_TEMPLATED_DELAY = (
     "templated delay: the stored delay value is a Jinja template string ({{ ... }}), not a "
     "fixed duration -- the typed delay() builder only accepts int/str/dict duration forms "
-    "(docs/ha-api-notes.md §18), so a runtime-templated delay falls back to raw_action"
+    "(docs/internals/ha-api-notes.md §18), so a runtime-templated delay falls back to raw_action"
 )
 _JUSTIFICATION_UNKNOWN_TRIGGER = (
     "trigger shape not modeled by any typed builder or the 2026.7 purpose-trigger "
@@ -118,7 +119,7 @@ _DEVICE_CONDITION_MARKERS = (
 
 def _justify(builder_name: str, argument_text: str) -> str:
     """Best-effort human-readable reason a raw_* node was needed, sourced from
-    the documented findings in docs/ha-api-notes.md §14-§18."""
+    the documented findings in docs/internals/ha-api-notes.md §14-§18."""
     if builder_name == "raw_trigger":
         if any(marker in argument_text for marker in _DEVICE_TRIGGER_MARKERS):
             return _JUSTIFICATION_DEVICE_TRIGGER

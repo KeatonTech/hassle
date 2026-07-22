@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import re
+import textwrap
 from pathlib import Path
 
 import click
@@ -27,7 +28,8 @@ _TOKEN = re.compile(r"[a-z][a-z0-9/-]*\Z")
 
 def _fenced_blocks(lang: str) -> list[str]:
     text = README.read_text(encoding="utf-8")
-    return [m.group(1) for m in re.finditer(rf"```{lang}\n(.*?)```", text, re.S)]
+    # dedent: a fence inside a markdown list item indents every line
+    return [textwrap.dedent(m.group(1)) for m in re.finditer(rf"```{lang}\n(.*?)```", text, re.S)]
 
 
 def _python_blocks() -> list[str]:

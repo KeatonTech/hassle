@@ -7,7 +7,7 @@ nine storage-collection helpers, `hassle.decompiler.codegen._helper_source`)
 -- unlike template helpers, there is no Jinja `state=` field to
 defer into a decorator body, so no decorator form exists for group at all.
 There is no identity kwarg to rename -- `GroupHelperConfig` has no `id`/
-`unique_id` field at all (docs/ha-api-notes.md §38.1). Identity is derived
+`unique_id` field at all (docs/internals/ha-api-notes.md §38.1). Identity is derived
 from `name` (slugified) at both compile and decompile time.
 
 Nested groups (a group whose members are groups) decompile as PLAIN entity

@@ -15,7 +15,7 @@ ordinary `wait_for`/`choose`/`service` source (no `notify_mobile`/`action`/
 `capture_actions`/`emit_actions` names anywhere in it), and re-compiling that
 decompiled source reproduces the identical IR (compile(decompile(x)) == x).
 
-Sim-test findings (docs/ha-api-notes.md §36.2): the simulator cannot yet
+Sim-test findings (docs/internals/ha-api-notes.md §36.2): the simulator cannot yet
 resume a pending `wait_for_trigger` on an event, nor does it populate the
 `wait.trigger` template variable a satisfied wait's later conditions read --
 so branch DISPATCH is untestable against the current simulator. This file is

@@ -1,6 +1,6 @@
 """`DirectBackend`'s config-entry template-helper read-back/update, verified
 at the unit level against a fake `_client` that faithfully reproduces the
-real HA wire shapes (docs/ha-api-notes.md §26.7):
+real HA wire shapes (docs/internals/ha-api-notes.md §26.7):
 
 - `config_entries/get` (WS) never carries an entry's options at all --
   `ConfigEntry.as_json_fragment` has no `options`/`data` key
@@ -17,7 +17,7 @@ real HA wire shapes (docs/ha-api-notes.md §26.7):
   UPDATE that resubmits `name` gets `400 {"errors": {"base": ["extra keys
   not allowed @ data['name']"]}}` from real HA.
 
-**Regression (docs/ha-api-notes.md §31.8):** `_acreate_template_helper`'s
+**Regression (docs/internals/ha-api-notes.md §31.8):** `_acreate_template_helper`'s
 create_entry response parsing read a top-level `entry_id` key that never
 existed on the wire -- `_prepare_config_flow_result_json`
 (`homeassistant/components/config/config_entries.py`) nests the whole
@@ -57,7 +57,7 @@ _SET_VALUE = {"action": "input_number.set_value", "data": {"value": "{{ value }}
 
 
 class _FakeClient:
-    """Models the REAL wire shapes docs/ha-api-notes.md §26/§26.7 record:
+    """Models the REAL wire shapes docs/internals/ha-api-notes.md §26/§26.7 record:
 
     - `config_entries/get` (WS): returns `ConfigEntry.as_json_fragment`-shaped
       dicts -- `entry_id`/`domain`/`title`/... but NEVER `options`/`data`.
@@ -128,7 +128,7 @@ class _FakeClient:
             entry_id = f"entry_{self._entry_counter}"
             title = str(json["name"])
             self._entries[entry_id] = {"title": title, "options": dict(json)}
-            # **The REAL wire shape** (docs/ha-api-notes.md §31.8,
+            # **The REAL wire shape** (docs/internals/ha-api-notes.md §31.8,
             # source-verified: `_prepare_config_flow_result_json`,
             # `homeassistant/components/config/config_entries.py`) --
             # `entry_id` is nested under a `"result"` key, NEVER a top-level
@@ -203,7 +203,7 @@ def _make_backend(client: _FakeClient) -> DirectBackend:
 def test_create_template_helper_extracts_entry_id_from_nested_result_key() -> None:
     """`_acreate_template_helper` must read the JUST-created entry_id
     from `response["result"]["entry_id"]`, NEVER a top-level `entry_id` key
-    (which the real wire shape never has, docs/ha-api-notes.md §31.8 --
+    (which the real wire shape never has, docs/internals/ha-api-notes.md §31.8 --
     `_FakeClient` here models that nesting faithfully, unlike the buggy
     `result.get("entry_id", flow_id)`, which would cache the WRONG value, a
     flow_id, and never raise -- this test fails against that old lookup)."""
@@ -288,7 +288,7 @@ def test_create_template_helper_raises_when_result_entry_id_is_missing() -> None
 def test_list_remote_reads_back_name_and_options_via_options_flow_suggested_values() -> None:
     # Regression for `KeyError: 'name'` / `KeyError: 'state'`:
     # `config_entries/get` alone never has enough to reconstruct the stored
-    # config (docs/ha-api-notes.md §26.7).
+    # config (docs/internals/ha-api-notes.md §26.7).
     client = _FakeClient(
         entries={
             "entry_1": {

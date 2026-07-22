@@ -6,7 +6,7 @@
 - The live `get_config` populates `DirectBackend.ha_version` and the tested-range
   warning (DESIGN §4, §15).
 - A create → list → update → delete cycle works for every managed kind, and
-  read-back is in HA's normalized plural storage form (docs/ha-api-notes.md §10.1).
+  read-back is in HA's normalized plural storage form (docs/internals/ha-api-notes.md §10.1).
 """
 
 from __future__ import annotations

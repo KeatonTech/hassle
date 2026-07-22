@@ -130,7 +130,7 @@ All fixtures are valid JSON per Home Assistant's schema as of July 2026 and exer
 
 | Fixture | Source | Construct |
 |---------|--------|-----------|
-| automation_ha_canonical_modern.json | Synthesized to match the exact post-2024.10 HA storage shape verified in docs/ha-api-notes.md §10.1 (real POST->GET capture, docs/ha-api-captures/normalize-post-get-pair.json): string `id`, plural `triggers`/`conditions`/`actions`, modern `trigger:`/`action:` discriminators throughout (no `platform:`/`service:` anywhere), no scalar/string-form `delay`, nested `choose`/`default`. This is what a real live `GET /api/config/automation/config/{id}` returns for an automation authored in the current HA UI -- the fixture the decompiler's zero-transformation round-trip (`test_ha_canonical_zero_transformation_roundtrip`) is judged against. | plural schema + modern discriminators + nested choose, all in one already-canonical fixture |
+| automation_ha_canonical_modern.json | Synthesized to match the exact post-2024.10 HA storage shape verified in docs/internals/ha-api-notes.md §10.1 (real POST->GET capture, docs/ha-api-captures/normalize-post-get-pair.json): string `id`, plural `triggers`/`conditions`/`actions`, modern `trigger:`/`action:` discriminators throughout (no `platform:`/`service:` anywhere), no scalar/string-form `delay`, nested `choose`/`default`. This is what a real live `GET /api/config/automation/config/{id}` returns for an automation authored in the current HA UI -- the fixture the decompiler's zero-transformation round-trip (`test_ha_canonical_zero_transformation_roundtrip`) is judged against. | plural schema + modern discriminators + nested choose, all in one already-canonical fixture |
 
 ## Real-world smoke-test addendum: mundane UI-authored shapes missed by the synthetic corpus
 
@@ -138,7 +138,7 @@ Source: a live smoke test against a real 2026.7 Home Assistant instance surfaced
 118 granular `raw_*` decompiler fallbacks across 101 real objects, tracing to three root causes.
 Each is a mundane, extremely common shape the HA UI actually writes that the (hand-authored,
 docs-derived) synthetic corpus above never happened to exercise. All three fixtures below are
-already in plural/canonical schema (docs/ha-api-notes.md §10.1) with an explicit `id`, mirroring
+already in plural/canonical schema (docs/internals/ha-api-notes.md §10.1) with an explicit `id`, mirroring
 what `GET /api/config/automation/config/{id}` actually returns.
 
 | Fixture | Source | Construct |
@@ -176,7 +176,7 @@ convention as rounds 1-2.
 | automation_choose_numeric_state_attribute_condition.json | Shape observed in a real 2026.7 UI-authored config: a `choose` branch's `conditions` list carries a `numeric_state` condition with `attribute` -- a regression fixture confirming the nested-in-choose-conditions path resolves through the same `decompile_condition` dispatcher as the top-level path (no code change was needed; this pins the behavior) | `choose` with one branch whose `conditions` is a `numeric_state` condition with `attribute`+`above` |
 | automation_parallel_multistep_branch_composite.json | Shape observed in a real 2026.7 UI-authored config: a `parallel` branch running more than one step in its `sequence` (a script call with rich `data`, then a `delay` with all four duration units), alongside a sibling branch containing an `if`/`then` -- the multi-step branch shape (not the delay's `milliseconds` field or the if-block, both of which decompile fine standalone) is what forced the whole `parallel` to `raw_action` | `parallel` with one two-step branch (service call + delay) and one one-step branch (`if`/`then`) |
 
-**Root causes (docs/ha-api-notes.md §21):**
+**Root causes (docs/internals/ha-api-notes.md §21):**
 1. A `choose`/`parallel` **branch** carrying its own `alias`/`enabled` was rejected by each handler's
    exact-keys branch-shape check (`set(branch_dict) != {"conditions", "sequence"}` /
    `set(branch_dict) != {"sequence"}`) -- distinct from the round-2 container-level `alias`/`enabled`
@@ -198,7 +198,7 @@ as a Jinja template STRING (renders to a list at runtime), not a literal list. `
 `list(items)` silently exploded the template string into a list of individual characters (a `str`
 is an `Iterable[str]`) instead of passing it through verbatim; the char-explosion shape survived to
 disk because the pull self-check only verified "does the recompiled bundle compile", not "does it
-recompile to the same value" (docs/ha-api-notes.md).
+recompile to the same value" (docs/internals/ha-api-notes.md).
 
 | Fixture | Source | Construct |
 |---------|--------|-----------|

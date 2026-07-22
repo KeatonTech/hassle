@@ -1,5 +1,5 @@
 """A helper declaration whose ``id=`` does not match ``slugify(name)`` gets a
-validation Finding (docs/ha-api-notes.md §17.5).
+validation Finding (docs/internals/ha-api-notes.md §17.5).
 
 Real HA storage-collection ``create`` derives the item's identity by
 slugifying ``name`` and **ignores any caller-supplied id** (§17.5). So if a

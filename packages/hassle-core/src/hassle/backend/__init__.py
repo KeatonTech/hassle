@@ -4,7 +4,7 @@ The `Backend` Protocol declared here, plus the plan/apply data model in
 :mod:`hassle.sync`, are frozen: the sync engine is built against
 `FakeBackend` (:mod:`hassle.backend.fake`, in-memory), and `DirectBackend`
 (:mod:`hassle.backend.direct`) — the real REST/WebSocket transport to HA Core
-— is a sibling implementation of the same Protocol. See docs/backend.md.
+— is a sibling implementation of the same Protocol. See docs/internals/backend-protocol.md.
 """
 
 from __future__ import annotations

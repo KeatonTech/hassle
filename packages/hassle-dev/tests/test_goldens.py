@@ -1,4 +1,4 @@
-"""Regression (docs/ha-api-notes.md §26.10): `run_goldens`'s drift check
+"""Regression (docs/internals/ha-api-notes.md §26.10): `run_goldens`'s drift check
 used plain `!=` on parsed JSON structures, which is blind to an
 `int`-vs-`float` difference (`{"min": 0} == {"min": 0.0}` is `True` in
 Python) -- so a compiler change that turned `0` into `0.0` was reported as

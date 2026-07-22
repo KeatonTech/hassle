@@ -217,7 +217,7 @@ class MissingTemplateHelperWriteTargetError(CompileError):
     """A ``template_number``/``template_select`` declaration omitted its
     required write-target kwarg.
 
-    DESIGN §5.7 / docs/ha-api-notes.md §26.6: HA's `template` config-flow form
+    DESIGN §5.7 / docs/internals/ha-api-notes.md §26.6: HA's `template` config-flow form
     schema requires a write-target action sequence for any writable template
     helper -- ``template_number`` needs ``set_value``, ``template_select``
     needs ``select_option`` -- since ``state`` alone only computes the
@@ -359,7 +359,7 @@ class InclusiveNumericBoundError(CompileError):
 
     HA's ``numeric_state`` condition/trigger only has EXCLUSIVE bounds
     (``above``/``below`` -- verified against
-    ``hassle.compiler.triggers.NumericStateExpr``, docs/ha-api-notes.md): there
+    ``hassle.compiler.triggers.NumericStateExpr``, docs/internals/ha-api-notes.md): there
     is no inclusive ``above_or_equal``/``below_or_equal`` field to map `>=`/`<=`
     onto. Silently emitting the exclusive field for an inclusive operator would
     compile a condition that is subtly WRONG right at the boundary value (e.g.

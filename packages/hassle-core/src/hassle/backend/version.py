@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 
 # The tested range. Lower bound: HA 2024.10, where the plural-schema storage
-# normalization (docs/ha-api-notes.md §10.1) landed — the earliest HA whose
+# normalization (docs/internals/ha-api-notes.md §10.1) landed — the earliest HA whose
 # stored form matches Hassle's canonical form. Upper bound: a little above the
 # current `dev` line, refreshed as CI's `stable`/`dev` tags advance.
 TESTED_HA_MIN = "2024.10.0"

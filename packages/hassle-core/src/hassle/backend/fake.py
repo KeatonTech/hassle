@@ -1,4 +1,4 @@
-"""`FakeBackend` — in-memory `Backend` (DESIGN §8, docs/ha-api-notes.md §11).
+"""`FakeBackend` — in-memory `Backend` (DESIGN §8, docs/internals/ha-api-notes.md §11).
 
 Seed data is hand-written Python modeled on the real capture shapes in
 docs/ha-api-captures/ (not parsed at runtime — provenance noted per record
@@ -7,7 +7,7 @@ domains (rest-ws-core.json records: `automation_create`/`automation_read_normali
 for automations, `script_create`/`script_read_normalized` for scripts,
 `helper_*_full_cycle` for the nine helper domains).
 
-Two behaviors mirror real HA exactly (docs/ha-api-notes.md §10.1, §11):
+Two behaviors mirror real HA exactly (docs/internals/ha-api-notes.md §10.1, §11):
 
 - **Normalization on write.** `create`/`update` run the input through
   `hassle.ir.normalize_ha` before storing — legacy singular `trigger/condition/
@@ -17,7 +17,7 @@ Two behaviors mirror real HA exactly (docs/ha-api-notes.md §10.1, §11):
   engine would show spurious `update`s for every already-plural object.
 - **Helper identity derivation.** A helper's `id` (if not supplied) is a slug
   of its `name` — real HA slugifies `name` into the storage-collection item id
-  (docs/ha-api-notes.md §4: `"H bool"` -> `"h_bool"`). Real HA addresses
+  (docs/internals/ha-api-notes.md §4: `"H bool"` -> `"h_bool"`). Real HA addresses
   update/delete via a `{domain}_id` payload key (quirk #1); `FakeBackend`
   reproduces this as an internal storage-organization detail even though the
   `Backend` Protocol's `update`/`delete` signatures are domain-shape-agnostic.
@@ -28,28 +28,28 @@ config-entry flow (create — menu step `step_id="user"` choosing the template
 type, then a form step collecting fields, `type: "create_entry"` result) /
 options-flow (update — one form step re-collecting the same fields,
 `type: "create_entry"` result merges into `entry.options`) instead of the
-storage-collection WS API (docs/ha-api-notes.md §26 records the real shapes
+storage-collection WS API (docs/internals/ha-api-notes.md §26 records the real shapes
 this models — flow/options-flow/removal are REST, §26.0, verified against
 real HA by the integration suite). Delete is config-entry removal (REST
 `DELETE .../entry/{entry_id}`).
 
-**Identity: there is no `unique_id`** (docs/ha-api-notes.md §26.6) — the real
+**Identity: there is no `unique_id`** (docs/internals/ha-api-notes.md §26.6) — the real
 form schema rejects an unrecognized `unique_id` key outright. Object identity
 is derived from the submitted `name` (slugified) -- mirroring the storage
 helpers' "id is a slug of name" rule, except here it is the ONLY identity
 source. The config entry's HA-assigned `entry_id` is tracked internally
 (`self._entry_ids`) exactly the way a real sync engine would persist it in
-the manifest — never in the stored config body itself (docs/backend.md's
+the manifest — never in the stored config body itself (docs/internals/backend-protocol.md's
 config-entry addendum).
 
-**Required write-target fields** (docs/ha-api-notes.md §26.6): a
+**Required write-target fields** (docs/internals/ha-api-notes.md §26.6): a
 `template_number`'s form requires `set_value`; a `template_select`'s form
 requires `select_option` (alongside `options`). Missing either raises
 `ConfigEntryFlowError`, mirroring HA's real `400 {"errors": {"set_value":
 "required key not provided"}}` rejection (modeled as an exception here since
 `create`/`update` are single-shot, not step-by-step — module note below).
 
-**Options-flow schema never includes `name`** (docs/ha-api-notes.md §26.7).
+**Options-flow schema never includes `name`** (docs/internals/ha-api-notes.md §26.7).
 Real HA's `generate_schema(domain, flow_type)` (`template/config_flow.py`)
 only adds the name field `if flow_type == "config"` — the options flow's
 schema (`flow_type="options"`) never has it, so submitting `name` in an
@@ -60,12 +60,12 @@ regardless, since real HA only overwrites keys that appear in the CURRENT
 step's schema (`_update_and_remove_omitted_optional_keys`) — `FakeBackend`
 reproduces that too, merging the submitted fields into the existing stored
 options rather than replacing the dict outright, so `list_remote` after an
-update still has `name` (docs/ha-api-notes.md §26.7 findings 2-3;
+update still has `name` (docs/internals/ha-api-notes.md §26.7 findings 2-3;
 `test_template_number_update_rejects_name_field`,
 `test_template_number_update_preserves_name_without_resubmitting_it`).
 
 **`template_number`'s `min`/`max`/`step` are float-coerced on write**
-(docs/ha-api-notes.md §26.10). HA's `NumberSelector` (the form field type for
+(docs/internals/ha-api-notes.md §26.10). HA's `NumberSelector` (the form field type for
 these three) unconditionally runs the submitted value through
 `vol.Coerce(float)` and stores the result -- an `int` submission is stored as
 a `float` regardless. `_coerce_number_selector_fields` reproduces this on
@@ -77,7 +77,7 @@ plan comparison a plain hash equality with no special case.
 **Category registry + per-entity category assignment.** Additive,
 non-`Backend`-Protocol surface (same pattern as `entry_id_for`/
 `fetch_registry_snapshot`) modeling `config/category_registry/list|create`
-and `config/entity_registry/update`'s `categories` field (docs/ha-api-notes.md
+and `config/entity_registry/update`'s `categories` field (docs/internals/ha-api-notes.md
 §30) well enough for `hassle.sync.category_writeback` to drive against it in
 unit tests: `list_categories`/`create_category` per scope
 (`self._categories: dict[scope, dict[category_id, name]]`), and
@@ -88,7 +88,7 @@ either), so category assignment is keyed directly by `(kind, identity)`
 rather than round-tripping through a simulated entity registry row; this is
 an internal simplification, like the helper-id-from-name-slug shortcut
 above, not a claim about HA's wire shape (`DirectBackend` -- the real
-transport -- does look the entity up by `unique_id`, docs/ha-api-notes.md
+transport -- does look the entity up by `unique_id`, docs/internals/ha-api-notes.md
 §30). `seed_category` is test-only sugar for pre-populating a category
 before a push (the "category already exists" case).
 """
@@ -104,7 +104,7 @@ from hassle.ir.keys import slugify as _slugify
 from hassle.ir.normalize import normalize_ha
 
 # The subset of a template helper's stored options body that identifies its
-# "type" (the config flow's menu step, docs/ha-api-notes.md §26) --
+# "type" (the config flow's menu step, docs/internals/ha-api-notes.md §26) --
 # informational only, mirrors the real integration's step_id naming.
 _TEMPLATE_FLOW_TYPE = {
     "template_number": "number",
@@ -113,7 +113,7 @@ _TEMPLATE_FLOW_TYPE = {
     "template_select": "select",
 }
 
-# Fields HA's form schema requires beyond `name`/`state` (docs/ha-api-notes.md
+# Fields HA's form schema requires beyond `name`/`state` (docs/internals/ha-api-notes.md
 # §26.6): a template number needs a write target (`set_value`); a template
 # select needs both the option list (`options`) and its write target
 # (`select_option`). Sensor/binary_sensor are read-only -- no extra required
@@ -125,7 +125,7 @@ _TEMPLATE_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "template_select": ("options", "select_option"),
 }
 
-# The `group` integration's twelve flavors (docs/ha-api-notes.md §38.1) -- the
+# The `group` integration's twelve flavors (docs/internals/ha-api-notes.md §38.1) -- the
 # config-flow menu's `step_id` per flavor also equals the flavor name
 # itself (§38.2), unlike template's `number`/`sensor`/`binary_sensor`/
 # `select` naming.
@@ -147,7 +147,7 @@ _GROUP_FLAVOR: dict[str, str] = {
 # `name`/`entities`/`hide_members` are always supplied by the DSL builders'
 # own required-kwarg signatures (`hassle.compiler.group_helpers`); the only
 # field HA's form schema requires that Hassle's own DSL leaves as a runtime
-# check is `type` on `group_sensor` (docs/ha-api-notes.md §38.1) -- mirrors
+# check is `type` on `group_sensor` (docs/internals/ha-api-notes.md §38.1) -- mirrors
 # `_TEMPLATE_REQUIRED_FIELDS` covering only the EXTRA required fields beyond
 # the ones every domain already shares.
 _GROUP_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
@@ -161,13 +161,13 @@ def _check_required_fields(kind: str, config: dict[str, Any], required: tuple[st
         raise ConfigEntryFlowError(
             f"{kind} form rejected: required key(s) not provided: {missing} "
             f"(mirrors HA's real 400 {{'errors': {{'<field>': 'required key not "
-            "provided'}}}} form-schema rejection, docs/ha-api-notes.md §26.6/§38.1)"
+            "provided'}}}} form-schema rejection, docs/internals/ha-api-notes.md §26.6/§38.1)"
         )
 
 
 # `template_number`'s `min`/`max`/`step` are the ONLY numeric fields across
 # the four template domains HA's form schema types as `NumberSelector`
-# (docs/ha-api-notes.md §26.10 -- confirmed by reading every domain's schema
+# (docs/internals/ha-api-notes.md §26.10 -- confirmed by reading every domain's schema
 # in `template/config_flow.py`: sensor/binary_sensor/select
 # have no numeric fields at all). `NumberSelector.__call__`
 # (`homeassistant/helpers/selector.py`) unconditionally runs the submitted
@@ -182,7 +182,7 @@ _NUMBER_SELECTOR_FIELDS: dict[str, tuple[str, ...]] = {
 
 
 def _coerce_number_selector_fields(kind: str, config: dict[str, Any]) -> dict[str, Any]:
-    """Mirror HA's `NumberSelector` float coercion (docs/ha-api-notes.md
+    """Mirror HA's `NumberSelector` float coercion (docs/internals/ha-api-notes.md
     §26.10) on the fields it actually applies to for `kind` -- storing floats
     the same way real HA does, so a compiled `int` local value and the
     (fixed, §26.10) stored remote value hash-compare equal only when they
@@ -202,7 +202,7 @@ def _empty_str_list() -> list[str]:
 @dataclass
 class FlowStep:
     """One step of a simulated `config_entries/flow` (or `.../options/flow`)
-    interaction, mirroring HA's real WS flow shapes (docs/ha-api-notes.md
+    interaction, mirroring HA's real WS flow shapes (docs/internals/ha-api-notes.md
     §26): `type` is `"menu"` | `"form"` | `"create_entry"` | `"abort"`."""
 
     flow_id: str
@@ -299,7 +299,7 @@ class FakeBackend:
             # as every other kind -- `name` is stripped here, at the
             # public-API boundary, before it ever reaches the simulated
             # options-flow submission, exactly mirroring `DirectBackend.
-            # _aupdate_template_helper` (docs/ha-api-notes.md §26.7: the
+            # _aupdate_template_helper` (docs/internals/ha-api-notes.md §26.7: the
             # options-flow schema never includes `name`, so a caller must
             # never be able to leak it onto the wire through this path).
             payload = {k: v for k, v in config.items() if k != "name"}
@@ -310,7 +310,7 @@ class FakeBackend:
             # as every other kind -- `name` is stripped here, at the
             # public-API boundary, before it ever reaches the simulated
             # options-flow submission, exactly mirroring the TEMPLATE_DOMAINS
-            # branch above (docs/ha-api-notes.md §38.1: the group
+            # branch above (docs/internals/ha-api-notes.md §38.1: the group
             # options-flow schema does NOT include `name` either -- same rule
             # as template, §26.7 finding 2 -- real HA 400s
             # `{"errors": {"base": ["extra keys not allowed @ data['name']"]}}`
@@ -338,7 +338,7 @@ class FakeBackend:
     #
     # Modeled on the real REST flow (create: POST /api/config/config_entries/
     # flow[/{flow_id}]) and options-flow (update: POST /api/config/
-    # config_entries/options/flow[/{flow_id}]) shapes (docs/ha-api-notes.md
+    # config_entries/options/flow[/{flow_id}]) shapes (docs/internals/ha-api-notes.md
     # §26, §26.0: these are REST, NOT WebSocket -- they do not exist as WS
     # commands on real HA, which raises "Unknown command" for any of them): a
     # menu step choosing the template type, then a form step collecting
@@ -375,7 +375,7 @@ class FakeBackend:
         self.flow_log.append(menu_step)
 
         # `unique_id` is NEVER part of the form's data_schema/submission
-        # (docs/ha-api-notes.md §26.6: real HA rejects it as an extra key).
+        # (docs/internals/ha-api-notes.md §26.6: real HA rejects it as an extra key).
         form_step = FlowStep(
             flow_id=flow_id,
             type="form",
@@ -385,7 +385,7 @@ class FakeBackend:
         self.flow_log.append(form_step)
 
         # HA's NumberSelector float-coerces min/max/step on the way in
-        # (docs/ha-api-notes.md §26.10) -- store what real HA would store,
+        # (docs/internals/ha-api-notes.md §26.10) -- store what real HA would store,
         # not the caller's raw submission.
         options = _coerce_number_selector_fields(kind, config)
         entry_id = self._next_entry_id()
@@ -394,7 +394,7 @@ class FakeBackend:
         # `test_fake_backend_template_flow.py`), NOT a literal mirror of the
         # real REST wire response: real HA's create_entry body nests
         # `entry_id`/`title`/... under a `"result"` key
-        # (`_prepare_config_flow_result_json`, docs/ha-api-notes.md §31.8),
+        # (`_prepare_config_flow_result_json`, docs/internals/ha-api-notes.md §31.8),
         # and never has an `"options"` key at all (options are only ever
         # readable via the options-flow's suggested values, §26.7).
         # `DirectBackend._acreate_template_helper` parses that real nested
@@ -423,7 +423,7 @@ class FakeBackend:
                 "target an existing entry via an options-flow update, never a recreate"
             )
         # `name` is REJECTED by the real options-flow schema outright
-        # (docs/ha-api-notes.md §26.7 finding 2): `generate_schema`
+        # (docs/internals/ha-api-notes.md §26.7 finding 2): `generate_schema`
         # only adds the name field for `flow_type == "config"`, never
         # `"options"`. Mirrors HA's real `400 {"errors": {"base": ["extra
         # keys not allowed @ data['name']"]}}`.
@@ -431,7 +431,7 @@ class FakeBackend:
             raise ConfigEntryFlowError(
                 f"{kind} options-flow form rejected: extra keys not allowed @ data['name'] "
                 "(the options-flow schema never includes `name` -- it is create-only and "
-                "becomes the entry's title, docs/ha-api-notes.md §26.7)"
+                "becomes the entry's title, docs/internals/ha-api-notes.md §26.7)"
             )
         _check_required_fields(kind, config, _TEMPLATE_REQUIRED_FIELDS[kind])
         flow_id = f"optflow_{entry_id}"
@@ -472,7 +472,7 @@ class FakeBackend:
 
     def entry_id_for(self, kind: str, identity: str) -> str | None:
         """Test/CLI-facing lookup of a template/group helper's HA-assigned
-        `entry_id` (manifest-only in the real sync engine, docs/backend.md)."""
+        `entry_id` (manifest-only in the real sync engine, docs/internals/backend-protocol.md)."""
         if kind in GROUP_DOMAINS:
             return self._group_entry_ids.get((kind, identity))
         return self._entry_ids.get((kind, identity))
@@ -481,7 +481,7 @@ class FakeBackend:
     #
     # Same create (menu -> form -> create_entry) / update (options-flow form
     # -> create_entry) / delete (entry removal) shape as the template-helper
-    # flows above (docs/ha-api-notes.md §38, mirroring §26): a menu
+    # flows above (docs/internals/ha-api-notes.md §38, mirroring §26): a menu
     # step choosing the flavor (twelve options, §38.1), then a form step
     # collecting `name`/`entities`/`hide_members`(+`all`/`type`), ending in a
     # flat `type: "create_entry"` body.
@@ -518,7 +518,7 @@ class FakeBackend:
         self.flow_log.append(menu_step)
 
         # `unique_id` is never part of the form's data_schema/submission
-        # (docs/ha-api-notes.md §38.1: same "extra keys not allowed" rule as
+        # (docs/internals/ha-api-notes.md §38.1: same "extra keys not allowed" rule as
         # template, §26.6).
         form_step = FlowStep(
             flow_id=flow_id,
@@ -552,14 +552,14 @@ class FakeBackend:
                 "target an existing entry via an options-flow update, never a recreate"
             )
         # `name` is REJECTED by the real options-flow schema outright
-        # (docs/ha-api-notes.md §38.1: same rule as template, §26.7 finding
+        # (docs/internals/ha-api-notes.md §38.1: same rule as template, §26.7 finding
         # 2). Mirrors HA's real `400 {"errors":
         # {"base": ["extra keys not allowed @ data['name']"]}}`.
         if "name" in config:
             raise ConfigEntryFlowError(
                 f"{kind} options-flow form rejected: extra keys not allowed @ data['name'] "
                 "(the options-flow schema never includes `name` -- it is create-only and "
-                "becomes the entry's title, docs/ha-api-notes.md §38.1)"
+                "becomes the entry's title, docs/internals/ha-api-notes.md §38.1)"
             )
         _check_required_fields(kind, config, _GROUP_REQUIRED_FIELDS[kind])
         flow_id = f"optflow_{entry_id}"
@@ -610,7 +610,7 @@ class FakeBackend:
         """`config/entity_registry/update`'s `categories` field, a per-scope
         SERVER-SIDE merge (never drops another scope's existing assignment on
         the same object -- no local or UI edit is silently lost --
-        docs/ha-api-notes.md §31.3, source-verified: "update/adjust only the
+        docs/internals/ha-api-notes.md §31.3, source-verified: "update/adjust only the
         provided scope(s); other category scopes ... are left as is").
         ``category_id=None`` UNSETS `scope` entirely (§31.3's `{scope: None}`
         primitive -- used by `hassle.sync.category_move` for a local move to
@@ -637,7 +637,7 @@ class FakeBackend:
         self._categories.setdefault(scope, {})[category_id] = name
 
     def delete_category(self, scope: str, category_id: str) -> None:
-        """`config/category_registry/delete` (docs/ha-api-notes.md §31.5c) --
+        """`config/category_registry/delete` (docs/internals/ha-api-notes.md §31.5c) --
         removes the category registry row AND strips it from every entity's
         `categories` assignment (real HA's `async_clear_category_id`, §31.3)."""
         self._categories.get(scope, {}).pop(category_id, None)
@@ -660,7 +660,7 @@ class FakeBackend:
           one) must be stripped here, never persisted, or local (`to_ha()`,
           no `id`) vs remote (this store, `id` leaked in) hash forever
           afterward, producing a phantom conflict/perpetual-update out of an
-          untouched object (docs/ha-api-notes.md's pull-plan-noop finding).
+          untouched object (docs/internals/ha-api-notes.md's pull-plan-noop finding).
         - Automations already carry `id` as part of the real input (intrinsic
           identity) -- passed through verbatim, no rewrite needed.
         """
@@ -674,7 +674,7 @@ class FakeBackend:
         self._require_kind(kind)
         self._store[kind].pop(identity, None)
         if kind in TEMPLATE_DOMAINS:
-            # Config entry removal (docs/ha-api-notes.md §26): the entry_id
+            # Config entry removal (docs/internals/ha-api-notes.md §26): the entry_id
             # is retired -- a later re-CREATE under the same name-derived
             # identity gets a FRESH entry_id (the "entry_id-changes" rollback
             # caveat, DESIGN §13 amendment).

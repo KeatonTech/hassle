@@ -129,7 +129,7 @@ def _render_data_value(value: Any) -> str:
     return render_literal(value)
 
 
-# Per-step `alias`/`enabled` (docs/ha-api-notes.md §20): the UI names and
+# Per-step `alias`/`enabled` (docs/internals/ha-api-notes.md §20): the UI names and
 # toggles individual steps. Every action shape below
 # accepts both, layered onto its own `known` set, so a step carrying them is
 # never forced to `raw_action` merely for that reason.
@@ -340,7 +340,7 @@ def _is_plain_service_call(body: dict[str, Any]) -> bool:
 
 
 def _step_option_kwargs_src(body: dict[str, Any]) -> list[str]:
-    """Render `alias=`/`enabled=` present in ``body`` (docs/ha-api-notes.md
+    """Render `alias=`/`enabled=` present in ``body`` (docs/internals/ha-api-notes.md
     §20) as ``key=value`` source fragments."""
     parts: list[str] = []
     if "alias" in body:
@@ -358,7 +358,7 @@ def _delay_duration_kwargs(value: Any) -> list[str] | None:
 
     HA accepts a delay as a dict of units, an ``"HH:MM:SS"`` string, or a bare
     number of seconds -- all functionally equivalent. The typed ``delay()``
-    builder only emits the dict form (docs/ha-api-notes.md), so decompiling a
+    builder only emits the dict form (docs/internals/ha-api-notes.md), so decompiling a
     string/numeric delay to it modernizes the representation -- cosmetic,
     same treatment as the trigger-discriminator modernization
     (test_roundtrip_corpus.py's ``_modernized`` documents and accounts for
@@ -580,7 +580,7 @@ def _choose(body: dict[str, Any], resolver: CallResolver | None) -> list[str] | 
             return None
         branch_dict = cast("dict[str, Any]", branch)
         # A `choose` branch may carry its own `alias`/`enabled`
-        # (docs/ha-api-notes.md §21): the HA UI names/toggles individual
+        # (docs/internals/ha-api-notes.md §21): the HA UI names/toggles individual
         # branches, distinct from the whole `choose` block's own alias/enabled
         # (already handled below) and from any step's own alias/enabled inside
         # the branch's sequence.
@@ -691,7 +691,7 @@ def _parallel(body: dict[str, Any], resolver: CallResolver | None) -> list[str] 
     # fixtures/configs/automation_parallel_action.json) becomes a top-level
     # statement inside `with parallel():`. Any other branch shape -- more than
     # one step in its sequence, or the branch itself carrying `alias`/`enabled`
-    # (docs/ha-api-notes.md §21: the HA UI can name/toggle a whole multi-step
+    # (docs/internals/ha-api-notes.md §21: the HA UI can name/toggle a whole multi-step
     # parallel branch, distinct from any one step's own alias/enabled) --
     # needs the explicit `with p.branch(...):` form, so `with parallel() as
     # p:` is used instead of the bare `with parallel():`.

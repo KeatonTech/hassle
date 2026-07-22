@@ -5,7 +5,7 @@ Covers the shape of `PlanAction`, `Plan`/`PlanEntry`, `Conflict`/`ConflictKind`,
 `Manifest`/`ManifestEntry`, and `ApplyResult`, independent of the plan/apply/pull
 engines themselves (those get their own test files). These shapes are a
 freeze-point contract that later engine code depends on existing and
-behaving as documented in docs/backend.md.
+behaving as documented in docs/internals/backend-protocol.md.
 """
 
 from __future__ import annotations

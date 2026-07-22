@@ -1,7 +1,7 @@
 """The config-entry group-helper flow verified end-to-end against real Home
 Assistant (mirrors `test_live_template_flow.py`): this suite is the
 AUTHORITATIVE verification of the flow shapes documented in
-docs/ha-api-notes.md §38; any mismatch found here supersedes the doc.
+docs/internals/ha-api-notes.md §38; any mismatch found here supersedes the doc.
 
 Does NOT run in unit CI (see `tests/integration/conftest.py`'s ``ha`` fixture
 -- skips whole-suite without ``HASSLE_TEST_HA_URL``/``HASSLE_TEST_HA_TOKEN``).

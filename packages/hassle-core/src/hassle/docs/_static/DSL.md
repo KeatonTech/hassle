@@ -282,7 +282,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -392,7 +392,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -881,7 +881,7 @@ Golden case: `fixtures/dsl/raw_automation_legacy/`.
 Proves normalize_ha runs on the raw body: the bundle writes the pre-2024.10
 singular schema (trigger/condition/action + service:), and the compiler stores
 the canonical plural form (triggers/conditions/actions + action:), exactly as
-HA normalizes on storage (docs/ha-api-notes.md §10.1).
+HA normalizes on storage (docs/internals/ha-api-notes.md §10.1).
 """
 
 from hassle import raw_automation
@@ -1834,7 +1834,7 @@ Golden case: `fixtures/dsl/template_helper_declarations/`.
 domains. The driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
 
-Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
+Identity (docs/internals/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
 real HA's config flow rejects an unrecognized `unique_id` key outright.
 Identity is derived from `name` (slugified): "Active HVAC Zones" ->
 `template_number:active_hvac_zones`.
@@ -1946,7 +1946,7 @@ Golden case: `fixtures/dsl/template_helper_declarations/`.
 domains. The driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
 
-Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
+Identity (docs/internals/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
 real HA's config flow rejects an unrecognized `unique_id` key outright.
 Identity is derived from `name` (slugified): "Active HVAC Zones" ->
 `template_number:active_hvac_zones`.
@@ -2058,7 +2058,7 @@ Golden case: `fixtures/dsl/template_helper_declarations/`.
 domains. The driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
 
-Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
+Identity (docs/internals/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
 real HA's config flow rejects an unrecognized `unique_id` key outright.
 Identity is derived from `name` (slugified): "Active HVAC Zones" ->
 `template_number:active_hvac_zones`.
@@ -2170,7 +2170,7 @@ Golden case: `fixtures/dsl/template_helper_declarations/`.
 domains. The driving case is `template_number` (e.g.
 `number.active_hvac_zones`).
 
-Identity (docs/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
+Identity (docs/internals/ha-api-notes.md §26.6): there is no `id=`/`unique_id=` kwarg --
 real HA's config flow rejects an unrecognized `unique_id` key outright.
 Identity is derived from `name` (slugified): "Active HVAC Zones" ->
 `template_number:active_hvac_zones`.
@@ -2279,11 +2279,11 @@ Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 
@@ -2482,11 +2482,11 @@ Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 
@@ -2685,11 +2685,11 @@ Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 
@@ -2888,11 +2888,11 @@ Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 
@@ -3091,11 +3091,11 @@ Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 
@@ -3294,11 +3294,11 @@ Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 
@@ -3497,11 +3497,11 @@ Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 
@@ -3700,11 +3700,11 @@ Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 
@@ -3903,11 +3903,11 @@ Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 
@@ -4106,11 +4106,11 @@ Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 
@@ -4309,11 +4309,11 @@ Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 
@@ -4512,11 +4512,11 @@ Golden case: `fixtures/dsl/group_helper_declarations/`.
 
 ```python
 """Golden case: group-helper declarations for all twelve group flavors,
-covering the three schema shapes (docs/ha-api-notes.md §38.1) -- base (name/
+covering the three schema shapes (docs/internals/ha-api-notes.md §38.1) -- base (name/
 entities/hide_members), +all (binary_sensor/light/switch), +type (sensor).
 
 Identity: there is no `id=`/`unique_id=` kwarg, mirroring template helpers
-(docs/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
+(docs/internals/ha-api-notes.md §38.1) -- real HA's `group` config flow rejects an
 unrecognized `unique_id` key outright. Identity is derived from `name`
 (slugified): "Entryway Top" -> `group_cover:entryway_top`.
 
@@ -7521,7 +7521,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -7697,7 +7697,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -7807,7 +7807,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -7917,7 +7917,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -8027,7 +8027,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -8137,7 +8137,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -8247,7 +8247,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -8357,7 +8357,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -8533,7 +8533,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -8643,7 +8643,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -8753,7 +8753,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -8863,7 +8863,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -8973,7 +8973,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -9083,7 +9083,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -9193,7 +9193,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -9303,7 +9303,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -9413,7 +9413,7 @@ build fails if any `hassle.__all__` name lacks a documented pair) --
 (`as_datetime`/`as_timestamp`/`today_at`/`timedelta_`), `var`, and `concat`.
 One `variables` action is the natural place to exercise a batch of
 independent template expressions at once (DESIGN §5.4's math-expression
-extension; docs/dsl-extensions.md "Runtime-math expression surface").
+extension; docs/internals/dsl-extensions.md "Runtime-math expression surface").
 """
 
 from hassle import (
@@ -10307,7 +10307,7 @@ Golden case: `fixtures/dsl/raw_passthrough/`.
 
 The raw action is authored in legacy `service:` form to prove the containing
 object's whole-body `normalize_ha` pass rewrites it to `action:`, exactly as
-HA itself would on storage (docs/ha-api-notes.md §10.1) -- the raw builders
+HA itself would on storage (docs/internals/ha-api-notes.md §10.1) -- the raw builders
 themselves do not touch the dict.
 """
 
@@ -10361,7 +10361,7 @@ Golden case: `fixtures/dsl/raw_passthrough/`.
 
 The raw action is authored in legacy `service:` form to prove the containing
 object's whole-body `normalize_ha` pass rewrites it to `action:`, exactly as
-HA itself would on storage (docs/ha-api-notes.md §10.1) -- the raw builders
+HA itself would on storage (docs/internals/ha-api-notes.md §10.1) -- the raw builders
 themselves do not touch the dict.
 """
 
@@ -10415,7 +10415,7 @@ Golden case: `fixtures/dsl/raw_passthrough/`.
 
 The raw action is authored in legacy `service:` form to prove the containing
 object's whole-body `normalize_ha` pass rewrites it to `action:`, exactly as
-HA itself would on storage (docs/ha-api-notes.md §10.1) -- the raw builders
+HA itself would on storage (docs/internals/ha-api-notes.md §10.1) -- the raw builders
 themselves do not touch the dict.
 """
 

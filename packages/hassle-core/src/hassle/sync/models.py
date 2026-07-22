@@ -121,9 +121,9 @@ class ManifestEntry(BaseModel):
 
     ``entry_id`` (additive/optional): for a config-entry template-helper
     (``hassle.ir.TEMPLATE_DOMAINS``) or group-helper (``hassle.ir.GROUP_DOMAINS``)
-    object, the HA-assigned config entry id (docs/ha-api-notes.md §26.5/§38)
+    object, the HA-assigned config entry id (docs/internals/ha-api-notes.md §26.5/§38)
     -- transport-side identity only, never the object-key identity
-    (``unique_id``) and never part of the IR body (docs/backend.md's
+    (``unique_id``) and never part of the IR body (docs/internals/backend-protocol.md's
     config-entry addendum). ``None`` for every other kind (automation/script/
     storage-collection helper), which have no such secondary identity to
     track.
@@ -137,7 +137,7 @@ class ManifestEntry(BaseModel):
     lost) rather than silently letting either side win when both changed to
     different values. Never the display name (that's transient HA-side
     state, not tracked here) -- just the slug `bundle_ops`'s placement
-    already anchors on (docs/ha-api-notes.md §22/§30).
+    already anchors on (docs/internals/ha-api-notes.md §22/§30).
     """
 
     model_config = ConfigDict(frozen=True)

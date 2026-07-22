@@ -10,7 +10,7 @@ storage-collection helper builders in :mod:`hassle.compiler.helpers` -- same
 "import-and-reference pattern" (DESIGN §5.7), same prebuilt-object
 registration path into the active bundle registry.
 
-**Identity (docs/ha-api-notes.md §26.6): there is no ``id=``/``unique_id=``
+**Identity (docs/internals/ha-api-notes.md §26.6): there is no ``id=``/``unique_id=``
 kwarg.** The real `template` config flow's form schema rejects an
 unrecognized ``unique_id`` key outright -- a flow-created entry has no
 caller-settable unique id at all. Identity is derived from ``name``
@@ -18,7 +18,7 @@ caller-settable unique id at all. Identity is derived from ``name``
 (``hassle.ir.keys.slugify``) -- except here it's the ONLY identity source;
 the object key is ``"<template domain>:<slugify(name)>"``. The HA-assigned
 config ``entry_id`` remains transport-side identity only (manifest-only,
-docs/backend.md).
+docs/internals/backend-protocol.md).
 
 Storage truth: ``state=`` takes a literal Jinja template string (the config
 entry's actual stored ``state`` option). Expression-builder values (an `Expr`
@@ -27,7 +27,7 @@ to Jinja at declaration time via ``str()`` -- since template strings are what
 HA's config entry stores and what the decompiler reproduces (the expression
 sugar is one-way).
 
-**Required write-target fields (docs/ha-api-notes.md §26.6):** a template
+**Required write-target fields (docs/internals/ha-api-notes.md §26.6):** a template
 NUMBER's form schema requires ``set_value`` (the action sequence run when the
 entity is set from the UI/a service call -- a template number needs a write
 target, since ``state`` alone only computes the displayed value); a template
@@ -51,7 +51,7 @@ the moment ``template_number``/``template_select`` is called without its
 required kwarg -- the backend checks are unchanged and remain a second line
 of defense for any non-DSL path that builds a `TemplateHelperConfig` directly.
 
-**``min``/``max``/``step`` are ``float``-coerced (docs/ha-api-notes.md
+**``min``/``max``/``step`` are ``float``-coerced (docs/internals/ha-api-notes.md
 §26.10):** HA's ``template_number`` form schema types these three fields as
 ``NumberSelector``, whose validator (``homeassistant/helpers/selector.py``)
 unconditionally runs every submitted value through ``vol.Coerce(float)`` --
@@ -84,7 +84,7 @@ from hassle.ir.keys import slugify
 from hassle.ir.models import TemplateHelperConfig
 
 # Write-target fields HA's `template` config-flow form schema requires beyond
-# `name`/`state` (docs/ha-api-notes.md §26.6, mirrors `hassle.backend.direct`/
+# `name`/`state` (docs/internals/ha-api-notes.md §26.6, mirrors `hassle.backend.direct`/
 # `hassle.backend.fake`'s `_TEMPLATE_REQUIRED_FIELDS`): a template NUMBER
 # needs `set_value` (the action run when the number is written), a template
 # SELECT needs `select_option` (the action run when an option is chosen).
@@ -178,7 +178,7 @@ def _render_state(state: Any) -> Any:
 
 def _coerce_number_field(value: Any) -> Any:
     """Coerce a `template_number` `min`/`max`/`step` value to `float`
-    (docs/ha-api-notes.md §26.10): HA's `NumberSelector.__call__`
+    (docs/internals/ha-api-notes.md §26.10): HA's `NumberSelector.__call__`
     (`homeassistant/helpers/selector.py`) runs every submitted `min`/`max`/
     `step` value through `vol.Coerce(float)` unconditionally and stores the
     result -- so the config entry's stored options always have these three
@@ -422,7 +422,7 @@ def template_number(
     :class:`~hassle.compiler.errors.MissingTemplateHelperWriteTargetError`
     at compile time (module docstring).
 
-    ``min``/``max``/``step`` are coerced to ``float`` (docs/ha-api-notes.md
+    ``min``/``max``/``step`` are coerced to ``float`` (docs/internals/ha-api-notes.md
     §26.10): HA's form schema (``NumberSelector``) always stores them as
     floats regardless of what's submitted, so a compiled ``int`` literal
     (the natural way to write ``min=0``) would otherwise never byte-match

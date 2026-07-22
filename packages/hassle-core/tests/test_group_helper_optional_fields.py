@@ -5,7 +5,7 @@ dropped every None-valued field from the compiled options body
 body carrying an EXPLICIT null would decompile to ``field=None`` and then
 silently lose that field on recompile -- a compile(decompile(x)) == x break.
 Unreachable while no modeled group field could be None; reachable the
-moment the optional sensor-group fields of docs/ha-api-notes.md §38.3
+moment the optional sensor-group fields of docs/internals/ha-api-notes.md §38.3
 (``ignore_non_numeric``/``unit_of_measurement``/``device_class``/
 ``state_class``) exist.
 

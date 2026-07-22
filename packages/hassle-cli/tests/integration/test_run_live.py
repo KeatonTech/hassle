@@ -1,7 +1,7 @@
 """`run --live` integration test (Dockerized HA).
 
 Shadow automation created ENABLED with a never-fires event trigger (revised
-design, docs/ha-api-notes.md §29 addendum -- NOT `initial_state: off`, which
+design, docs/internals/ha-api-notes.md §29 addendum -- NOT `initial_state: off`, which
 turned out not to be what actually mattered here), triggered with
 `skip_condition: false` by default (HA's own default is `true` -- assert we
 override it), trace rendered with correct source lines, the action's real
@@ -91,7 +91,7 @@ def _write_bundle(
     root.mkdir()
     (root / "hassle.toml").write_text("format_version = 1\n", encoding="utf-8")
     # A flat bundle (DSL sources directly at the bundle root) is still fully
-    # supported (docs/ha-api-notes.md §17.9 RESOLVED: the loader also
+    # supported (docs/internals/ha-api-notes.md §17.9 RESOLVED: the loader also
     # recurses into subdirectories now, but never requires them).
     # The counter.increment action separates "the automation.trigger service
     # call was accepted" from "the automation's action script actually ran"
@@ -143,7 +143,7 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     the entire DESIGN §10.4 semantic surface in one place:
 
     Phase 1 (condition unsatisfied -- HA's own default for a freshly created
-    `input_boolean` is `"off"`, docs/ha-api-notes.md §4): trigger, assert the
+    `input_boolean` is `"off"`, docs/internals/ha-api-notes.md §4): trigger, assert the
     trace shows `failed_conditions` and the counter did NOT change --
     positive proof conditions are evaluated by default (skip_condition:
     false), not just "the run completed".
@@ -206,7 +206,7 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     before_phase2 = _counter_value(ha, counter_entity_id)
     result = _invoke_in_dir(main, run_args, cwd=bundle, env=run_env)
     assert result.exit_code == 0, result.output
-    # Structural assertion (docs/ha-api-notes.md §29): the word "trace"
+    # Structural assertion (docs/internals/ha-api-notes.md §29): the word "trace"
     # alone doesn't prove a timeline was actually rendered
     # -- a step path from the real automation must appear, and the "trace
     # never became available" warning must NOT (that would mean

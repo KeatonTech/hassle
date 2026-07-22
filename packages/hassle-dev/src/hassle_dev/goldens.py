@@ -45,7 +45,7 @@ def _dump(ir: dict[str, Any]) -> str:
 
 
 def _type_strict_equal(a: Any, b: Any) -> bool:
-    """Like ``==``, but ``0 != 0.0`` (docs/ha-api-notes.md
+    """Like ``==``, but ``0 != 0.0`` (docs/internals/ha-api-notes.md
     §26.10): plain ``==`` on parsed JSON structures treats an `int` and a
     numerically-equal `float` as equal (`{"min": 0} == {"min": 0.0}` is
     `True` in Python), so `run_goldens`'s drift check silently missed an
@@ -87,7 +87,7 @@ def run_goldens(dsl_dir: Path, *, update: bool) -> GoldenReport:
         actual_text = _dump(actual)
         current_text = expected_path.read_text(encoding="utf-8")
         # Compare structurally (indentation/key-order agnostic) but rewrite in the
-        # canonical dumped form on update. Type-strict (docs/ha-api-notes.md
+        # canonical dumped form on update. Type-strict (docs/internals/ha-api-notes.md
         # §26.10): plain `!=` would miss an int-vs-float drift entirely.
         if not _type_strict_equal(json.loads(current_text), actual):
             if update:

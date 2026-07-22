@@ -1,6 +1,6 @@
 """The config-entry template-helper flow verified end-to-end against real
 Home Assistant: this suite is the AUTHORITATIVE verification of the flow
-shapes documented in docs/ha-api-notes.md §26; any mismatch found here
+shapes documented in docs/internals/ha-api-notes.md §26; any mismatch found here
 supersedes the doc.
 
 **This suite is exactly what caught real bugs:**
@@ -43,7 +43,7 @@ supersedes the doc.
   exercising the compiler at all.
 
 Fixed in `hassle/backend/direct.py` and
-`hassle/compiler/template_helpers.py`; see docs/ha-api-notes.md
+`hassle/compiler/template_helpers.py`; see docs/internals/ha-api-notes.md
 §26.0-§26.10 for the full correction history.
 
 Covers:
@@ -51,7 +51,7 @@ Covers:
   `/api/config/config_entries/flow[/{flow_id}]` for create, REST
   `/api/config/config_entries/options/flow[/{flow_id}]` for update, REST
   `DELETE /api/config/config_entries/entry/{entry_id}` for delete —
-  docs/ha-api-notes.md §26.1-26.3).
+  docs/internals/ha-api-notes.md §26.1-26.3).
 - the same cycle for the other three template domains (sensor/binary_sensor/
   select), proving the plugin generalizes across the domain (scoped to the
   template domain first: number/sensor/binary_sensor/select).
@@ -92,7 +92,7 @@ _BUILDERS = {
 
 def _compiled(domain: str, **kwargs: Any) -> dict[str, Any]:
     """Produce a template-helper config the way the real product does: through
-    the DSL builder, not a hand-authored dict (docs/ha-api-notes.md
+    the DSL builder, not a hand-authored dict (docs/internals/ha-api-notes.md
     §26.10 -- a raw `int` `min`/`max`/`step` never exercises the compiler's
     float coercion, and the simulator's spirit is that tests exercise
     compiled IR)."""
@@ -313,7 +313,7 @@ def test_template_helper_rollback_restores_prior_options_live(ha: DirectBackend)
     restored = ha.list_remote("template_number")[identity]
     assert sha256_hash(restored) == before_hash
     # Rollback-by-recreate is a real recreate at the HA level: document the
-    # entry_id-changes caveat (docs/ha-api-notes.md §26.3) rather than assert
+    # entry_id-changes caveat (docs/internals/ha-api-notes.md §26.3) rather than assert
     # it is preserved -- the object key and stored options are identical
     # either way, which is what the plan/apply engine actually depends on.
     assert ha.entry_id_for("template_number", identity) is not None

@@ -3,7 +3,7 @@
 `Manifest.canonical_json()` (hassle-core) gives stable serialization; this
 module just owns the file path convention (`.hassle/manifest.lock`, committed
 to git per DESIGN §8.1) and default-empty-manifest construction. `synced_at`
-is always caller-supplied (no wall clock in core logic, docs/backend.md) --
+is always caller-supplied (no wall clock in core logic, docs/internals/backend-protocol.md) --
 the CLI is the only layer allowed to call a clock, so `now_iso()` lives here,
 not in hassle-core.
 """

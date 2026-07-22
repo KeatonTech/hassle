@@ -10,7 +10,7 @@ Both real-world spellings normalize to the DSL, then render canonically:
   (`invert_template`'s render-and-compare check) correctly REJECTS it and the
   caller falls back to the unchanged string form. This is the documented
   "one-time canonicalization on push" behavior (docs/DSL.md via
-  docs/dsl-extensions.md): only after the user's own edit (or Hassle's own compiled
+  docs/internals/dsl-extensions.md): only after the user's own edit (or Hassle's own compiled
   re-render) replaces the source with the canonical `states('x') == 'y'`
   spelling does it invert cleanly forever after.
 

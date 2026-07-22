@@ -1,4 +1,4 @@
-"""Pull -> plan-noop invariant (docs/ha-api-notes.md §23): a fresh pull
+"""Pull -> plan-noop invariant (docs/internals/ha-api-notes.md §23): a fresh pull
 followed immediately by a plan, with zero edits on either side, must never
 show a `conflict` or a plain (non-modernization) `update` for an untouched
 object -- only `noop`, or an `update` that is schema-only modernization

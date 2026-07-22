@@ -1,6 +1,6 @@
 """Sanity check: turning `hassle/registry.py` into a package must not disturb the
 `hassle.registry.entities` runtime shape frozen in the top-level DSL surface
-(docs/dsl-extensions.md).
+(docs/internals/dsl-extensions.md).
 
 This is deliberately the simplest possible check -- if the registry-module ->
 registry-package refactor breaks this, nothing else in the registry test suite

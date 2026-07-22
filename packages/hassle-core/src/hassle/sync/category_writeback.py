@@ -1,6 +1,6 @@
 """Category write-back on push-create (DESIGN §7.3/§9.2).
 
-Pull-side placement (docs/ha-api-notes.md §22) maps an
+Pull-side placement (docs/internals/ha-api-notes.md §22) maps an
 HA UI category onto a bundle file: ``automations/<slug(category name)>.py`` /
 ``scripts/<slug(category name)>.py``. This module is the reverse: when
 `hassle.sync.apply.apply_plan` successfully CREATEs a brand-new automation or
@@ -11,7 +11,7 @@ slugifies to the file's stem.
 
 Every HA write goes through the same API the UI uses: the category
 registry/entity registry WS commands this drives are exactly what the HA
-frontend's own category-assignment UI calls (docs/ha-api-notes.md §22, §30).
+frontend's own category-assignment UI calls (docs/internals/ha-api-notes.md §22, §30).
 
 This module never raises past its own boundary (no local or UI edit is ever
 silently lost by way of an unhandled exception here) — `attempt_category_writeback`
@@ -29,21 +29,21 @@ object" sync logic lives, reusing this module's scope map and
 slug-derivation helper).
 
 The scope map this module owns (`_SCOPE_FOR_KIND`) covers all 13 helper
-kinds under the shared `"helpers"` scope (docs/ha-api-notes.md §31):
+kinds under the shared `"helpers"` scope (docs/internals/ha-api-notes.md §31):
 real HA's category registry has no scope allowlist at all (§31.1), and the
 frontend's helpers page shares ONE scope, `"helpers"`, across all 25 helper
 kinds -- 9 storage-collection (`HELPER_DOMAINS`) + 4 template config-entry
 (`TEMPLATE_DOMAINS`) + 12 group config-entry (`GROUP_DOMAINS`).
 
 Bundle placement gives every kind a real root-level category-shaped file
-(`<slug>.py`) -- `category_shaped_stem` (docs/ha-api-notes.md §31.6)
+(`<slug>.py`) -- `category_shaped_stem` (docs/internals/ha-api-notes.md §31.6)
 recognizes it kind-independently; there is no per-kind tree shape left to
 check (an earlier design had `automations/<slug>.py` / `scripts/<slug>.py`
 / `helpers/<slug>.py`).
 
 Backend surface used (additive, NOT part of the frozen `Backend` Protocol —
 same `getattr`-probed pattern as `entry_id_for`/`fetch_registry_snapshot`,
-docs/backend.md §3.1):
+docs/internals/backend-protocol.md §3.1):
 
 - ``list_categories(scope) -> dict[category_id, name]``
 - ``create_category(scope, name) -> category_id``
@@ -71,7 +71,7 @@ from hassle.ir.keys import (
     humanize_slug,
 )
 
-# Every object kind's HA UI category-registry scope (docs/ha-api-notes.md
+# Every object kind's HA UI category-registry scope (docs/internals/ha-api-notes.md
 # §31.2/§31.6, source-verified). Bundle PLACEMENT gives every kind a real
 # root-level category-shaped file (`<slug>.py`) -- `category_shaped_stem`
 # recognizes it kind-independently; this map is what lets

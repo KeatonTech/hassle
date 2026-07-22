@@ -13,7 +13,7 @@ Covers:
    `test_registry_stubs.py`.
 6. Simulator: namespace/entity-method calls execute identically to
    `service(...)` in the simulator, which runs compiled IR, not DSL Python.
-7. Docs gate: covered by `hassle-dev docs` (docs/dsl-extensions.md new section).
+7. Docs gate: covered by `hassle-dev docs` (docs/internals/dsl-extensions.md new section).
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ def _write_bundle(tmp_path: Path, source: str) -> Path:
 
 # ---------------------------------------------------------------------------
 # Regression pin: entity-method call records (was AttributeError on
-# `main`; recorded in docs/ha-api-notes.md).
+# `main`; recorded in docs/internals/ha-api-notes.md).
 # ---------------------------------------------------------------------------
 
 
@@ -191,7 +191,7 @@ def test_validate_known_domain_service_typo_via_namespace_has_did_you_mean(tmp_p
 
 def test_validate_uncaptured_but_plausible_service_is_not_flagged(tmp_path: Path) -> None:
     """Deliberate scope boundary (fixture-corpus false-positive evidence,
-    `docs/ha-api-notes.md` §33 predecessor / `_validate_unknown_services`'s
+    `docs/internals/ha-api-notes.md` §33 predecessor / `_validate_unknown_services`'s
     docstring): a real HA service simply absent from this snapshot's
     necessarily-incomplete `get_services` capture (an integration not loaded
     when the snapshot was taken) must not be flagged merely for having no

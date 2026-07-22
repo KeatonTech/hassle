@@ -314,7 +314,7 @@ def a():
 
 
 def test_extract_does_not_false_positive_on_wait_trigger_event_data_dotted(tmp_path: Path) -> None:
-    """docs/ha-api-notes.md §36.1: the regex fallback previously matched the
+    """docs/internals/ha-api-notes.md §36.1: the regex fallback previously matched the
     substring `event.data` inside `wait.trigger.event.data.action` (a Jinja
     *variable path*, not an entity reference) because `event` is itself a
     real HA entity domain in `_KNOWN_ISH_DOMAINS`. The dotted spelling (not

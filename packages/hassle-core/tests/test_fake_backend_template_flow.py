@@ -3,7 +3,7 @@
 `FakeBackend` models the multi-step config-entry flow (create: menu step
 choosing the template type, then a form step -> `create_entry`) and
 options-flow (update: one form step -> `create_entry`, same `entry_id`)
-shapes (docs/ha-api-notes.md §26; the REAL transport was captured by the CI
+shapes (docs/internals/ha-api-notes.md §26; the REAL transport was captured by the CI
 integration suite, `packages/hassle-core/tests/integration/
 test_live_template_flow.py`, which is the authoritative verification -- it
 found the flow/options-flow/removal operations are REST, not WebSocket, §26.0,
@@ -38,7 +38,7 @@ _SELECT_OPTION = {"action": "input_select.select_option", "data": {"option": "{{
 
 def _required_fields(domain: str) -> dict[str, object]:
     """The extra fields each domain's form schema requires beyond name/state
-    (docs/ha-api-notes.md §26.6)."""
+    (docs/internals/ha-api-notes.md §26.6)."""
     if domain == "template_number":
         return {"set_value": _SET_VALUE}
     if domain == "template_select":
@@ -123,7 +123,7 @@ def test_template_number_update_drives_options_flow_same_entry_id() -> None:
     backend.reset_write_tracking()
     log_len_before = len(backend.flow_log)
 
-    # `name` is NOT resubmitted (docs/ha-api-notes.md §26.7 -- the
+    # `name` is NOT resubmitted (docs/internals/ha-api-notes.md §26.7 -- the
     # options-flow schema never includes it; real HA 400s if it's sent).
     backend.update(
         "template_number",
@@ -158,7 +158,7 @@ def test_template_number_update_silently_strips_name_at_the_public_api_boundary(
     # FULL local config, exactly like every other kind -- `name` is stripped
     # before it ever reaches the simulated options-flow submission, mirroring
     # `DirectBackend._aupdate_template_helper` protecting a caller from ever
-    # producing the real HA 400 (docs/ha-api-notes.md §26.7). A caller must
+    # producing the real HA 400 (docs/internals/ha-api-notes.md §26.7). A caller must
     # never see this as an error: nothing else in Hassle strips `name` out of
     # the local config before calling `Backend.update`.
     backend = FakeBackend()
@@ -177,7 +177,7 @@ def test_template_number_update_silently_strips_name_at_the_public_api_boundary(
 
 def test_template_number_internal_options_flow_submission_rejects_name_field() -> None:
     # The internal flow-submission step itself (mirroring the real
-    # options-flow schema, docs/ha-api-notes.md §26.7 finding 2) must reject
+    # options-flow schema, docs/internals/ha-api-notes.md §26.7 finding 2) must reject
     # `name` if it ever reached it -- `update()`'s stripping (previous test)
     # is what actually prevents this in practice; this test pins the
     # lower-level simulation's fidelity to the real 400 directly.
@@ -195,7 +195,7 @@ def test_template_number_internal_options_flow_submission_rejects_name_field() -
 
 def test_template_number_update_preserves_name_without_resubmitting_it() -> None:
     # Real HA merges the update's fields into the entry's EXISTING options
-    # rather than replacing the dict outright (docs/ha-api-notes.md §26.7
+    # rather than replacing the dict outright (docs/internals/ha-api-notes.md §26.7
     # finding 3) -- `name` (never part of the options-flow schema) survives
     # untouched across an update that never resubmits it.
     backend = FakeBackend()
@@ -273,7 +273,7 @@ def test_every_template_domain_supports_full_cycle(domain: str) -> None:
     extra = _required_fields(domain)
     identity = backend.create(domain, {"name": "Thing", "state": "{{ 1 }}", **extra})
     assert backend.list_remote(domain)[identity]["name"] == "Thing"
-    # `name` is NOT part of an UPDATE's payload (docs/ha-api-notes.md §26.7 --
+    # `name` is NOT part of an UPDATE's payload (docs/internals/ha-api-notes.md §26.7 --
     # the options-flow schema never includes it); it survives untouched.
     backend.update(domain, identity, {"state": "{{ 2 }}", **extra})
     updated = backend.list_remote(domain)[identity]

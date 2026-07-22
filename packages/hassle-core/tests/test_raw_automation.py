@@ -39,7 +39,7 @@ def test_raw_automation_dict_assignment_form() -> None:
     )
     ha = obj.to_ha()
     # Legacy singular keys normalized to plural, service: -> action:, exactly
-    # as HA's own storage normalization (docs/ha-api-notes.md §10.1).
+    # as HA's own storage normalization (docs/internals/ha-api-notes.md §10.1).
     assert ha["triggers"] == [{"platform": "device", "device_id": "abc123", "type": "turned_on"}]
     assert ha["actions"] == [{"action": "light.turn_on", "entity_id": "light.hallway"}]
     assert "trigger" not in ha and "action" not in ha
@@ -77,7 +77,7 @@ def test_blueprint_automation_maps_inputs_to_singular_input_key() -> None:
         inputs={"motion_entity": "binary_sensor.hall_motion", "no_motion_wait": 90},
     )
     ha = obj.to_ha()
-    # docs/ha-api-notes.md §10.5: stored key is singular "input", path is
+    # docs/internals/ha-api-notes.md §10.5: stored key is singular "input", path is
     # author-qualified, and a blueprint automation stores ONLY use_blueprint.
     assert ha["use_blueprint"] == {
         "path": "hassle/motion_light.yaml",

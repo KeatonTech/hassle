@@ -1,6 +1,6 @@
 """CATEGORY capture must be SCOPED to category-shaped files only. The
 category-shaped-file convention itself is root-level, cross-kind
-(docs/ha-api-notes.md §31.6) -- this file's SCOPING guarantee is unchanged,
+(docs/internals/ha-api-notes.md §31.6) -- this file's SCOPING guarantee is unchanged,
 just re-pinned against that shape.
 
 `_import_bundle_modules` originally used a bare `hasattr(module, "CATEGORY")`

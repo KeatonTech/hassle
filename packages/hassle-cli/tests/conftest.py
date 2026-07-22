@@ -75,7 +75,7 @@ def bundle_dir(tmp_path: Path, registry_snapshot_json: dict[str, Any]) -> Path:
 
     DSL sources live directly at the bundle root (`hallway.py`, not
     `automations/hallway.py`) -- a flat bundle is still fully supported
-    (docs/ha-api-notes.md §17.9 RESOLVED: the loader recurses into
+    (docs/internals/ha-api-notes.md §17.9 RESOLVED: the loader recurses into
     subdirectories too, but never requires them). Kept flat here because many
     tests in this suite reference `bundle_dir / "hallway.py"` directly; an
     empty `automations/` dir sits alongside it, matching what a real

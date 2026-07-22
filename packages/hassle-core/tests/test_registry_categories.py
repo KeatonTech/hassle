@@ -5,9 +5,9 @@ registry-model half of the fix:
 
 - `RegistrySnapshot` gains an additive `categories` field: `{scope: {category_id:
   name}}` (WS `config/category_registry/list` is called once per scope, e.g.
-  `{"scope": "automation"}`; DESIGN §7.3, docs/ha-api-notes.md new §22).
+  `{"scope": "automation"}`; DESIGN §7.3, docs/internals/ha-api-notes.md new §22).
 - `EntityInfo` gains `unique_id` (== the automation/script/helper config id,
-  docs/ha-api-notes.md §2 "id <-> unique_id") and a per-scope `categories` map
+  docs/internals/ha-api-notes.md §2 "id <-> unique_id") and a per-scope `categories` map
   (`{scope: category_id}`) already present on entity-registry rows but never
   parsed by the snapshot model.
 

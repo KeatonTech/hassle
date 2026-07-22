@@ -11,7 +11,7 @@ here that doesn't require a real HA connection is unit-tested against
 - `shadow_automation_id` / `build_shadow_config` -- pure, deterministic
   (byte-stable output; no wall clock in core logic).
 - `trigger_payload` -- the `skip_condition: false`-by-default payload (HA's
-  own default is `true`; DESIGN §10.4 point 2/docs/ha-api-notes.md §10.6).
+  own default is `true`; DESIGN §10.4 point 2/docs/internals/ha-api-notes.md §10.6).
 - `run_shadow_session` -- the create -> trigger -> get-trace -> delete
   orchestration against the `Backend` protocol (`create`/`delete` only, so it
   runs unchanged against `FakeBackend`), with `trigger_fn`/`get_trace_fn`
@@ -30,11 +30,11 @@ from typing import Any, Protocol
 
 from hassle.ir.canonical import canonical_json
 
-# Bounded polling for the trace-persistence race (docs/ha-api-notes.md §29):
+# Bounded polling for the trace-persistence race (docs/internals/ha-api-notes.md §29):
 # HA's `trace/list` can return empty for a short window after
 # `automation.trigger` while the trace is asynchronously persisted -- the
 # same class of async-settling race as the config-REST reload wait
-# (`DirectBackend._await_config_entity`, docs/ha-api-notes.md §17.7). This is
+# (`DirectBackend._await_config_entity`, docs/internals/ha-api-notes.md §17.7). This is
 # live-transport I/O, not core compiler/simulator logic, so the "no
 # wall-clock in core logic" rule does not apply; the bound keeps a
 # slow/never-settling trace from hanging the CLI forever.
@@ -67,12 +67,12 @@ def build_shadow_config(object_key: str, body: dict[str, Any]) -> dict[str, Any]
     fire on its own (a unique-per-run event type, see `never_fires_event_type`)
     and a shadow-prefixed id.
 
-    Revised design (docs/ha-api-notes.md §29 addendum): DESIGN §10.4 point 1
+    Revised design (docs/internals/ha-api-notes.md §29 addendum): DESIGN §10.4 point 1
     originally said "its triggers never fire on their own" via
     `initial_state: off` (a *disabled* shadow). Live evidence + HA source
     reading showed that mechanism was never actually exercised -- the
     integration test that would have caught it was broken by an unrelated
-    `CliRunner.invoke(cwd=...)` bug (docs/ha-api-notes.md §28) from the day it
+    `CliRunner.invoke(cwd=...)` bug (docs/internals/ha-api-notes.md §28) from the day it
     was written, so `run --live`'s shadow flow had never run against real HA
     before. A disabled automation's `entity_id` targeting turned out to be
     broken for an unrelated reason (§29 addendum: `entity_id` is `slug(alias)`,
@@ -100,7 +100,7 @@ def trigger_payload(
     HA's own default for `skip_condition` is `true` (conditions skipped); a
     live run should behave like a *real* trigger, so Hassle always sends an
     explicit value: `false` unless `--skip-conditions` was passed (DESIGN
-    §10.4 point 2, docs/ha-api-notes.md §10.6).
+    §10.4 point 2, docs/internals/ha-api-notes.md §10.6).
     """
     payload: dict[str, Any] = {"skip_condition": bool(skip_conditions)}
     if variables:
@@ -148,7 +148,7 @@ def run_shadow_session(
     backend.create(kind, shadow_config)
     try:
         # HA retains traces per item_id ACROSS the shadow's delete/recreate
-        # (round-6 CI finding, docs/ha-api-notes.md §29): snapshot the runs
+        # (round-6 CI finding, docs/internals/ha-api-notes.md §29): snapshot the runs
         # that already exist so trace selection can never render a previous
         # session's run.
         pre_existing_run_ids = (
@@ -220,7 +220,7 @@ def canonical_shadow_json(config: dict[str, Any]) -> str:
 def render_trace_timeline(trace: dict[str, Any]) -> str:
     """Render a `trace/get` response as a step-by-step timeline (DESIGN
     §10.4 point 3): one line per step path (`trigger`, `condition/0`,
-    `action/0`, ...), keyed off `trace["trace"]` (docs/ha-api-notes.md §7's
+    `action/0`, ...), keyed off `trace["trace"]` (docs/internals/ha-api-notes.md §7's
     capture shape) in the dict's own order (HA returns it execution-ordered).
     Full DSL-source-line mapping is a separate, not-yet-built DESIGN §10.4
     feature -- this renders the step path HA gives, which is already enough

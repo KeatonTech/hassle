@@ -1145,7 +1145,7 @@ def stubs(refresh: bool) -> None:
     `typings/hassle/services.pyi` from the registry snapshot (DESIGN §11).
 
     See docs/internals/cli.md for why there are three generated stub files
-    and the path history behind where they live; and docs/ha-api-notes.md.
+    and the path history behind where they live; and docs/internals/ha-api-notes.md.
     """
     from hassle.registry.snapshot import RegistrySnapshot
 

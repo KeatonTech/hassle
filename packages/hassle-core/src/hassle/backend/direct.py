@@ -9,11 +9,11 @@ four plain `Backend` methods (`list_remote`/`create`/`update`/`delete`) the sync
 engine expects — so `apply_plan` drives real HA unchanged.
 
 It also exposes non-`Backend` concerns that live on the transport, not the sync
-seam (docs/backend.md "Deliberately out of scope"): registry snapshot fetch,
+seam (docs/internals/backend-protocol.md "Deliberately out of scope"): registry snapshot fetch,
 server-side `validate_config`, trace access, template render, the HA version
 check, and the 2026.7 purpose-vocabulary enumeration.
 
-Per-kind mapping to HA's APIs (DESIGN §4, docs/ha-api-notes.md):
+Per-kind mapping to HA's APIs (DESIGN §4, docs/internals/ha-api-notes.md):
 
 - **automations** — config REST, keyed by `id`; enumerate via `/api/states`
   (`attributes.id`), fetch/write/delete `/api/config/automation/config/{id}`.
@@ -24,7 +24,7 @@ Per-kind mapping to HA's APIs (DESIGN §4, docs/ha-api-notes.md):
   (`config_entries/get`); create/update/delete are REST
   (`/api/config/config_entries/flow[/{flow_id}]`, `/api/config/
   config_entries/options/flow[/{flow_id}]`, `DELETE /api/config/
-  config_entries/entry/{entry_id}`) — docs/ha-api-notes.md §26: these three
+  config_entries/entry/{entry_id}`) — docs/internals/ha-api-notes.md §26: these three
   do not exist as WS commands on real HA. Identity is derived from `name`
   (§26.6: the flow's form schema rejects an unrecognized `unique_id` key
   outright, so there is no settable unique id at all). See
@@ -47,7 +47,7 @@ from hassle.ir.keys import slugify as _slugify
 from hassle.registry.snapshot import PurposeVocabulary, RegistrySnapshot
 
 # The template integration's config-flow menu step_id per domain
-# (docs/ha-api-notes.md §26.1); verified against a real HA instance by
+# (docs/internals/ha-api-notes.md §26.1); verified against a real HA instance by
 # `test_live_template_flow.py`.
 _TEMPLATE_FLOW_TYPE = {
     "template_number": "number",
@@ -57,7 +57,7 @@ _TEMPLATE_FLOW_TYPE = {
 }
 
 # Fields HA's form schema requires beyond `name`/`state`
-# (docs/ha-api-notes.md §26.6): a template number needs a write target
+# (docs/internals/ha-api-notes.md §26.6): a template number needs a write target
 # (`set_value`); a template select needs both the option list (`options`) and
 # its write target (`select_option`). Sensor/binary_sensor are read-only.
 _TEMPLATE_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
@@ -68,7 +68,7 @@ _TEMPLATE_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 # The `group` integration's config-flow menu step_id per flavor
-# (docs/ha-api-notes.md §38.1) -- captured against a live HA instance. Unlike
+# (docs/internals/ha-api-notes.md §38.1) -- captured against a live HA instance. Unlike
 # template, the step_id per flavor equals the flavor name itself (§38.2).
 _GROUP_FLOW_TYPE = {
     "group_binary_sensor": "binary_sensor",
@@ -88,7 +88,7 @@ _GROUP_FLOW_TYPE = {
 # `name`/`entities`/`hide_members` are always supplied by the DSL builders'
 # own required-kwarg signatures; the only field HA's form schema requires
 # that isn't already covered by the DSL signature is `type` on `group_sensor`
-# (docs/ha-api-notes.md §38.1) -- mirrors `_TEMPLATE_REQUIRED_FIELDS` covering
+# (docs/internals/ha-api-notes.md §38.1) -- mirrors `_TEMPLATE_REQUIRED_FIELDS` covering
 # only the EXTRA fields beyond what every domain already shares.
 _GROUP_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     domain: ("type",) if domain == "group_sensor" else () for domain in GROUP_DOMAINS
@@ -118,7 +118,7 @@ class DirectBackend:
         self._reload_interval = reload_interval
         # (kind, name-derived identity) -> HA-assigned entry_id, discovered
         # via list_remote/create and consumed by update/delete (which
-        # address the entry by entry_id, not identity -- docs/ha-api-notes.md
+        # address the entry by entry_id, not identity -- docs/internals/ha-api-notes.md
         # §26, §26.6). Process-local cache; a fresh DirectBackend rebuilds it
         # from `_alist_template_helpers` on first list_remote.
         self._template_entry_ids: dict[tuple[str, str], str] = {}
@@ -226,7 +226,7 @@ class DirectBackend:
             self._run(self._client.ws_command(f"{kind}/delete", **{f"{kind}_id": identity}))
 
     def entry_id_for(self, kind: str, identity: str) -> str | None:
-        """Additive, non-`Backend`-Protocol lookup (docs/backend.md §3.1):
+        """Additive, non-`Backend`-Protocol lookup (docs/internals/backend-protocol.md §3.1):
         the config entry_id for a template/group-helper kind, `None` for any
         other kind or an identity DirectBackend hasn't seen this process."""
         if kind in GROUP_DOMAINS:
@@ -237,7 +237,7 @@ class DirectBackend:
     #
     # The config REST API (automations/scripts) writes the YAML file and then
     # *auto-reloads asynchronously* — the entity appears ~300 ms after POST and
-    # disappears ~1 s after DELETE (docs/ha-api-notes.md §2). So a create/update/
+    # disappears ~1 s after DELETE (docs/internals/ha-api-notes.md §2). So a create/update/
     # delete returns before the change is observable via `/api/states`. To keep
     # the `Backend` contract synchronous (a later `list_remote` must see the
     # write), we block until the reload settles. This is bounded polling in the
@@ -311,7 +311,7 @@ class DirectBackend:
     async def _awrite_script(self, config: dict[str, Any]) -> str:
         object_id = str(config.get("id") or _slugify(str(config.get("alias", "script"))))
         # Scripts are keyed by object_id in the path, not by an `id` field in the
-        # body (docs/ha-api-notes.md §3) — strip it before POSTing.
+        # body (docs/internals/ha-api-notes.md §3) — strip it before POSTing.
         body = {k: v for k, v in config.items() if k != "id"}
         await self._client.rest_post(f"/api/config/script/config/{object_id}", json=body)
         await self._await_config_entity("script", object_id, present=True)
@@ -333,7 +333,7 @@ class DirectBackend:
         payload = {k: v for k, v in config.items() if k != "id"}
         await self._client.ws_command(f"{kind}/update", **{f"{kind}_id": identity}, **payload)
 
-    # -- config-entry template helpers (docs/ha-api-notes.md §26) ----------
+    # -- config-entry template helpers (docs/internals/ha-api-notes.md §26) ----------
     #
     # Create/update/delete go through HA's config-entry flow REST views, not
     # WebSocket commands (only listing, `config_entries/get`, is WS). Object
@@ -366,7 +366,7 @@ class DirectBackend:
 
     async def _acurrent_template_options(self, entry_id: str) -> dict[str, Any]:
         """The stored options of a template config entry, read back via an
-        options-flow's suggested values (docs/ha-api-notes.md §26.7 -- there
+        options-flow's suggested values (docs/internals/ha-api-notes.md §26.7 -- there
         is no admin API that returns entry options directly). Opens an
         options flow, harvests `data_schema`'s `description.suggested_value`
         per field, then cancels the flow (mirrors a user opening then closing
@@ -388,7 +388,7 @@ class DirectBackend:
             return options
         finally:
             # Cancel rather than commit -- this is a read, not a write
-            # (docs/ha-api-notes.md §26.7). Best-effort: an already-expired
+            # (docs/internals/ha-api-notes.md §26.7). Best-effort: an already-expired
             # flow 404ing on cancel is not this call's problem to raise.
             with contextlib.suppress(HaApiError):
                 await self._client.rest_delete(f"/api/config/config_entries/options/flow/{flow_id}")
@@ -428,7 +428,7 @@ class DirectBackend:
             raise ValueError(
                 f"{kind} config is missing required field(s) {missing} "
                 "(HA's template form schema rejects the submission without them, "
-                "docs/ha-api-notes.md §26.6)"
+                "docs/internals/ha-api-notes.md §26.6)"
             )
         step_id = _TEMPLATE_FLOW_TYPE[kind]
 
@@ -446,7 +446,7 @@ class DirectBackend:
             f"/api/config/config_entries/flow/{flow_id}", json=dict(config)
         )
         # The create_entry response's `entry_id` is nested under a `"result"`
-        # key, never a top-level key (docs/ha-api-notes.md §31.8) -- and
+        # key, never a top-level key (docs/internals/ha-api-notes.md §31.8) -- and
         # never a silent `flow_id` fallback if it's missing, which would
         # cache a wrong value now instead of raising here; see
         # docs/internals/backend.md.
@@ -459,7 +459,7 @@ class DirectBackend:
                 f"top-level keys {sorted(result)}, result keys "
                 f"{sorted(entry_json) if entry_json else '<result missing/empty>'}). "
                 "This is a Hassle bug, not a mistake in your configuration -- the "
-                "expected shape is documented at docs/ha-api-notes.md §31.8. Fix: "
+                "expected shape is documented at docs/internals/ha-api-notes.md §31.8. Fix: "
                 "please report this (include the keys listed above) at "
                 "https://github.com/KeatonTech/hassle/issues; the config entry "
                 "may have been created in HA regardless -- check the HA UI's "
@@ -489,7 +489,7 @@ class DirectBackend:
             raise ValueError(
                 f"{kind} config is missing required field(s) {missing} "
                 "(HA's template form schema rejects the submission without them, "
-                "docs/ha-api-notes.md §26.6)"
+                "docs/internals/ha-api-notes.md §26.6)"
             )
         # `name` (and any other non-options-flow-schema key) must NOT be
         # resubmitted -- the options-flow schema never includes it (§26.7
@@ -516,7 +516,7 @@ class DirectBackend:
         await self._client.rest_delete(f"/api/config/config_entries/entry/{entry_id}")
         self._template_entry_ids.pop((kind, identity), None)
 
-    # -- config-entry group helpers (docs/ha-api-notes.md §38) -------------
+    # -- config-entry group helpers (docs/internals/ha-api-notes.md §38) -------------
     #
     # Same create (menu -> form -> create_entry) / read-back (options-flow
     # suggested values) / update (options-flow form -> create_entry) /
@@ -535,7 +535,7 @@ class DirectBackend:
     async def _acurrent_group_options(self, entry_id: str) -> dict[str, Any]:
         """The stored options of a group config entry, read back via an
         options-flow's suggested values -- same mechanism as
-        `_acurrent_template_options` (docs/ha-api-notes.md §26.7/§38.1: there
+        `_acurrent_template_options` (docs/internals/ha-api-notes.md §26.7/§38.1: there
         is no admin API that returns a config entry's options directly, for
         ANY integration). Opens an options flow, harvests `data_schema`'s
         `description.suggested_value` per field, then cancels the flow."""
@@ -594,7 +594,7 @@ class DirectBackend:
             raise ValueError(
                 f"{kind} config is missing required field(s) {missing} "
                 "(HA's group form schema rejects the submission without them, "
-                "docs/ha-api-notes.md §38.1)"
+                "docs/internals/ha-api-notes.md §38.1)"
             )
         step_id = _GROUP_FLOW_TYPE[kind]
 
@@ -609,7 +609,7 @@ class DirectBackend:
         result = await self._client.rest_post(
             f"/api/config/config_entries/flow/{flow_id}", json=dict(config)
         )
-        # Same nested-`result` wire shape as template (docs/ha-api-notes.md
+        # Same nested-`result` wire shape as template (docs/internals/ha-api-notes.md
         # §31.8) -- never a top-level `entry_id` key, and never a silent
         # flow_id fallback if it's missing (the exact bug class §31.8
         # documents).
@@ -622,7 +622,7 @@ class DirectBackend:
                 f"top-level keys {sorted(result)}, result keys "
                 f"{sorted(entry_json) if entry_json else '<result missing/empty>'}). "
                 "This is a Hassle bug, not a mistake in your configuration -- the "
-                "expected shape is documented at docs/ha-api-notes.md §31.8. Fix: "
+                "expected shape is documented at docs/internals/ha-api-notes.md §31.8. Fix: "
                 "please report this (include the keys listed above) at "
                 "https://github.com/KeatonTech/hassle/issues; the config entry "
                 "may have been created in HA regardless -- check the HA UI's "
@@ -648,11 +648,11 @@ class DirectBackend:
             raise ValueError(
                 f"{kind} config is missing required field(s) {missing} "
                 "(HA's group form schema rejects the submission without them, "
-                "docs/ha-api-notes.md §38.1)"
+                "docs/internals/ha-api-notes.md §38.1)"
             )
         # `name` (and any other non-options-flow-schema key) must NOT be
         # resubmitted -- the options-flow schema never includes it
-        # (docs/ha-api-notes.md §38.1: same rule as template, §26.7 finding
+        # (docs/internals/ha-api-notes.md §38.1: same rule as template, §26.7 finding
         # 2); HA 400s with "extra keys not allowed @ data['name']" otherwise.
         # `name` survives untouched server-side regardless (mirrors §26.7
         # finding 3) since an UPDATE's object_key/identity -- and hence its
@@ -681,7 +681,7 @@ class DirectBackend:
     def fetch_registry_snapshot(self) -> RegistrySnapshot:
         return self._run(self._afetch_registry_snapshot())
 
-    # Scopes to fetch into the registry snapshot (docs/ha-api-notes.md
+    # Scopes to fetch into the registry snapshot (docs/internals/ha-api-notes.md
     # §31.2/§31.6, source-verified): `automation`/`script` place by their own
     # scope; ALL 13 helper kinds share the one `"helpers"` scope. Bundle
     # placement for helpers is handled elsewhere -- this is just the read
@@ -704,7 +704,7 @@ class DirectBackend:
         for entity in entities:
             entity.setdefault("domain", str(entity.get("entity_id", "")).split(".", 1)[0])
         # HA's device registry keys each row as `id`; the snapshot model (and its
-        # fixtures) use `device_id` (docs/ha-api-notes.md §5).
+        # fixtures) use `device_id` (docs/internals/ha-api-notes.md §5).
         for device in devices:
             device.setdefault("device_id", device.get("id"))
 
@@ -745,7 +745,7 @@ class DirectBackend:
     # category_writeback.attempt_category_writeback` (CREATE) and `hassle.
     # sync.category_move.sync_category_on_move` (UPDATE). Shapes are
     # source-verified against HA core's `homeassistant/components/config/
-    # category_registry.py` / `entity_registry.py` (docs/ha-api-notes.md §31).
+    # category_registry.py` / `entity_registry.py` (docs/internals/ha-api-notes.md §31).
 
     def list_categories(self, scope: str) -> dict[str, str]:
         return self._run(self._alist_categories(scope))
@@ -765,7 +765,7 @@ class DirectBackend:
 
     def delete_category(self, scope: str, category_id: str) -> None:
         """`config/category_registry/delete` -- additive, test/CLI-facing
-        (docs/ha-api-notes.md §31.5c: `websocket_delete_category`,
+        (docs/internals/ha-api-notes.md §31.5c: `websocket_delete_category`,
         `{scope, category_id}`)."""
         self._run(self._adelete_category(scope, category_id))
 
@@ -785,7 +785,7 @@ class DirectBackend:
         """Find `kind:identity`'s entity-registry row and update its
         `categories` map for `scope`.
 
-        **Single-scope merge payload, no read-first** (docs/ha-api-notes.md
+        **Single-scope merge payload, no read-first** (docs/internals/ha-api-notes.md
         §31.3/§31.5b, source-verified): `config/entity_registry/update`'s
         `categories` handler merges per-scope SERVER-SIDE ("If passed in, we
         update/adjust only the provided scope(s). Other category scopes in
@@ -796,7 +796,7 @@ class DirectBackend:
         §31.3 confirms), used by `hassle.sync.category_move` for a local
         move to the `misc.py` fallback.
 
-        **Identity anchor** (docs/ha-api-notes.md §2/§22/§31.6/§31.8):
+        **Identity anchor** (docs/internals/ha-api-notes.md §2/§22/§31.6/§31.8):
         `unique_id == identity` for automations/scripts/storage helpers. A
         TEMPLATE_DOMAINS kind has no CALLER-settable `unique_id` (§26.6), but
         its entity's `unique_id` is not blank either -- `template/helpers.py`'s
@@ -826,7 +826,7 @@ class DirectBackend:
 
     def _unique_id_to_match(self, kind: str, identity: str) -> str | None:
         """The `unique_id` value `kind:identity`'s entity-registry row must
-        carry (docs/ha-api-notes.md §31.8): the object-key identity itself
+        carry (docs/internals/ha-api-notes.md §31.8): the object-key identity itself
         for every kind EXCEPT a TEMPLATE_DOMAINS/GROUP_DOMAINS kind, whose
         entity's `unique_id` is the config entry's `entry_id` instead (there
         is no caller-settable `unique_id` for these, §26.6/§38.1 -- the same
@@ -886,7 +886,7 @@ class DirectBackend:
     async def _afetch_purpose_vocabulary(self) -> PurposeVocabulary:
         # The 2026.7 UI enumerates purpose-specific trigger/condition types via
         # these subscriptions: each acks then pushes a `{type: description}`
-        # snapshot event (docs/ha-api-notes.md §17). The vocabulary is the keys.
+        # snapshot event (docs/internals/ha-api-notes.md §17). The vocabulary is the keys.
         triggers = await self._subscribe_keys("trigger_platforms/subscribe")
         conditions = await self._subscribe_keys("condition_platforms/subscribe")
         return PurposeVocabulary(triggers=triggers, conditions=conditions)
@@ -912,7 +912,7 @@ class DirectBackend:
     def validate_config(self, config: dict[str, Any]) -> dict[str, Any]:
         """Run HA's own `validate_config` on an automation-shaped config.
 
-        Requires the plural block keys (docs/ha-api-notes.md §6); returns HA's
+        Requires the plural block keys (docs/internals/ha-api-notes.md §6); returns HA's
         per-block `{valid, error}` report.
         """
         return self._run(
@@ -948,7 +948,7 @@ class DirectBackend:
 
         The shadow-automation live-run flow needs to trigger
         `automation.trigger` with `skip_condition` explicitly set
-        (docs/ha-api-notes.md §10.6) -- a generic service-call passthrough,
+        (docs/internals/ha-api-notes.md §10.6) -- a generic service-call passthrough,
         not specific to any one domain.
         """
         return self._run(self._client.rest_post(f"/api/services/{domain}/{service}", json=data))

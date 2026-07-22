@@ -1,9 +1,13 @@
 # hassle-core
 
-The library behind everything: the DSL, the compiler/decompiler, the sync
-engine, the Home Assistant backends, and the deterministic simulator. The
-distribution is named `hassle-core`; it installs a single import package,
-`hassle` (internals are subpackages, never sibling packages).
+The Python library that does all of Hassle's actual work: it compiles the
+typed Python DSL to Home-Assistant-native config and decompiles HA config back
+into Python source, computes and applies the three-way sync plan against a
+live instance, validates entity/service references against the registry
+(generating the `.pyi` stubs editors use), and runs automations on a
+deterministic simulator for tests. The distribution is named `hassle-core`; it
+installs a single import package, `hassle` (internals are subpackages, never
+sibling packages).
 
 The `hassle` CLI (`packages/hassle-cli`) is a thin command layer over this
 package. If logic could ever be needed by another frontend (an editor

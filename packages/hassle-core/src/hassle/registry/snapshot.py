@@ -27,13 +27,13 @@ class EntityInfo(BaseModel):
     labels: list[str] = []
     domain: str | None = None
     platform: str | None = None
-    # `unique_id` == the automation/script/helper config `id` (docs/ha-api-notes.md
+    # `unique_id` == the automation/script/helper config `id` (docs/internals/ha-api-notes.md
     # §2 "id <-> unique_id" -- confirmed on a real WS `config/entity_registry/list`
     # capture). Used to look up an object's entity-registry entry from its object
     # key identity (pull placement, DESIGN §7.3).
     unique_id: str | None = None
     # Per-scope UI category assignment: `{"automation": "lighting"}` (DESIGN
-    # §7.3; docs/ha-api-notes.md §5 confirms the `categories` key is already
+    # §7.3; docs/internals/ha-api-notes.md §5 confirms the `categories` key is already
     # present on real entity-registry rows -- just never parsed by this model
     # before).
     categories: dict[str, str] = {}
@@ -84,7 +84,7 @@ class ServiceField(BaseModel):
     description: str | None = None
     example: Any = None
     required: bool = False
-    # Real HA `get_services` schemas (docs/ha-api-notes.md §6) mostly describe
+    # Real HA `get_services` schemas (docs/internals/ha-api-notes.md §6) mostly describe
     # a field's shape via a `selector: {<selector_type>: {...}}` dict, not a
     # flat `type:` string -- `type` is often just absent for a real capture.
     # Modeled explicitly (rather than left as an unstructured `extra="allow"`
@@ -153,7 +153,7 @@ class RegistrySnapshot(BaseModel):
     def entity_by_unique_id(self, scope: str, unique_id: str) -> EntityInfo | None:
         """Find the entity-registry entry whose `unique_id` matches (and whose
         domain matches `scope`, when known) -- the id<->unique_id anchor
-        (docs/ha-api-notes.md §2) that lets pull placement map an object key's
+        (docs/internals/ha-api-notes.md §2) that lets pull placement map an object key's
         identity back to its registry row."""
         for entity in self.entities:
             if entity.unique_id == unique_id and (entity.domain is None or entity.domain == scope):

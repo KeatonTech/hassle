@@ -46,9 +46,9 @@ These were the project's global rules from day one (numbered R1–R8 in the
    the generated docs), with the diff visible in the PR.
 4. **Every bug becomes a regression test before it is fixed.**
 5. **Compatibility contracts don't drift silently.** The frozen interfaces —
-   the IR schema ([docs/ir-format.md](docs/ir-format.md)), the Backend/plan
-   seam ([docs/backend.md](docs/backend.md)), and the top-level DSL surface
-   ([docs/dsl-extensions.md](docs/dsl-extensions.md), i.e. `hassle.__all__`) —
+   the IR schema ([docs/internals/ir-format.md](docs/internals/ir-format.md)), the Backend/plan
+   seam ([docs/internals/backend-protocol.md](docs/internals/backend-protocol.md)), and the top-level DSL surface
+   ([docs/internals/dsl-extensions.md](docs/internals/dsl-extensions.md), i.e. `hassle.__all__`) —
    are additive-only; a change to one must update its contract doc in the same
    PR. `tests/test_package_layering.py` additionally pins the internal
    dependency direction between subpackages.
@@ -73,8 +73,8 @@ Python; and no local or UI edit is ever silently lost.
 - Before calling anything done: new tests green, previously green tests still
   green, `ruff` and `pyright` clean. Run them — don't assume.
 - If Home Assistant behaves differently than [DESIGN.md](DESIGN.md) or
-  [docs/ha-api-notes.md](docs/ha-api-notes.md) claims, don't silently work
-  around it: record the finding in `docs/ha-api-notes.md` and flag it in the
+  [docs/internals/ha-api-notes.md](docs/internals/ha-api-notes.md) claims, don't silently work
+  around it: record the finding in `docs/internals/ha-api-notes.md` and flag it in the
   PR description.
 - The README's examples are executed by
   `packages/hassle-cli/tests/test_readme_examples.py` — if you change the

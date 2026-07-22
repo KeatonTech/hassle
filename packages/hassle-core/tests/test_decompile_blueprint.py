@@ -1,6 +1,6 @@
 """Blueprint automations decompile to `blueprint_automation(...)` (DESIGN §5.8),
 never to `raw_automation`. Stored `use_blueprint.input` (singular) maps back to
-the DSL's ergonomic `inputs=` keyword (docs/ha-api-notes.md §10.5).
+the DSL's ergonomic `inputs=` keyword (docs/internals/ha-api-notes.md §10.5).
 """
 
 from __future__ import annotations

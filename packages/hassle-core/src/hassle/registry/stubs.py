@@ -1,7 +1,7 @@
 """The `.pyi` stub generator (DESIGN §5.2).
 
 Generates typed domain classes + per-entity typed attributes matching the
-`hassle.registry.entities` attribute/index shape (docs/dsl-extensions.md), so a bad
+`hassle.registry.entities` attribute/index shape (docs/internals/dsl-extensions.md), so a bad
 attribute name becomes a pyright error, and typed service methods from
 `get_services` schemas.
 
@@ -35,7 +35,7 @@ device_registry's `name_by_user or name`), best-effort, in this order:
 **Deviation from DESIGN's illustrative snippet:** DESIGN §5.2 shows
 `LightEntity.turn_on(brightness_pct: int | Template = ..., transition: float =
 ...)`. There is no `Template` type anywhere in this codebase (verified: only
-`TemplateExpr`, an internal, non-public builder class per docs/dsl-extensions.md) --
+`TemplateExpr`, an internal, non-public builder class per docs/internals/dsl-extensions.md) --
 using it in a *public* generated stub would require exporting an internal
 name. This generator instead widens numeric/bool fields to also accept `str`
 (the shape a Jinja template string renders as at the type level, since HA
@@ -80,7 +80,7 @@ _PY_TYPE = {
 
 # Selector-aware typing: real HA
 # `get_services` field schemas mostly describe a field's shape via
-# `selector: {<selector_type>: {...}}` (docs/ha-api-notes.md §6), not a flat
+# `selector: {<selector_type>: {...}}` (docs/internals/ha-api-notes.md §6), not a flat
 # `type:` string -- `field.type` is `None` for most real captures. Mapping
 # the selector's own key to a safe, always-resolvable Python annotation
 # (never the bare selector-type word itself, which is not a real Python name)
@@ -265,7 +265,7 @@ def _field_type(field_type: str | None, *, selector: dict[str, object] | None = 
     """Resolve a service field's HA schema type to a safe, ALWAYS-resolvable
     Python annotation -- either from a flat legacy ``type:`` string
     (``_PY_TYPE``) or, when absent (the common real-HA shape,
-    docs/ha-api-notes.md §6: ``selector: {<selector_type>: {...}}``), from
+    docs/internals/ha-api-notes.md §6: ``selector: {<selector_type>: {...}}``), from
     the selector's own key (``_SELECTOR_PY_TYPE``). Falls back to plain
     ``str`` for anything neither map recognizes -- NEVER the raw, unmapped
     type/selector-type word itself, which is not a real Python name and would
@@ -376,7 +376,7 @@ def _service_function(service_name: str, service_def: ServiceDef) -> list[str]:
     form (``hassle.services.<domain>.<service>(...)``) has NO implicit target
     at all: it delegates straight to ``hassle.compiler.actions.service``,
     whose ``target=`` is a real, commonly-passed keyword
-    (`docs/dsl-extensions.md`/DESIGN §5.3's "target= also accepts the bare entity
+    (`docs/internals/dsl-extensions.md`/DESIGN §5.3's "target= also accepts the bare entity
     target sugar"). Without a ``target`` parameter, every decompiled
     ``<domain>.<service>(target=..., ...)`` call -- the decompiler's own
     canonical namespace-form output -- would be a hard pyright

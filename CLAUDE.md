@@ -14,7 +14,7 @@ contract you write first.
    states what is in and out of its scope.
 
 Context on why things are the way they are: `docs/internals/` (per-area design
-notes), `docs/ha-api-notes.md` (empirical HA API findings, §-numbered and
+notes), `docs/internals/ha-api-notes.md` (empirical HA API findings, §-numbered and
 cited from code), and `docs/history/` (the original milestone plan and its
 legend).
 
@@ -26,8 +26,8 @@ legend).
 - **Golden files** change only via `hassle-dev goldens --update` /
   `hassle-dev docs --update`, and the PR must show the diff.
 - **Every bug found becomes a regression test before it is fixed.**
-- **Compatibility contracts** (docs/ir-format.md, docs/backend.md,
-  docs/dsl-extensions.md) are additive-only; update the contract doc in the
+- **Compatibility contracts** (docs/internals/ir-format.md, docs/internals/backend-protocol.md,
+  docs/internals/dsl-extensions.md) are additive-only; update the contract doc in the
   same PR as any change to its interface.
 - **Error messages are product surface**: what / where (file:line) / fix, one
   paragraph, snapshot-tested (`hassle_dev.snapshots`).
@@ -58,7 +58,7 @@ legend).
 - Use the `reviewer` subagent on your diff before proposing a merge.
 - If DESIGN.md and reality disagree (an HA API behaves differently, a design
   detail is impossible), do NOT silently work around it: record the finding in
-  `docs/ha-api-notes.md` and flag it to the human in your summary.
+  `docs/internals/ha-api-notes.md` and flag it to the human in your summary.
 
 ## Project subagents (in .claude/agents/)
 

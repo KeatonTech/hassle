@@ -27,7 +27,7 @@ from hassle_cli.uv_project import scaffold_pyproject
 # `python.analysis.extraPaths` includes `.` (the bundle root) so Pylance
 # resolves the same PEP 420 namespace-package cross-file imports
 # (`from lib.x import y`, `from helpers.modes import guest_mode`) the
-# compiler's own loader does (DESIGN §6, docs/ha-api-notes.md §17.9).
+# compiler's own loader does (DESIGN §6, docs/internals/ha-api-notes.md §17.9).
 # `python.defaultInterpreterPath` points at the bundle's own uv-project venv:
 # without it, VS Code's Python extension may keep/select an
 # interpreter that has no `hassle` installed, and every `from hassle import *`
@@ -219,7 +219,7 @@ def init_bundle(root: Path) -> list[str]:
     Returns a list of human-readable steps taken, for the CLI to print."""
     steps: list[str] = []
 
-    # DESIGN §6's tree layout (docs/ha-api-notes.md §17.9 RESOLVED: the loader
+    # DESIGN §6's tree layout (docs/internals/ha-api-notes.md §17.9 RESOLVED: the loader
     # recurses, so these are real importable packages, not just organizational
     # convenience). No `__init__.py` in any of them -- the bundle loader
     # relies on PEP 420 namespace packages (the bundle root is put on

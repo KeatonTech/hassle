@@ -9,7 +9,7 @@ The result carries the IR objects keyed by object key, plus a span map so every
 downstream error (validation, plan conflict, simulator failure) can point at the
 user's Python line. Duplicate object keys are rejected.
 
-The bundle is a package tree (DESIGN §6/§7.3, docs/ha-api-notes.md §17.9
+The bundle is a package tree (DESIGN §6/§7.3, docs/internals/ha-api-notes.md §17.9
 RESOLVED): subdirectories are recursively imported as PEP 420 namespace
 packages, no ``__init__.py`` required anywhere.
 
@@ -243,7 +243,7 @@ def compile_registered(
             # already built at decoration time -- record them first, before
             # running the body, so they land ahead of any `when()` calls
             # inside the body (composition order: "decorator list first,
-            # when() appends", also documented in docs/dsl-extensions.md).
+            # when() appends", also documented in docs/internals/dsl-extensions.md).
             for trig in reg.decorator_triggers:
                 record_trigger(trig, span=reg.span)
             reg.func()
@@ -374,7 +374,7 @@ def _iter_bundle_source_files(bundle_path: Path) -> list[Path]:
     directories (sorted, stable -- so import order never depends on OS
     directory-listing order).
 
-    Symlink policy (docs/ha-api-notes.md §17.9): **every
+    Symlink policy (docs/internals/ha-api-notes.md §17.9): **every
     symlink is skipped, silently, whether it points at a directory or a
     ``.py`` file.** Following one would let a child inside the bundle
     resolve to code living *outside* it -- a sandbox escape (§7.2/§14: "the
@@ -438,7 +438,7 @@ def _category_global_span(py: Path) -> SourceSpan | None:
 
 def _import_bundle_modules(bundle_path: Path) -> dict[str, CategoryGlobal]:
     """Import every ``*.py`` module in the bundle tree (sorted, stable), at
-    any depth under a subdirectory (DESIGN §6/§7.3, docs/ha-api-notes.md
+    any depth under a subdirectory (DESIGN §6/§7.3, docs/internals/ha-api-notes.md
     §17.9 RESOLVED).
 
     Each file is imported under its dotted package-relative module name

@@ -1,4 +1,4 @@
-"""Empirical verification of the `capture_span(depth=2)` claim in docs/compiler-api.md §2.
+"""Empirical verification of the `capture_span(depth=2)` claim in docs/internals/compiler-api.md §2.
 
 The internal-api doc hard-codes `capture_span(depth=2)` for a `@contextlib.
 contextmanager`-decorated nested-construct function, with the comment "skip
@@ -19,7 +19,7 @@ call site regardless of how many other constructs are active above it.
 
 This test builds its own minimal probe construct (rather than importing
 `if_then`/`choose`/etc.) so it verifies the *general* CM-nesting fact
-docs/compiler-api.md §2 asserts, independent of any one construct's
+docs/internals/compiler-api.md §2 asserts, independent of any one construct's
 implementation details.
 """
 

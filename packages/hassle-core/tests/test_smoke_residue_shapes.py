@@ -1,6 +1,6 @@
 """Smoke test -- residue coverage, round 2.
 
-Round 1 (``test_smoke_real_world_shapes.py``, docs/ha-api-notes.md §19) fixed three
+Round 1 (``test_smoke_real_world_shapes.py``, docs/internals/ha-api-notes.md §19) fixed three
 mundane UI-authored shapes. A second live smoke test against a real 2026.7 Home
 Assistant bundle (101 objects) surfaced 12 more granular ``raw_action`` fallbacks,
 tracing to four more root causes -- all ordinary shapes the HA UI writes on every

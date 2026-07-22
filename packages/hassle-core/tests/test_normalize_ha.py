@@ -4,7 +4,7 @@
 2024.10+ storage normalization: outer singular ``trigger/condition/action`` ->
 plural ``triggers/conditions/actions``; ``service:`` -> ``action:`` recursively
 (including inside script ``sequence`` and nested actions). Inner ``platform:`` is
-preserved (only the outer block key becomes plural — docs/ha-api-notes.md §10.1).
+preserved (only the outer block key becomes plural — docs/internals/ha-api-notes.md §10.1).
 
 Golden: docs/ha-api-captures/normalize-post-get-pair.json — the real capture pair.
 """

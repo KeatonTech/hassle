@@ -121,7 +121,7 @@ jobs:
           YAML
           echo "[]" > ha-config/automations.yaml
           echo "{}" > ha-config/scripts.yaml
-          # Assumption (CI is the authoritative check, docs/ha-api-notes.md
+          # Assumption (CI is the authoritative check, docs/internals/ha-api-notes.md
           # §26.0): `template:` is a
           # config-entry-capable integration, and HA generally registers a
           # `config_flow: true` integration's config_entries/flow handler from
@@ -131,7 +131,7 @@ jobs:
           # `config_entries/flow/create(handler="template")`. If this
           # integration job fails with "unknown handler" / "integration not
           # found", add a bare `template:` key here and update
-          # docs/ha-api-notes.md §26.0 with the correction.
+          # docs/internals/ha-api-notes.md §26.0 with the correction.
 
       - name: Start Home Assistant (${{ matrix.ha_tag }})
         run: |

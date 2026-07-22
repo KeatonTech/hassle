@@ -7,7 +7,7 @@ distribution (``packages/hassle-core/src/hassle``), so there is exactly one whee
 to install and the public surface and its implementation version together.
 
 ``__all__`` here is the frozen top-level DSL surface: additions
-are allowed, changes are not. See ``docs/dsl-extensions.md``.
+are allowed, changes are not. See ``docs/internals/dsl-extensions.md``.
 """
 
 from __future__ import annotations

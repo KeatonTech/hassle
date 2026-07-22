@@ -41,7 +41,7 @@ def execute_live_run(root: Path, target: str, *, skip_conditions: bool, console:
 
         def resolve_shadow_entity_id(shadow_id: str) -> str:
             """The automation `entity_id` is `slug(alias)`, NOT `slug(id)`
-            (docs/ha-api-notes.md §10.2, confirmed against real HA) --
+            (docs/internals/ha-api-notes.md §10.2, confirmed against real HA) --
             `automation.{shadow_id}` was a latent bug that made every live
             trigger silently target a nonexistent entity (§29 addendum: this,
             not disabled-automation semantics, is why no trace ever appeared).
@@ -105,7 +105,7 @@ def execute_live_run(root: Path, target: str, *, skip_conditions: bool, console:
     if result.trace:
         console.print(render_trace_timeline(result.trace))
     else:
-        # Never silent (docs/ha-api-notes.md §29): the
+        # Never silent (docs/internals/ha-api-notes.md §29): the
         # shadow ran and was cleaned up, but no trace ever appeared even
         # after `stream_trace`'s bounded poll -- tell the user explicitly
         # instead of just printing "shadow run complete" and nothing else.

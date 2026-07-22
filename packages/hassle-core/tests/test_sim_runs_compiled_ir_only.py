@@ -50,7 +50,7 @@ def test_sim_input_is_ir_objects_not_dsl_source() -> None:
     above actually firing the automation)."""
     result = _corpus_result()
     # This fixture is legacy-authored (`platform:`, not `trigger:` -- see
-    # docs/ha-api-notes.md: normalize_ha rewrites the outer `trigger`->
+    # docs/internals/ha-api-notes.md: normalize_ha rewrites the outer `trigger`->
     # `triggers` block key but preserves the legacy inner `platform:`
     # discriminator verbatim, exactly as real HA's own storage does).
     assert result.objects["automation:corpus_only"].to_ha()["triggers"][0]["platform"] == "state"

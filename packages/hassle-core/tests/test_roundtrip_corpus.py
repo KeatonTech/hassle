@@ -6,7 +6,7 @@ DSL bundle, recompile that bundle, and assert the recompiled IR's canonical hash
 equals the canonical hash of ``normalize_ha(x)`` (which is ``x`` itself for every
 fixture already in HA's stored plural form).
 
-**Note on the corpus (recorded in docs/ha-api-notes.md):** the corpus (built
+**Note on the corpus (recorded in docs/internals/ha-api-notes.md):** the corpus (built
 before the 2026.7 purpose vocabulary made the plural form the UI default) is
 **48 of 55** automation fixtures in legacy singular form
 (`trigger`/`condition`/`action` + `service:`) -- normalization is the common
@@ -24,7 +24,7 @@ docs examples; real HA always assigns one on creation) -- a per-fixture
 identity needed to name the decompiled object and round-trip through
 ``object_key()``.
 
-**Recorded finding (docs/ha-api-notes.md):** the compiler *always* materializes
+**Recorded finding (docs/internals/ha-api-notes.md):** the compiler *always* materializes
 an explicit ``id`` in its output (``options.get("id") or reg.func.__name__``,
 ``bundle.py``'s ``_build_automation``) -- there is no DSL shape that omits it.
 So for the ~50 corpus fixtures missing ``id`` (an artifact of being hand-authored
@@ -33,9 +33,9 @@ correct post-round-trip comparison is ``normalize_ha(x)`` **with the synthesized
 id added** -- matching what real HA would already have. This is expected
 compiler behavior, not a decompiler bug or a lossy round-trip.
 
-**Recorded finding, ``platform:`` modernization (docs/ha-api-notes.md §16):**
+**Recorded finding, ``platform:`` modernization (docs/internals/ha-api-notes.md §16):**
 ``normalize_ha`` deliberately preserves an inner ``platform:`` discriminator
-verbatim (verified against real HA -- docs/ha-api-notes.md §10.1: HA itself
+verbatim (verified against real HA -- docs/internals/ha-api-notes.md §10.1: HA itself
 never rewrites it). But every *typed* trigger builder in ``hassle.compiler``
 always emits the modern ``trigger:`` discriminator (there is no builder-level
 way to request the legacy spelling) -- 48 of the 55 corpus automation fixtures
@@ -50,7 +50,7 @@ byte-faithful to real HA for the sync engine's actual hashing). The
 `_modernized` helper below is local to *this test's expectation*, not a change
 to the frozen IR schema's `normalize_ha` surface.
 
-**Recorded finding, ``delay:`` format modernization (docs/ha-api-notes.md §18):**
+**Recorded finding, ``delay:`` format modernization (docs/internals/ha-api-notes.md §18):**
 HA accepts a ``delay`` action as a dict of units, an ``"HH:MM:SS"`` string, or a
 bare number of seconds -- all equivalent at runtime. The typed ``delay()``
 builder (part of the frozen top-level DSL surface) only emits the dict form.
@@ -186,7 +186,7 @@ def test_roundtrip_corpus(fx: Fixture, tmp_path_factory: pytest.TempPathFactory)
     expected = normalize_ha(expected_config, kind=fx.kind)
     # `@raw_automation`'s whole-object fallback (used when a config's top-level
     # shape can't be expressed as `@automation` at all -- e.g. the ancient
-    # inline single-trigger form, see docs/ha-api-notes.md) and
+    # inline single-trigger form, see docs/internals/ha-api-notes.md) and
     # `blueprint_automation` (which stores only `use_blueprint`, no
     # triggers/conditions/actions at all, DESIGN §5.8) both return the body
     # verbatim, unlike a typed `@automation`, which always materializes

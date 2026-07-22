@@ -60,7 +60,7 @@ def test_blueprint_automation_shape() -> None:
     objects = _compile("blueprint_automation")
     (body,) = [v for k, v in objects.items() if k.startswith("automation:")]
     # inputs= mapped to use_blueprint.input (singular); author-qualified path
-    # (docs/ha-api-notes.md §10.5).
+    # (docs/internals/ha-api-notes.md §10.5).
     assert set(body) >= {"id", "use_blueprint"}
     ub = body["use_blueprint"]
     assert ub["path"] == "hassle/motion_light.yaml"

@@ -63,7 +63,7 @@ def _trigger_type(trigger: dict[str, Any]) -> Any:
     """The trigger-type discriminator, preferring the canonical ``trigger:``
     key but falling back to the legacy ``platform:`` key.
 
-    docs/ha-api-notes.md: HA's storage normalization rewrites the *outer*
+    docs/internals/ha-api-notes.md: HA's storage normalization rewrites the *outer*
     block key (`trigger` -> `triggers`) but does **not** rewrite the *inner*
     per-item discriminator -- a config authored (or `raw_*`-passed-through)
     with the legacy ``platform:`` key stores and returns that way verbatim.

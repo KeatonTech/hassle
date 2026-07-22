@@ -7,7 +7,7 @@ tests `_afetch_registry_snapshot`: monkeypatch `DirectBackend._client` with a
 fake exposing an async `ws_command`, and drive the private async coroutine
 directly via `asyncio.run`.
 
-Shapes (docs/ha-api-notes.md §31.3, source-verified -- corrects §30's
+Shapes (docs/internals/ha-api-notes.md §31.3, source-verified -- corrects §30's
 inference):
 
 - `config/category_registry/create` -- `{scope, name}` -> `{category_id, name,
@@ -21,7 +21,7 @@ inference):
   behavior); it just sends this call's own `{scope: category_id}`, and HA
   itself is responsible for leaving every other scope's assignment alone.
 
-**(docs/ha-api-notes.md §31.6, corrected by §31.8):** identity lookup for
+**(docs/internals/ha-api-notes.md §31.6, corrected by §31.8):** identity lookup for
 a TEMPLATE helper kind (`hassle.ir.keys.TEMPLATE_DOMAINS`) uses the SAME
 `unique_id`-keyed entity-registry lookup every other kind uses -- there is no
 CALLER-settable `unique_id` for these (§26.6), but `template/helpers.py`'s
@@ -89,7 +89,7 @@ def test_create_category_sends_scope_and_name() -> None:
 
 def test_delete_category_sends_scope_and_category_id() -> None:
     """`config/category_registry/delete` is confirmed to exist
-    (docs/ha-api-notes.md §31.5c) -- `delete_category` is the additive
+    (docs/internals/ha-api-notes.md §31.5c) -- `delete_category` is the additive
     surface integration teardown drives, no more suppressed."""
     client = _FakeClient()
     backend = _make_backend(client)
@@ -226,7 +226,7 @@ def test_assign_category_template_helper_looks_up_by_unique_id_equal_to_entry_id
 class _SettlingClient(_FakeClient):
     """The entity-registry row appears only after `appears_after` calls to
     `config/entity_registry/list` -- models the async settle gap
-    `_aassign_category`'s bounded poll exists to cover (docs/ha-api-notes.md
+    `_aassign_category`'s bounded poll exists to cover (docs/internals/ha-api-notes.md
     §30 addendum, §17.7's `_await_config_entity` precedent)."""
 
     def __init__(self, row: dict[str, Any], *, appears_after: int) -> None:

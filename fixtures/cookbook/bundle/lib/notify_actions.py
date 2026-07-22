@@ -21,7 +21,7 @@ Compiles to (DESIGN §5.5/§5.6 sugar, one-way -- see
    ``var("wait.trigger['event']['data']['action']").eq(SLUG)`` -- HA's own Jinja
    context after a satisfied ``wait_for_trigger`` exposes the firing
    trigger's data as ``wait.trigger`` (the only spelling for a wait-variable
-   read documented anywhere in this DSL surface, docs/ha-api-notes.md §30) --
+   read documented anywhere in this DSL surface, docs/internals/ha-api-notes.md §30) --
    running that branch's captured body (built with the public
    `capture_actions`/`emit_actions` seam, `hassle.compiler.recording`) if
    the tapped button matches.
@@ -57,7 +57,7 @@ def _wait_action_id_var() -> Any:
     supports both `AttrDict` styles) and renders to the same value at
     runtime; spelled this way ONLY to dodge a registry-validator false
     positive (`hassle.registry.extract._extract_entity_ids_from_jinja`'s
-    regex fallback -- see docs/ha-api-notes.md §30): its known-ish-domain
+    regex fallback -- see docs/internals/ha-api-notes.md §30): its known-ish-domain
     regex matches bare `event.data` inside `wait.trigger.event.data.action`
     (because `event.*` is itself a real HA entity domain) and misreports it
     as an unknown entity id. Filed as a validator bug, not fixed here.

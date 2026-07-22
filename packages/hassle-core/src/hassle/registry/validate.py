@@ -507,7 +507,7 @@ def _validate_helper_slugs(
     snapshot: RegistrySnapshot,
     adopted_helper_keys: frozenset[str] = frozenset(),
 ) -> list[Finding]:
-    """docs/ha-api-notes.md §17.5: a helper whose
+    """docs/internals/ha-api-notes.md §17.5: a helper whose
     ``id=`` does not match ``slugify(name)`` will silently get a *different*
     identity from real HA's WS-API storage-collection ``create``, which
     derives the item id by slugifying ``name`` and ignores any caller-supplied
@@ -584,7 +584,7 @@ def _validate_helper_slugs(
                         f"helper to a `name` that slugifies to `{supplied_id}`), so the bundle's "
                         f"id matches what HA will actually assign. (This only applies to new "
                         f"helpers Hassle creates; an already-existing helper with this id is "
-                        f"exempt -- see docs/ha-api-notes.md §17.5.)"
+                        f"exempt -- see docs/internals/ha-api-notes.md §17.5.)"
                     ),
                 )
             )
@@ -601,7 +601,8 @@ def _validate_helper_slugs(
                         f"helper, Home Assistant's WS API will derive its real identity from "
                         f"the name slug and ignore the supplied id. No registry snapshot was "
                         f"available, so it's unknown whether `{entity_id}` already exists "
-                        f"(in which case this would not apply -- see docs/ha-api-notes.md "
+                        f"(in which case this would not apply -- see "
+                        f"docs/internals/ha-api-notes.md "
                         f"§17.5)."
                     ),
                     fix=(

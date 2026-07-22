@@ -38,7 +38,7 @@ class RegisteredObject:
     # The declared id (explicit ``id=`` or the function name default). The object
     # key is ``"<kind>:<declared_id>"``.
     declared_id: str
-    # `@automation(triggers=[...])` (DESIGN §5.3/§5.5, docs/dsl-extensions.md,
+    # `@automation(triggers=[...])` (DESIGN §5.3/§5.5, docs/internals/dsl-extensions.md,
     # additive to the frozen DSL surface): triggers evaluated at decoration
     # time, recorded before the
     # function body runs (bundle.py's `compile_registered`) so they land first
@@ -136,7 +136,7 @@ def automation(
     """Register an automation (DESIGN §5.3). Accepts every HA automation option.
 
     ``triggers=`` (additive to the frozen DSL surface,
-    docs/dsl-extensions.md): a sequence of ``TriggerBuilder``
+    docs/internals/dsl-extensions.md): a sequence of ``TriggerBuilder``
     objects -- the same objects ``when()`` accepts -- evaluated at decoration
     time (i.e. built when the ``@automation(...)`` line itself runs, before the
     compiler ever invokes the function body). This is the preferred, canonical

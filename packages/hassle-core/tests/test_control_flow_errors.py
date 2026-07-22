@@ -3,7 +3,7 @@
 Covers `ElseWithoutIfError` -- `with else_then():`/`with else_if(...):` used
 where the immediately-preceding action in the current list is not an
 `if_then`/`choose` container. This is the actions/control-flow error class
-(docs/compiler-api.md §5), defined alongside the core-compiler errors in
+(docs/internals/compiler-api.md §5), defined alongside the core-compiler errors in
 `hassle/compiler/errors.py`.
 """
 

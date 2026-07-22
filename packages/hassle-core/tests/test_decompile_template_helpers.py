@@ -5,7 +5,7 @@ config-entry options body.
 `TemplateHelperConfig` decompiles to the matching builder call
 (`hassle.decompiler.codegen._template_helper_source`): there is no identity
 kwarg to rename -- `TemplateHelperConfig` has no `id`/`unique_id` field at
-all (docs/ha-api-notes.md §26.6: real HA's config-flow form schema rejects
+all (docs/internals/ha-api-notes.md §26.6: real HA's config-flow form schema rejects
 an unrecognized `unique_id` key outright). Identity is derived from `name`
 (slugified) at both compile and decompile time. Placement follows the same
 category/misc rule as the nine storage-collection helpers
@@ -22,7 +22,7 @@ a bare read with no `| float`) both invert cleanly via `expr(...)` /
 `state_of(...)` (DESIGN §5.4 extension); only
 `template_binary_sensor:any_door_open`'s `is_state(...)` call form falls back
 to the verbatim decorator body (documented one-time-canonicalization
-behavior, docs/dsl-extensions.md). See `test_template_helper_decorator_form.py`
+behavior, docs/internals/dsl-extensions.md). See `test_template_helper_decorator_form.py`
 for the decorator-form-specific contract and
 `test_template_helper_decorator_fallback.py` for the fallback-form-specific
 contract.
@@ -63,7 +63,7 @@ def test_decompile_template_number_produces_matching_builder_decorator() -> None
     # instead.
     decorator_line = source.split("\n", 1)[0]
     assert "state=" not in decorator_line
-    # min/max/step decompile as floats (docs/ha-api-notes.md
+    # min/max/step decompile as floats (docs/internals/ha-api-notes.md
     # §26.10): HA's NumberSelector always stores these as floats, and the
     # compiler now coerces to match -- `render_literal`'s `repr()` renders
     # them accordingly.

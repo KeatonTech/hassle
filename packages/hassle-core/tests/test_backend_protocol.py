@@ -1,4 +1,4 @@
-"""The frozen `Backend` Protocol shape (docs/backend.md) — DESIGN §8, §4.
+"""The frozen `Backend` Protocol shape (docs/internals/backend-protocol.md) — DESIGN §8, §4.
 
 `Backend` is structural (typing.Protocol): both `FakeBackend` and
 `DirectBackend` implement it independently. This test file only pins the

@@ -1,7 +1,7 @@
 """Classic HA trigger builders (DESIGN §5.4).
 
 Every builder emits the canonical plural HA trigger dict directly
-(``{"trigger": "<type>", ...}``, per docs/compiler-api.md §1). Field shapes are
+(``{"trigger": "<type>", ...}``, per docs/internals/compiler-api.md §1). Field shapes are
 pinned against the fixture corpus (``fixtures/configs/automation_*_trigger.json``).
 
 Common options shared by every classic trigger (DESIGN §5.4): ``for_=`` durations,
@@ -184,7 +184,7 @@ class TimeExpr(_TriggerBase):
     (``automation_time_trigger_weekday_and_entity_at.json``) showed HA's
     ``time`` *trigger* schema also accepts ``weekday`` (a day-abbreviation-list
     filter on the fixed-time trigger, e.g. weekday-scoped wakeups) — recorded
-    as a DESIGN §5.4 deviation in docs/ha-api-notes.md. ``at=`` also accepts an
+    as a DESIGN §5.4 deviation in docs/internals/ha-api-notes.md. ``at=`` also accepts an
     entity reference (``input_datetime.x``, HA's schedule-driven-wakeup shape)
     since it's typed as a plain ``str``, same as a literal time string. A
     single builder exposes all of them; each serialization method emits only

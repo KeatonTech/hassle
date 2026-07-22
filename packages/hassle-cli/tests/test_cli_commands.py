@@ -219,7 +219,7 @@ def test_stubs_generates_pyi_files(bundle_dir: Path, cli) -> None:
     # latter is not on any import path pyright resolves `hassle.registry` to,
     # so a real editor never picked up the generated types at all
     # (`test_registry_stubs_pyright.py` proves the correct placement/config;
-    # this command just never matched it -- see docs/ha-api-notes.md).
+    # this command just never matched it -- see docs/internals/ha-api-notes.md).
     stub_path = bundle_dir / "typings" / "hassle" / "registry" / "__init__.pyi"
     assert stub_path.is_file()
     assert not (bundle_dir / ".hassle" / "entities.pyi").exists()

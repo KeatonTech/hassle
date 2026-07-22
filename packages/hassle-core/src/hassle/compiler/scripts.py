@@ -324,7 +324,7 @@ class ScriptCallAction:
     rewrite (a caller's ``{"action": "script.<id>", "metadata": {...}}``
     action becomes ``<fn_name>(<data kwargs>, metadata={...})``) recompiles
     to the exact same stored shape -- a UI-saved action's ``metadata: {}``
-    (even empty, docs/ha-api-notes.md §19.1) and any step
+    (even empty, docs/internals/ha-api-notes.md §19.1) and any step
     ``alias``/``enabled`` must round-trip through the call, not just
     ``data``.
     """

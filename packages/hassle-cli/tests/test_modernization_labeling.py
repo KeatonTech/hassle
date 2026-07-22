@@ -3,7 +3,7 @@
 A legacy-form remote object (inner `platform:`/scalar `delay:`, or outer
 singular `trigger:`/`action:` + `service:`) adopted then re-pushed produces a
 ONE-TIME plan diff: Hassle compiles the modern (plural, `action:`) form, but
-HA stores whatever it was given verbatim thereafter (docs/ha-api-notes.md
+HA stores whatever it was given verbatim thereafter (docs/internals/ha-api-notes.md
 §17.1: HA does NOT rewrite inner `platform:` on storage). So after `adopt`,
 the bundle's compiled (modern) form differs from the remote's still-legacy
 form, purely as a schema/style difference -- not a behavior change. The plan

@@ -28,13 +28,13 @@ Process — in this order, no exceptions:
 4. Run the full check: `pytest`, `ruff check`, `pyright` (strict on hassle-core). Fix what you
    broke.
 5. Report: what you built, test names added, anything that deviated from DESIGN.md (deviations
-   must also be recorded in docs/ha-api-notes.md if API-related).
+   must also be recorded in docs/internals/ha-api-notes.md if API-related).
 
 Rules that override any shortcut you're tempted to take:
 - Never edit golden files by hand; use `hassle-dev goldens --update` / `hassle-dev docs
   --update` and say so in your report.
-- Never change a compatibility contract (docs/ir-format.md, docs/backend.md,
-  docs/dsl-extensions.md) without updating that document in the same change; additions only.
+- Never change a compatibility contract (docs/internals/ir-format.md, docs/internals/backend-protocol.md,
+  docs/internals/dsl-extensions.md) without updating that document in the same change; additions only.
 - Never violate the DESIGN.md §2 invariants.
 - No network access in unit tests.
 - Error messages you introduce follow the what/where/fix rubric and get snapshot tests.

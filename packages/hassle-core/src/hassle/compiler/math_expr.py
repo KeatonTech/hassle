@@ -6,7 +6,7 @@ compose, render to Jinja at compile time). Everything here is additive to the
 frozen top-level DSL surface; no existing name changes.
 
 **Sibling builder module** (same convention as ``templates.py`` itself,
-docs/compiler-api.md's "may you edit" column): it does not modify
+docs/internals/compiler-api.md's "may you edit" column): it does not modify
 ``hassle.compiler.builders`` or ``hassle.compiler.templates``'s existing
 names, only imports :class:`TemplateExpr` and composes with it.
 

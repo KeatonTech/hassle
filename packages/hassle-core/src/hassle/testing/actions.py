@@ -72,7 +72,7 @@ class EventOccurrence:
     """One fired event (``Simulator.fire_event``), the event-carrying
     counterpart of :class:`~hassle.testing.state.StateChange` -- the other
     shape a pending ``SuspendWaitForTrigger`` can be resumed with
-    (docs/ha-api-notes.md §36.2 gap 1: a `wait_for_trigger([event(...)])`
+    (docs/internals/ha-api-notes.md §36.2 gap 1: a `wait_for_trigger([event(...)])`
     step must be resumable by a fired event, not only a state change or a
     timeout).
     """
@@ -550,7 +550,7 @@ def _evaluate_condition_with_repeat(
 def _wait_trigger_namespace(occurrence: StateChange | EventOccurrence) -> dict[str, Any]:
     """The satisfying trigger's data, shaped like HA's real post-`wait_for_trigger`
     `wait.trigger` variable for the occurrence kind that satisfied the wait
-    (docs/ha-api-notes.md §36.2 gap 2). Only the `event` shape is
+    (docs/internals/ha-api-notes.md §36.2 gap 2). Only the `event` shape is
     modeled today (`{"event": {"event_type": ..., "data": {...}}}`, mirroring
     `AutomationEngine.on_event`'s own top-level `trigger.event.data` shape) --
     a state-satisfied wait gets an empty namespace rather than a fabricated
@@ -564,7 +564,7 @@ def _wait_trigger_namespace(occurrence: StateChange | EventOccurrence) -> dict[s
 def _set_wait_satisfied(ctx: ActionContext, occurrence: StateChange | EventOccurrence) -> None:
     """Populate ``ctx.variables["wait"]`` after a `wait_for_trigger` step is
     SATISFIED, so later actions' templates can read ``wait.completed`` /
-    ``wait.trigger.*`` (docs/ha-api-notes.md §36.2 gap 2 -- without this, any
+    ``wait.trigger.*`` (docs/internals/ha-api-notes.md §36.2 gap 2 -- without this, any
     such template would hit an `UnsupportedTemplateError` for the undefined
     `wait` name). `wait.trigger` carries the satisfying occurrence's data and
     `wait.completed` is true.

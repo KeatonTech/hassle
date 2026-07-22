@@ -1,6 +1,6 @@
 """Category write-back on push-create (DESIGN §7.3/§9.2).
 
-Pull-side placement (docs/ha-api-notes.md §22) maps an HA UI category ->
+Pull-side placement (docs/internals/ha-api-notes.md §22) maps an HA UI category ->
 root-level `<slug(category)>.py`. Push is the reverse: when `hassle push`
 CREATEs a brand-new object whose source file lives at that same `<slug>.py`
 shape, Hassle assigns the matching HA category to the new object's
@@ -20,7 +20,7 @@ All against `FakeBackend` (no network in unit tests) -- the FakeBackend
 category-registry/entity-registry model, described in `hassle.backend.fake`'s
 module docstring addendum.
 
-**Category registry scopes** (docs/ha-api-notes.md §31): §31.5a
+**Category registry scopes** (docs/internals/ha-api-notes.md §31): §31.5a
 source-confirms HA's category registry was never actually restricted to the
 `automation`/`script` scopes -- ALL 13 helper kinds (9 storage-collection + 4
 template config-entry) carry categories under the shared frontend scope
@@ -368,7 +368,7 @@ def test_adopt_action_never_touches_categories() -> None:
 
 def test_delete_category_removes_row_and_clears_assignments() -> None:
     """`config/category_registry/delete` is confirmed to exist
-    (docs/ha-api-notes.md §31.5c) -- it removes the category registry row AND
+    (docs/internals/ha-api-notes.md §31.5c) -- it removes the category registry row AND
     strips the assignment from every entity carrying it (real HA's
     `async_clear_category_id`, §31.3)."""
     backend = FakeBackend()

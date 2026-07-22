@@ -40,7 +40,7 @@ def test_shadow_id_is_hash_derived_and_prefixed() -> None:
 
 
 def test_build_shadow_config_replaces_triggers_with_never_fires_event() -> None:
-    """Revised design (docs/ha-api-notes.md §29 addendum): the shadow is
+    """Revised design (docs/internals/ha-api-notes.md §29 addendum): the shadow is
     created ENABLED (no `initial_state`) with its own trigger list replaced
     by a single event trigger using a run-unique event type nothing on the
     real bus will ever fire -- the same "never fires on its own" guarantee
