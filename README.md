@@ -11,14 +11,18 @@ and never writes a YAML file behind HA's back.
 from hassle import automation, delay, only_if, state, sun, when
 from hassle.registry import entities as e
 
-@automation(id="hall_light_on_motion", alias="Hallway: light on motion", mode="restart")
+@automation(
+    id="hall_light_on_motion",
+    alias="Hallway: light on motion",
+    mode="restart",
+    triggers=[state(e.binary_sensor.hall_motion).to("on")]
+)
 def hall_light_on_motion():
-    when(state(e.binary_sensor.hall_motion).to("on"))
-    only_if(e.input_boolean.guest_mode.state == "off")
-    only_if(sun(after="sunset", after_offset="-00:30:00"))
-    e.light.hallway.turn_on(brightness_pct=60)
-    delay(minutes=5)
-    e.light.hallway.turn_off()
+    with only_if(e.input_boolean.guest_mode.state == "off"):
+        with only_if(sun(after="sunset", after_offset="-00:30:00")):
+            e.light.hallway.turn_on(brightness_pct=60)
+            delay(minutes=5)
+            e.light.hallway.turn_off()
 ```
 
 (`e` is the generated, typed entity registry — Pylance autocompletes your real
@@ -47,11 +51,10 @@ edit it, test it, push it back, and the UI can still edit it too.
   from hassle import automation, only_if, state, when
   from hassle.registry import entities as e
 
-  @automation(id="hall_night_light")
+  @automation(id="hall_night_light", triggers=[state(e.binary_sensor.hall_motion).to("on")])
   def hall_night_light():
-      when(state(e.binary_sensor.hall_motion).to("on"))
-      only_if(e.sensor.hall_lux.state < 30)  # a typed comparison, not a quoted template
-      e.light.hallway.turn_on(brightness_pct=40)
+      with only_if(e.sensor.hall_lux.state < 30):  # a typed comparison, not a quoted template
+          e.light.hallway.turn_on(brightness_pct=40)
   ```
 
   No quoting layers, no `| float(999)` fallback rituals, and mistakes fail at
