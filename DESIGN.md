@@ -641,8 +641,8 @@ round-trip corpus):**
   write a trigger") — a `when()` call still composes with the decorator's list regardless of
   where in the body it appears, appending after the decorator's triggers in call order.
 - **`only_if` gains a block form; it's the canonical decompiled shape whenever conditions
-  exist** (owner feedback — "a bare `only_if(...)` call looks like an empty if" —
-  `ux/dsl-ergonomics`, item 1). `only_if(*conditions)` is now dual-form: the bare call keeps
+  exist** (a bare `only_if(...)` call looks like an empty if — `ux/dsl-ergonomics`, item 1).
+  `only_if(*conditions)` is dual-form: the bare call keeps
   its exact pre-existing behavior (F3), and the SAME call is also usable as
   `with only_if(cond1, cond2): ...`. HA has no notion of a conditional subset of an
   automation's actions — automation-level conditions gate every single action regardless of
@@ -681,10 +681,10 @@ round-trip corpus):**
   "ha_version": "2026.6.3",
   "objects": {
     "automation:hall_light_on_motion": {
-      "source": "hallway.py",           // root-level (MILESTONES M15 category-first layout, §6)
+      "source": "hallway.py",           // root-level (category-first layout, §6)
       "compiled_hash": "sha256:…",     // hash of canonical JSON at last successful sync
       "kind": "dsl",                    // dsl | raw | blueprint
-      "category": null                  // base category slug at last sync (F2 amendment, MILESTONES M15)
+      "category": null                  // base category slug at last sync (F2 amendment)
     },
     "input_boolean:guest_mode": { … }
   }
@@ -695,7 +695,7 @@ round-trip corpus):**
 `manifest.lock` is committed to git, which is what lets a second machine (or a teammate/agent)
 clone the repo and immediately have the correct merge base.
 
-### 8.2 Plan semantics (table-driven; this table IS the test spec for MILESTONES M5)
+### 8.2 Plan semantics (table-driven; this table IS the binding test spec)
 
 For each object key, compare **base** (manifest), **local** (freshly compiled), **remote**
 (live HA, canonical-hashed):
@@ -727,8 +727,8 @@ For each object key, compare **base** (manifest), **local** (freshly compiled), 
   re-check catches everything slower than that. For a single-household tool this is acceptable;
   a future add-on could add a lock if ever needed (§13).
 - First-ever pull adopts everything; nothing is ever "unmanaged" (simplest mental model) —
-  **except** an object key matching a `hassle.toml` `ignore` glob (§6 amendment, owner decision):
-  those are filtered out before this table is even computed, deliberately staying unmanaged
+  **except** an object key matching a `hassle.toml` `ignore` glob (§6 amendment): those are
+  filtered out before this table is even computed, deliberately staying unmanaged
   forever (never adopted, refreshed, or deleted) so a push can never touch them.
 
 ### 8.3 Pull is the same merge, driven the other way
@@ -766,7 +766,7 @@ CLI affordances that keep this honest:
 - None of this *requires* git (the tool functions in a bare directory and warns once), but
   `hassle init`/first pull offers `git init` and writes the `.gitignore`.
 
-### 8.5 ~~Optional: the in-HA mirror (best-effort)~~ — REMOVED
+### 8.5 In-HA mirror (removed)
 
 > **Removed (2026-07-17).** The mirror was designed to stash the bundle ZIP inside HA's local
 > media storage so a copy of sources+tests lived inside HA (and its backups). The backend layer
@@ -853,20 +853,16 @@ with `hassle init`: `hassle validate && hassle test` on every push).
 
 ### 10.4 Live test-run (G9)
 
-`hassle run hallway.py::hall_light_on_motion --live` (root-level path, MILESTONES M15 §6):
+`hassle run hallway.py::hall_light_on_motion --live` (root-level path, §6):
 
 1. Compile + validate the single object; push it as a **shadow automation**
    (`id="hassle_shadow_<hash>"`), **enabled**, with its own trigger list replaced by a single
    event trigger on a run-unique event type (`hassle_shadow_never_<uuid>`) that nothing on the
    real event bus will ever fire — the same "its triggers never fire on their own" guarantee,
-   without disabling the automation. *(Revised post-M7: the original design used
-   `initial_state: off` instead; live verification against real HA (docs/internals/ha-api-notes.md §27
-   addendum) found the integration test that would have caught problems with that mechanism was
-   itself broken from the day it was written by an unrelated test bug, so the disabled-shadow
-   path had never actually run against real HA. HA source confirms a disabled automation's forced
-   `automation.trigger` call DOES execute and DOES record a trace — so `initial_state: off` was
-   never actually broken either — but the never-fires-event-trigger design removes the dependency
-   on that indirect property entirely and is simpler to reason about.)*
+   without disabling the automation. This avoids relying on `initial_state: off`, which also
+   keeps a disabled automation's triggers from firing but couples correctness to how HA
+   implements disabling internally rather than to a guarantee Hassle controls directly (live
+   verification against real HA: docs/internals/ha-api-notes.md §27 addendum).
 2. Fire it via `automation.trigger`, targeting the shadow's real `entity_id` (`slug(alias)`, NOT
    `slug(id)` — §4/§10.2's quirk; resolve it by matching `attributes.id` on `/api/states`, the same
    way the automation is enumerated elsewhere) (options: `--skip-conditions`, `--vars k=v`). Note
@@ -965,8 +961,7 @@ they're near-identical). Designed-for future plugins, in rough order:
   Nabu Casa setup). The CLI warns once when the configured URL is plain http to a non-private
   address.
 - The compiler executes bundle Python **on the laptop only** (it's the user's own code). Nothing
-  Hassle uploads to HA is executable by Hassle — only HA-native JSON configs (and, if the mirror
-  is enabled, an inert ZIP in the media dir).
+  Hassle uploads to HA is executable by Hassle — only HA-native JSON configs.
 
 ---
 
@@ -979,26 +974,22 @@ they're near-identical). Designed-for future plugins, in rough order:
 | Compile-time vs runtime `if` confusion | Medium | `__bool__` trap raises teaching error (§5.5); AGENTS.md headline; lint |
 | HA API drift across versions | Medium | M0.V verification checklist; CLI checks HA version via `get_config` and warns outside the tested range; CI job against HA `dev` container |
 | Concurrent edits (UI while pushing) | Medium | Hash re-check at apply time (§8.2); simultaneous-apply race documented as accepted limitation |
-| User skips git and loses hand-written sources | Medium | `hassle init`/pull offers `git init`; one-time warning in bare directories; optional mirror (§8.5) as belt-and-suspenders |
-| Media gates tightened by HA — upload Content-Type or download extension check (mirror breaks) | Low (feature is optional) | Mirror is best-effort by design; degrades to a warning; sync never depends on it |
+| User skips git and loses hand-written sources | Medium | `hassle init`/pull offers `git init`; one-time warning in bare directories |
 | Bundle Python does something malicious/surprising at compile time | Low (user's own code) | Compile sandbox: no network, sys.path isolation; documented that the bundle is code you review like any repo |
 
-## 16. Decisions log and open questions
+## 16. Foundational decisions
 
-**Decided (owner-approved 2026-07-03):**
-- CLI-only architecture; no add-on in v1 (v2 decision record, top of file).
-- Git is the source of truth for sources/tests; HA for live objects; `manifest.lock` is the base.
-- Auth: single long-lived HA token, direct connection.
-- In-HA mirror is optional and best-effort (§8.5), off by default.
-
-**Still open for the owner:**
-1. **Name**: "Hassle" (from the directory) — CLI `hassle`. OK?
-2. **Embedded-Python DSL** with compile-time tracing (§5.1, §5.5) vs. a custom standalone
-   language — confirm the trade-off is acceptable. This is the load-bearing decision.
-3. **Helper scope v1**: storage-collection helpers only; template/threshold/etc. helpers are a
-   v2 plugin (§1 non-goals) — acceptable?
-4. **Live run** creates a temporary shadow automation inside HA and executes real service
-   calls (§10.4) — comfortable with that?
-5. **Simulator template subset** (§10.1) rather than embedding HA itself — acceptable? (The
-   alternative — depending on the `homeassistant` package for template eval — is heavyweight
-   but could be a later opt-in `hassle test --engine=ha` mode.)
+- **Name**: "Hassle" (from the directory); CLI command `hassle`.
+- **CLI-only architecture**; no Home Assistant add-on (§ above).
+- **Git is the source of truth** for sources/tests; HA for live objects; `manifest.lock` is the
+  merge base tying the two together.
+- **Auth**: a single long-lived HA token, direct connection (§14).
+- **Embedded-Python DSL** with compile-time tracing (§5.1, §5.5), not a custom standalone
+  language — the load-bearing trade-off of the whole design.
+- **Helper scope**: storage-collection helpers plus template-domain config-entry helpers (§1);
+  other config-entry domains (threshold, derivative, group, …) remain follow-ons.
+- **Live run** creates a temporary shadow automation inside HA and executes real service calls
+  (§10.4).
+- **Simulator template subset** (§10.1) rather than embedding HA itself; a
+  `hassle test --engine=ha` mode against the real `homeassistant` package remains a possible
+  later addition.
