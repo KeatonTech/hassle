@@ -7,7 +7,7 @@ instance, with real request/response captures that become the `FakeBackend` fixt
 This document records that verification: every DESIGN §4 table row, the four named quirks
 (helper `{domain}_id` payload keys, `skip_condition` default, media-upload Content-Type gate,
 blueprint config shape), plus several findings that **correct or extend DESIGN §4/§5.8/§8.5**.
-Raw JSON captures live in [`ha-api-captures/`](ha-api-captures/) for direct fixture consumption.
+Raw JSON captures live in [`ha-api-captures/`](../ha-api-captures/) for direct fixture consumption.
 
 Corrections are collected in **§10 — flagged loudly**. Read that section.
 
@@ -516,11 +516,11 @@ default live run mirrors a real trigger — exactly as the design states.
 
 ## 11. Notes for `FakeBackend` fixtures
 
-- Raw captures: [`ha-api-captures/rest-ws-core.json`](ha-api-captures/rest-ws-core.json)
+- Raw captures: [`ha-api-captures/rest-ws-core.json`](../ha-api-captures/rest-ws-core.json)
   (automations, scripts, all 9 helper cycles, registries, `get_services`, `validate_config`),
-  [`validate-template-roundtrip.json`](ha-api-captures/validate-template-roundtrip.json)
+  [`validate-template-roundtrip.json`](../ha-api-captures/validate-template-roundtrip.json)
   (plural validate, plural POST round-trip, `render_template`, `editable`),
-  [`traces-skip-condition.json`](ha-api-captures/traces-skip-condition.json)
+  [`traces-skip-condition.json`](../ha-api-captures/traces-skip-condition.json)
   (trace/list, trace/get, skip_condition matrix). Media captures are inline in §9 (curl-driven).
 - **Model the plural schema (§10.1) in FakeBackend:** `list_remote` returns the plural form; the
   canonical hash is over the plural form; a `create/update` that receives singular input should
@@ -649,7 +649,7 @@ later pass added a public read-only `StateExpr.entity_id` accessor and
 switched `.value`/`expr()` to use it; the private-attr coupling and its
 deviation note are gone.
 
-## 14. M2 finding: the compiler always materializes an explicit automation `id`
+## 14. The compiler always materializes an explicit automation `id`
 
 `hassle.compiler.bundle._build_automation` sets `body["id"] = options.get("id")
 or reg.func.__name__` unconditionally -- there is no DSL shape that produces an
@@ -763,7 +763,7 @@ if a future HA changes this, that test fails and `normalize_ha` gets the rule.
 (Also observed: scalar `delay: 5` is stored verbatim, not expanded.)
 
 ### 17.2 Purpose-vocabulary enumeration WS API — found ✅ (provisional fixture shape kept, no R5 break)
-M0.V could not capture the enumeration API (§0). It is the pair of WS
+The initial capture pass could not capture the enumeration API (§0). It is the pair of WS
 subscriptions **`trigger_platforms/subscribe`** and
 **`condition_platforms/subscribe`** (`homeassistant/components/websocket_api/
 commands.py`: `handle_subscribe_trigger_platforms` /
@@ -779,14 +779,14 @@ reads the first snapshot event of each and returns
   feature) — so `fetch_purpose_vocabulary()` returns empty lists there, and the
   round-trip half of the live-verification test skips locally and runs in CI on
   `stable`/`dev`.
-- **R5 note:** the provisional M0.1 fixture shape
+- **R5 note:** the provisional early fixture shape
   (`registry.purpose_vocabulary = {triggers: [str], conditions: [str]}`) is
   *derivable directly* from `sorted(payload.keys())`, so the shape does **not**
   differ — the fixture and `RegistrySnapshot.PurposeVocabulary` are kept
-  unchanged, and no MILESTONES.md update is required. (Only the *source* moved from
-  "provisional" to "these two subscribe commands.")
+  unchanged. (Only the *source* moved from "provisional" to "these two
+  subscribe commands.")
 
-### 17.3 Parallel-branch `stop` semantics (M4 finding) ✅
+### 17.3 Parallel-branch `stop` semantics (simulator finding) ✅
 From `homeassistant/helpers/script.py` (`_async_step_parallel` + `async_run`'s
 `_StopScript` handling), authoritative and version-stable: each `parallel:`
 branch runs as its own sub-`Script`. A `stop` in a branch raises `_StopScript`,
@@ -794,7 +794,7 @@ which re-raises out of the (non-top-level) branch; the branches run under
 `asyncio.gather(return_exceptions=True)`, so **sibling branches are NOT
 cancelled — they all run to completion**, and *then* the first `_StopScript`
 re-raises and propagates up, ending the whole run (actions in the enclosing
-sequence *after* the `parallel:` block are skipped). Net for the M4 simulator:
+sequence *after* the `parallel:` block are skipped). Net for the simulator:
 `stop` in one branch stops the automation, but does not interrupt in-flight
 siblings.
 
@@ -815,13 +815,13 @@ strategy). Re-verify on 2026.7 in CI.
 Real HA storage-collection `create` **assigns the item id by slugifying `name`
 and ignores any caller-supplied `id`** (§4). `DirectBackend.create` therefore
 strips `id` from the create payload and returns HA's assigned `result.id`.
-**Divergence from `FakeBackend`:** the M5 `FakeBackend._derive_identity` honors a
-supplied helper `id` if present. This does not affect M6 (DirectBackend matches
-real HA), but the compiler/CLI (M5/M7) should ensure a declared helper's `name`
+**Divergence from `FakeBackend`:** `FakeBackend._derive_identity` honors a
+supplied helper `id` if present. This does not affect `DirectBackend` (it
+matches real HA), but the compiler/CLI should ensure a declared helper's `name`
 slugifies to its intended `id`, or the plan's object key will drift from HA's
-assigned identity. Flagged for M7.
+assigned identity.
 
-**Amendment 2026-07-05 (smoke #7 field evidence): the slug rule only
+**Amendment 2026-07-05 (field evidence from a later smoke test): the slug rule only
 constrains the WS-API *creation* path — `.storage` contents themselves are
 unconstrained.** A real live registry has helpers whose id does **not**
 equal `slugify(name)` — e.g. an `input_text` with id
@@ -833,7 +833,7 @@ id/name-slug relationship above never applied to them in the first place.
 Nothing in HA enforces id == slugify(name) as an invariant of storage
 *contents*; it is purely a derivation rule of one specific creation path.
 
-Consequence for the M7 `helper-id-name-mismatch` validator Finding
+Consequence for the `helper-id-name-mismatch` validator Finding
 (`hassle.registry.validate._validate_helper_slugs`): the original,
 unconditional form of this check would tell an owner to "fix" the id of an
 already-live, adopted helper like the one above — advice that, if followed,
@@ -869,7 +869,7 @@ compiler/simulator determinism). Helpers (WS storage collections) are
 synchronous and need no such wait.
 
 ### 17.8 Hassle bug found + fixed (regression-tested): planned `delete` carried no re-verify hash
-The M6 core-loop integration test surfaced an M5 latent bug: `compute_plan`
+A core-loop integration test surfaced a latent sync-engine bug: `compute_plan`
 produced `delete` entries with `remote_hash_at_plan = None`, but `apply_plan`
 re-verifies the remote hash before deleting (DESIGN §8.2) — so every planned
 delete aborted as spurious "drift". No prior test ran a `compute_plan` delete
@@ -877,27 +877,27 @@ through `apply_plan`. Fixed in `plan.py` (populate `remote_hash_at_plan` on the
 `delete` entry, mirroring `update`); regression-tested by
 `tests/test_plan_apply_delete_roundtrip.py` (R4). No interface change.
 
-### 17.9 DESIGN §6 mismatch found in M7: `compile_bundle` does not recurse into subdirectories — RESOLVED 2026-07-04 (M7.1)
+### 17.9 DESIGN §6 mismatch: `compile_bundle` does not recurse into subdirectories — RESOLVED 2026-07-04
 DESIGN §6's documented bundle layout has DSL sources split across
 `automations/`, `scripts/`, `helpers/`, `lib/` subdirectories under the
-bundle root. The real M1 implementation
-(`hassle.compiler.bundle._import_bundle_modules`) only globs **top-level**
+bundle root. The original compiler implementation
+(`hassle.compiler.bundle._import_bundle_modules`) only globbed **top-level**
 `*.py` files directly in the bundle directory (`bundle_path.glob("*.py")`,
-non-recursive) — every fixture from M0 through M6
+non-recursive) — every fixture in the corpus at the time
 (`fixtures/dsl/*/bundle/`, `fixtures/registry/{clean,broken}_bundle/bundle/`)
-is in fact flat, one or more `.py` files directly at the bundle root, and
-every milestone's test suite was built and passed against that flat
-convention despite §6 showing subdirectories.
+was in fact flat, one or more `.py` files directly at the bundle root, and
+the whole test suite was built and passed against that flat convention
+despite §6 showing subdirectories.
 
-Found while wiring M7's CLI test fixtures (nesting DSL sources under
+Found while wiring the CLI's test fixtures (nesting DSL sources under
 `automations/`, per §6) against `compile_bundle` and getting an empty
-`CompileResult.objects` with no error. Not fixed as part of M7 itself
-(changing `_import_bundle_modules` to recurse was a behavior change to a
-frozen, heavily-tested M1 module with no M7 test-contract requirement forcing
-it); M7's own fixtures and the `hassle init` scaffold used the flat
+`CompileResult.objects` with no error. Not fixed at first (changing
+`_import_bundle_modules` to recurse was a behavior change to a frozen,
+heavily-tested compiler module with no test-contract requirement forcing
+it yet); the CLI's own fixtures and the `hassle init` scaffold used the flat
 convention that matched actual `compile_bundle` behavior at the time.
 
-**Decision (M7.1): DESIGN §6's tree layout wins — the loader
+**Decision: DESIGN §6's tree layout wins — the loader
 recurses.** `compile_bundle` now walks the whole bundle tree
 (`hassle.compiler.bundle._iter_bundle_source_files`), skipping `tests/`,
 `.hassle/`, `stubs/`, any dot-directory, and `__pycache__` at every depth.
@@ -908,7 +908,7 @@ notify_adults` (DESIGN §5.3/§5.6 verbatim) resolves through **PEP 420
 namespace packages** — no `__init__.py` anywhere in the tree, since the
 bundle root is already on `sys.path` and namespace packages need none for
 this. `hassle init` now scaffolds `automations/scripts/helpers/lib/tests/`,
-none with an `__init__.py`. Flat bundles (every pre-M7.1 fixture) are
+none with an `__init__.py`. Flat bundles (every earlier fixture) are
 unaffected: a bundle with no subdirectories compiles exactly as before, byte
 for byte (zero golden drift verified). Duplicate-id detection and source
 spans now span the whole tree (a span from a nested file reads like
@@ -918,7 +918,7 @@ objects (`hassle_cli.bundle_ops.default_source_path`) now land under
 §7.3, instead of the flat one-file-per-object fallback this finding
 previously documented as the workaround.
 
-**Review finding (M7.1 review, fixed same branch): the recursive walk
+**Follow-up finding (fixed in the same change): the recursive walk
 followed symlinks.** A symlinked directory or `.py` file inside the bundle,
 pointing outside it, was imported and executed — a sandbox escape (§14) —
 and because the target's `__file__`/`__path__` resolves outside
@@ -1167,7 +1167,7 @@ The field measurement's shape list also named a `choose` branch whose
 pre-round-3 and current decompiler: `_choose` calls the same top-level
 `decompile_condition` dispatcher `_cond_numeric_state` already goes through
 for a bare automation-level condition, and `_cond_numeric_state`'s `known` set
-already included `attribute` (an M1.1-era addition, docs/internals/ha-api-notes.md's
+already included `attribute` (a runtime-math-era addition, docs/internals/ha-api-notes.md's
 sun-elevation condition note). No code path exists that treats a
 choose-nested condition differently from a top-level one. **No fix was
 needed** — `automation_choose_numeric_state_attribute_condition.json` is a
@@ -1215,14 +1215,14 @@ was taken for the category registry itself — see the caveat below):
   strictly additive, no existing placement test needed to change.
 - **Caveat (flagged per CLAUDE.md's "record + flag" rule):** unlike most of this document's
   findings, the `scope` parameter and per-row shape for `config/category_registry/list` were
-  **not** re-verified against a live HA instance in this work item — M0.V's Docker harness wasn't
-  re-run. The shape is inferred from DESIGN §7.3's own description plus HA core's established
+  **not** re-verified against a live HA instance in this pass — the initial capture pass's Docker
+  harness wasn't re-run. The shape is inferred from DESIGN §7.3's own description plus HA core's established
   convention for other scoped registry lists (`entity_category`, `floor_registry`'s `scope`-less
   precedent). If a live capture ever shows a different argument name or response shape, only
   `DirectBackend._afetch_categories` needs to change — the `RegistrySnapshot.categories` shape and
   the placement logic in `bundle_ops` are already guarded/tested against "the command doesn't
   exist" and would tolerate a renamed argument the same way (empty categories, no crash) until
-  fixed. Recommended follow-up: add this to a future M0.V-style verification pass.
+  fixed. Recommended follow-up: add this to a future behavioral-verification pass.
 - **Helpers are intentionally excluded** from category-based placement: HA's category registry
   only covers `automation`/`script` scopes (per DESIGN §7.3's own wording); helpers keep today's
   domain-default `helpers/misc.py` fallback unconditionally.
@@ -1249,8 +1249,8 @@ against object keys. This is a deliberate, approved exception to §8.2's "first-
 adopts everything; nothing is ever unmanaged" — DESIGN §6/§8.2 have been amended in place (this is
 not a silent workaround). Implementation lives in `hassle_cli.ignore_filter`
 (`apply_ignore_globs`/`migrate_manifest_for_ignores`), called from the CLI layer **before**
-`hassle.sync.plan.compute_plan` runs — the F2 plan engine itself is untouched, so the M5 table-spec
-tests are unaffected. See DESIGN §6/§8.2 for the full semantics; test coverage in
+`hassle.sync.plan.compute_plan` runs — the plan engine itself is untouched, so the sync engine's
+table-spec tests are unaffected. See DESIGN §6/§8.2 for the full semantics; test coverage in
 `packages/hassle-cli/tests/test_ignore_filtering.py` (unit, including the safety property that an
 ignored key present remotely but absent locally never plans as `delete`) and
 `test_pull_ignore_globs.py` (end-to-end `pull`/`plan`/`push`, plus the manifest-migration notice).
@@ -1264,7 +1264,7 @@ had) now write `lib/README.md` (explaining `@macro`/`@shared_script`/plain const
 checks `Path.is_file()` before writing) — re-running `init` or `pull` never clobbers a file the
 user has since edited. Test coverage: `packages/hassle-cli/tests/test_lib_readme_scaffold.py`.
 
-## 23. Hassle bug found + fixed (regression-tested): pull→plan-noop invariant (`fix/plan-noop-invariant`)
+## 23. Hassle bug found + fixed (regression-tested): pull→plan-noop invariant
 
 A fresh `hassle pull` immediately followed by `hassle plan`, with zero edits on either side, must
 show every object as `noop` (or an `update` labeled `"modernization (one-time)"` — DESIGN §8.2's
@@ -1303,8 +1303,8 @@ easily pass by analogy with automations/helpers (both of which legitimately take
 difference — `update` if untouched otherwise, or `conflict` if the object also differs from the
 manifest base on either side. This is pure test/seeding-harness residue, not a real HA behavior
 (real HA's own script REST endpoint has no such leak, per the capture) — but `FakeBackend` is the
-only backend M5's unit suite and M7's CLI suite exercise, so the leak was real and reproducible
-end-to-end (`hassle pull` → `hassle plan` through the actual CLI, R2-compliant, no network).
+only backend the core unit suite and the CLI's own suite exercise, so the leak was real and
+reproducible end-to-end (`hassle pull` → `hassle plan` through the actual CLI, R2-compliant, no network).
 
 **Fix:** `FakeBackend._stored_body` (new, called from both `create`/`update`) now strips `id` from
 a script's body unconditionally before storing — mirroring `ScriptConfig` having no `id` field at
@@ -1326,9 +1326,9 @@ asserting the ONE-TIME modernization label, not `noop` and not `conflict`, match
 `test_modernization_labeling.py`'s existing single-object test but run across the full corpus
 object set for the first time).
 
-## 24. M8 finding: `hassle stubs`' output location never matched any pyright config (fixed) — `m8/vscode`
+## 24. `hassle stubs`' output location never matched any pyright config (fixed)
 
-**The finding.** M3's own CI-proof test (`packages/hassle-core/tests/test_registry_stubs_pyright.py`)
+**The finding.** An existing CI-proof test (`packages/hassle-core/tests/test_registry_stubs_pyright.py`)
 already demonstrated the ONLY placement that makes pyright prefer a generated stub over the real
 runtime `hassle.registry` module for that dotted import path: a `pyrightconfig.json`/
 `python.analysis.stubPath` setting of `"typings"`, with the stub file physically at
@@ -1338,14 +1338,14 @@ stubs` (`hassle_cli.cli`) wrote to `.hassle/entities.pyi`, and `hassle init` shi
 `.vscode/settings.json` at all. Nothing wired the two together: a fresh `hassle init` + `hassle
 pull` + `hassle stubs` sequence — the DESIGN §11 layer-1 "free" story — produced a real bundle
 where Pylance had **zero** knowledge of the generated entity types, silently. `hassle stubs`
-reported success (`wrote .hassle/entities.pyi`); nothing before M8 ever opened the result in a real
-pyright run to check it actually resolved.
+reported success (`wrote .hassle/entities.pyi`); nothing before this fix ever opened the result in
+a real pyright run to check it actually resolved.
 
-**Verification.** `packages/hassle-core/tests/test_registry_stubs_pyright_init_template.py` (new,
-M8) builds a bundle using the real `hassle_cli.init_cmd.init_bundle` + the real
-`generate_entities_stub`/`stubs`-command code path (not a hand-rolled fixture, unlike the M3
-original) and runs pyright against exactly those files — this is the "layer-1 proof, extended"
-this milestone asked for.
+**Verification.** `packages/hassle-core/tests/test_registry_stubs_pyright_init_template.py` (new)
+builds a bundle using the real `hassle_cli.init_cmd.init_bundle` + the real
+`generate_entities_stub`/`stubs`-command code path (not a hand-rolled fixture, unlike the original
+CI-proof test above) and runs pyright against exactly those files — this is the "layer-1 proof,
+extended" DESIGN §11 calls for.
 
 **Fix (not a DESIGN.md change — DESIGN §11 already specified the right end state, it just was
 never wired up):**
@@ -1356,19 +1356,19 @@ never wired up):**
   `hassle init` and `hassle pull`.
 - `hassle stubs` now writes `typings/hassle/registry/__init__.pyi` (+ an empty
   `typings/hassle/__init__.pyi` package marker) instead of `.hassle/entities.pyi`. This is not a
-  frozen interface (F1–F3) — no milestone ever pinned the stub's disk location as a contract, only
+  frozen interface (F1–F3) — nothing ever pinned the stub's disk location as a contract, only
   the command name/behavior ("generates `.hassle/entities.pyi`" was prose in a docstring, not a
-  tested guarantee) — so relocating it needed no MILESTONES.md update. The stale `.hassle/entities.pyi`
-  assertion in `test_cli_commands.py::test_stubs_generates_pyi_files` was updated in the same PR
-  (R4: this is exactly the kind of found-bug the milestone forced into the open).
+  tested guarantee) — so relocating it needed no compatibility-contract update. The stale
+  `.hassle/entities.pyi` assertion in `test_cli_commands.py::test_stubs_generates_pyi_files` was
+  updated alongside this fix (R4: exactly the kind of found-bug this rule exists to catch).
 
 No HA API behavior is involved in this finding (it's pure local tooling/editor-integration), but
 it's recorded here per the standing instruction to log any DESIGN-vs-reality gap discovered while
-implementing a milestone.
+implementing a feature.
 
 ## 26. Config-entry template-helper flow shapes — DESIGN §13's plugin protocol exercised (source-informed, CI-verified)
 
-This milestone builds the first config-entry `ObjectType` plugin (DESIGN §13:
+This builds the first config-entry `ObjectType` plugin (DESIGN §13:
 "Config-entry helpers ... needs the config flow WS API; the plugin protocol
 already allows async multi-step applies"), scoped to the `template` domain
 (number/sensor/binary_sensor/select). Unlike every prior kind (automation/
@@ -1378,7 +1378,7 @@ script config REST, the nine storage-collection helpers' single-shot WS
 
 ### 26.0 Status: WS-transport assumption FAILED on real HA — corrected to REST (CI-verified finding)
 
-**Original status (source-informed, not yet CI-verified):** M0.V-style Docker
+**Original status (source-informed, not yet CI-verified):** a live Docker
 capture was not available in the implementation sandbox (no Docker), so the
 shapes were derived from Home Assistant core source
 (`homeassistant/components/template/config_flow.py`,
@@ -1423,26 +1423,26 @@ payloads (`{"type": "form"/"menu"/"create_entry", "flow_id", "step_id",
 "data_schema", ...}`) rather than a WS envelope, so the unit tests exercise
 the same shapes CI now confirms.
 
-This is the milestone's key finding: **the config-entry flow API is REST,
+This is the key finding: **the config-entry flow API is REST,
 distinct from every other kind Hassle manages** (automations/scripts are
 already REST for their config CRUD; the nine storage helpers are WS;
 template-helper *listing* is WS but its *mutations* are REST) — a three-way
 split that DESIGN §13's "the config flow WS API" phrasing did not anticipate.
-No MILESTONES.md change needed (F2 `Backend` is still untouched — this is
-purely a `DirectBackend`-internal transport correction), but flagged here
-per the standing "record findings, flag to human" rule since it directly
-contradicts an assumption baked into the milestone text itself.
+No compatibility-contract change needed (F2 `Backend` is still untouched —
+this is purely a `DirectBackend`-internal transport correction), but flagged
+here per the standing "record findings, flag to human" rule since it
+directly contradicts an assumption baked into the original design text.
 
 The CI integration suite
 (`packages/hassle-core/tests/integration/test_live_template_flow.py`) remains
 the **authoritative verification**; the correction above is what made it
-pass (pending the orchestrator's next CI run to confirm).
+pass (pending a subsequent CI run to confirm).
 
 Also unverified in this sandbox: whether the `template` integration's
 config-entry flow is reachable with NO `template:` stanza in
 `configuration.yaml` (assumed yes — a `config_flow: true` integration's flow
 handler is generally registered from its manifest independent of YAML
-config). `.github/workflows/ci.yml`'s M10 integration job leaves
+config). `.github/workflows/ci.yml`'s config-entry-helper integration job leaves
 `configuration.yaml` unchanged on this assumption; **this assumption held**
 — CI reached the flow endpoints at all (got a real HA response, "Unknown
 command", rather than "integration/handler not found"), which is itself
@@ -1451,7 +1451,7 @@ evidence the handler was registered without a YAML stanza.
 ### 26.1 Create: REST `/api/config/config_entries/flow` — menu step, then a form step, then `create_entry`
 
 The `template` integration's config flow starts with a **menu** step
-(`step_id: "user"`) whose choices are the four helper types this milestone
+(`step_id: "user"`) whose choices are the four helper types Hassle
 manages (`number`/`sensor`/`binary_sensor`/`select`, plus others the
 integration itself defines that Hassle doesn't manage), then a **form** step
 (`step_id` = the chosen type) collecting EXACTLY the type's own schema fields
@@ -1496,8 +1496,9 @@ flow/*` WebSocket commands — §26.0 found it's REST. Round 2 sent
 `set_value` — §26.6 found the schema rejects the former and requires the
 latter.)
 
-**Correction (§31.8, CI field failure on PR #10):** the `create_entry` body
-shown above was ALSO wrong in a way nothing caught until M15 — `entry_id`
+**Correction (§31.8, a later CI field failure):** the `create_entry` body
+shown above was ALSO wrong in a way nothing caught until the category
+write-back work — `entry_id`
 (and `title`, `domain`, ...) are nested under a `"result"` key, never
 top-level keys on the response body, and there is no `"options"` key on the
 wire at all (`ConfigEntry.as_json_fragment`,
@@ -1512,10 +1513,10 @@ pre-existing top-level key this override merely populates.
 `DirectBackend._acreate_template_helper`'s original `result.get("entry_id",
 flow_id)` silently fell back to `flow_id` on every real call (a real, truthy
 string -- nothing ever raised), so `_template_entry_ids` cached the WRONG
-value from the moment M10 shipped; invisible until M15's category
-write-back needed to actually cross-reference it against a live entity
-registry. Fixed in the same PR; see §31.8 below for the full account and the
-identity-anchor implication.
+value from the moment this shipped; invisible until the category
+write-back work needed to actually cross-reference it against a live entity
+registry. Fixed alongside that finding; see §31.8 below for the full account
+and the identity-anchor implication.
 
 `FakeBackend._create_via_flow` (`hassle/backend/fake.py`) models this same
 three-step shape (menu -> form -> create_entry) as `FlowStep` records
@@ -1589,7 +1590,7 @@ already have everything the sync engine needs; the multi-step flow is
 entirely an **internal** `FakeBackend`/`DirectBackend` implementation detail
 for `kind in TEMPLATE_DOMAINS`, exactly the way the nine storage helpers'
 `{domain}_id` payload-key convention (quirk #1) is internal and never leaks
-into the Protocol. No MILESTONES.md F2 update needed. See docs/internals/backend-protocol.md's
+into the Protocol. No `Backend` Protocol update needed. See docs/internals/backend-protocol.md's
 config-entry addendum for the identity/manifest bookkeeping this implies
 (`entry_id` lives in `ManifestEntry`, additively).
 
@@ -1604,7 +1605,7 @@ existing object's HA id" — here, "never let an update change the entry_id;
 only a delete+recreate legitimately gets a new one, and that IS a different
 HA-side object even though Hassle's object key is unchanged").~~
 
-**This was wrong — see §26.6.** CI round 2 found the flow's form schema
+**This was wrong — see §26.6.** A later verification found the flow's form schema
 rejects an unrecognized `unique_id` key outright: there is no
 caller-settable unique id at all, so this identity scheme was never
 achievable against real HA. Left here (struck through, not deleted) as the
@@ -1612,7 +1613,7 @@ record of what was tried and why it failed, per the standing "every bug
 becomes evidence, not silently erased" practice this doc follows throughout
 (cf. §17.5's amendment, §23's bug-and-fix pattern).
 
-### 26.6 Identity REDESIGNED (CI round 2 finding): no settable `unique_id` — identity derives from `name`
+### 26.6 Identity REDESIGNED (CI finding): no settable `unique_id` — identity derives from `name`
 
 **The CI failure, verbatim** (both HA `stable` and `dev`, all 5
 `test_live_template_flow.py` tests, after the §26.0 REST-transport fix
@@ -1654,8 +1655,7 @@ unblocked flow step submission):
    into a caller-visible `id`, §4/§17.5). This invalidates §26.5's identity
    scheme outright: there was never a `unique_id` to send.
 
-**Identity, REDESIGNED and RE-FROZEN in this PR (supersedes §26.5; MILESTONES.md
-updated in the same series, R5):**
+**Identity, REDESIGNED and RE-FROZEN (supersedes §26.5, R5):**
 
 - Object key: `"<template domain>:<slugify(name)>"` — e.g.
   `"template_number:active_hvac_zones"` for `name="Active HVAC Zones"`. This
@@ -1691,9 +1691,9 @@ updated in the same series, R5):**
   gained a required `set_value=` kwarg; `template_select` gained a required
   `select_option=` kwarg. `name=` became the sole identity-bearing kwarg.
 
-### 26.7 CI round 3 finding: CREATE works, READ-BACK and UPDATE were still wrong — no admin API exposes entry options at all
+### 26.7 CREATE works, READ-BACK and UPDATE were still wrong — no admin API exposes entry options at all
 
-**The CI failures, verbatim** (both HA `stable` and `dev`, run 28809973141;
+**The CI failures, verbatim** (both HA `stable` and `dev`;
 CREATE itself now succeeds — the §26.1/§26.6 fixes held):
 
 ```
@@ -1725,7 +1725,7 @@ local HA checkout):
    command (`_async_matching_config_entries_json_fragments`,
    `homeassistant/components/config/config_entries.py`) or the single-entry
    command (`config_entry_get_single`, same file, which ALSO just returns
-   `entry.as_json_fragment`). The round-2 code's `entry.get("options", {})`
+   `entry.as_json_fragment`). The earlier code's `entry.get("options", {})`
    was therefore always `{}` against real HA — the exact source of the
    `KeyError: 'name'` / `KeyError: 'state'` CI hit reading back a
    just-created entry's `list_remote` row.
@@ -1815,13 +1815,13 @@ fake.py`** (`FakeBackend.update` strips `name` before delegating to
 `_update_via_options_flow`; `_update_via_options_flow` merges into existing
 stored options and defensively 400s — `ConfigEntryFlowError` — if `name`
 somehow still reaches it, mirroring the real schema rejection for direct
-callers of the internal method). No `Backend` (F2) or MILESTONES.md identity
-changes — this round is purely an implementation-fidelity fix, not a design
-change. Regression tests (unit-level; this sandbox cannot run the Docker-HA
-integration suite that is the authoritative verification):
+callers of the internal method). No `Backend` (F2) identity changes — this
+is purely an implementation-fidelity fix, not a design change. Regression
+tests (unit-level; this sandbox cannot run the Docker-HA integration suite
+that is the authoritative verification):
 `packages/hassle-core/tests/test_direct_backend_template_helpers.py` (new —
 faithfully fakes the `_client` wire shapes above, confirmed to fail against
-the round-2 code for the exact CI-reported reasons before the fix landed),
+the earlier code for the exact CI-reported reasons before the fix landed),
 `test_fake_backend_template_flow.py`'s
 `test_template_number_update_silently_strips_name_at_the_public_api_boundary`
 / `test_template_number_internal_options_flow_submission_rejects_name_field`
@@ -1851,7 +1851,7 @@ to this integration. `_acurrent_template_options` defensively `.get()`s both
 field lacking a `suggested_value`, so an unexpected shape degrades to a
 missing field rather than a crash — CI will still catch a genuine mismatch
 (a missing option would show up as a spurious diff/plan-update, not a
-`KeyError`, which is a strictly safer failure mode than round 2's).
+`KeyError`, which is a strictly safer failure mode than the earlier code's).
 
 ### 26.9 Read-back cost: one options-flow open+cancel round-trip per entry, per `list_remote`
 
@@ -1861,15 +1861,15 @@ call, on top of the pre-existing `config_entries/get` + `config/
 entity_registry/list` WS calls. This is the unavoidable cost of there being
 no direct "read one entry's options" API (§26.7 finding 2) — real HA's own
 frontend pays the same cost every time its helpers-list page needs to show
-current values. Not optimized further in this milestone (no perf budget was
-set for `list_remote` in DESIGN or in this milestone); flagged here in case a
-future milestone's `pull`/`plan` on a large template-helper population needs
-it addressed (e.g. batching, or caching options against `modified_at` from
-`config_entries/get`'s already-free listing).
+current values. Not optimized further here (no perf budget was set for
+`list_remote` in DESIGN); flagged here in case a future pass on a large
+template-helper population needs it addressed (e.g. batching, or caching
+options against `modified_at` from `config_entries/get`'s already-free
+listing).
 
-### 26.10 CI round 4 finding: `template_number`'s `min`/`max`/`step` are always stored as `float` — compiler must coerce to match
+### 26.10 `template_number`'s `min`/`max`/`step` are always stored as `float` — compiler must coerce to match
 
-**The CI failure, verbatim** (both HA `stable` and `dev`, run 28811559165;
+**The CI failure, verbatim** (both HA `stable` and `dev`;
 this was the ONLY failure left after the §26.7 read-back/update fix landed —
 4 of 5 integration tests were already green):
 
@@ -1903,7 +1903,7 @@ ONLY fields anywhere in the four domains typed as `NumberSelector`:
 `template_binary_sensor` (`device_class`) use only `SelectSelector` (string
 enum choices); `template_select` (`options`/`select_option`) uses
 `TemplateSelector`/`ActionSelector`, neither numeric. No other coercion
-class exists to hunt for in this milestone's scope.
+class exists to hunt for within Hassle's managed scope.
 
 **Fixed at compile time**, per the design direction that keeps plan
 comparison a plain hash equality with no comparison-time special case
@@ -1964,7 +1964,7 @@ the float form) to an explicit `"min=0.0" in source`, and by the existing
 which now exercises the float-valued fixture end-to-end (decompile → write
 → recompile) unchanged.
 
-### 26.11 Reviewer follow-up: missing write-target kwargs were only caught at APPLY time — now a compile-time error
+### 26.11 Missing write-target kwargs were only caught at APPLY time — now a compile-time error
 
 **The gap:** §26.6 froze `set_value=`/`select_option=` as required DSL kwargs
 for `template_number`/`template_select`, and `_check_required_fields`
@@ -1989,7 +1989,7 @@ any tier-2/3 `Finding` check even starts, this is caught by `hassle validate`,
 `file:line`, both plain and `--json` modes) instead of letting the exception
 escape as a raw traceback.
 
-(Task #15, reviewer follow-up to this same PR #4: the paragraph above was
+(Follow-up finding: the paragraph above was
 initially true only for `validate` — `_build_plan` (`hassle_cli.cli`, shared
 by `plan`/`status`/`push`) called `bundle_ops.compile_local_objects` with no
 `CompileError` handling at all, so those three commands still dumped a raw
@@ -2004,13 +2004,13 @@ The backend-side `_check_required_fields` checks are UNCHANGED and remain a
 second line of defense for any non-DSL path that constructs a
 `TemplateHelperConfig` directly (e.g. a hand-rolled adopt path bypassing the
 DSL builders). I3 is unaffected: pulled template helpers always carry their
-write-target keys (M10 CI-verified, §26.6), confirmed here by a defensive
+write-target keys (CI-verified, §26.6), confirmed here by a defensive
 decompile-then-recompile test
 (`test_decompile_template_helpers.py::test_decompiled_write_target_helpers_recompile_without_error`)
 proving the decompiler can never produce a `template_number`/`template_select`
 call that then trips the new check.
 
-## 25. M8 finding: `DiagnosticsManager.refresh()` race (fixed, regression-tested) — `vscode-extension/`
+## 25. `DiagnosticsManager.refresh()` race (fixed, regression-tested)
 
 While writing the `@vscode/test-electron` integration test for Problems-pane diagnostics,
 a real race surfaced: `activate()` fires one `hassle validate --json`
@@ -2025,16 +2025,17 @@ if no newer `refresh()` call has started since. Regression test:
 `"regression: a slow, stale refresh() cannot clobber a newer one's results"` (verified to fail
 without the guard, confirming it exercises the real bug).
 
-## 27. M10 CI run: `test_run_live.py::test_run_live_creates_shadow_triggers_and_cleans_up` also failed — diagnosed as unrelated to this milestone (not fixed here, flagged)
+## 27. `test_run_live.py::test_run_live_creates_shadow_triggers_and_cleans_up` also failed — diagnosed as unrelated to the template-helper work (not fixed here, flagged)
 
 The same CI run that surfaced the §26.0 WS-transport bug also failed
 `packages/hassle-cli/tests/integration/test_run_live.py::
 test_run_live_creates_shadow_triggers_and_cleans_up` on the `dev` job. Full
-error text was not available to this session (no direct CI log access);
-diagnosis below is from static analysis of what M10 actually touched, cross-
-checked against this test's dependency surface.
+error text was not directly available (no direct CI log access);
+diagnosis below is from static analysis of what the config-entry
+template-helper work actually touched, cross-checked against this test's
+dependency surface.
 
-**What M10 touched that this test's code path could plausibly reach:**
+**What the template-helper work touched that this test's code path could plausibly reach:**
 `hassle.ir.keys.OBJECT_KINDS` (widened to include `TEMPLATE_DOMAINS`) and
 `hassle_cli.bundle_ops.default_source_path` (added a `TEMPLATE_DOMAINS`
 branch). Neither is on `test_run_live`'s path:
@@ -2047,8 +2048,9 @@ branch). Neither is on `test_run_live`'s path:
   `default_source_path` at all (no adoption/placement happens during a live
   run). `OBJECT_KINDS`'s widened membership is therefore inert for this test.
 - The `ha`/`ha_url_token` fixtures (`packages/hassle-cli/tests/integration/
-  conftest.py`) are untouched by any M10 commit (`git log` confirms last
-  touch was the M7.1 bundle-subdirs commit). Their `_wipe` helper does
+  conftest.py`) are untouched by the template-helper work (`git log` confirms
+  the last touch was the bundle-subdirectory-recursion change, §17.9). Their
+  `_wipe` helper does
   iterate the widened `OBJECT_KINDS` (including the four template domains),
   calling `backend.list_remote(kind)` for each — but `list_remote` for a
   template domain calls the genuinely-correct WS command `config_entries/
@@ -2067,21 +2069,20 @@ branch). Neither is on `test_run_live`'s path:
   broken WS command in one test's connection cannot corrupt a different
   test's separate connection.
 
-**Conclusion: most likely pre-existing/environmental, not an M10
-regression** — no code path connects the two. Left undiagnosed further
-(no CI log access, and `test_run_live.py`/its fixtures are unowned by this
-milestone) rather than guessing at a fix; flagging to the human/orchestrator
-per the standing instruction. If the orchestrator's next CI run reproduces
-it with full logs, the actual assertion/exception message will settle
-whether it's a `dev`-image regression (HA version drift in trace behavior)
-or flaky timing, neither of which this milestone's diff plausibly causes.
+**Conclusion: most likely pre-existing/environmental, not a
+regression from the template-helper work** — no code path connects the two.
+Left undiagnosed further (no CI log access, and `test_run_live.py`/its
+fixtures are unowned by this change) rather than guessing at a fix; flagged
+per the standing instruction. A CI run with full logs would settle whether
+it's a `dev`-image regression (HA version drift in trace behavior) or flaky
+timing, neither of which the template-helper change plausibly causes.
 
 **Merge-time addendum (2026-07-06):** the failure was subsequently root-caused and
 fixed on `main` — see §29 (`automation.trigger` targeted a nonexistent entity_id, then
 a trace-settle race, then HA's per-item_id trace retention across shadow
-delete/recreate). It was indeed unrelated to this milestone's diff, as diagnosed.
+delete/recreate). It was indeed unrelated to the template-helper change, as diagnosed.
 
-## 28. CI stabilization (`fix/ci-stabilization`): two unrelated root causes for 8 pushes of red `main`
+## 28. CI stabilization: two unrelated root causes for 8 pushes of red `main`
 
 Main was red on every push for a while; the two failures had nothing to do with each other and
 neither was actually the "HA behavior changed" story one might guess from the job names.
@@ -2127,8 +2128,8 @@ Fix, both layers as required:
 **Finding B — `integration · HA stable` and `integration · HA dev`, identically:
 `packages/hassle-cli/tests/integration/test_run_live.py::test_run_live_creates_shadow_triggers_
 and_cleans_up` — `TypeError: Context.__init__() got an unexpected keyword argument 'cwd'`.** The
-task description hypothesized an HA-dev trace/shadow behavior change or a timing/settle issue;
-neither is correct. `gh run view 28765559755 --log-failed` shows the identical `AssertionError:
+initial hypothesis was an HA-dev trace/shadow behavior change or a timing/settle issue;
+neither is correct. The CI log shows the identical `AssertionError:
 assert 1 == 0` / `TypeError` on **both** the `stable` and `dev` matrix legs, which rules out an
 HA-version-specific behavior change outright (a dev-only regression cannot reproduce byte-for-byte
 on stable too). The actual cause: the test called
@@ -2149,13 +2150,13 @@ replaced the invalid `cwd=` kwarg with an `os.chdir()`-around-the-call helper
 `test_cli_runner_invoke_rejects_cwd_kwarg_regression` (no network, runs in the ordinary unit job),
 pins down the root cause directly against a trivial `click.command()` so this class of mistake
 gets caught immediately in the unit job next time instead of silently no-op'ing an integration
-test. No DESIGN.md or MILESTONES.md change needed — DESIGN §10.4's
+test. No DESIGN.md change needed — DESIGN §10.4's
 intended behavior (shadow created, triggered, trace rendered, cleaned up) is unchanged; only the
-test's own Click API usage was wrong. Not independently re-verified against live HA in this PR (no
-Docker/HA access in this environment) — the orchestrator's CI run against both `stable` and `dev`
-is the actual green/red signal for this fix, per the task's definition of done.
+test's own Click API usage was wrong. Not independently re-verified against live HA in this pass (no
+Docker/HA access in this environment) — the live-integration CI run against both `stable` and `dev`
+is the actual green/red signal for this fix.
 
-## 29. `run --live` trace-settle race (`fix/run-live-trace-settle`): a real trace vanished silently
+## 29. `run --live` trace-settle race: a real trace vanished silently
 
 **The finding.** Once Finding B (§28) was fixed and `run --live`'s shadow-automation body actually
 executed against real HA, a new, legible failure appeared identically on `HA stable` and `HA dev`:
@@ -2207,13 +2208,13 @@ had it right. The bug was purely the missing poll/no-feedback path, not a parame
   the trace/`call_service` surface `FakeBackend` doesn't have). The one integration test's
   assertion was tightened from the bare word `"trace"` to a structural check (`action/0` step path
   present, the explicit-warning text absent) plus the mirror assertion in the "never appears" case.
-- No DESIGN.md/MILESTONES.md change: DESIGN §10.4 point 3 already specified a rendered timeline;
-  this fixes an implementation gap, not a design gap. Not re-verified against live HA in this PR
-  (no Docker/HA access here) — the orchestrator's CI run is the actual green signal.
+- No DESIGN.md change: DESIGN §10.4 point 3 already specified a rendered timeline;
+  this fixes an implementation gap, not a design gap. Not re-verified against live HA in this pass
+  (no Docker/HA access here) — the live-integration CI run is the actual green signal.
 
-### 27 addendum (`fix/run-live-enabled-shadow`): the real root cause was `entity_id` targeting, not disabled-automation semantics
+### 27 addendum: the real root cause was `entity_id` targeting, not disabled-automation semantics
 
-**Round-2 CI evidence.** With §29's bounded poll + never-silent warning in place, the warning
+**Follow-up CI evidence.** With §29's bounded poll + never-silent warning in place, the warning
 fired cleanly on both `HA stable` and `HA dev`: a genuine 5-second poll, never a single trace. This
 proved the trace really never appears — not a race — and prompted the hypothesis that a *disabled*
 shadow automation (`initial_state: off`, DESIGN §10.4 point 1's original mechanism) might not
@@ -2249,7 +2250,7 @@ symptom was real and had a different, definitive cause.
   why it was still worth making.)
 
 **The actual root cause: already-documented Hassle-side bug, §10.2's exact quirk.** §10.2 above
-(from the original M0.V spike) states plainly: *"the automation `entity_id` is `slug(alias)`, not
+(from the original verification pass) states plainly: *"the automation `entity_id` is `slug(alias)`, not
 `slug(id)` … Enumerate/trigger by matching `attributes.id`, never by assuming `automation.<id>`."*
 `hassle_cli.commands.run_live_command.execute_live_run`'s `trigger_fn` did exactly the thing this
 note warns against:
@@ -2269,7 +2270,7 @@ without needing the disabled-automation hypothesis at all, and explains why it's
 exercised until the `cwd=` bug (§28) was fixed and the shadow flow ran against real HA for the
 first time.
 
-**Fix (both parts landed together, `fix/run-live-enabled-shadow`):**
+**Fix (both parts landed together):**
 - `hassle_cli/run_live.py`'s `build_shadow_config`: the shadow is now created **enabled** (no
   `initial_state` key at all) with its trigger list replaced by a single event trigger on a
   run-unique event type (`never_fires_event_type()` → `hassle_shadow_never_<uuid4>`) that nothing
@@ -2281,21 +2282,21 @@ first time.
   `DirectBackend._alist_automations`'s own enumeration logic) before calling `automation.trigger` —
   replacing the naive, wrong `f"automation.{shadow_id}"`. `list_traces`/`get_trace`'s `item_id`
   usage was already correct (keyed by the bare config id, per §7/§10.2) and is unchanged.
-- DESIGN §10.4 point 1/2 and MILESTONES.md updated in the same series to describe the
-  enabled-shadow-with-never-fires-trigger design and the `entity_id`-resolution requirement (this
-  revises a previously-designed mechanism with live evidence, per the standing instruction).
-- Integration test strengthened (coordinator ask): the shadow's action now also increments a
-  counter helper created for the test (M0.V pattern), and the test asserts the counter's value
+- DESIGN §10.4 point 1/2 updated to describe the enabled-shadow-with-never-fires-trigger design
+  and the `entity_id`-resolution requirement (this revises a previously-designed mechanism with
+  live evidence, per the standing instruction).
+- Integration test strengthened: the shadow's action now also increments a
+  counter helper created for the test, and the test asserts the counter's value
   changed — separating "the service call was accepted" from "the automation's action actually
   executed," the exact ambiguity that let this hide as long as it did. Unit tests updated for the
   new shadow shape (`test_build_shadow_config_replaces_triggers_with_never_fires_event`,
   `test_never_fires_event_type_is_unique_per_call`) and for the entity_id-resolution fix
   (`test_execute_live_run_uses_bare_automation_id_not_entity_id_for_trace_lookup`'s assertion now
   pins the REAL resolved entity_id, not the old naive one).
-- Not re-verified against live HA in this PR (no Docker/HA access here) — the orchestrator's CI run
-  against `HA stable` + `HA dev` is the actual green signal.
+- Not re-verified against live HA in this pass (no Docker/HA access here) — the live-integration CI
+  run against `HA stable` + `HA dev` is the actual green signal.
 
-### 27 addendum, round 3 (`fix/run-live-fixture-condition`): the entity_id fix worked; the remaining failure was pure test fixture
+### 27 addendum, round 3: the entity_id fix worked; the remaining failure was pure test fixture
 
 **Round-3 CI evidence.** With the enabled-shadow + real-`entity_id` fix from the previous round
 landed, the full live pipeline executed for the first time ever: shadow created enabled, entity
@@ -2327,16 +2328,16 @@ into deliberate, documented coverage of the entire §10.4 semantic surface in on
 A new unit test, `test_render_trace_timeline_failed_conditions_has_no_action_step`
 (`packages/hassle-cli/tests/test_run_command.py`), pins the rendering shape a `failed_conditions`
 trace actually produces (`trigger` + `condition/0` + `condition/0/entity_id/0` steps, no `action/*`
-step at all, per the M0.V §7 capture shape) — this is the local, network-free proof that the new
+step at all, per the original capture's §7 shape) — this is the local, network-free proof that the new
 integration test's phase-1 structural assertions (`"failed_conditions" in output`, `"action/0" not
 in output`) are checking something real rather than an unverified guess about HA's trace shape.
 No product code changed in this round — `render_trace_timeline`/`resolve_shadow_entity_id`/
 `build_shadow_config` were already correct; this closes out the last gap with a test fix only. Not
-re-verified against live HA in this PR (no Docker/HA access here) — the orchestrator's CI run is
+re-verified against live HA in this pass (no Docker/HA access here) — the live-integration CI run is
 the actual green signal, and is expected to be the first fully-green run of this test across all
-three rounds.
+three fix iterations.
 
-## 30. Category write-back on push-create — WS shapes now live-verified by CI (`m11/category-writeback`)
+## 30. Category write-back on push-create — WS shapes now live-verified by CI
 
 > **Corrections (2026-07-06, source-verified in §31):** (b) `config/entity_registry/
 > update` merges `categories` per scope server-side (not wholesale replace) — the
@@ -2344,7 +2345,7 @@ three rounds.
 > delete` exists; (d) one entity CAN carry categories in multiple scopes at once.
 
 > **Post-merge status (2026-07-06):** the caveats below were written before the integration
-> suite ran. PR #3's CI subsequently ran `tests/integration/test_live_category_writeback.py`
+> suite ran. CI subsequently ran `tests/integration/test_live_category_writeback.py`
 > green on BOTH HA images (stable + dev) on the first attempt, which live-confirms:
 > `config/category_registry/create`'s `{scope, name}` argument shape, the category assignment
 > landing in the entity-registry row's `categories` map, the slug-reuse (no-duplicate) path,
@@ -2354,7 +2355,7 @@ three rounds.
 > unverified: `config/category_registry/delete`'s existence (teardown suppresses errors, so a
 > green run proves nothing either way).
 
-**Scope.** M11 is the reverse of §22's pull-side category placement: when `hassle push` CREATEs a
+**Scope.** This is the reverse of §22's pull-side category placement: when `hassle push` CREATEs a
 brand-new automation/script whose source file matches the `automations/<slug>.py` /
 `scripts/<slug>.py` shape (and isn't the `misc.py` fallback), Hassle assigns the matching HA UI
 category to the new object — creating the category first if none exists yet. Implemented in
@@ -2364,7 +2365,7 @@ existing/adopted objects' categories are never retroactively touched, since this
 module is only ever invoked from the CREATE branch).
 
 **Two new WS commands, neither previously used/captured anywhere in this codebase — inferred from
-reading HA core's source, NOT re-verified against a live instance in this PR (same caveat class as
+reading HA core's source, NOT re-verified against a live instance in this pass (same caveat class as
 §22's own "not live-verified" flag for `category_registry/list`'s `scope` param; no Docker/HA
 access in this sandbox):**
 
@@ -2386,7 +2387,7 @@ access in this sandbox):**
   server-side instead, the client-side merge here is harmless (idempotent) — only the "read first"
   round-trip would become unnecessary, not wrong.
 
-**New category naming.** MILESTONES.md only specifies that a missing category is "created
+**New category naming.** The original plan only specifies that a missing category is "created
 ... then assigned" — not what name it gets (there's no way to recover a category's original
 mixed-case display name from a bundle filename's slug). Chosen: `hassle.ir.keys.humanize_slug`
 (`"automatic_hvac"` → `"Automatic Hvac"`), a best-effort display name, not a round-trip guarantee —
@@ -2424,27 +2425,27 @@ rolled test `Backend` stub without it simply skips write-back with no warning):*
 category_id)`, `categories_for(kind, identity)` (test/CLI-facing lookup, not used by
 `attempt_category_writeback` itself).
 
-**No F2/Backend Protocol change.** Per MILESTONES R5, since the additive-method pattern (not a
-Protocol change) was sufficient, MILESTONES.md's F2 section is untouched.
+**No F2/Backend Protocol change.** Per R5, the additive-method pattern (not a
+Protocol change) was sufficient, so the frozen Protocol section needed no update.
 
-**Test coverage:** `packages/hassle-core/tests/test_category_writeback.py` (the four milestone
-tests, `FakeBackend`-only, `apply_plan`-level), `packages/hassle-core/tests/
+**Test coverage:** `packages/hassle-core/tests/test_category_writeback.py` (`FakeBackend`-only,
+`apply_plan`-level), `packages/hassle-core/tests/
 test_direct_backend_category_writeback.py` (WS payload shapes for `create_category`/
 `assign_category`, monkeypatched `_client`, no network), `packages/hassle-cli/tests/
 test_push_category_writeback.py` (end-to-end `hassle push` against `FakeBackend`, including the
-warning text in `hassle push`'s stdout), and — added in the round below —
+warning text in `hassle push`'s stdout), and — added below —
 `packages/hassle-core/tests/integration/test_live_category_writeback.py` (real Docker HA, both
 `stable`/`dev`).
 
-### 30 addendum: integration coverage added, one settle-race fixed pre-emptively (round 2, same PR)
+### 30 addendum: integration coverage added, one settle-race fixed pre-emptively
 
-**Why this addendum exists.** MILESTONES.md's own text ends with "CI integration verifies
-live" — the first round of this PR shipped only unit tests (`FakeBackend`-level and
+**Why this addendum exists.** The original plan's own text ends with "CI integration verifies
+live" — the first pass at this feature shipped only unit tests (`FakeBackend`-level and
 monkeypatched-`_client`-level), which never actually drives `config/category_registry/create` or
-`config/entity_registry/update` against a real instance. Given M10's own history (§26.0-§26.10:
-six CI rounds where source-inferred flow shapes turned out wrong), shipping M11 without live
-coverage of its own two newly-inferred WS commands would repeat exactly that mistake. Flagged by
-review before merge; fixed in this same PR/commit rather than a follow-up.
+`config/entity_registry/update` against a real instance. Given the template-helper work's own
+history (§26.0-§26.10: several rounds of CI where source-inferred flow shapes turned out wrong),
+shipping this feature without live coverage of its own two newly-inferred WS commands would repeat
+exactly that mistake. Flagged before merge; fixed in the same change rather than a follow-up.
 
 **Added:** `test_live_category_writeback.py`, four tests (module docstring has the full list) —
 create-and-assign with no pre-existing category, reuse of an existing matching category (never
@@ -2490,10 +2491,10 @@ the poll is harmless (succeeds on its first iteration) and this note should be u
 now covered by tests that will confirm or refute them once CI runs): whether
 `config/category_registry/create`'s exact `{scope, name}` argument shape and
 `config/entity_registry/update`'s wholesale-replace-vs-merge `categories` semantics match what
-this section infers. If CI finds either wrong, fix `DirectBackend` + this section in the same PR
-as §26 did, and downgrade the corresponding unit test's docstring claim accordingly.
+this section infers. If CI finds either wrong, fix `DirectBackend` + this section together, as §26
+did, and downgrade the corresponding unit test's docstring claim accordingly.
 
-## 31. M15 research: HA UI categories — which object kinds, which scopes, and can helpers round-trip? (source-verified, core `dev` + `2026.7.1` + `2026.2.3`, frontend `dev` + `20260624.4` + `20260226.0`)
+## 31. HA UI categories research: which object kinds, which scopes, and can helpers round-trip? (source-verified, core `dev` + `2026.7.1` + `2026.2.3`, frontend `dev` + `20260624.4` + `20260226.0`)
 
 > **Verification method.** All claims below were read directly from GitHub source
 > (`gh api .../contents/... -H "Accept: application/vnd.github.raw"`) of
@@ -2620,8 +2621,8 @@ merges per scope before `attr.evolve` runs (§31.3), and `None` unsets a single 
 This is exactly the contingency §30 itself pre-declared: `DirectBackend
 ._aassign_category`'s read-then-client-side-merge is harmless/idempotent, only the
 "read first" round-trip is unnecessary. It could be simplified to send just
-`{scope: category_id}`, and gains a free "unset" primitive (`{scope: None}`) if M15
-ever needs category *removal*.
+`{scope: category_id}`, and gains a free "unset" primitive (`{scope: None}`) if a
+future pass ever needs category *removal*.
 
 (c) **§30 addendum's open item — `config/category_registry/delete` — is now
 source-confirmed to exist**: `websocket_delete_category`, args
@@ -2640,7 +2641,7 @@ same-object two-scope test IS possible and would be the stronger I6 check.
 confirmed at §31.1 (`vol.Required("scope"): str` on all four commands), matching the
 2026-07-05 live verification note already appended to §22.
 
-### 31.6 Implications for M15 (category-first bundle layout)
+### 31.6 Implications for category-first bundle layout
 
 **Helper category grouping CAN round-trip through HA — it does not need to be
 source-only metadata.** Every helper Hassle manages (all nine storage-collection
@@ -2659,7 +2660,7 @@ cross-kind `<slug>.py`) per category; but (2) a mixed-kind category file
 category rows** (scopes `automation`/`script`/`helpers`, three distinct `category_id`s
 that merely share a name) — creation on push must happen per scope, and a user
 renaming the category in one HA table but not the others makes the three names
-diverge, so M15 needs an explicit policy (e.g. slug-match per scope independently, the
+diverge, so this needs an explicit policy (e.g. slug-match per scope independently, the
 same anchor §30 already uses, and surface divergence as a warning rather than guessing).
 One residual caveat: a config-entry helper whose entry is in an error state has no
 registry row, so category assignment for it fails into the existing
@@ -2674,7 +2675,7 @@ config-entry helpers goes via `config_entry_id` → registry row rather than the
 > lookup works unchanged for template helpers too; no `config_entry_id`
 > branch was needed after all.
 
-### 31.7 M15 work item A: implementation notes (`m15/category-sync`)
+### 31.7 Implementation notes: category conflict-surfacing and unset semantics
 
 Two decisions the binding spec left to the implementer, recorded here per this
 doc's own convention:
@@ -2682,7 +2683,7 @@ doc's own convention:
 - **Conflict-surfacing mechanism.** The spec requires a local-move-vs-remote-
   recategorization conflict to be "surfaced as a conflict (I6), never silently
   overwritten" but doesn't mandate *how*. Implemented as an additive
-  `ApplyResult.category_conflicts: list[str]` (parallel to M11's
+  `ApplyResult.category_conflicts: list[str]` (parallel to §30's
   `category_warnings`), populated by the new `hassle.sync.category_move`
   module and printed by `hassle push` in red — **not** folded into the
   existing `PlanAction.CONFLICT`/`--accept-local`/`--accept-remote` machinery,
@@ -2692,7 +2693,7 @@ doc's own convention:
   config body). On a conflict the manifest's base `category` is left
   unchanged, so the identical conflict resurfaces on every subsequent
   push/pull until a human resolves it one way or the other (no CLI flag to
-  force a side yet — a natural follow-on, not required by work item A's test
+  force a side yet — a natural follow-on, not required by this change's test
   contract).
 - **`assign_category`'s signature widens to `category_id: str | None`**
   (`DirectBackend`/`FakeBackend`), with `None` meaning "unset this scope
@@ -2705,7 +2706,7 @@ doc's own convention:
   `FakeBackend`, same non-Protocol pattern as `list_categories`/
   `assign_category`), added so integration teardown can call the
   now-confirmed `config/category_registry/delete` directly instead of
-  reaching into `DirectBackend._client` privately — the pre-M15 teardown
+  reaching into `DirectBackend._client` privately — the earlier teardown
   fixture did the latter specifically because there was no public method for
   it yet.
 - **Pull-side manifest advance now also records `category`**
@@ -2716,15 +2717,15 @@ doc's own convention:
   instead of `None` (which would otherwise misfire as "moved locally" on the
   very first push after every pull).
 
-### 31.8 CI field failure on PR #10: `_acreate_template_helper` cached a flow_id, not the real entry_id (source-verified, `home-assistant/core` `dev` + `2026.7.1`)
+### 31.8 CI field failure: `_acreate_template_helper` cached a flow_id, not the real entry_id (source-verified, `home-assistant/core` `dev` + `2026.7.1`)
 
-**Symptom.** Both HA images in PR #10's integration matrix failed identically
+**Symptom.** Both HA images in the integration matrix failed identically
 on ONE test: `test_helper_category_assign_and_readback_storage_and_template`'s
 template-helper half raised `LookupError: no entity-registry row found for
 template_number:tank_level_<suffix> after waiting 10.0s`. The
 storage-collection half of the same test passed, and the same-object
 two-scope test passed — the failure was specific to the template-helper
-identity anchor introduced for M15.
+identity anchor introduced for the category-sync work.
 
 **Root cause, confirmed by reading source (not the CI log alone).**
 `_acreate_template_helper` (`hassle/backend/direct.py`) read the just-created
@@ -2751,8 +2752,8 @@ config entry's id as `result.get("entry_id", flow_id)` off the REST
 `result.get("entry_id", flow_id)` therefore ALWAYS took the fallback branch
 and silently cached `flow_id` — a real, truthy string, so nothing ever
 raised — as if it were the entry_id, for every template-helper CREATE this
-codebase has ever driven against real HA, since M10 first shipped. This was
-invisible until M15's category write-back needed `_template_entry_ids` to
+codebase has ever driven against real HA, since this shipped. This was
+invisible until the category write-back work needed `_template_entry_ids` to
 actually resolve a LIVE entity-registry row: `test_live_template_flow.py`'s
 own `entry_id_for(...) is not None` assertion is true for a flow_id just as
 much as a real entry_id, so it never caught this.
@@ -2777,14 +2778,14 @@ unchanged for template helpers too — the match VALUE is the cached
 `entry_id` instead of the object-key identity, but the lookup FIELD never
 needs to branch on kind at all. `DirectBackend._unique_id_to_match` is the
 one-line abstraction this collapses to; the `config_entry_id`-based
-`_entity_registry_matcher` branch from the first round of this PR is gone.
+`_entity_registry_matcher` branch from the earlier version of this fix is gone.
 
 **Fix.** `_acreate_template_helper` now reads `result.get("result") or {}`,
 then `entry_id` off THAT dict. `DirectBackend._aassign_category`/
 `categories_for` anchor on `unique_id`, matching either `identity` (every
 kind except `TEMPLATE_DOMAINS`) or the cached `entry_id` (`TEMPLATE_DOMAINS`).
 
-**Reviewer finding (round 2): no `flow_id` fallback on a missing
+**Follow-up finding: no `flow_id` fallback on a missing
 `result.entry_id` either.** The first version of this fix still had
 `entry_id = str(entry_json.get("entry_id") or flow_id)` — the EXACT same
 silent-wrong-cache bug class this whole section documents, just narrowed to
@@ -2806,8 +2807,8 @@ derives `entry_id_for` from `_alist_template_helpers`, which reads
 `config_entries/get`, a completely different, always-correctly-shaped code
 path never affected by this bug). As of this writing no real bundle has ever
 push-created a template helper against a persistent HA instance — the only
-place `_acreate_template_helper` has run at all is this milestone's
-ephemeral, single-run Docker CI containers — so no manifest migration is
+place `_acreate_template_helper` has run at all is ephemeral, single-run
+Docker CI containers — so no manifest migration is
 needed. Recorded here so a future reader investigating a stale/wrong
 `entry_id` doesn't have to re-derive this.
 
@@ -2834,7 +2835,7 @@ example JSON), is corrected too — `FlowStep.result` is FakeBackend's own
 internal test-log bookkeeping shape, never a literal wire-response mirror,
 since `FakeBackend` never parses JSON for this path at all.
 
-### 31.9 M15 work item B: implementation notes (`m15/category-layout`)
+### 31.9 Implementation notes: category-first bundle layout decisions
 
 Two decisions the binding spec (§"Binding layout decisions") left to the
 implementer, recorded here per this doc's own convention:
@@ -2923,21 +2924,21 @@ stays usable and testable offline — it inspects the resolved
 `uv run hassle --help`, even though its text mentions that as the thing the
 resolved state should make possible.
 
-## 33. Typed service namespaces + entity-method sugar — two coordinator-flagged stub-generator hardenings
+## 33. Typed service namespaces + entity-method sugar — two stub-generator hardenings
 
-**Milestone text vs. observed `main` behavior (recorded per CLAUDE.md's rule):**
-MILESTONES.md's M18 write-up describes today's mismatch as "calling
+**Design text vs. observed `main` behavior (recorded per CLAUDE.md's rule):**
+the original design text describes today's mismatch as "calling
 `e.cover.x.close_cover()` is a `TypeError`" -- verified against actual `main`
-(pre-M18) behavior, it is an `AttributeError` (`'EntityRef' object has no
+(pre-fix) behavior, it is an `AttributeError` (`'EntityRef' object has no
 attribute 'close_cover'`), since `EntityRef` had no `__getattr__` at all
-before this milestone (only the unrelated `.attr()` method). The test list's
+before this change (only the unrelated `.attr()` method). The test list's
 item 1 ("Regression pinning today's mismatch") is written against the real
-observed exception type, not the milestone prose's.
+observed exception type, not the original prose's.
 
 **Hardening 1 — partial-stub-package poisoning risk (reported, field
 evidence on a real bundle):** a `typings/hassle/` directory
-containing ONLY submodule stubs (`registry/__init__.pyi` from M3, and this
-milestone's new `services.pyi`) with no top-level `typings/hassle/__init__.pyi`
+containing ONLY submodule stubs (`registry/__init__.pyi`, and this
+change's new `services.pyi`) with no top-level `typings/hassle/__init__.pyi`
 risks pyright treating `hassle` as a namespace/partial stub package for that
 dotted path once a config's default `stubPath` (`"typings"`) picks it up --
 which can hide the REAL installed package's own top-level surface (every
@@ -2966,7 +2967,7 @@ though the failure mode itself didn't reproduce here.
 registry/__init__.pyi:67 "location" is not defined` on a real bundle):** real
 HA `get_services` field schemas mostly describe a field's shape via
 `selector: {<selector_type>: {...}}` (§6 above), not a flat `type:` string --
-`ServiceField.type` is `None` for most real captures, and the pre-M18 stub
+`ServiceField.type` is `None` for most real captures, and the earlier stub
 generator only ever consulted `type`, silently falling back to `str` for
 every selector-shaped field (safe, if imprecise -- this sandbox could not
 reproduce a bare-`location`-annotation leak from that code path specifically
@@ -2984,11 +2985,11 @@ impossible for the generator to ever emit a bare, unmapped type/selector-type
 word as an annotation. Regression-pinned in
 `test_registry_stubs_selector_types.py`, including a standalone pyright check
 over a generated stub containing a `location`-selector field (the class of
-test that would have caught the whole bug, per the coordinator's ask).
+test that would have caught the whole bug).
 
-## 34. M18 reviewer round: binding-module resolution for the `hassle.__init__.pyi` re-export stub (B1/B2/N1/N2)
+## 34. Binding-module resolution for the `hassle.__init__.pyi` re-export stub (B1/B2/N1/N2)
 
-Reviewer BLOCKED PR #17 on the coordinator-added `generate_hassle_reexport_stub`
+Review blocked merge on the newly-added `generate_hassle_reexport_stub`
 (§33 above). Two blocking findings, both fixed here; two non-blocking notes
 folded in alongside.
 
@@ -3088,7 +3089,7 @@ per name (wrapped in parens when it would overflow 100 columns, matching
 `ruff format`'s own convention) and renders `__all__` one name per line via
 the same category-then-alphabetical sort.
 
-## 35. Type-annotation truth pass (task #28, `fix/annotation-truth`): the DSL's own stub annotations rejected correct decompiled code
+## 35. Type-annotation truth pass: the DSL's own stub annotations rejected correct decompiled code
 
 **Field evidence** (a real bundle, Pylance *standard* mode — not an HA
 API disagreement, a DSL-internal typing bug; recorded here anyway per this
@@ -3157,7 +3158,7 @@ the full test suite proves it (`pytest`/`ruff`/`pyright --strict` all green,
 plus the new pyright-gate tests in
 `packages/hassle-dev/tests/test_annotation_truth_pyright_gate.py`).
 
-## 36. Task #30 (`ux/capture-notify-recipe`): actionable-notification cookbook recipe — a validator false positive found (not fixed, out of fence) and a real simulator gap (STOP, sub-item 3)
+## 36. Actionable-notification cookbook recipe — a validator false positive found (not fixed here) and a real simulator gap
 
 **Context:** building the public `capture_actions()`/`emit_actions(...)`
 seam (`hassle.compiler.recording`) and a `notify_mobile`/`action` cookbook
@@ -3172,7 +3173,7 @@ with notify_mobile(title="Title", message="Hello World"):
         cover.close_cover(target=e.cover.all_top)
 ```
 
-### 36.1 Validator false positive: `event.data` misread as an entity id (found, NOT fixed — out of this task's file fence)
+### 36.1 Validator false positive: `event.data` misread as an entity id (found, NOT fixed here)
 
 The recipe conditions each `choose()` branch on the wait-trigger's action id,
 which in real HA (and this simulator, once §36.2 below is addressed) is
@@ -3197,15 +3198,13 @@ means the substring `event.data` inside `wait.trigger.event.data.action`
 is misreported as an unknown entity.
 
 This is a real bug in `hassle/registry/extract.py`/`hassle/registry/
-validate.py` — both **outside this task's file fence** (task #30 owns
-`hassle/compiler/recording.py` + `hassle/compiler/control_flow.py`
-public-surface additions, `hassle/__init__.py` exports, and docs/cookbook
-generators only; M19 and other concurrent work own the rest of the
-compiler/decompiler surface, and the registry/validator modules belong to
-neither). Per this task's instructions ("if you must [touch scripts.py/
-decompiler], STOP and note it" — the same discipline applied here to
-`extract.py`/`validate.py`, which are equally out of scope): **not fixed
-here**, flagged for a follow-on fix instead.
+validate.py` — both **outside the scope of the change that found them**
+(that change touched `hassle/compiler/recording.py` +
+`hassle/compiler/control_flow.py` public-surface additions,
+`hassle/__init__.py` exports, and docs/cookbook generators only; the
+registry/validator modules belong to neither). Per the standing discipline
+of stopping and flagging rather than reaching outside a change's own scope:
+**not fixed here**, flagged for a follow-on fix instead.
 
 **Workaround used in the recipe** (`lib/notify_actions.py`,
 `_wait_action_id_var()`): spell the same variable read with bracket
@@ -3222,11 +3221,10 @@ looks like a HA object_id in an entity-reference-shaped context, or scoping
 the regex fallback to skip inside a `wait.`/`trigger.`/`repeat.`-rooted
 attribute chain) — flagged for whoever owns `hassle/registry/` next.
 
-### 36.2 Simulator gap: `wait_for_trigger([event(...)])` can never resume, and `wait.trigger` is never populated (STOP — sub-item 3 of this task)
+### 36.2 Simulator gap: `wait_for_trigger([event(...)])` can never resume, and `wait.trigger` is never populated
 
-Per this task's explicit instruction ("if the sim cannot yet evaluate the
-wait-variable condition, STOP on that sub-item and report exactly what's
-missing rather than shipping an untested recipe"): the simulator
+Per the standing discipline of stopping and reporting exactly what's missing
+rather than shipping an untested recipe: the simulator
 (`hassle.testing.actions`/`hassle.testing.engine`) cannot currently execute
 this recipe end-to-end. Two independent, compounding gaps, read from source
 before writing anything:
@@ -3258,9 +3256,9 @@ before writing anything:
    not the intended dict), so a `var(...).eq(...)` condition built on it
    could never evaluate `True`.
 
-**Consequence:** this task's sub-item 3 (a sim test firing
+**Consequence:** a sim test firing
 `mobile_app_notification_action` and asserting the matching branch's
-service ran) cannot be written as a genuinely passing test against the
+service ran cannot be written as a genuinely passing test against the
 CURRENT simulator — it would either hang (never resumed) or silently always
 take the `default`/no branch (condition never true). Per the STOP
 instruction, that specific test is NOT included; instead
@@ -3278,14 +3276,14 @@ event-carrying resume path, not just a `StateChange`); (b) populate
 sequence, so `wait.trigger....` template reads work in later actions,
 mirroring how `trigger_ctx`/`ctx.trigger_ctx` already work for the top-level
 trigger. Both changes are simulator-internal (`hassle/testing/actions.py`,
-`hassle/testing/engine.py`, `hassle/testing/triggers.py`) — outside this
-task's file fence; flagged here rather than worked around silently.
+`hassle/testing/engine.py`, `hassle/testing/triggers.py`); flagged here
+rather than worked around silently.
 
-## 37. Task #32 (`fix/sim-wait-resumption`): §36.2 simulator gap closed; §36.1 validator false positive fixed (narrowly)
+## 37. §36.2 simulator gap closed; §36.1 validator false positive fixed (narrowly)
 
-**Context:** closing the two gaps §36 flagged as out-of-fence/STOP for task
-#30, now squarely in this task's fence (`hassle/testing/`,
-`hassle/registry/extract.py`, and the cookbook recipe's sim test).
+**Context:** closing the two gaps §36 flagged as out of scope/STOP, now
+addressed directly (`hassle/testing/`, `hassle/registry/extract.py`, and the
+cookbook recipe's sim test).
 
 ### 37.1 §36.2 resolved: event-driven `wait_for_trigger` resumption + the `wait` variable
 
@@ -3324,7 +3322,7 @@ Both compounding gaps from §36.2 are fixed:
 - **Timeout semantics (item 3):** unchanged from the existing, already-correct
   mechanism — `AutomationEngine.check_due`'s deterministic fake-clock deadline
   (`run.wake_at`) still drives the timeout path (R8: no wall-clock); this
-  task only added the `wait` variable's population on that already-existing
+  change only added the `wait` variable's population on that already-existing
   path, per the same `_set_wait_satisfied`/`_set_wait_timed_out` call.
 - **A necessary companion fix, found while writing the cookbook branch-dispatch
   test (not a scope-creep — required for that test to pass without hanging
@@ -3388,7 +3386,7 @@ the bug is not accidental-safe, so the fix does not rely on that.)
 
 Verified narrow (both directions): `wait.trigger.event.data.action`,
 `trigger.event.data.action` (a bare `trigger.`-rooted read, not just the
-`wait.trigger...` spelling, per this task's instructions) no longer
+`wait.trigger...` spelling) no longer
 false-positive; `states('light.hallway')` and
 `is_state('event.doorbell', 'pressed')` (a genuine `event.*` domain entity in
 real entity position) still extract correctly. Tests:
@@ -3397,16 +3395,16 @@ test_extract_does_not_false_positive_on_wait_trigger_event_data_dotted`,
 `..._still_finds_real_entity_id_looking_strings_in_entity_position`,
 `..._does_not_false_positive_on_trigger_rooted_dotted_paths`.
 
-**Not done (left for a follow-on task, deliberately, per this
-task's file fence):** now that the dotted spelling (`wait.trigger.event.data.
+**Not done (left for a follow-on, deliberately, outside this change's
+scope):** now that the dotted spelling (`wait.trigger.event.data.
 action`) passes `validate_bundle` cleanly, `fixtures/cookbook/bundle/lib/
 notify_actions.py`'s `_wait_action_id_var()` bracket-subscript workaround
 COULD be simplified back to dotted attribute access. Not done here: that
-function lives outside this task's fence (`lib/notify_actions.py` is the
+function lives outside this change's scope (`lib/notify_actions.py` is the
 notify-recipe's own authoring surface, and the exact compiled `value_template`
 string it produces is asserted byte-for-byte by
-`packages/hassle-core/tests/test_capture_notify_recipe.py`, a task-#30-owned
-golden-shape test this task was not asked to touch). Flagged for a follow-on:
+`packages/hassle-core/tests/test_capture_notify_recipe.py`, a golden-shape
+test this change was not asked to touch). Flagged for a follow-on:
 switching the spelling back to dotted form is now purely cosmetic (both
 spellings render identically, and both now validate cleanly) and would need
 `test_capture_notify_recipe.py`'s asserted `value_template` strings updated
@@ -3415,9 +3413,11 @@ output anywhere) a `hassle-dev goldens --update` regen.
 
 ## 38. Group-helper config-entry flow shapes — captured live (a real HA instance, 2026-07-13)
 
-The `group` integration is the second config-entry helper family (M10 said
-"other config-entry helper domains (threshold, derivative, group, …) become
-mechanical follow-ons" — this is the group follow-on). Captured against a
+The `group` integration is the second config-entry helper family (the
+template-helper work's own follow-on note, docs/internals/backend-protocol.md
+§3.1.1, said "other config-entry helper domains (threshold, derivative,
+group, …) become mechanical follow-ons" — this is the group follow-on).
+Captured against a
 real live HA instance via the exact REST/WS endpoints §26.0 froze (flows opened
 read-only and DELETEd before any `create_entry`, the same thing the UI does
 when a dialog is opened and closed; ~25 real group entries enumerated and
@@ -3453,7 +3453,7 @@ No `unique_id` is settable (same §26.6 rule as template — the schema rejects
 extra keys); the entry `title` is set from `name` and is the identity
 correlator on read-back. Options flows re-present the SAME FORM STEP SHAPE
 (step_id = the flavor, no menu) with current values as suggested values —
-but **NOT the `name` field itself** (CI-corrected, PR #35, both HA `stable`
+but **NOT the `name` field itself** (CI-corrected, both HA `stable`
 and `dev`, §38.4 finding #1): the options-flow schema is `entities`/
 `hide_members`(+`all`/`type`) ONLY, exactly like template's own options-flow
 schema (§26.7 finding 2) — a group's title is not editable through the
@@ -3485,17 +3485,17 @@ Captured on a real HA instance (2026.6.x era). The sensor flavor's form showed
 ONLY `name`/`entities`/`hide_members`/`type` — HA core source has grown
 optional sensor-group fields (`ignore_non_numeric`, `unit_of_measurement`,
 `device_class`, `state_class`) in some versions; the CI integration matrix
-(HA stable + dev, M6 pattern) is the authority, per §0. If CI's schemas
-differ, widen the sensor kwargs there and record it here.
+(HA stable + dev, the live-integration pattern) is the authority, per §0. If
+CI's schemas differ, widen the sensor kwargs there and record it here.
 
-**Widened (`m21/sensor-group-fields`, 2026-07-15):** `group_sensor` now
+**Widened (2026-07-15):** `group_sensor` now
 models the four optional fields as explicit kwargs. Semantics (deliberately
 NOT the always-materialized `hide_members`/`all` rule, because these fields
 are optional in HA's own schema and version-dependent): an omitted kwarg
 stays out of the compiled options body entirely; a passed one is stored
 verbatim — **including an explicit `None`** (an `_UNSET` sentinel default
 carries the omitted-vs-explicitly-null distinction). The explicit-`None`
-case matters because it fixes an I3 latent break the M21 review found:
+case matters because it fixes an I3 latent break review found:
 `_declare_group_helper` used to drop every `None`-valued field from the
 body, so a wire options body storing an explicit null (a plausible HA
 read-back shape for an unset optional selector) would decompile to
@@ -3510,31 +3510,31 @@ widened; if CI ever shows optional fields on OTHER flavors, the same
 `_UNSET` pattern extends kwarg-by-kwarg (the `**fields` catch-all already
 round-trips unknown fields, explicit nulls included, in the meantime).
 
-**Follow-up finding (reviewer, `m21/sensor-group-fields` — recorded, not
+**Follow-up finding (recorded, not
 yet fixed):** the SAME drop-`None` body assembly survives at two sibling
 call sites, `hassle.compiler.helpers` (storage-collection builders) and
 `hassle.compiler.template_helpers._declare_template_helper`. The template
 one is the concrete concern: it uses `None` itself as the omitted-kwarg
 sentinel (every optional kwarg defaults to `None`, and `state=None` is
-additionally the decorator-form signal, M13), so it cannot distinguish
+additionally the decorator-form signal), so it cannot distinguish
 omitted from explicitly-null at all — and template sensors carry exactly
 the nullable optional fields (`unit_of_measurement`/`device_class`) that
 made the group version reachable. A wire template-helper options body
 storing an explicit null would today decompile to `field=None` and lose
 the field on recompile (same I3 break this section's group fix closed).
-Needs its own scoped work item (the `_UNSET` migration there must not
+Needs its own scoped follow-on (the `_UNSET` migration there must not
 disturb the `state=None` decorator-form contract); out of scope for the
-group_sensor item, recorded here so it isn't silently rediscovered.
+`group_sensor` fix above, recorded here so it isn't silently rediscovered.
 
-### 38.4 Implementation findings (M21 build) — places the M10 pattern did NOT transfer verbatim
+### 38.4 Implementation findings — places the template-helper pattern did NOT transfer verbatim
 
-Building the plugin surfaced genuine divergences from the M10
+Building the plugin surfaced genuine divergences from the
 template-helper template. Finding #1 below was CI-verified WRONG on the
-first PR round (both HA `stable` and `dev`, PR #35) and is corrected here in
+first attempt (both HA `stable` and `dev`) and is corrected here in
 place, struck through rather than deleted, per the standing "every bug
 becomes evidence, not silently erased" practice (cf. §17.5, §26.5's own
 identity-scheme correction). Findings #2-#3 remain source-informed only
-(§0: CI is the authority; #2 is exercised end-to-end by the same PR #35 run
+(§0: CI is the authority; #2 is exercised end-to-end by the same CI run
 and did NOT fail, #3 is not yet exercised by any integration test).
 
 1. ~~**The group options-flow schema RE-PRESENTS THE SAME FORM as create,
@@ -3556,7 +3556,7 @@ and did NOT fail, #3 is not yet exercised by any integration test).
    after all (contradicting the live capture), this is the one place to
    revisit first.~~
 
-   **WRONG — CI-verified, PR #35, both HA `stable` and `dev`.** The verbatim
+   **WRONG — CI-verified, both HA `stable` and `dev`.** The verbatim
    failure:
 
    ```
@@ -3603,7 +3603,7 @@ and did NOT fail, #3 is not yet exercised by any integration test).
 
 2. **Sub-kind discrimination reuses the SAME entity-registry cross-reference
    mechanism as template, not the step_id fallback §38.2 offered as an
-   alternative.** `DirectBackend._template_entry_domains` (M10) was
+   alternative.** `DirectBackend._template_entry_domains` was
    generalized and renamed `_config_entry_entity_domains` — it was never
    actually template-specific to begin with (it doesn't filter by
    integration domain at all, just maps every config entry's single created
@@ -3618,12 +3618,12 @@ and did NOT fail, #3 is not yet exercised by any integration test).
    the step_id is genuinely unused in the shipped implementation, kept only
    as documentation of a fallback that would still work if the entity
    registry cross-reference method were ever unavailable. **CI-exercised,
-   PR #35, not falsified:** every test that lists/reads a group entry back
+   not falsified:** every test that lists/reads a group entry back
    (`test_group_cover_create_read_update_delete_cycle`'s read half,
    `test_group_binary_sensor_schema_shape_with_all_live`,
    `test_group_sensor_schema_shape_with_type_live`,
    `test_group_helper_plan_apply_create_then_noop_on_repush`) passed on both
-   `stable` and `dev` — the two failures that PR run found were both
+   `stable` and `dev` — the two failures that run found were both
    root-caused to finding #1 (the options-flow submission itself), not this
    mechanism.
 
@@ -3642,17 +3642,17 @@ and did NOT fail, #3 is not yet exercised by any integration test).
    `Backend`/plan/apply/decompile/validate machinery does not depend on it
    at all, only category assignment does.
 
-**A fourth item, not a divergence but new work with no M10 analogue:** a
+**A fourth item, not a divergence but new work with no template-helper analogue:** a
 group helper's own `entities=` list is validated for unknown member entities
 by a NEW function, `hassle.registry.validate.
 _validate_group_entities` — `hassle.registry.extract.extract_references`
-(the M3 walker `_validate_references` reuses for every other kind) only ever
+(the walker `_validate_references` reuses for every other kind) only ever
 descends into an object's `triggers`/`conditions`/`actions` sections, and
 neither a template helper's nor a group helper's IR body has any of those.
 A template helper's `state=` Jinja string was therefore never checked for
 entity references either (nothing new there) — but a group helper's
 `entities=` field is a literal list of entity ids, exactly the shape this
-milestone asks to validate, so it needed its own small walker rather than
+needed to validate, so it needed its own small walker rather than
 falling out of the existing one for free the way `_bundle_declared_keys`'s
 widening (a bundle's own group declares its produced entity, mirroring
 template) did.
