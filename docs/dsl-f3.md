@@ -363,6 +363,21 @@
 > three error additions the final total is **113 names** (verified at merge
 > time: `len(hassle.__all__) == 113`). No name collisions anywhere.
 
+> **Widened 2026-07-24 (`ux/script-responses`, owner request, F3-additive,
+> +0 names — `stop` was already frozen; only its accepted kwargs widened):**
+> `stop()` gained `response_variable=`, HA's script-response mechanism
+> (2023.7+): it names a RUN VARIABLE whose value becomes the script's
+> response — `variables(bid={...}); stop("done", response_variable="bid")`
+> — and a caller passing the already-frozen `service("script.<id>",
+> response_variable="result")` receives it (`{{ result.position }}`). The
+> simulator delivers responses end-to-end through its blocking
+> `script.<slug>` expansion (a callee that never stops with a response
+> yields `none`, where real HA errors — sim stays permissive, documented in
+> `hassle.testing.actions`). The decompiler round-trips the
+> `{"stop": ..., "response_variable": ...}` shape (I3). Motivation: the
+> owner's bundle refactors complex blind/HVAC logic into "blind auction"
+> behavior scripts, each returning a `{position, peek, priority}` bid dict.
+
 The public surface is exactly `hassle.__all__` (module`packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.
 
@@ -550,7 +565,8 @@ output form, independent of how the DSL source happened to be written).
   are the same residue-coverage round-2 ADDITION, keyword-only so they never
   collide with a duration unit.
 - `variables(**kwargs)` — a `variables` action.
-- `stop(message=None, *, error=None)` — a `stop` action.
+- `stop(message=None, *, error=None, response_variable=None)` — a `stop`
+  action; `response_variable=` returns a script response (`ux/script-responses`).
 - `fire_event(event_type, **event_data)` — the fire-event **action** (distinct
   from the `event` **trigger** builder below).
 

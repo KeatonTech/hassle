@@ -129,6 +129,12 @@ class ActionContext:
     #: script error fails the caller's service call), unlike a plain `stop`
     #: (normal completion from the caller's point of view).
     halted_by_error: bool = False
+    #: The value of the run variable named by a `stop` action's
+    #: `response_variable` (HA script responses, `ux/script-responses`):
+    #: a CALLER whose `script.<slug>` service call carries its own
+    #: `response_variable` receives this under that name. None until (and
+    #: unless) such a stop runs.
+    response: Any = None
 
     def template_context(self, *, repeat: dict[str, Any] | None = None) -> dict[str, Any]:
         ctx = dict(self.variables)
@@ -342,6 +348,10 @@ def _run_one(
     if "stop" in action:
         if action.get("error"):
             ctx.halted_by_error = True
+        if "response_variable" in action:
+            # HA: the named RUN VARIABLE's value becomes the script's
+            # response, delivered to a caller that asked for one.
+            ctx.response = ctx.variables.get(str(action["response_variable"]))
         return False
     if "event" in action:
         # fire_event action: recorded like a service call under a synthetic
@@ -437,6 +447,13 @@ def _maybe_expand_script_call(
         script_call_depth=ctx.script_call_depth + 1,
     )
     completed = yield from run_actions(sequence, callee_ctx)
+    caller_response_variable = action.get("response_variable")
+    if caller_response_variable is not None:
+        # HA script responses: the callee's stop(response_variable=...)
+        # value lands in the caller's variables under the CALLER's name.
+        # None when the callee never returned one (real HA errors there;
+        # the simulator stays permissive and templates see `none`).
+        ctx.variables[str(caller_response_variable)] = callee_ctx.response
     if not completed and callee_ctx.halted_by_error:
         ctx.halted_by_error = True
         return False

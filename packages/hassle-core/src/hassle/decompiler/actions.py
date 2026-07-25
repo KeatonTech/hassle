@@ -794,7 +794,7 @@ def _wait_template(body: dict[str, Any]) -> list[str]:
 
 
 def _stop(body: dict[str, Any]) -> list[str]:
-    known = {"stop", "error"}
+    known = {"stop", "error", "response_variable"}
     if not set(body) <= known:
         return _raw_action(body)
     parts: list[str] = []
@@ -803,6 +803,8 @@ def _stop(body: dict[str, Any]) -> list[str]:
         parts.append(repr(message))
     if "error" in body:
         parts.append(f"error={render_literal(body['error'])}")
+    if "response_variable" in body:
+        parts.append(f"response_variable={render_literal(body['response_variable'])}")
     return [f"stop({', '.join(parts)})"]
 
 

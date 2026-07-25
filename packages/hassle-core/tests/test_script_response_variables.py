@@ -92,7 +92,7 @@ def test_stop_with_response_decompile_recompiles_to_identical_ir() -> None:
     }
     obj = parse(config, kind="script", key_hint="bidder")
     source = decompile_bundle({obj.object_key(): obj})
-    assert "response_variable='bid'" in source
+    assert 'response_variable="bid"' in source
 
     import tempfile
 

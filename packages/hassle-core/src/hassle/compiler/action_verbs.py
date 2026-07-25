@@ -24,15 +24,26 @@ class _RawAction:
         return self._body
 
 
-def stop(message: str | None = None, *, error: bool | None = None) -> None:
+def stop(
+    message: str | None = None,
+    *,
+    error: bool | None = None,
+    response_variable: str | None = None,
+) -> None:
     """Record a ``stop`` action (DESIGN §5.5 action primitives).
 
     Emits ``{"stop": <message>}`` (HA's message-only form) or, when ``error=``
     is given, the extended ``{"stop": <message>, "error": <bool>}`` form.
+    ``response_variable=`` (F3-additive widening, `ux/script-responses`)
+    names a run variable whose VALUE becomes the script's response -- HA's
+    script-response mechanism (2023.7+): a caller passing
+    ``response_variable=`` on the ``script.<id>`` service call receives it.
     """
     body: dict[str, Any] = {"stop": message or ""}
     if error is not None:
         body["error"] = error
+    if response_variable is not None:
+        body["response_variable"] = response_variable
     record_action(_RawAction(body), span=capture_span(depth=0))
 
 
