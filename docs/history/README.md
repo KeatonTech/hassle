@@ -36,7 +36,7 @@ The record uses internal shorthand. Decoder ring:
 | **"reviewer finding B1/N2…"** | Numbered findings from the review agent's pass on a milestone PR (B = blocking, N = non-blocking). |
 | **"CI round N" / "residue-coverage round N"** | Iterations of CI-driven fixing; residue rounds were decompiler-coverage hardening passes against a real HA export. |
 | **"owner"** | The project author, who made the binding product decisions recorded here. |
-| **"field report" / "BrandtCamp"** | Bug reports from the author's own live deployment — the first real installation. BrandtCamp was its bundle name (entity names since anonymized to the "kai" persona). |
+| **"field report"** | A bug report from the author's own live deployment — the first real installation (its entity names appear in fixtures anonymized to the "kai" persona). |
 | **coordinator / implementer / reviewer / fixture-wrangler** | The agent roles: an orchestrating session, milestone implementers, a review agent, and a fixtures/boilerplate agent. |
 | **`ux/<topic>`, `fix/<topic>`, `m<N>/<topic>`** | Branch-naming conventions for DSL-ergonomics work, bug fixes, and milestone work respectively. |
 | **§N references** | Sections of DESIGN.md (design) or [docs/internals/ha-api-notes.md](../internals/ha-api-notes.md) (empirical HA API findings, still a living reference). |

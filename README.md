@@ -1,5 +1,9 @@
 # Hassle
 
+[![CI](https://github.com/KeatonTech/hassle/actions/workflows/ci.yml/badge.svg)](https://github.com/KeatonTech/hassle/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+
 **H**ome **A**ssistant **S**cript **S**ync for **L**ocal **E**diting —
 Terraform for your home automations.
 
@@ -80,11 +84,11 @@ preserved in [`docs/history/`](docs/history/).
 uv tool install "git+https://github.com/KeatonTech/hassle#subdirectory=packages/hassle-cli"
 ```
 
-(Verified: `uv` resolves the sibling `hassle-core` package from the same repo
-checkout automatically — no extra index or `--find-links` needed. Not on PyPI
-yet; this is an install-from-git tool, same rationale as running any Terraform
-provider straight from its repo before a first tagged release. `pipx` works too,
-same syntax.)
+That tracks `main`; append `@v0.1.0` to the URL fragment's repo part to pin a
+release instead. `uv` resolves the sibling `hassle-core` package from the same
+repo checkout automatically — no extra index or `--find-links` needed. Not on
+PyPI yet, so this is an install-from-git tool for now; `pipx` works too, same
+syntax.
 
 Requires Python 3.12+. No Home Assistant add-on, no Supervisor, no second
 listening service — just this CLI talking to your HA instance's own REST/WebSocket

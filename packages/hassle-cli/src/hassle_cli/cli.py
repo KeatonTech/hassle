@@ -159,6 +159,7 @@ def _require_backend_config(root: Path) -> tuple[str, str]:
 
 
 @click.group()
+@click.version_option(package_name="hassle-cli", prog_name="hassle")
 @click.option(
     "--plain", is_flag=True, default=False, help="Plain-text output (no color/rich formatting)."
 )
