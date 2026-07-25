@@ -43,6 +43,14 @@ VSCODE_SETTINGS = {
 CI_WORKFLOW = """\
 name: hassle
 on: [push, pull_request]
+
+# `hassle validate`/`test` import and run this bundle's Python, so a pull
+# request runs its author's code on the runner. Nothing here needs write
+# access or secrets; if this repository is public, also enable "Require
+# approval for all external contributors" in Settings > Actions.
+permissions:
+  contents: read
+
 jobs:
   validate-and-test:
     runs-on: ubuntu-latest

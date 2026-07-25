@@ -12,6 +12,10 @@ concurrency:
 env:
   UV_VERSION: "0.11.26"
 
+# Least privilege: nothing here needs to write to the repository.
+permissions:
+  contents: read
+
 jobs:
   ci:
     name: lint · typecheck · unit · corpus

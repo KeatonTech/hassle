@@ -255,6 +255,14 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the engineering rules (tests
 first, golden-file discipline, compatibility contracts, error-message style)
 and the full set of verification gates.
 
+## Security
+
+Your HA token lives in your OS keyring, never in the bundle. Note that a
+bundle is executable Python, and that a committed bundle contains webhook IDs
+(which are bearer secrets) and a full map of your home — read
+[`SECURITY.md`](SECURITY.md) before publishing a bundle repository, and to
+report a vulnerability.
+
 ## License
 
 [MIT](LICENSE).

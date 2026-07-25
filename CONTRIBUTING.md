@@ -80,6 +80,15 @@ Python; and no local or UI edit is ever silently lost.
   `packages/hassle-cli/tests/test_readme_examples.py` — if you change the
   README or the CLI surface, that test tells you whether they still agree.
 
+## Security
+
+Report vulnerabilities privately — see [SECURITY.md](SECURITY.md), which also
+documents the trust boundaries you should keep in mind when changing the
+decompiler, the template engine, or anything that writes files during `pull`.
+Two invariants there are load-bearing and have dedicated regression tests:
+config fetched from Home Assistant must never reach generated source outside a
+literal position, and templates must render sandboxed.
+
 ## Project history
 
 The codebase was built test-first, milestone by milestone, largely by AI
