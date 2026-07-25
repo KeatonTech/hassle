@@ -3,7 +3,7 @@ sync engine (`compute_plan`/`apply_plan`) expects: `object_key -> (kind, config)
 
 Also resolves each object's `source_path` (bundle-relative) from its
 declaration-site span (`CompileResult.decl_span_for`), for `PlanEntry.source_path`
-(routes the pull engine's `SourceWriter` calls, docs/backend.md).
+(routes the pull engine's `SourceWriter` calls, docs/internals/backend-protocol.md).
 """
 
 from __future__ import annotations
@@ -38,19 +38,19 @@ def compile_local_objects(bundle_root: Path) -> tuple[ObjectMap, CompileResult]:
 def category_overrides_and_warnings(
     result: CompileResult,
 ) -> tuple[dict[str, str], list[str]]:
-    """MILESTONES M12: `hassle.sync.apply.apply_plan`'s `category_overrides`
-    map (bundle-relative source path -> exact display name), built from every
+    """`hassle.sync.apply.apply_plan`'s `category_overrides` map
+    (bundle-relative source path -> exact display name), built from every
     bundle file's `CATEGORY` global that actually slugifies to its own file
     stem -- alongside a list of warning strings for every file whose
     `CATEGORY` does NOT (the "write-back additionally ignores the global with
-    a warning" half of MILESTONES M12's binding semantics; the compile-time
+    a warning" half of this binding semantics rule; the compile-time
     Finding, `hassle.registry.validate`'s `category-slug-mismatch`, is the
     other half of that same rule, surfaced via `hassle validate`/`plan`
     instead of push's own warning stream).
 
     A mismatched file's `CATEGORY` is deliberately left OUT of the returned
     map (never passed through as an override) -- `apply_plan`'s fallback for
-    an entry with no override entry is exactly M11's `humanize_slug` guess,
+    an entry with no override entry is exactly `humanize_slug`'s guess,
     which is the correct "don't guess which side is right" behavior here.
     """
     overrides: dict[str, str] = {}
@@ -80,17 +80,17 @@ def source_path_for(bundle_root: Path, result: CompileResult, object_key: str) -
 
 
 def _category_source_path(object_key: str, registry: RegistrySnapshot) -> str | None:
-    """DESIGN §7.3's placement default, the category-registry half (MILESTONES
-    M15 work item B: root-level, cross-kind layout, docs/ha-api-notes.md
-    §31.6): an object's entity-registry entry (matched by `unique_id ==
-    identity`, the id<->unique_id anchor, docs/ha-api-notes.md §2) may carry a
+    """DESIGN §7.3's placement default, the category-registry half
+    (root-level, cross-kind layout, docs/internals/ha-api-notes.md §31.6): an object's
+    entity-registry entry (matched by `unique_id ==
+    identity`, the id<->unique_id anchor, docs/internals/ha-api-notes.md §2) may carry a
     UI category for its OWN scope (``"automation"``/``"script"`` for those two
     kinds, the shared ``"helpers"`` scope for all 13 helper kinds); if so,
     place it under root-level ``<slug(category name)>.py`` instead of the
     flat ``misc.py``.
 
-    **Placement = category, derived from the object's OWN scope**
-    (MILESTONES M15 binding semantics): the entity-registry lookup filters by
+    **Placement = category, derived from the object's OWN scope**: the
+    entity-registry lookup filters by
     `kind` (the real HA domain, e.g. `input_boolean`), but the CATEGORY lookup
     itself uses `kind`'s category-registry scope (`_SCOPE_FOR_KIND` --
     `automation`/`script` for those two kinds, `"helpers"` for every helper
@@ -116,22 +116,21 @@ def _category_source_path(object_key: str, registry: RegistrySnapshot) -> str | 
 def category_display_names_for_paths(
     object_keys: list[str], registry: RegistrySnapshot
 ) -> dict[str, str]:
-    """MILESTONES M12 (widened by M15 work item B to every object kind):
-    destination path -> that category's real HA display name, for every
+    """Destination path -> that category's real HA display name (applies to
+    every object kind), for every
     ``object_keys`` entry that has a UI-assigned category (the exact same
     `_category_source_path` anchor `default_source_path` already uses for
     placement -- this just also keeps the display NAME it would otherwise
     throw away, for `hassle pull` to emit as the new category file's
     `CATEGORY` global).
 
-    Only ever consulted by `hassle_cli.pull_apply.apply_pull_with_decompiler`
+    Only ever consulted by `hassle.sync.pull_apply.apply_pull_with_decompiler`
     for an ADOPT batch whose destination file does not already exist --
     i.e. this dict may (harmlessly) also contain paths for objects landing
     in an ALREADY-EXISTING category file; the caller is what decides whether
     the destination is actually new.
 
-    MILESTONES M15: when two objects of DIFFERENT scopes land on the SAME
-    root-level file (a mixed-kind category file), both resolve to the same
+    When two objects of DIFFERENT scopes land on the SAME
     slugified name here by construction (they only share a file because
     their own scope's category slugifies the same) -- so whichever is
     processed last simply confirms the same display name; no special
@@ -157,21 +156,20 @@ def category_display_names_for_paths(
 def default_source_path(object_key: str, *, registry: RegistrySnapshot | None = None) -> str:
     """Fallback path for a brand-new (adopted) object with no existing file.
 
-    MILESTONES M15 work item B (DESIGN §7.3, category-first layout): root-level
-    mixed-kind files. When `registry` is supplied and the object has a
-    UI-assigned category under its OWN scope's category-registry scope
-    (`_category_source_path`), it lands under root-level
-    ``<slug(category name)>.py`` -- the SAME file an automation/script/helper
-    with a same-named category in any of the other two scopes would land in
-    (placement is derived independently per object, from its own scope; it
-    just so happens a shared slug means a shared file). Otherwise (no
-    registry, or the object is uncategorized) it falls back to the single
-    root-level ``misc.py`` -- one shared uncategorized file for every kind,
-    replacing the old per-tree ``automations/misc.py`` / ``scripts/misc.py``
-    / ``helpers/misc.py`` trio (RETIRED shape; MILESTONES M15). After this
-    first placement the object stays wherever the user moves it (tracked by
-    the manifest); this is only the *initial* landing spot for an object
-    nobody has ever pulled before.
+    DESIGN §7.3, category-first layout: root-level mixed-kind files. When
+    `registry` is supplied and the object has a UI-assigned category under
+    its OWN scope's category-registry scope (`_category_source_path`), it
+    lands under root-level ``<slug(category name)>.py`` -- the SAME file an
+    automation/script/helper with a same-named category in any of the other
+    two scopes would land in (placement is derived independently per object,
+    from its own scope; it just so happens a shared slug means a shared
+    file). Otherwise (no registry, or the object is uncategorized) it falls
+    back to the single root-level ``misc.py`` -- one shared uncategorized
+    file for every kind, replacing the old per-tree ``automations/misc.py``
+    / ``scripts/misc.py`` / ``helpers/misc.py`` trio (retired shape). After
+    this first placement the object stays wherever the user moves it
+    (tracked by the manifest); this is only the *initial* landing spot for
+    an object nobody has ever pulled before.
     """
     if registry is not None:
         categorized = _category_source_path(object_key, registry)
@@ -199,10 +197,10 @@ def category_divergence_warnings(
     previous_source_paths: dict[str, str | None],
     new_source_paths: dict[str, str],
 ) -> list[str]:
-    """MILESTONES M15 §31.6.2's divergence policy: "if HA-side renames make
-    the scopes' names diverge for what was one file, pull places each object
-    by its OWN scope's category (files may split) and emits a divergence
-    warning naming the scopes -- never guesses a winner."
+    """The divergence policy: if HA-side renames make the scopes' names
+    diverge for what was one file, pull places each object by its OWN
+    scope's category (files may split) and emits a divergence warning
+    naming the scopes -- never guesses a winner.
 
     Placement itself (`_category_source_path`/`default_source_path`) already
     does the "place by own scope" half unconditionally -- it never needs to
@@ -220,10 +218,9 @@ def category_divergence_warnings(
     A single-kind split (every formerly-shared occupant is still one kind, or
     they still all land on the same new path) is not a scope divergence --
     ordinary same-scope re-categorization already has its own (per-object,
-    silent) handling; this warning is specifically for the CROSS-SCOPE case
-    the milestone calls out.
+    silent) handling; this warning is specifically for the CROSS-SCOPE case.
 
-    **Polish-batch item 4(a):** only warn when the OLD shared path was
+    Only warn when the OLD shared path was
     ITSELF category-derived (``category_shaped_stem(old_path) is not
     None``). A user who hand-grouped a mixed-kind file under a name that was
     never a category placement (``misc.py``, a nested `lib/`/`tests/`/`docs/`
@@ -288,9 +285,9 @@ def remote_objects_from_backend(backend: Any, kinds: list[str]) -> ObjectMap:
 def _module_path_for(source_path: str) -> str:
     """A bundle-relative ``.py`` file path -> the dotted module path an
     ``import`` statement would use (``"scripts/notify.py"`` ->
-    ``"scripts.notify"``) -- the M7.1 loader imports every bundle file this
+    ``"scripts.notify"``) -- the bundle loader imports every bundle file this
     way (recursive PEP 420 namespace packages, no ``__init__.py`` needed,
-    docs/ha-api-notes.md §17.9 RESOLVED), so this is just that same mapping
+    docs/internals/ha-api-notes.md §17.9 RESOLVED), so this is just that same mapping
     run forward instead of backward."""
     posix = Path(source_path).as_posix()
     if posix.endswith(".py"):
@@ -301,7 +298,7 @@ def _module_path_for(source_path: str) -> str:
 def build_script_refs(
     scripts: dict[str, Any], source_paths: dict[str, str]
 ) -> dict[str, ScriptRef]:
-    """Build the ``ux/shared-script-calls`` cross-reference table
+    """Build the shared-script-calls cross-reference table
     (``{script_object_id: ScriptRef}``) for every MANAGED script in a pull
     batch, from the same ``source_paths`` placement (DESIGN §7.3) the pull
     loop already computes for every object.
@@ -314,9 +311,9 @@ def build_script_refs(
     (for cross-file cycle detection). Naming collisions are resolved
     independently per destination file (a fresh ``used_names`` tracker per
     module path), matching how each file is actually decompiled on its own in
-    `hassle_cli.pull_apply` (one `decompile_bundle` call per destination).
+    `hassle.sync.pull_apply` (one `decompile_bundle` call per destination).
 
-    **Field-failure fix (``ux/shared-script-calls-fix``):** every ``ScriptRef``
+    Every ``ScriptRef``
     also carries ``is_shared_script`` -- whether ``obj`` actually decompiles
     to ``@shared_script`` (:func:`hassle.decompiler.codegen.
     script_is_shared_script`) rather than falling back to plain ``@script``

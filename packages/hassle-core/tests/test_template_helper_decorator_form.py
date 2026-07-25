@@ -1,24 +1,22 @@
-"""M13 test 1 + test 5 -- template-helper DECORATOR form.
+"""Template-helper DECORATOR form.
 
-Test 1 (golden DSL<->IR pair): `fixtures/dsl/template_helper_decorator_form/`
+Golden DSL<->IR pair: `fixtures/dsl/template_helper_decorator_form/`
 covers all four template domains in decorator form; `test_dsl_golden_pairs.py`
 already exercises it as an ordinary golden case (it is discovered generically
 from `fixtures/dsl/`). This file adds the byte-identical-IR-to-the-equivalent-
-call-form assertion the milestone text calls out explicitly, plus the
+call-form assertion, plus the
 decorator's own contract (zero-arg body, `TemplateExpr`/`str` return only --
-DESIGN §5.4/§5.7 M13 extension).
+DESIGN §5.4/§5.7 extension).
 
-Test 5 (bad decorator body -> R6 compile error, snapshot-tested):
+Bad decorator body -> compile error stating what/where/fix, snapshot-tested:
 `TemplateHelperDecoratorBodyError` for the three ways a decorated function can
 misbehave -- declared parameters, a recording-verb call (naturally surfaces as
-`NoRecordingContextError`, itself already R6/snapshot-tested elsewhere), and a
+`NoRecordingContextError`, itself already snapshot-tested elsewhere), and a
 non-`TemplateExpr`/`str` return value.
 """
 
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
 
 import pytest
@@ -28,6 +26,7 @@ from hassle.compiler import NoRecordingContextError, TemplateHelperDecoratorBody
 from hassle.compiler.bundle import compile_bundle
 from hassle.compiler.template_helpers import reset_declared_template_helpers
 from hassle.registry import entities as e
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 FIXTURE = (
     Path(__file__).resolve().parents[3]
@@ -44,20 +43,16 @@ CALL_FORM_FIXTURE = (
     / "bundle"
 )
 
+
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 @pytest.fixture(autouse=True)
@@ -111,7 +106,7 @@ def test_decorator_form_identity_is_still_slug_of_name() -> None:
 
 
 def test_decorator_form_matches_hand_written_call_form_ir_shape() -> None:
-    """Golden-pair equivalence (milestone text): the decorator fixture's
+    """Golden-pair equivalence: the decorator fixture's
     `template_sensor:average_temp` IR has the exact same KEYS (and non-state
     values) as the call-form fixture's own `template_sensor:average_temp` --
     only `state=`'s Jinja text differs (a different, but equivalent,
@@ -142,7 +137,7 @@ def test_decorator_form_reuses_write_target_validation() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 5: bad decorator body -> R6 compile error, snapshot-tested.
+# Bad decorator body -> compile error stating what/where/fix, snapshot-tested.
 # ---------------------------------------------------------------------------
 
 
@@ -196,7 +191,7 @@ def test_decorator_calling_a_recording_verb_raises_no_recording_context_error() 
     """A `service(...)` call inside a decorator body has nowhere to record
     into (the decorator form calls the function directly, no active
     recorder) -- this is `NoRecordingContextError`, not a NEW error class;
-    already R6/snapshot-tested (`test_no_recording_context...`), asserted
+    already snapshot-tested (`test_no_recording_context...`), asserted
     here as belt-and-suspenders that the decorator form actually reaches that
     same trap rather than silently swallowing the call."""
     with pytest.raises(NoRecordingContextError):
@@ -208,7 +203,7 @@ def test_decorator_calling_a_recording_verb_raises_no_recording_context_error() 
 
 
 def test_decorator_body_user_exception_is_chained_under_decorator_body_error() -> None:
-    """N2 (reviewer, M13 PR #8): a plain (non-CompileError) exception raised
+    """A plain (non-CompileError) exception raised
     inside the decorated function -- e.g. a `ZeroDivisionError` from a bug in
     the user's expression math -- is chained under
     `TemplateHelperDecoratorBodyError` so the helper's `@template_sensor(...)`

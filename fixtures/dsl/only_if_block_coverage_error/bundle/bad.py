@@ -1,6 +1,6 @@
-"""Error case: an action recorded AFTER a `with only_if(...):` block closes
-(`ux/dsl-ergonomics`, item 1) -- automation-level conditions gate every
-action, so once the block form is used, every action must be inside it.
+"""Error case: an action recorded AFTER a `with only_if(...):` block closes --
+automation-level conditions gate every action, so once the block form is
+used, every action must be inside it.
 """
 
 from hassle import automation, only_if, service, state

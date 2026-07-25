@@ -3,7 +3,7 @@
 A fresh Home Assistant container starts un-onboarded. This drives the onboarding
 REST flow (create the owner user, complete the core_config/analytics/integration
 steps), then mints a long-lived access token over the WebSocket — exactly the
-capture recorded in docs/ha-api-notes.md §1.2. The token is written to the path
+capture recorded in docs/internals/ha-api-notes.md §1.2. The token is written to the path
 given as argv[1] (and echoed as ``HASSLE_TEST_HA_TOKEN=<token>`` on stdout so a
 workflow can append it to ``$GITHUB_ENV``).
 

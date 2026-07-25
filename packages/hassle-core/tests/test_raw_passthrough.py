@@ -5,7 +5,7 @@ automation/script; the containing object's whole-body `normalize_ha` pass
 (already applied by the core compiler) normalizes a legacy `service:` action
 to `action:`, while an inner trigger `platform:` discriminator is preserved
 verbatim -- exactly as HA's own storage normalization behaves
-(docs/ha-api-notes.md §10.1).
+(docs/internals/ha-api-notes.md §10.1).
 """
 
 from __future__ import annotations

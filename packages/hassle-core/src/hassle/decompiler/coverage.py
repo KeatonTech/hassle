@@ -1,5 +1,5 @@
-"""DSL-coverage metric (MILESTONES M2 test 3): what fraction of objects decompile
-with zero ``raw_*`` nodes.
+"""DSL-coverage metric: what fraction of objects decompile with zero
+``raw_*`` nodes.
 
 Walks each object's *decompiled source* (not the JSON) counting occurrences of
 the granular raw escape hatches (``raw_trigger``/``raw_condition``/``raw_action``)
@@ -10,7 +10,7 @@ the CI artifact (``hassle-dev decompile-coverage``) are judged against.
 Each exception is also tagged with a human-readable ``justification`` string
 (:func:`_justify`) so the tracked artifact (``hassle-dev decompile-coverage``'s
 JSON output) is self-describing rather than a bare, mysterious node count --
-sourced from the same reasons recorded in docs/ha-api-notes.md §14-§18 and the
+sourced from the same reasons recorded in docs/internals/ha-api-notes.md §14-§18 and the
 corresponding builder-module docstrings/comments.
 """
 
@@ -64,11 +64,12 @@ def _find_raw_nodes(source: str) -> list[tuple[str, str]]:
 
 
 # Justification strings, one per recognized raw-node shape, sourced verbatim
-# (paraphrased for brevity) from docs/ha-api-notes.md's M2 findings sections
-# and the builder-module comments that first noted each gap.
+# (paraphrased for brevity) from docs/internals/ha-api-notes.md and the builder-module
+# comments that first noted each gap.
 _JUSTIFICATION_DEVICE_TRIGGER = (
     "device trigger: no stable cross-integration schema (DESIGN §5.4 -- "
-    "hassle.compiler.triggers._trig_device), always raw by design, docs/ha-api-notes.md §5.4 note"
+    "hassle.compiler.triggers._trig_device), always raw by design, "
+    "docs/internals/ha-api-notes.md §5.4 note"
 )
 _JUSTIFICATION_DEVICE_CONDITION = (
     "device condition: no stable cross-integration schema (DESIGN §5.4 -- "
@@ -78,29 +79,29 @@ _JUSTIFICATION_INLINE_LEGACY_AUTOMATION = (
     "whole-object raw_automation fallback: this config uses the ancient inline "
     "single-trigger form (bare platform/entity_id/to at the automation's top level, no "
     "trigger:/triggers: wrapper at all) -- no @automation shape can express top-level "
-    "fields outside its option set (docs/ha-api-notes.md §14/§16)"
+    "fields outside its option set (docs/internals/ha-api-notes.md §14/§16)"
 )
 _JUSTIFICATION_TEMPLATED_DELAY = (
     "templated delay: the stored delay value is a Jinja template string ({{ ... }}), not a "
     "fixed duration -- the typed delay() builder only accepts int/str/dict duration forms "
-    "(docs/ha-api-notes.md §18), so a runtime-templated delay falls back to raw_action"
+    "(docs/internals/ha-api-notes.md §18), so a runtime-templated delay falls back to raw_action"
 )
 _JUSTIFICATION_UNKNOWN_TRIGGER = (
     "trigger shape not modeled by any typed builder or the 2026.7 purpose-trigger "
-    "vocabulary; falls back to raw_trigger so no data is dropped (DESIGN §5.8, I3)"
+    "vocabulary; falls back to raw_trigger so no data is dropped (DESIGN §5.8)"
 )
 _JUSTIFICATION_UNKNOWN_CONDITION = (
     "condition shape not modeled by any typed builder or the 2026.7 purpose-condition "
-    "vocabulary; falls back to raw_condition so no data is dropped (DESIGN §5.8, I3)"
+    "vocabulary; falls back to raw_condition so no data is dropped (DESIGN §5.8)"
 )
 _JUSTIFICATION_UNKNOWN_ACTION = (
     "action shape not modeled by any typed action/control-flow builder; falls back to "
-    "raw_action so no data is dropped (DESIGN §5.8, I3)"
+    "raw_action so no data is dropped (DESIGN §5.8)"
 )
 _JUSTIFICATION_UNKNOWN_AUTOMATION = (
     "whole-object shape not expressible as a typed @automation (fields outside its HA "
     "option set, or a use_blueprint shape the blueprint_automation() builder doesn't "
-    "recognize); falls back to raw_automation so no data is dropped (DESIGN §5.8, I3)"
+    "recognize); falls back to raw_automation so no data is dropped (DESIGN §5.8)"
 )
 
 
@@ -118,7 +119,7 @@ _DEVICE_CONDITION_MARKERS = (
 
 def _justify(builder_name: str, argument_text: str) -> str:
     """Best-effort human-readable reason a raw_* node was needed, sourced from
-    the documented findings in docs/ha-api-notes.md §14-§18."""
+    the documented findings in docs/internals/ha-api-notes.md §14-§18."""
     if builder_name == "raw_trigger":
         if any(marker in argument_text for marker in _DEVICE_TRIGGER_MARKERS):
             return _JUSTIFICATION_DEVICE_TRIGGER

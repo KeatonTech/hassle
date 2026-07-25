@@ -1,6 +1,5 @@
 """Regression: precedence-aware rendering must respect associativity, not
-just precedence level (reviewer-flagged blocker on M1.1's math-expression
-work). "Every bug found becomes a regression test before it is fixed" (R6).
+just precedence level.
 
 The bug: ``_binop`` rendered BOTH operands with the same ``min_prec``, so a
 same-precedence RIGHT child of a left-associative operator (``-``, ``/``,

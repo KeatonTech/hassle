@@ -1,4 +1,4 @@
-"""M18 milestone test 5 — the `hassle.services` stub generator.
+"""The `hassle.services` stub generator.
 
 Generated alongside the entities stub (same write path, `hassle stubs` and
 `hassle pull`'s auto-refresh both emit it): per-domain classes, typed kwargs
@@ -53,11 +53,10 @@ def test_services_stub_contains_typed_service_method(snapshot: RegistrySnapshot)
 
 
 def test_services_stub_service_functions_accept_target(snapshot: RegistrySnapshot) -> None:
-    """Regression test (task #28, annotation-truth pass): every generated
-    ``@staticmethod`` service function must accept a ``target=`` parameter --
-    the decompiler's own canonical namespace-form output
-    (``light.turn_on(target=e.light.hallway, ...)``, MILESTONES M18) was a
-    hard `reportCallIssue` ("No parameter named 'target'") in a real
+    """Regression: every generated ``@staticmethod`` service function must
+    accept a ``target=`` parameter -- the decompiler's own canonical
+    namespace-form output (``light.turn_on(target=e.light.hallway, ...)``)
+    was a hard `reportCallIssue` ("No parameter named 'target'") in a real
     decompiled bundle before this, since the underlying
     ``hassle.compiler.actions.service`` call this delegates to always accepts
     ``target=``."""
@@ -80,8 +79,8 @@ def test_services_stub_module_getattr_present(snapshot: RegistrySnapshot) -> Non
 def test_services_stub_module_getattr_suppresses_incomplete_stub(
     snapshot: RegistrySnapshot,
 ) -> None:
-    """N1 (reviewer non-blocking note): a bare module-level ``def
-    __getattr__`` trips pyright's ``reportIncompleteStub`` ("obscures type
+    """A bare module-level ``def __getattr__`` trips pyright's
+    ``reportIncompleteStub`` ("obscures type
     errors for module") -- unlike the entities stub, `hassle.services` is a
     REAL module at runtime (not a variable holding an instance), so the
     class-indirection trick the entities stub uses for ITS `__getattr__`
@@ -116,10 +115,10 @@ def test_services_stub_is_ruff_format_clean(snapshot: RegistrySnapshot, tmp_path
 
 
 def test_service_functions_accept_envelope_kwargs(snapshot: RegistrySnapshot) -> None:
-    """Owner field report (BrandtCamp prettify pass): every decompiled call
-    carries `metadata={}` and response services use `response_variable=` --
-    universal envelope kwargs, not snapshot fields. Both stub forms must
-    accept them or every real bundle turns red with reportCallIssue."""
+    """Every decompiled call carries `metadata={}` and response services use
+    `response_variable=` -- universal envelope kwargs, not snapshot fields.
+    Both stub forms must accept them or every real bundle turns red with
+    reportCallIssue."""
     from hassle.registry.stubs import generate_entities_stub
 
     for stub in (generate_services_stub(snapshot), generate_entities_stub(snapshot)):
@@ -146,9 +145,9 @@ def test_envelope_kwarg_skipped_when_field_claims_the_name() -> None:
 
 
 def test_keyword_field_names_are_skipped() -> None:
-    """HA really ships a `calendar.create_event` field literally named `in`
-    (owner field report, round 2): a Python keyword can never be passed as a
-    kwarg, and emitting it makes the whole generated .pyi a syntax error."""
+    """HA really ships a `calendar.create_event` field literally named `in`:
+    a Python keyword can never be passed as a kwarg, and emitting it makes
+    the whole generated .pyi a syntax error."""
     import ast
 
     from hassle.registry.snapshot import ServiceDef, ServiceField
@@ -173,8 +172,8 @@ def test_keyword_field_names_are_skipped() -> None:
 
 def test_entity_classes_expose_attr(snapshot: RegistrySnapshot) -> None:
     """`e.cover.x.attr("current_position")` is real DSL surface
-    (EntityRef.attr, M16) -- the stub classes must declare it or every use
-    is a reportAttributeAccessIssue (owner field report, round 2)."""
+    (EntityRef.attr) -- the stub classes must declare it or every use
+    is a reportAttributeAccessIssue."""
     from hassle.registry.stubs import generate_entities_stub
 
     assert "def attr(self, attribute: str) -> Any: ..." in generate_entities_stub(snapshot)
@@ -184,7 +183,7 @@ def test_namespace_target_accepts_purpose_targets(snapshot: RegistrySnapshot) ->
     """`light.turn_on(target=area("kitchen"))` is canonical decompiler output
     -- the namespace stubs' target= must accept the public target helpers'
     return types (AreaTarget/FloorTarget/LabelTarget/DeviceIdTarget), not
-    just str/sequence/dict (owner field report, round 2)."""
+    just str/sequence/dict."""
     stub = generate_services_stub(snapshot)
     assert "from hassle.compiler.purpose import" in stub
     assert (
@@ -196,9 +195,9 @@ def test_namespace_target_accepts_purpose_targets(snapshot: RegistrySnapshot) ->
 
 
 def test_entity_method_shadowing_str_gets_targeted_ignore() -> None:
-    """Entity classes subclass str (task #28 annotation-truth), so a service
-    named after a str method (media_player.join, owner field report round 3)
-    is an incompatible override -- suppressed per-method, never file-wide."""
+    """Entity classes subclass str, so a service named after a str method
+    (media_player.join) is an incompatible override -- suppressed per-method,
+    never file-wide."""
     from hassle.registry.snapshot import ServiceDef, ServiceField
     from hassle.registry.stubs import _service_method
 

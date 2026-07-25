@@ -6,7 +6,7 @@ HA's stored ``for:`` shape is a dict with all three unit keys present
 ``fixtures/configs/automation_purpose_trigger_entity_target.json``). The DSL
 accepts three input forms for ergonomics (a ``timedelta``, an ``"HH:MM:SS"``
 string, or a partial dict of units) and normalizes all of them to that exact
-dict shape so compiler output is byte-stable (R8) regardless of which form the
+dict shape so compiler output is byte-stable regardless of which form the
 user wrote.
 """
 
@@ -23,10 +23,10 @@ DurationLike = "timedelta | str | dict[str, Any]"
 
 class InvalidDurationError(CompileError):
     """A `for_=`/duration value is neither a timedelta, an `HH:MM:SS` string,
-    nor a dict of hours/minutes/seconds units (R6: what/where/fix -- M9
-    error-message audit finding. Previously a bare `ValueError`/`TypeError`
-    with no file:line and no fix hint, reachable from ordinary bundle
-    authoring, e.g. `state(x).to("on", for_="5 minutes")`)."""
+    nor a dict of hours/minutes/seconds units (what/where/fix, instead of a
+    bare `ValueError`/`TypeError` with no file:line and no fix hint,
+    reachable from ordinary bundle authoring, e.g.
+    `state(x).to("on", for_="5 minutes")`)."""
 
     def __init__(self, value: Any, span: Any = None) -> None:
         where = f" at {span.file}:{span.line}" if span is not None else ""

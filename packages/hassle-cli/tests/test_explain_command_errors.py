@@ -1,6 +1,6 @@
-"""M9 error-message audit finding: `hassle explain <object_key>` with an
-unknown key previously printed KeyError's re-quoted repr with no "Fix:"
-clause (R6)."""
+"""`hassle explain <object_key>` with an unknown key previously printed
+KeyError's re-quoted repr with no "Fix:" clause -- error messages must
+state what/where/fix."""
 
 from __future__ import annotations
 

@@ -1,26 +1,20 @@
-"""MILESTONES M7 test 4: `test_conflict_ux_snapshot` -- 3-way DSL diff output golden."""
+"""`test_conflict_ux_snapshot` -- 3-way DSL diff output golden."""
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+from hassle_dev.snapshots import check_snapshot
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    actual = actual.rstrip("\n")
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def test_dsl_diff_list_literal_is_not_mangled_by_rich_markup() -> None:
-    """Regression test (bug found while implementing `ux/triggers-in-decorator`):
-    `render_plan`'s conflict diff printed `dsl_diff`'s output through
+    """Regression test: `render_plan`'s conflict diff printed `dsl_diff`'s output through
     `console.print(diff_text, style="")` with Rich markup parsing left on.
     `diff_text` is arbitrary decompiled DSL source, not a markup string -- a
     literal `[...]` list in it (e.g. `triggers=[...]`, or a list-valued
@@ -177,11 +171,11 @@ def test_push_accept_remote_records_base_so_replan_is_refresh(
     git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
     """The non-interactive `--accept-remote` flag path records the same base
-    the interactive [r] prompt does (field report, BrandtCamp 2026-07-14:
-    an accept-remote that records nothing re-surfaces the IDENTICAL conflict
-    on every subsequent plan, training the owner to ignore prompts -- I6).
-    Base advances to the LOCAL side: next plan reads `refresh`, and push
-    leaves the kept remote untouched."""
+    the interactive [r] prompt does (regression: an accept-remote that
+    records nothing re-surfaces the IDENTICAL conflict on every subsequent
+    plan, training the user to ignore prompts -- no local or UI edit may be
+    silently lost). Base advances to the LOCAL side: next plan reads
+    `refresh`, and push leaves the kept remote untouched."""
     from hassle.sync.models import PlanAction
     from hassle_cli.cli import _build_plan
 
@@ -214,7 +208,7 @@ def hall_light_on_motion():
     actions = {e.object_key: e.action for e in plan.entries}
     assert actions.get("automation:hall_light_on_motion") is PlanAction.REFRESH, actions
     # A --yes push right now must not push the rejected local version over the
-    # kept remote (I6: the accepted UI edit is never silently lost).
+    # kept remote (no accepted UI edit is ever silently lost).
     assert cli(["push", "--yes"], cwd=git_repo).exit_code == 0
     assert backend.list_remote("automation")["hall_light_on_motion"]["alias"] == "UI edit"
 

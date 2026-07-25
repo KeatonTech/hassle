@@ -1,7 +1,7 @@
 {
   "id": "dismiss_reminder_automation",
   "alias": "Dismiss guest reminder",
-  "description": "Shape observed in a real UI-authored automation (ux/shared-script-calls, owner feedback): calls a managed script (declared fields) by its direct script.<object_id> action form, with the data dict matching every declared field and the metadata:{} every UI-saved action carries (docs/ha-api-notes.md §19.1).",
+  "description": "Shape observed in a real UI-authored automation: calls a managed script (declared fields) by its direct script.<object_id> action form, with the data dict matching every declared field and the metadata:{} every UI-saved action carries (docs/internals/ha-api-notes.md §19.1).",
   "triggers": [
     {
       "trigger": "state",

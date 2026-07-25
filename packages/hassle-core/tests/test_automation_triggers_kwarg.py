@@ -1,5 +1,5 @@
 """``triggers=`` decorator metadata — the new canonical DSL form (DESIGN §5.3/§5.5,
-docs/dsl-f3.md, task #10, F3-additive).
+docs/internals/dsl-extensions.md).
 
 ``@automation`` gains a ``triggers=`` keyword: a list of ``TriggerBuilder``
 objects (the same objects ``when()`` accepts), evaluated at decoration time
@@ -7,11 +7,12 @@ objects (the same objects ``when()`` accepts), evaluated at decoration time
 before the function body is ever invoked by the compiler). Semantics:
 ``triggers=`` and ``when()`` COMPOSE — the decorator list's triggers are
 recorded first, then any ``when()`` calls inside the body append after them,
-in call order. ``when()`` remains fully supported (F3 forbids removing it) and
-is still the right tool for a dynamically-built trigger list.
+in call order. ``when()`` remains fully supported (the frozen top-level DSL
+surface forbids removing it) and is still the right tool for a
+dynamically-built trigger list.
 
-Compile parity is the crux of this workstream: ``@automation(triggers=[...])``
-must produce byte-identical IR to the equivalent ``when(...)`` form.
+``@automation(triggers=[...])`` must produce byte-identical IR to the
+equivalent ``when(...)`` form.
 """
 
 from __future__ import annotations
@@ -151,7 +152,7 @@ def a():
 def test_triggers_kwarg_only_valid_on_automation_not_script(tmp_path: Path) -> None:
     # `script` has no triggers at all (HA scripts aren't triggered by
     # themselves); `triggers=` on `@script` must still be rejected as an
-    # unknown option, exactly like any other bogus kwarg (M1 test 5 contract).
+    # unknown option, exactly like any other bogus kwarg.
     import pytest
 
     from hassle.compiler.errors import UnknownAutomationOptionError

@@ -1,6 +1,6 @@
 {
-  "template_binary_sensor:keaton_home_beacon": {
-    "name": "Keaton Home Beacon",
-    "state": "{{ (states('sensor.keaton_watch_beacon_area') == 'Living Room') or (states('sensor.keaton_phone_beacon_area') == 'Living Room') }}"
+  "template_binary_sensor:kai_home_beacon": {
+    "name": "Kai Home Beacon",
+    "state": "{{ (states('sensor.kai_watch_beacon_area') == 'Living Room') or (states('sensor.kai_phone_beacon_area') == 'Living Room') }}"
   }
 }

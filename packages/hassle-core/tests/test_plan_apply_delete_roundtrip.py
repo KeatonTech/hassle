@@ -1,10 +1,10 @@
-"""Regression (R4): a `delete` planned by `compute_plan` actually applies.
+"""Regression: a `delete` planned by `compute_plan` actually applies.
 
-Bug found by the M6 core-loop integration test: `compute_plan` produced `delete`
-entries with no `remote_hash_at_plan`, but `apply_plan` re-verifies the remote
-hash before deleting (DESIGN §8.2). With the field unset, the re-verify saw
-``None != <live hash>`` and aborted every delete as spurious drift. No prior test
-ran a `compute_plan` delete entry through `apply_plan`, so it went unnoticed.
+Bug: `compute_plan` produced `delete` entries with no `remote_hash_at_plan`, but
+`apply_plan` re-verifies the remote hash before deleting (DESIGN §8.2). With the
+field unset, the re-verify saw ``None != <live hash>`` and aborted every delete
+as spurious drift. No prior test ran a `compute_plan` delete entry through
+`apply_plan`, so it went unnoticed.
 """
 
 from __future__ import annotations

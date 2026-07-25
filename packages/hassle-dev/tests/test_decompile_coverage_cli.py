@@ -1,9 +1,9 @@
-"""`hassle-dev decompile-coverage` — machine-readable coverage artifact (M2).
+"""`hassle-dev decompile-coverage` — machine-readable coverage artifact.
 
 Wired into CI as the >= 90% gate: the command analyzes the full fixture corpus,
 writes a JSON artifact listing per-fixture `raw_*` node counts, and exits
 non-zero if the clean fraction is below the gate. Each exception entry also
-carries a `justification` string (docs/ha-api-notes.md §14-§18) so the
+carries a `justification` string (docs/internals/ha-api-notes.md §14-§18) so the
 tracked artifact explains itself instead of being a bare, mysterious count.
 """
 
@@ -46,7 +46,7 @@ def test_decompile_coverage_writes_json_artifact(tmp_path: Path) -> None:
         assert exc["justification"].strip(), f"{exc['object_key']} has an empty justification"
 
     # Spot-check the four known corpus exceptions get their specific,
-    # documented reasons (docs/ha-api-notes.md §14-§18), not a generic fallback.
+    # documented reasons (docs/internals/ha-api-notes.md §14-§18), not a generic fallback.
     by_key = {exc["object_key"]: exc["justification"] for exc in report["exceptions"]}
     assert "device trigger" in by_key["automation:automation_device_trigger"]
     assert "device condition" in by_key["automation:automation_condition_device"]

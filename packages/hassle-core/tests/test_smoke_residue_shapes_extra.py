@@ -1,6 +1,6 @@
-"""Smoke-test task #8 -- residue coverage, round 3, final.
+"""Smoke test -- residue coverage, round 3, final.
 
-Field measurement of the owner's real 2026.7 bundle after round 2 landed: the
+Field measurement of a real 2026.7 bundle after round 2 landed: the
 ``raw_action`` count dropped 14 -> 7. Of the remaining 7, five are fixable
 (traced to two decompiler root causes below); two are device actions that stay
 raw by design (no stable cross-integration schema, same rationale as

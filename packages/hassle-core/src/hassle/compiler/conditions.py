@@ -1,4 +1,4 @@
-"""Classic condition builders + combinators (DESIGN §5.4) — triggers/conditions workstream.
+"""Classic condition builders + combinators (DESIGN §5.4).
 
 ``trigger_condition`` is the ``condition: trigger`` block referencing a trigger's
 ``id=`` (fixture: ``automation_condition_trigger.json``). ``any_of``/``all_of``/
@@ -50,8 +50,7 @@ class _CombinatorExpr:
         self._conditions = conditions
 
     def to_condition(self) -> dict[str, Any]:
-        # R6 bool-guard (M20, entity-first conditions milestone, absorbed
-        # scope item (c)): a plain `bool` among the combinator's conditions is
+        # Bool guard: a plain `bool` among the combinator's conditions is
         # always the classic `==`/`!=` mistake -- catch it here (evaluated
         # lazily, at compile time, same as every other condition builder)
         # rather than let `c.to_condition()` raise a bare `AttributeError`.
@@ -61,8 +60,8 @@ class _CombinatorExpr:
             # "unnecessary" against the DECLARED type -- but the whole point
             # is defending against a caller who ignored/couldn't satisfy that
             # annotation at runtime (an un-type-checked bundle file, or a
-            # `# type: ignore` at the call site, both real). The documented
-            # typing dance (M20, entity-first conditions milestone spec).
+            # `# type: ignore` at the call site, both real). Python itself
+            # does not enforce the annotation.
             if isinstance(c, bool):  # pyright: ignore[reportUnnecessaryIsInstance]
                 call = {"or": "any_of", "and": "all_of", "not": "not_"}.get(
                     self._keyword, self._keyword

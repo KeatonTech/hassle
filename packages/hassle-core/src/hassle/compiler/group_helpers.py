@@ -1,25 +1,25 @@
-"""Group-helper declarations (M21, mirrors M10's ``template_helpers.py``) --
+"""Group-helper declarations (mirrors ``template_helpers.py``) --
 the model/builder layer for the ``group`` config-entry domain.
 
 ``group_cover(name="Entryway Top", entities=["cover.a", "cover.b"])`` builds a
 :class:`~hassle.ir.models.GroupHelperConfig` for one of the twelve group
-domains (``hassle.ir.GROUP_DOMAINS``, F1-additive) and returns an
+domains (``hassle.ir.GROUP_DOMAINS``, additive to the frozen IR schema) and returns an
 :class:`~hassle.compiler.helpers.EntityRef`, exactly like the nine storage-
 collection helper builders in :mod:`hassle.compiler.helpers` -- same
 "import-and-reference pattern" (DESIGN §5.7), same prebuilt-object
 registration path into the active bundle registry.
 
 **Identity:** there is no ``id=``/``unique_id=`` kwarg, mirroring template
-helpers (docs/ha-api-notes.md §26.6/§38.1) -- real HA's `group` config flow
+helpers (docs/internals/ha-api-notes.md §26.6/§38.1) -- real HA's `group` config flow
 form schema rejects an unrecognized `unique_id` key outright. Identity is
 derived from ``name`` (required), mirroring the nine storage helpers' "id is
 a slug of name" rule -- the object key is ``"<group domain>:<slugify(name)>"``.
 
-**No decorator form.** Unlike the template-helper builders (M13), a group
+**No decorator form.** Unlike the template-helper builders, a group
 helper has no Jinja `state=` field to defer -- every group builder call is
 the plain, immediate call form: build + register right now, at the call site.
 
-**Three schema shapes (docs/ha-api-notes.md §38.1):** every flavor takes
+**Three schema shapes (docs/internals/ha-api-notes.md §38.1):** every flavor takes
 ``name=``/``entities=``/``hide_members=`` (default ``False``); three flavors
 (``group_binary_sensor``/``group_light``/``group_switch``) additionally take
 ``all=`` (default ``False``); ``group_sensor`` additionally takes a required
@@ -27,10 +27,11 @@ the plain, immediate call form: build + register right now, at the call site.
 stdev). ``hide_members``/``all`` are ALWAYS materialized explicitly in the
 compiled options body (never omitted just because they equal their default)
 -- HA's own options-flow read-back always returns them explicitly too, so
-this keeps a single canonical compiled form (I3/plan-noop, the same
-one-canonical-form rule §38.1 documents).
+this keeps a single canonical compiled form (a plan-noop requires
+compile(decompile(x)) == x, the same one-canonical-form rule §38.1
+documents).
 
-**Optional sensor fields (docs/ha-api-notes.md §38.3):** newer HA versions'
+**Optional sensor fields (docs/internals/ha-api-notes.md §38.3):** newer HA versions'
 `sensor` flavor schema has grown four OPTIONAL fields --
 ``ignore_non_numeric``/``unit_of_measurement``/``device_class``/
 ``state_class`` -- which ``group_sensor`` models as explicit kwargs. Unlike
@@ -42,12 +43,13 @@ body entirely, while an EXPLICITLY passed one lands in it verbatim --
 ``_UNSET`` sentinel default, not by ``None``: a wire options body can store
 an explicit null (HA's read-back for an unset optional selector), the
 decompiler reproduces it as ``field=None``, and recompiling must preserve it
-byte-stable (I3 -- the M21 review found the previous drop-``None`` body
-assembly would silently lose exactly that field).
+byte-stable -- an earlier drop-``None`` body assembly would silently lose
+exactly that field.
 
 ``entities`` is a list of entity ids of the flavor's own domain, in the
-EXACT order given -- never sorted/deduped (I3: order is caller-declared
-data). Groups may nest (a group whose members are themselves group
+EXACT order given -- never sorted/deduped (order is caller-declared data,
+and compile(decompile(x)) must equal x for any config). Groups may nest (a
+group whose members are themselves group
 entities) -- ``entities`` stores plain entity-id strings either way, no
 special-casing needed here or in the decompiler.
 
@@ -56,8 +58,8 @@ default (unlike ``hide_members=``/``all=``) -- Python itself raises
 ``TypeError`` on an omitted call, exactly the same "the signature IS the
 required-field check" pattern every ``hassle.compiler.helpers`` builder
 already uses for its own required ``id=`` kwarg. This differs from
-`template_number`/`template_select`'s `set_value=`/`select_option=` (M10,
-docs/ha-api-notes.md §26.11), which needed a dedicated compile-time
+`template_number`/`template_select`'s `set_value=`/`select_option=`
+(docs/internals/ha-api-notes.md §26.11), which needed a dedicated compile-time
 ``CompileError`` subclass because those two kwargs had to stay optional at
 the Python level (both call and decorator forms share one signature); a
 group builder has no decorator form to accommodate, so a required
@@ -79,7 +81,7 @@ class _UnsetType:
     """Sentinel type for "kwarg not passed at all" (module docstring's
     optional-sensor-fields paragraph) -- distinct from ``None``, which is a
     real wire value (an explicit null in the stored options body) and must
-    survive compile/decompile round trips verbatim (I3)."""
+    survive compile/decompile round trips verbatim."""
 
     def __repr__(self) -> str:  # pragma: no cover - debugging nicety only
         return "<UNSET>"
@@ -122,14 +124,13 @@ def _declare_group_helper(
         "name": name,
         # `list(...)`, not the caller's own list object: a defensive copy so a
         # later caller-side mutation of their own `entities=` list can never
-        # retroactively change an already-compiled/registered IR body (R8).
+        # retroactively change an already-compiled/registered IR body.
         "entities": list(entities),
         "hide_members": bool(hide_members),
         # Drop only the `_UNSET` sentinel (kwarg not passed), NEVER a real
         # `None`: an explicit null is wire data -- the decompiler emits
         # `field=None` for a stored null, and recompiling must reproduce it
-        # byte-stable (I3; the M21 review found dropping `None` here made
-        # exactly that round trip lossy).
+        # byte-stable (dropping `None` here would make that round trip lossy).
         **{k: v for k, v in fields.items() if v is not _UNSET},
     }
     helper = GroupHelperConfig.model_validate(body)
@@ -152,7 +153,7 @@ def group_binary_sensor(
     all: bool = False,
     **fields: Any,
 ) -> EntityRef:
-    """Declare a ``group_binary_sensor`` helper (M21, docs/ha-api-notes.md §38.1).
+    """Declare a ``group_binary_sensor`` helper (docs/internals/ha-api-notes.md §38.1).
 
     ``all=True`` mirrors HA's group "all entities must match" toggle (the
     group is ``on`` only when every member is ``on``, instead of the default
@@ -171,7 +172,7 @@ def group_binary_sensor(
 def group_button(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_button`` helper (M21, docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_button`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_button", name, entities=entities, hide_members=hide_members, **fields
     )
@@ -180,10 +181,10 @@ def group_button(
 def group_cover(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_cover`` helper (M21, docs/ha-api-notes.md §38.1).
+    """Declare a ``group_cover`` helper (docs/internals/ha-api-notes.md §38.1).
 
     Groups may nest: a `group_cover`'s own ``entities=`` may name another
-    group's entity id (e.g. the owner's `cover.entryway_top` group contains
+    group's entity id (e.g. a `cover.entryway_top` group could contain
     `cover.bay_window_top`, itself a group, §38.1).
     """
     return _declare_group_helper(
@@ -194,7 +195,7 @@ def group_cover(
 def group_event(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_event`` helper (M21, docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_event`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_event", name, entities=entities, hide_members=hide_members, **fields
     )
@@ -203,7 +204,7 @@ def group_event(
 def group_fan(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_fan`` helper (M21, docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_fan`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_fan", name, entities=entities, hide_members=hide_members, **fields
     )
@@ -217,7 +218,7 @@ def group_light(
     all: bool = False,
     **fields: Any,
 ) -> EntityRef:
-    """Declare a ``group_light`` helper (M21, docs/ha-api-notes.md §38.1).
+    """Declare a ``group_light`` helper (docs/internals/ha-api-notes.md §38.1).
 
     ``all=True`` mirrors HA's group "all entities must match" toggle (see
     :func:`group_binary_sensor`'s docstring).
@@ -230,7 +231,7 @@ def group_light(
 def group_lock(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_lock`` helper (M21, docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_lock`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_lock", name, entities=entities, hide_members=hide_members, **fields
     )
@@ -239,7 +240,7 @@ def group_lock(
 def group_media_player(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_media_player`` helper (M21, docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_media_player`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_media_player", name, entities=entities, hide_members=hide_members, **fields
     )
@@ -248,7 +249,7 @@ def group_media_player(
 def group_notify(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_notify`` helper (M21, docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_notify`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_notify", name, entities=entities, hide_members=hide_members, **fields
     )
@@ -266,7 +267,7 @@ def group_sensor(
     state_class: str | None | _UnsetType = _UNSET,
     **fields: Any,
 ) -> EntityRef:
-    """Declare a ``group_sensor`` helper (M21, docs/ha-api-notes.md §38.1).
+    """Declare a ``group_sensor`` helper (docs/internals/ha-api-notes.md §38.1).
 
     ``type=`` is REQUIRED (no default): the aggregation kind HA's form schema
     requires -- one of ``"min"``/``"max"``/``"mean"``/``"median"``/
@@ -277,11 +278,11 @@ def group_sensor(
 
     ``ignore_non_numeric``/``unit_of_measurement``/``device_class``/
     ``state_class`` are the OPTIONAL sensor-flavor fields newer HA schemas
-    carry (docs/ha-api-notes.md §38.3; the CI integration matrix is the
+    carry (docs/internals/ha-api-notes.md §38.3; the CI integration matrix is the
     authority on which HA versions accept them, §0). Omitted -> absent from
     the compiled options body; passed -> stored verbatim, including an
-    explicit ``None`` (a stored null round-trips byte-stable, I3 -- module
-    docstring's optional-sensor-fields paragraph).
+    explicit ``None`` (a stored null round-trips byte-stable -- see the
+    module docstring's optional-sensor-fields paragraph).
     """
     return _declare_group_helper(
         "group_sensor",
@@ -305,7 +306,7 @@ def group_switch(
     all: bool = False,
     **fields: Any,
 ) -> EntityRef:
-    """Declare a ``group_switch`` helper (M21, docs/ha-api-notes.md §38.1).
+    """Declare a ``group_switch`` helper (docs/internals/ha-api-notes.md §38.1).
 
     ``all=True`` mirrors HA's group "all entities must match" toggle (see
     :func:`group_binary_sensor`'s docstring).
@@ -318,7 +319,7 @@ def group_switch(
 def group_valve(
     *, name: str, entities: list[str], hide_members: bool = False, **fields: Any
 ) -> EntityRef:
-    """Declare a ``group_valve`` helper (M21, docs/ha-api-notes.md §38.1)."""
+    """Declare a ``group_valve`` helper (docs/internals/ha-api-notes.md §38.1)."""
     return _declare_group_helper(
         "group_valve", name, entities=entities, hide_members=hide_members, **fields
     )

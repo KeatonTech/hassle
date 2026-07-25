@@ -1,8 +1,8 @@
-"""M9 error-message audit finding: `HaClient._ws_recv`'s close/error paths
-previously raised `HaConnectionError` with no "Fix:" clause -- fixed to
-follow the same what/where/fix rubric as every sibling `HaConnectionError`
-site (R6). Exercised here with a minimal fake WS object (no real network,
-R2) since `_ws_recv` only needs `.receive()`/`.exception()`/message `.type`.
+"""`HaClient._ws_recv`'s close/error paths previously raised
+`HaConnectionError` with no "Fix:" clause -- fixed to follow the same
+what/where/fix rubric as every sibling `HaConnectionError` site. Exercised
+here with a minimal fake WS object (no real network) since `_ws_recv` only
+needs `.receive()`/`.exception()`/message `.type`.
 """
 
 from __future__ import annotations

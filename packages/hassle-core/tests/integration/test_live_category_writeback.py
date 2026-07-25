@@ -1,17 +1,14 @@
-"""MILESTONES M11 test 1 (integration half) — category write-back on
-push-create, verified end-to-end against real Home Assistant.
+"""Category write-back on push-create, verified end-to-end against real Home
+Assistant.
 
-MILESTONES M11 test 1 explicitly says: "FakeBackend models `config/
-entity_registry/update` + category registries; CI integration verifies
-live." The unit suite (`test_category_writeback.py`, `test_direct_backend_
+The unit suite (`test_category_writeback.py`, `test_direct_backend_
 category_writeback.py`) proves the plan/apply-level logic and the exact WS
 payload shapes `DirectBackend` sends; THIS suite is what actually proves those
-two inferred WS commands (docs/ha-api-notes.md §30) work against real HA --
+two inferred WS commands (docs/internals/ha-api-notes.md §30) work against real HA --
 `config/category_registry/create` and `config/entity_registry/update`'s
-`categories` field were never captured/verified live before this milestone,
-and M10's own history (six CI rounds where source-inferred flow shapes
-differed from reality, §26.0-§26.10) is exactly the risk class this suite
-exists to catch early.
+`categories` field. Source-inferred flow shapes have differed from reality
+before (§26.0-§26.10), and that is exactly the risk class this suite exists
+to catch early.
 
 Covers:
 1. `test_push_create_assigns_category_creating_it_first` — no pre-existing
@@ -23,56 +20,56 @@ Covers:
    duplicated (category count for the scope is unchanged by the push).
 3. `test_push_create_script_scope_assigns_category` — the script-scope
    variant, proving the `unique_id` lookup used by `_aassign_category` really
-   does match a `script.<object_id>` entity's registry row (the coordinator's
-   specific worry: does a script's entity-registry `unique_id` really equal
-   its object id, the same way an automation's does?).
-4. `test_push_create_preserves_other_scope_category_assignment` — I6: an
-   object already carrying a category under a DIFFERENT scope keeps it after
-   this scope's category is assigned (proves the client-side merge in
-   `_aassign_category` isn't just a unit-test fiction). Automations/scripts
-   only ever have ONE category scope apiece in real HA (`_CATEGORY_SCOPES`),
-   so there is no second real scope to seed on the SAME object; this test
-   instead seeds a category under the OTHER kind's scope on a second object
-   and confirms assigning the first object's category doesn't disturb it --
-   the closest live analogue to "a different scope's assignment survives"
-   available given HA's actual category-registry scope set. See the test's
-   own docstring for the full reasoning.
+   does match a `script.<object_id>` entity's registry row (does a script's
+   entity-registry `unique_id` really equal its object id, the same way an
+   automation's does?).
+4. `test_push_create_preserves_other_scope_category_assignment` — no local or
+   UI edit is silently lost: an object already carrying a category under a
+   DIFFERENT scope keeps it after this scope's category is assigned (proves
+   the client-side merge in `_aassign_category` isn't just a unit-test
+   fiction). Automations/scripts only ever have ONE category scope apiece in
+   real HA (`_CATEGORY_SCOPES`), so there is no second real scope to seed on
+   the SAME object; this test instead seeds a category under the OTHER
+   kind's scope on a second object and confirms assigning the first object's
+   category doesn't disturb it -- the closest live analogue to "a different
+   scope's assignment survives" available given HA's actual
+   category-registry scope set. See the test's own docstring for the full
+   reasoning.
 
 Every test owns its own category (globally-unique, randomized name, so
 concurrent/rerun CI jobs against a persistent instance never collide) and
 deletes it during teardown via `DirectBackend.delete_category`
-(`config/category_registry/delete`, confirmed to exist, docs/ha-api-notes.md
-§31.5c -- M15 item 3 removes the earlier `contextlib.suppress`-masked no-op
-this fixture used while the command's existence was still unconfirmed).
+(`config/category_registry/delete`, confirmed to exist, docs/internals/ha-api-notes.md
+§31.5c).
 
-5. `test_push_create_with_category_global_uses_exact_display_name` (MILESTONES
-   M12) -- a push-create carrying a `category_overrides` entry for its source
-   path (standing in for a bundle file's `CATEGORY = "..."` global, MILESTONES
-   M12) creates the category with EXACTLY that display name, live-verified via
-   `config/category_registry/list`, instead of M11's `humanize_slug`-derived
+5. `test_push_create_with_category_global_uses_exact_display_name` -- a
+   push-create carrying a `category_overrides` entry for its source path
+   (standing in for a bundle file's `CATEGORY = "..."` global) creates the
+   category with EXACTLY that display name, live-verified via
+   `config/category_registry/list`, instead of the `humanize_slug`-derived
    guess.
 
-**MILESTONES M15 work item A** (docs/ha-api-notes.md §31, source-verified --
+**Helper category scopes** (docs/internals/ha-api-notes.md §31, source-verified --
 corrects §22/§30's "helpers have no category scope" belief):
 
-6. `test_helper_category_assign_and_readback_storage_and_template` (M15 test
-   1) -- assigns a category to a storage-collection helper (`input_boolean`)
+6. `test_helper_category_assign_and_readback_storage_and_template` --
+   assigns a category to a storage-collection helper (`input_boolean`)
    AND a template config-entry helper (`template_number`) via
    `DirectBackend.assign_category`/`create_category` (the shared `"helpers"`
    scope, §31.2) and reads both back via `categories_for` -- live proof that
    the template-helper's `unique_id == entry_id` anchor (§31.6/§31.8) really
    does resolve to the right entity-registry row on real HA, not just in
-   `FakeBackend`. (This test's first CI run on PR #10 caught a real bug:
+   `FakeBackend`. (This test's first CI run caught a real bug:
    `_acreate_template_helper` was caching a flow_id instead of the real
-   entry_id, §31.8 -- fixed in the same round.)
+   entry_id, §31.8.)
 7. `test_same_object_two_scope_category_assignment_preserved` (§31.5d) -- the
-   STRONGER I6 check §31.5d itself calls for: one automation carries a
-   category under BOTH its own `"automation"` scope AND (as a synthetic
-   second scope, proving scopes are genuinely arbitrary per §31.1) an
-   unrelated `"anything_sluggy"` scope, assigned in either order -- both
-   survive the other's assignment on the SAME entity-registry row. This
-   supersedes the pre-M15 cross-object proxy (test 4 above), now that a
-   real same-object case is actually possible.
+   STRONGER "no edit silently lost" check §31.5d itself calls for: one
+   automation carries a category under BOTH its own `"automation"` scope AND
+   (as a synthetic second scope, proving scopes are genuinely arbitrary per
+   §31.1) an unrelated `"anything_sluggy"` scope, assigned in either order --
+   both survive the other's assignment on the SAME entity-registry row. This
+   supersedes the cross-object proxy (test 4 above), now that a real
+   same-object case is actually possible.
 """
 
 from __future__ import annotations
@@ -110,7 +107,7 @@ def _unique_slug(prefix: str) -> str:
 @pytest.fixture
 def cleanup_category(ha: DirectBackend):
     """Category cleanup for a (scope, category_id) pair -- `config/
-    category_registry/delete` is now CONFIRMED to exist (docs/ha-api-notes.md
+    category_registry/delete` is now CONFIRMED to exist (docs/internals/ha-api-notes.md
     §31.5c, source-verified: `websocket_delete_category`), so teardown calls
     it for real via `DirectBackend.delete_category` -- no more
     `contextlib.suppress`-masked no-op (§30's addendum flagged this exact
@@ -218,10 +215,10 @@ def test_push_create_reuses_existing_matching_category(ha: DirectBackend, cleanu
 
 
 def test_push_create_script_scope_assigns_category(ha: DirectBackend, cleanup_category) -> None:
-    """The coordinator's specific worry: does a `script.<object_id>` entity's
+    """Does a `script.<object_id>` entity's
     entity-registry `unique_id` actually equal the script's object id, the
     same way an automation's `unique_id` equals its config `id`
-    (docs/ha-api-notes.md §2)? `DirectBackend._aassign_category` (and
+    (docs/internals/ha-api-notes.md §2)? `DirectBackend._aassign_category` (and
     `_afetch_categories`/pull placement, §22) all assume so; this is the
     live proof for the script side specifically."""
     slug = _unique_slug("chores")
@@ -262,8 +259,9 @@ def test_push_create_script_scope_assigns_category(ha: DirectBackend, cleanup_ca
 def test_push_create_preserves_other_scope_category_assignment(
     ha: DirectBackend, cleanup_category
 ) -> None:
-    """I6: the client-side merge in `_aassign_category` must never drop an
-    existing category assignment under a scope this call isn't about.
+    """No local or UI edit is silently lost: the client-side merge in
+    `_aassign_category` must never drop an existing category assignment
+    under a scope this call isn't about.
 
     Real HA's category registry only has two scopes at all (`automation`,
     `script`, DESIGN §7.3/`_CATEGORY_SCOPES`) and a single object can only
@@ -351,17 +349,17 @@ def test_push_create_preserves_other_scope_category_assignment(
 def test_push_create_with_category_global_uses_exact_display_name(
     ha: DirectBackend, cleanup_category
 ) -> None:
-    """MILESTONES M12 -- a bundle file's `CATEGORY = "..."` global (modeled
+    """A bundle file's `CATEGORY = "..."` global (modeled
     here as a `category_overrides` plan-apply entry, the same sidecar map
     `hassle_cli.cli`'s push path builds from the compiled bundle) supplies the
     EXACT display name for a brand-new category, live-verified via
-    `config/category_registry/list` -- never M11's `humanize_slug` guess.
+    `config/category_registry/list` -- never the `humanize_slug` guess.
 
-    **Deliberately punctuated `display_name`** (round 2 fix, CI field failure
-    on PR #7): `slugify(display_name)` is NOT expected to equal `slug` here --
-    that's the entire point of the CATEGORY global (recovering an exact
-    display name, punctuation included, that a slug can't hold). The FIRST
-    version of this test wrongly re-derived a slug from `display_name` and
+    **Deliberately punctuated `display_name`**: `slugify(display_name)` is
+    NOT expected to equal `slug` here -- that's the entire point of the
+    CATEGORY global (recovering an exact display name, punctuation included,
+    that a slug can't hold). An earlier version of this test wrongly
+    re-derived a slug from `display_name` and
     filtered `list_categories` by it, which only coincidentally matches when
     the display name happens to slugify back to the file's own slug (true for
     a tame name, false the moment punctuation collapses differently, e.g.
@@ -418,14 +416,14 @@ def test_push_create_with_category_global_uses_exact_display_name(
 
 
 # ---------------------------------------------------------------------------
-# MILESTONES M15 work item A
+# Helper category scopes
 # ---------------------------------------------------------------------------
 
 
 def test_helper_category_assign_and_readback_storage_and_template(
     ha: DirectBackend, cleanup_category
 ) -> None:
-    """M15 test 1: the shared `"helpers"` scope (docs/ha-api-notes.md §31.2)
+    """The shared `"helpers"` scope (docs/internals/ha-api-notes.md §31.2)
     round-trips for BOTH a storage-collection helper (`input_boolean`,
     anchored by `unique_id == object_id`) and a template config-entry helper
     (`template_number`, anchored by `unique_id == entry_id` -- §31.6/§31.8,
@@ -433,7 +431,7 @@ def test_helper_category_assign_and_readback_storage_and_template(
     `unique_id` equals its config entry's `entry_id`). This is also the live
     proof that `_acreate_template_helper` now caches the REAL `entry_id`
     (§31.8 fixed a bug where it cached a flow_id instead, which this exact
-    test caught failing on PR #10's first CI run)."""
+    test caught failing on its first CI run)."""
     slug = _unique_slug("hvac_helpers")
     category_id = ha.create_category("helpers", slug.replace("_", " ").title())
     cleanup_category("helpers", category_id)
@@ -474,9 +472,10 @@ def test_same_object_two_scope_category_assignment_preserved(
     (§31.1) -- a SINGLE entity-registry row can carry categories under
     multiple scopes at once. Assign this object's OWN `"automation"`-scope
     category, then an unrelated second scope's category on the SAME
-    object -- both must survive (I6), each direction (assign order doesn't
-    matter): this is the stronger same-object check §31.5d calls for,
-    superseding the pre-M15 cross-object proxy above."""
+    object -- both must survive (no local or UI edit is silently lost), each
+    direction (assign order doesn't matter): this is the stronger
+    same-object check §31.5d calls for, superseding the cross-object proxy
+    above."""
     slug = _unique_slug("plant_care")
     identity = f"auto_{slug}"
 

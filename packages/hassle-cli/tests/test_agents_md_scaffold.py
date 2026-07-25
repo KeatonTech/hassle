@@ -1,7 +1,7 @@
 """`hassle init` (and `hassle pull`, when it creates the scaffold dirs) writes
 `AGENTS.md` (generated, DESIGN §12) plus `docs/DSL.md`/`docs/COOKBOOK.md`
-(the bundle's own copy of the reference docs -- MILESTONES M9 deliverable
-1). All three are idempotent to re-run but AGENTS.md/docs/*.md are
+(the bundle's own copy of the reference docs). All three are idempotent to
+re-run but AGENTS.md/docs/*.md are
 REGENERATED every time (unlike lib/README.md/tests/README.md, which are
 user territory) since they are wholly generated content the user never
 hand-edits (the module docstring says so) -- mirrors `.vscode/settings.json`
@@ -32,11 +32,11 @@ def test_init_writes_docs_dsl_and_cookbook(tmp_path: Path) -> None:
 
 
 def test_init_agents_md_uses_bundle_directory_name(tmp_path: Path) -> None:
-    bundle = tmp_path / "chez-keaton"
+    bundle = tmp_path / "chez-kai"
     bundle.mkdir()
     init_bundle(bundle)
     content = (bundle / "AGENTS.md").read_text(encoding="utf-8")
-    assert "chez-keaton" in content
+    assert "chez-kai" in content
 
 
 def test_init_regenerates_agents_md_on_rerun(tmp_path: Path) -> None:

@@ -1,5 +1,4 @@
-"""M18 milestone test 3 — decompiler canonical form for typed service
-namespaces.
+"""Decompiler canonical form for typed service namespaces.
 
 Canonical form: a plain service-call action whose literal `"domain.service"`
 exists in the registry snapshot AND whose data is kwarg-expressible (every key
@@ -7,8 +6,8 @@ a valid Python identifier, not a reserved word) emits the namespace call
 (`light.turn_on(target=..., **fields)`) plus a per-file
 `from hassle.services import <domains>` import line. Everything else
 (templated service name, snapshot-absent service, no snapshot at all,
-non-kwarg-safe data keys) falls back to today's `service(...)` (I3 byte-exact
-through BOTH branches).
+non-kwarg-safe data keys) falls back to today's `service(...)` (byte-exact
+compile(decompile(x)) == x through BOTH branches).
 """
 
 from __future__ import annotations

@@ -1,4 +1,5 @@
-"""Builds the `Backend` (F2) a CLI invocation talks to.
+"""Builds the `Backend` (the frozen protocol + plan/apply data model) a CLI
+invocation talks to.
 
 Production path: `hassle.toml`'s `ha_url` + a resolved token (keyring/
 `HASSLE_TOKEN`/`HASSLE_HA_URL`+`HASSLE_TOKEN` env overrides for `run --live`)
@@ -7,8 +8,8 @@ build a real `hassle.backend.DirectBackend`.
 Test-only seam: `ha_url = "fake://<token>"` (never written by production code
 -- only by `packages/hassle-cli/tests/conftest.py`) resolves to a `FakeBackend`
 registered in-process via `register_fake_backend`. This keeps every CLI-level
-test in `packages/hassle-cli/tests/` running against `FakeBackend` (R2: no
-network in unit tests) while still exercising the *real* command code path
+test in `packages/hassle-cli/tests/` running against `FakeBackend` (unit
+tests never touch the network) while still exercising the *real* command code path
 (argument parsing, plan rendering, manifest read/write, git checks, ...) --
 only the actual HA transport is swapped.
 """
@@ -31,7 +32,7 @@ _FAKE_URL_PREFIX = "fake://"
 
 class UnregisteredFakeBackendError(Exception):
     """A `fake://<token>` URL was used but no `FakeBackend` is registered for
-    that token (M7 review cleanup).
+    that token.
 
     Without this check, `connect()` would fall through to building a real
     `DirectBackend` against the literal string `fake://<token>` as if it were

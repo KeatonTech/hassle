@@ -1,13 +1,14 @@
 """`hassle-dev` — internal developer CLI.
 
 Subcommands:
-  corpus-stats       Report fixture-corpus construct coverage; enforce the M0 contract.
-  goldens            Manage golden files (DSL↔IR pairs land in M1; M0 is the baseline).
-  docs               Build/check docs/DSL.md + docs/COOKBOOK.md (MILESTONES M9 tests 1-2).
-  acceptance-tasks   Emit the 10 agent-acceptance task prompts for a bundle (MILESTONES M9
-                     test 3 -- build only; the orchestrator runs the actual model sessions).
+  corpus-stats       Report fixture-corpus construct coverage; enforce the
+                     minimum-coverage contract.
+  goldens            Manage golden files (DSL<->IR pairs).
+  docs               Build/check docs/DSL.md + docs/COOKBOOK.md.
+  acceptance-tasks   Emit the 10 agent-acceptance task prompts for a bundle
+                     (build only; running the actual model sessions is a separate step).
   acceptance-bundle  Generate the sample-house bundle acceptance-tasks' prompts are written
-                     against (MILESTONES M9 test 3; see hassle_dev.bundle_gen).
+                     against (see hassle_dev.bundle_gen).
 """
 
 from __future__ import annotations
@@ -56,9 +57,9 @@ def _cmd_corpus_stats(args: argparse.Namespace) -> int:
 
 
 def _cmd_goldens(args: argparse.Namespace) -> int:
-    # DSL↔IR golden pairs live under fixtures/dsl/. Each pair is `compile(bundle) ==
-    # expected_ir.json`; --update recompiles and rewrites them (R3: goldens change
-    # only through this command, and the PR must show the diff).
+    # DSL<->IR golden pairs live under fixtures/dsl/. Each pair is `compile(bundle) ==
+    # expected_ir.json`; --update recompiles and rewrites them (golden files are
+    # regenerated, never hand-edited -- and the diff should be reviewed).
     dsl_dir: Path | None = args.dsl or find_dsl_dir()
     if dsl_dir is None or not dsl_dir.is_dir():
         print("goldens: could not locate fixtures/dsl/ (pass --dsl DIR)")
@@ -205,16 +206,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     p_cov.set_defaults(func=_cmd_decompile_coverage)
 
-    p_docs = sub.add_parser(
-        "docs", help="build/check docs/DSL.md + docs/COOKBOOK.md (MILESTONES M9)"
-    )
+    p_docs = sub.add_parser("docs", help="build/check docs/DSL.md + docs/COOKBOOK.md")
     p_docs.add_argument("--update", action="store_true", help="write docs/*.md in place")
     p_docs.add_argument("--repo-root", type=Path, default=None, help="path to the repo root")
     p_docs.set_defaults(func=_cmd_docs)
 
     p_acc = sub.add_parser(
         "acceptance-tasks",
-        help="emit the 10 agent-acceptance task prompts for a bundle (MILESTONES M9 test 3)",
+        help="emit the 10 agent-acceptance task prompts for a bundle",
     )
     p_acc.add_argument("--bundle", type=Path, required=True, help="path to the bundle directory")
     p_acc.add_argument("--json", action="store_true", help="emit machine-readable JSON")

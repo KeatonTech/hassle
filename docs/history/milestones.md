@@ -1,6 +1,13 @@
-# Hassle — Implementation Plan (for the implementing agents)
+# Hassle — Implementation Plan (historical record)
 
-Read [DESIGN.md](DESIGN.md) first (v2, CLI-only — there is no add-on). This file tells you what
+> **Historical document.** This is the original milestone plan the project was
+> built against, preserved as written. The engineering rules it defines (R1–R8)
+> are restated for contributors in [CONTRIBUTING.md](../../CONTRIBUTING.md);
+> the internal shorthand (M-numbers, R/I/F/G codes, "done gates", agent roles)
+> is decoded in [this directory's README](README.md). Nothing below is updated
+> anymore.
+
+Read [DESIGN.md](../../DESIGN.md) first (v2, CLI-only — there is no add-on). This file tells you what
 to build, in what order, and — most importantly — **which tests to write before writing the
 code**. Every milestone is TDD: its "Write these tests first" list is the acceptance contract.
 A milestone is done when those tests (plus everything previously green) pass in CI.
@@ -41,11 +48,11 @@ the frozen IR (F1). M8 (VS Code) and M9 (docs) can start early in stub form but 
 - **F1** (end of M0): IR model schema + canonical JSON serialization + object key format
   (`"automation:<id>"` etc.).
 - **F2** (start of M5): the `Backend` protocol (Python `Protocol` in `hassle-core`, spec'd in
-  `docs/backend.md`) + the plan/apply data model. M5 builds the sync engine against `FakeBackend`;
+  `docs/internals/backend-protocol.md`) + the plan/apply data model. M5 builds the sync engine against `FakeBackend`;
   M6 builds `DirectBackend` against the same protocol — independently.
 - **F3** (end of M1): DSL public API surface (`hassle.__all__`, 72 names, plus the
   `hassle.registry.entities` entry point) — additions allowed, changes are not.
-  Declared in [docs/dsl-f3.md](docs/dsl-f3.md).
+  Declared in [docs/internals/dsl-extensions.md](../dsl-extensions.md).
 
 ---
 
@@ -100,7 +107,7 @@ script-verify every row of DESIGN §4 against it with a long-lived token: endpoi
 command names, payload shapes (`{domain}_id` keys on helper update/delete), auto-reload
 behavior, `id`↔unique_id relationship, `skip_condition` default, blueprint config shape, and the
 media upload/resolve/remove flow (incl. the Content-Type gate behavior — DESIGN §8.5 depends on
-it). Deliverable: `docs/ha-api-notes.md` with request/response captures, plus corrections to
+it). Deliverable: `docs/internals/ha-api-notes.md` with request/response captures, plus corrections to
 DESIGN §4 if any. These captures become the `FakeBackend` fixtures for M5.
 
 ---
@@ -116,9 +123,9 @@ declarations; `raw_*` passthrough; `@blueprint_automation`; source-span tracking
 node; `CompileTimeBranchError` trap; bundle loader (imports bundle in isolation, collects
 registered objects, rejects duplicate ids); entity indexing form (`e.sensor["3d_printer"]`);
 **`normalize_ha`** — the singular→plural / `service:`→`action:` normalization HA itself applies
-on storage (docs/ha-api-notes.md §10.1), applied by the compiler to everything it emits,
+on storage (docs/internals/ha-api-notes.md §10.1), applied by the compiler to everything it emits,
 including legacy-form `raw_*` bodies (added to `hassle.ir` as an F1-compatible extension;
-module renamed from `hassle_core.ir` 2026-07-03, owner decision — see docs/ir-f1.md).
+module renamed from `hassle_core.ir` 2026-07-03, owner decision — see docs/internals/ir-format.md).
 
 **Write these tests first**
 1. **Golden pairs** `fixtures/dsl/{case}/bundle/…py` → `expected_ir.json`: one case per DSL
@@ -326,7 +333,7 @@ check via `get_config` with a tested-range warning.
    Also verify (M4 finding): does HA rewrite inner legacy `platform:` → `trigger:` on
    storage? `normalize_ha` currently preserves inner `platform:` verbatim; if HA rewrites
    it, legacy-authored objects would hash-drift and normalize_ha needs the extra rule
-   (frozen-interface-compatible extension + capture evidence in docs/ha-api-notes.md).
+   (frozen-interface-compatible extension + capture evidence in docs/internals/ha-api-notes.md).
 6. UI-editability check: after apply, `GET /api/config/automation/config/{id}` returns the
    config and the automation entity exists with correct unique_id (I2 proxy for "UI can edit it").
 7. Auth: bad token → clean 401 error surfaced with fix hint; `hassle login` validation path.
@@ -339,7 +346,7 @@ check via `get_config` with a tested-range warning.
    Content-Type AND download extension, per DESIGN §4 quirks), resolve + download bytes
    identical, remove works; determine and document the target-folder creation story (upload
    does not mkdir); never target the media root; simulated tightened gate (403/400/404) →
-   warning, sync unaffected. Re-confirm all docs/ha-api-notes.md §10 findings on HA `stable`
+   warning, sync unaffected. Re-confirm all docs/internals/ha-api-notes.md §10 findings on HA `stable`
    (2026.7+) — M0.V ran on 2026.2.3 (see notes §0).
 
 **Done when:** integration suite green in CI against HA `stable` **and** `dev` tags; a smoke
@@ -375,7 +382,7 @@ gate and orphan sweep in `doctor`.
     aren't alarmed; snapshot-tested.
 5. `run --live` integration test (Dockerized HA): shadow created **enabled**, with its trigger
    list replaced by a single never-fires event trigger (a run-unique event type — post-M7 revision,
-   docs/ha-api-notes.md §27 addendum; superseded the original `initial_state: off` design after live
+   docs/internals/ha-api-notes.md §27 addendum; superseded the original `initial_state: off` design after live
    verification), triggered with `skip_condition: false` by default (HA's own default is `true` —
    assert we override it) against the shadow's real `entity_id` (resolved via `attributes.id`
    matching, never assumed as `automation.<id>` — §10.2's quirk), trace rendered with correct
@@ -462,7 +469,7 @@ helper domains (threshold, derivative, group, …) become mechanical follow-ons.
    HA stable + dev) — integration test creates/updates/deletes a template number end-to-end.
 2. DSL declarations: `template_number(id=..., name=..., state="{{ ... }}", min=..., max=...)`
    (+ template_sensor/binary_sensor/select), registered as prebuilt objects; golden pairs.
-   **Amended by CI evidence (docs/ha-api-notes.md §26.6):** no `id=` kwarg exists in the
+   **Amended by CI evidence (docs/internals/ha-api-notes.md §26.6):** no `id=` kwarg exists in the
    implemented DSL — real HA's config-flow schema rejects a caller-supplied `unique_id` outright,
    so `name=` is the sole identity-bearing kwarg (`slugify(name)` derives the object key).
    `template_number`/`template_select` also gained required `set_value=`/`select_option=` kwargs
@@ -483,11 +490,11 @@ DESIGN amendments in the same series: §1 non-goals (config-entry helpers move f
 key `"<template domain>:<unique_id>"`, `unique_id` a caller-declared DSL kwarg. **CI round 2 found
 this un-implementable against real HA**: the `template` config flow's form schema rejects an
 unrecognized `unique_id` key outright (`400 {"errors": {"base": ["extra keys not allowed @
-data['unique_id']"]}}`, both HA `stable` and `dev` — docs/ha-api-notes.md §26.6) — a flow-created
+data['unique_id']"]}}`, both HA `stable` and `dev` — docs/internals/ha-api-notes.md §26.6) — a flow-created
 entry has no caller-settable unique id at all. Per R5, un-freezing and re-freezing in the same
 series with the evidence:
 
-**Identity freeze, RE-FROZEN (`m10/template-helpers`, CI round 2 evidence, docs/ha-api-notes.md
+**Identity freeze, RE-FROZEN (`m10/template-helpers`, CI round 2 evidence, docs/internals/ha-api-notes.md
 §26.6):** object key is `"<template domain>:<slugify(name)>"` (e.g.
 `"template_number:active_hvac_zones"` for `name="Active HVAC Zones"`) — identity is DERIVED from
 the declared `name` (the DSL's `name=` kwarg, required), mirroring the nine storage helpers'
@@ -507,9 +514,9 @@ redesign): tracked in `ManifestEntry.entry_id` (additive optional field, `hassle
 never in the IR body and never in the object key. An UPDATE never changes `entry_id` (I2 analog,
 driven through the options flow); a DELETE followed by a re-CREATE under the same name-derived
 identity gets a **fresh** `entry_id` from HA — documented, not hidden, as the rollback-by-recreate
-caveat (docs/ha-api-notes.md §26.3). `template_number`/`template_select` additionally require a
+caveat (docs/internals/ha-api-notes.md §26.3). `template_number`/`template_select` additionally require a
 write-target action sequence (`set_value=`/`select_option=`, §26.6) — HA's own form schema rejects
-the submission without one. See docs/backend.md §3.1 and docs/ha-api-notes.md §26 (especially
+the submission without one. See docs/internals/backend-protocol.md §3.1 and docs/internals/ha-api-notes.md §26 (especially
 §26.0 and §26.6) for the full mechanics; `Backend` (F2) itself required zero changes throughout
 both rounds of correction.
 
@@ -654,7 +661,7 @@ def active_hvac_zones():
 **Goal:** replace the type-tree layout (`automations/<cat>.py`, `scripts/<cat>.py`,
 `helpers/misc.py`) with category-first, mixed-kind files at the bundle root: `hvac.py`
 holds the HVAC automations AND their template helpers AND scripts; `misc.py` holds
-everything uncategorized. Evidence base: docs/ha-api-notes.md §31 (source-verified) —
+everything uncategorized. Evidence base: docs/internals/ha-api-notes.md §31 (source-verified) —
 ALL helper domains (nine storage-collection + four template config-entry) carry
 categories under the shared frontend scope `"helpers"`, so helper grouping round-trips
 through HA; it is NOT source-only metadata. DESIGN §7.3 must be amended in the same PR
@@ -716,7 +723,7 @@ through HA; it is NOT source-only metadata. DESIGN §7.3 must be amended in the 
 
 **Goal:** the `TemplateExpr` surface (M1.1) reads entity state ONLY numerically —
 `expr(x)` renders `states('x') | float` — so a string-state check like
-`is_state('sensor.keaton_watch_beacon_area', 'Living Room')` is inexpressible, and
+`is_state('sensor.kai_watch_beacon_area', 'Living Room')` is inexpressible, and
 (equivalently) `is_state`/bare-`states()` templates are not invertible. The owner wants
 custom helper functions like `check_beacon(sensor, area)` composing with `&`/`|`/`~`.
 Composition already works (plain Python functions returning `TemplateExpr`); the missing
@@ -803,7 +810,7 @@ otherwise (works once `hassle-cli` is published).
 - **Determinism:** the scaffolded `pyproject.toml` is byte-stable given the same bundle dir
   name + the same resolved toolchain path (or its absence) — no wall-clock, no randomness. The
   auto-detected path is machine-specific BY DESIGN (a comment line inside the generated
-  `[tool.uv.sources]` block says so, and this is documented in `docs/ha-api-notes.md`) — but
+  `[tool.uv.sources]` block says so, and this is documented in `docs/internals/ha-api-notes.md`) — but
   `hassle-dev acceptance-bundle`'s output must stay byte-identical across machines/runs
   regardless (R8/M9 test 3's harness precondition): since that generator drives the real
   `hassle pull` pipeline from inside THIS repo's own editable checkout, auto-detection would
@@ -847,7 +854,7 @@ stub/runtime mismatch this milestone closes).
 
 **Surfaces (F3: `hassle.services` is a new module, imported explicitly per domain — NOT
 part of the `from hassle import *` star surface, since domains are instance-dynamic; note
-in docs/dsl-f3.md):**
+in docs/internals/dsl-extensions.md):**
 1. `from hassle.services import cover` → `cover.close_cover(target=..., **fields)` records
    byte-identical IR to the equivalent `service(...)` call. Module-level PEP 562
    `__getattr__` accepts any domain; domain objects accept any service name (offline
@@ -1060,7 +1067,7 @@ whole cover-group ladder behind the blind automations, the light groups) are inv
 sync — pull leaves them UI-owned, push can never touch them. M10 predicted this milestone
 ("other config-entry helper domains … become mechanical follow-ons"): reuse the M10 plugin
 protocol wholesale for the `group` domain. Flow shapes captured live against the owner's HA
-(docs/ha-api-notes.md §38); CI integration (HA stable + dev) is the authority per §0.
+(docs/internals/ha-api-notes.md §38); CI integration (HA stable + dev) is the authority per §0.
 
 **Identity freeze (mirrors M10's re-frozen rule exactly):** object key is
 `"group_<flavor>:<slugify(name)>"` (e.g. `group_cover:entryway_top` for `name="Entryway Top"`).

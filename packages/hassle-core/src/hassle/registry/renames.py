@@ -2,9 +2,9 @@
 
 HA renamed several purpose-specific trigger/condition types between their Labs
 debut and the 2026.7 stable vocabulary, **without migration** — old keys
-simply stop working. Kept as DATA (never hard-coded logic), per MILESTONES M3
-test 2b, so a validator run against an old bundle can point at the exact new
-name instead of just saying "unknown".
+simply stop working. Kept as DATA (never hard-coded logic), so a validator
+run against an old bundle can point at the exact new name instead of just
+saying "unknown".
 """
 
 from __future__ import annotations

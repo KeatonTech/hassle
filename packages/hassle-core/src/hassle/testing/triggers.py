@@ -63,7 +63,7 @@ def _trigger_type(trigger: dict[str, Any]) -> Any:
     """The trigger-type discriminator, preferring the canonical ``trigger:``
     key but falling back to the legacy ``platform:`` key.
 
-    docs/ha-api-notes.md: HA's storage normalization rewrites the *outer*
+    docs/internals/ha-api-notes.md: HA's storage normalization rewrites the *outer*
     block key (`trigger` -> `triggers`) but does **not** rewrite the *inner*
     per-item discriminator -- a config authored (or `raw_*`-passed-through)
     with the legacy ``platform:`` key stores and returns that way verbatim.
@@ -118,7 +118,7 @@ def _entity_ids(trigger: dict[str, Any]) -> list[Any]:
 def _state_filter_matches(state_filter: Any, state: str | None) -> bool:
     """HA state triggers accept a scalar or a LIST for `from:`/`to:` (match
     any) -- decompiled triggers routinely carry the list form
-    (`state([x]).is_(["off"]).to(["on"])`, task #35)."""
+    (`state([x]).is_(["off"]).to(["on"])`)."""
     if isinstance(state_filter, list):
         return state in state_filter
     return state == state_filter
@@ -150,7 +150,7 @@ def state_trigger_matches(trigger: dict[str, Any], change: StateChange) -> bool:
 
 
 def numeric_state_crosses(trigger: dict[str, Any], change: StateChange) -> bool:
-    """Only fires on the crossing edge, never while already above/below (M4 test 1)."""
+    """Only fires on the crossing edge, never while already above/below."""
     entities = _entity_ids(trigger)
     if change.entity_id not in entities:
         return False
@@ -196,12 +196,12 @@ def zone_trigger_matches(trigger: dict[str, Any], change: StateChange) -> bool:
 
 
 def template_trigger_edge(trigger: dict[str, Any], was_true: bool, is_true: bool) -> bool:
-    """Template triggers fire only on the false->true edge (M4 test 1)."""
+    """Template triggers fire only on the false->true edge."""
     return is_true and not was_true
 
 
 #: Optional entity-state lookup for `time` triggers whose `at:` is an entity
-#: id (task #35): returns the entity's state string, or None when unset.
+#: id: returns the entity's state string, or None when unset.
 EntityStateResolver = Callable[[str], str | None] | None
 
 
@@ -215,7 +215,7 @@ def time_matches(
         # HA also accepts `at: <input_datetime/sensor entity>`: the trigger
         # time is that entity's current state. Unset/unresolvable state (or
         # no resolver wired in) = the trigger simply never fires -- never a
-        # parse crash on the entity id (owner field report, task #35).
+        # parse crash on the entity id.
         if resolve_entity is None:
             return False
         at = resolve_entity(at)

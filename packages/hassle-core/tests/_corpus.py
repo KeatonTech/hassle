@@ -1,4 +1,4 @@
-"""Corpus loader shared by the M0 IR tests.
+"""Corpus loader shared by the IR round-trip tests.
 
 Maps each `fixtures/configs/*.json` file to its object *kind* using the
 filename convention the corpus is built to:

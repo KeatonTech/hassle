@@ -21,12 +21,12 @@ below verbatim:
 | (new remote id)       | —             | adopt                                                 |
 
 `compute_plan` is pure: it never touches a `Backend` or the filesystem; the
-caller (M7's CLI, or a test) supplies local/remote as already-materialized
+caller (the CLI, or a test) supplies local/remote as already-materialized
 dicts. `manifest.lock` only stores the base *hash* (DESIGN §8.1), not the full
 base config body, so `compute_plan` accepts an optional `base_objects` map
 (object_key -> config) purely to populate `Conflict.base` for 3-way-diff
-rendering (M7); the plan *decision* itself only ever depends on hash
-comparisons, never on `base_objects`' content.
+rendering (the CLI's job); the plan *decision* itself only ever depends on
+hash comparisons, never on `base_objects`' content.
 """
 
 from __future__ import annotations
@@ -83,8 +83,10 @@ def _plan_one(
     raw_local_hash = None if local_config is None else sha256_hash(local_config)
     raw_remote_hash = None if remote_config is None else sha256_hash(remote_config)
 
-    # Normalization-drift guard (owner field report: 29 perpetual updates):
-    # if the two sides are the SAME object once HA's storage normalization
+    # Normalization-drift guard: without it, a stale manifest hash can leave
+    # an object stuck showing an "update" every single plan even though HA
+    # and the bundle already agree. If the two sides are the SAME object
+    # once HA's storage normalization
     # is applied (floats, filled defaults, duration format), there is
     # nothing to sync -- regardless of what a stale manifest hash says.
     if canon_local is not None and canon_local == canon_remote:

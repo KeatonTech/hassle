@@ -8,7 +8,7 @@ file for a UI-deleted object, and `conflict` writes both versions with markers
 summary. `noop`/`update`/`delete`/`create` are push-side actions and are never
 acted on here.
 
-The key invariant (MILESTONES M5 test 2): **pull never touches the Backend.**
+The key invariant: **pull never touches the Backend.**
 `apply_pull` doesn't even accept one — it can't write to HA even by accident.
 """
 
@@ -47,11 +47,13 @@ def apply_pull(plan: Plan, source_writer: SourceWriter) -> PullResult:
 
 
 def _placeholder_dsl_source(object_key: str, config: dict[str, object] | None) -> str:
-    """A stub "DSL source" string standing in for M2's real decompiler.
+    """A stub "DSL source" string standing in for the real decompiler
+    (`hassle.decompiler`; see `hassle.sync.pull_apply` for the real
+    integration).
 
     Not real Python — just enough for the pull engine's *action* (splice vs.
     write vs. delete, with the right object key and config data) to be under
-    test. Real decompiled fidelity is M2's job at integration.
+    test.
     """
     body = json.dumps(config, indent=2, sort_keys=True) if config is not None else "null"
     return f"# hassle: decompiled from {object_key}\n# {body}\n"

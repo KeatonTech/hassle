@@ -1,12 +1,12 @@
-"""ux/stub-docstrings item 2: `hassle pull` also regenerates
-`typings/hassle/registry/__init__.pyi` write-if-changed from the fresh
-registry snapshot, so stubs can never go stale.
+"""`hassle pull` also regenerates `typings/hassle/registry/__init__.pyi`
+write-if-changed from the fresh registry snapshot, so stubs can never go
+stale.
 
-Before this change, a bundle that never ran `hassle stubs` by hand (the
-owner's real bundle, notably) had NO `typings/` dir at all, even after many
-pulls -- pyright/Pylance had zero knowledge of the instance's real entities.
-`hassle stubs` stays available for a manual, on-demand refresh (e.g. right
-after `login`, before the first `pull`).
+Before this change, a bundle that never ran `hassle stubs` by hand had NO
+`typings/` dir at all, even after many pulls -- pyright/Pylance had zero
+knowledge of the instance's real entities. `hassle stubs` stays available
+for a manual, on-demand refresh (e.g. right after `login`, before the first
+`pull`).
 """
 
 from __future__ import annotations

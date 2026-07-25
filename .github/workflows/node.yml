@@ -15,9 +15,8 @@ concurrency:
   group: node-${{ github.ref }}
   cancel-in-progress: true
 
-# Kept off the Python matrix in `.github/workflows/ci.yml` (MILESTONES M8:
-# "extend .github/workflows with a node job; keep it off the python matrix") --
-# the extension is a wholly separate TypeScript project (`vscode-extension/`)
+# Kept off the Python matrix in `.github/workflows/ci.yml` -- the extension
+# is a wholly separate TypeScript project (`vscode-extension/`)
 # with its own toolchain, dependency lockfile, and release artifact (a
 # `.vsix`, never published from CI); it has nothing to do with the
 # `hassle`/`hassle-cli` Python package matrix.
@@ -69,8 +68,8 @@ jobs:
       - name: Compile
         run: npm run compile
 
-      # MILESTONES M8: "at least one @vscode/test-electron run must execute
-      # headless in CI" -- `xvfb-run` provides the virtual X display VS
+      # At least one @vscode/test-electron run must execute
+      # headless in CI -- `xvfb-run` provides the virtual X display VS
       # Code's Electron shell needs on a headless Linux runner.
       - name: Integration tests (real Extension Host, headless)
         run: xvfb-run -a npm run test:integration

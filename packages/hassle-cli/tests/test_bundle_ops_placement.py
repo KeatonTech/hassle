@@ -1,9 +1,8 @@
-"""MILESTONES M15 work item B: category-first bundle layout -- an object with
-no existing file and no UI-assigned category lands in the single, shared
-root-level ``misc.py``, whatever its kind (automation/script/every helper
-domain) -- replacing the M7.1-era per-kind-tree fallback
-(``automations/misc.py`` / ``scripts/misc.py`` / ``helpers/misc.py``,
-RETIRED)."""
+"""Category-first bundle layout: an object with no existing file and no
+UI-assigned category lands in the single, shared root-level ``misc.py``,
+whatever its kind (automation/script/every helper domain) -- not in a
+per-kind tree (``automations/misc.py`` / ``scripts/misc.py`` /
+``helpers/misc.py``)."""
 
 from __future__ import annotations
 
@@ -25,7 +24,7 @@ def test_default_source_path_places_helpers_under_root_misc() -> None:
 
 
 def test_default_source_path_places_template_helpers_under_root_misc() -> None:
-    # M10: config-entry template-helper domains use the same shared root-level
+    # Config-entry template-helper domains use the same shared root-level
     # misc placement rule as the nine storage-collection helper domains.
     assert default_source_path("template_number:active_hvac_zones") == "misc.py"
     assert default_source_path("template_sensor:average_temp") == "misc.py"

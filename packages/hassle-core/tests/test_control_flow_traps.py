@@ -1,4 +1,4 @@
-"""M1 actions/control-flow trap coverage (work item scope, item 5).
+"""Actions/control-flow trap coverage.
 
 DESIGN §5.5: a native Python `if`/`for` on a runtime state expression must
 raise `CompileTimeBranchError` loudly rather than silently compiling wrong --

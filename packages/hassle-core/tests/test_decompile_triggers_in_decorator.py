@@ -1,17 +1,16 @@
-"""Decompiler emits `triggers=` in the decorator as the canonical form (owner-
-approved DSL evolution, task #10; DESIGN §5.3/§5.5/§7.3, docs/dsl-f3.md).
+"""Decompiler emits `triggers=` in the decorator as the canonical form
+(DESIGN §5.3/§5.5/§7.3, docs/internals/dsl-extensions.md).
 
 The decompiler no longer emits `when(...)` in the automation body: triggers
 become a `triggers=[...]` kwarg on `@automation(...)` (multi-line formatted
 when there is more than one trigger, matching the pre-existing `when(...)`
 multi-trigger formatting convention). `when()` itself is untouched and remains
-importable/usable (F3: additions never remove).
+importable/usable (the frozen top-level DSL surface: additions never remove).
 
 Section comments (`# --- conditions ---`/`# --- actions ---`) were removed
-entirely in a later round (`ux/dsl-ergonomics`, owner amendment -- see
-`test_no_section_comments_ever_emitted` below and DESIGN §7.3's dated note):
-once conditions also moved to the `with only_if(...):` block form, the body's
-structure became self-describing on its own.
+entirely (see `test_no_section_comments_ever_emitted` below and DESIGN §7.3's
+dated note): once conditions also moved to the `with only_if(...):` block
+form, the body's structure became self-describing on its own.
 """
 
 from __future__ import annotations
@@ -79,8 +78,7 @@ def test_raw_trigger_still_emitted_as_body_statement() -> None:
 
 
 def test_no_section_comments_ever_emitted() -> None:
-    # Updated (`ux/dsl-ergonomics`, owner amendment -- supersedes this test's
-    # original expectation): section comments are removed entirely, not just
+    # Section comments are removed entirely, not just
     # the triggers one. With conditions now emitted as the `with only_if(...):`
     # block form (item 1) wrapping every action, the body's structure --
     # decorator = when, only_if block = gate, plain statements = do -- no
@@ -115,7 +113,7 @@ def test_no_triggers_at_all_emits_no_triggers_kwarg() -> None:
 def test_decorator_triggers_recompile_byte_identical_ir() -> None:
     """Compile parity via the decompiler path too: decompiling a config with
     triggers, then recompiling the decorator-form output, must reproduce
-    byte-identical IR (I3)."""
+    byte-identical IR."""
     config = {
         "id": "1",
         "alias": "Hallway Light On Motion",

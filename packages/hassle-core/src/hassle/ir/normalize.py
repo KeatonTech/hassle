@@ -1,9 +1,9 @@
-"""`normalize_ha` — reproduce HA's 2024.10+ storage normalization (F1 extension).
+"""`normalize_ha` — reproduce HA's 2024.10+ storage normalization.
 
 Home Assistant's config API accepts the legacy singular schema
 (``trigger``/``condition``/``action`` outer keys, ``service:`` inner discriminator)
 but **stores and returns** the plural schema (``triggers``/``conditions``/``actions``,
-``action:``). See DESIGN §7.1 / docs/ha-api-notes.md §10.1. Hassle's canonical form
+``action:``). See DESIGN §7.1 / docs/internals/ha-api-notes.md §10.1. Hassle's canonical form
 — what the compiler emits and what the sync engine hashes — is therefore the plural
 form; without applying the same normalization locally, every object would hash
 differently from HA's stored copy and the plan would show perpetual spurious diffs.
@@ -20,8 +20,8 @@ The rules, verified against the real POST->GET capture pair
 - **Inner ``platform:`` is preserved** — HA pluralizes only the outer block key, it
   does not rewrite the trigger discriminator on read-back.
 
-This is an F1-compatible *extension*: it adds a new public function to
-``hassle.ir`` and touches no existing F1 surface. It never mutates its input.
+This is compatible with the frozen IR schema: it adds a new public function to
+``hassle.ir`` and touches no existing frozen surface. It never mutates its input.
 """
 
 from __future__ import annotations

@@ -1,30 +1,31 @@
-"""M16 test 3 -- inverter coverage for the string-state vocabulary.
+"""Inverter coverage for the string-state vocabulary.
 
 Both real-world spellings normalize to the DSL, then render canonically:
 
 - `states('x') == 'y'` / `!=` / `in [...]` -> `state_of(...)` forms (byte-exact
-  round-trip, I3 nice branch).
+  round-trip, the compile(decompile(x)) == x nice branch).
 - `is_state('x', 'y')` -> `state_of('x').eq('y')` in Python source, but its
   RE-RENDER is `states('x') == 'y'`, which differs textually from the
   original `is_state(...)` call -- so the byte-exact acceptance gate
   (`invert_template`'s render-and-compare check) correctly REJECTS it and the
   caller falls back to the unchanged string form. This is the documented
   "one-time canonicalization on push" behavior (docs/DSL.md via
-  docs/dsl-f3.md): only after the user's own edit (or Hassle's own compiled
+  docs/internals/dsl-extensions.md): only after the user's own edit (or Hassle's own compiled
   re-render) replaces the source with the canonical `states('x') == 'y'`
   spelling does it invert cleanly forever after.
 
-The owner's real multi-line Bermuda template (`is_state(...) or
+A real multi-line Bermuda template (`is_state(...) or
 is_state(...)`) is the driving fallback case, verbatim.
 
 **Regression (bug found while adding this coverage):** `invert_template`
 compared its re-render against `jinja_text.strip()` instead of the original
 `jinja_text` -- a pre-existing bug (reachable via `expr(...)`'s `| float`
 grammar too, just never exercised by a torture case that combined
-surrounding whitespace with an otherwise-invertible template before M16
-added a bare `states(...)` case to that same test matrix), silently dropping
+surrounding whitespace with an otherwise-invertible template before a bare
+`states(...)` case was added to that same test matrix), silently dropping
 a leading/trailing newline around the `{{ ... }}` block on inversion and
-violating I3. Fixed by comparing against the unstripped original text.
+violating the compile(decompile(x)) == x invariant. Fixed by comparing
+against the unstripped original text.
 """
 
 from __future__ import annotations
@@ -66,7 +67,7 @@ def test_bare_states_in_list_inverts_to_state_of_in() -> None:
 
 # ---------------------------------------------------------------------------
 # Regression: surrounding whitespace around an otherwise-invertible `{{ ... }}`
-# block must NOT be silently dropped (bug found via this milestone's own
+# block must NOT be silently dropped (bug found via this feature's own
 # torture-template coverage -- see module docstring).
 # ---------------------------------------------------------------------------
 
@@ -84,7 +85,8 @@ def test_surrounding_whitespace_is_not_silently_dropped(jinja_text: str) -> None
     """`invert_template` must reject (fall back), not silently match, when
     the original text has padding around the `{{ ... }}` block that its own
     canonical re-render would never reproduce -- this would otherwise
-    violate I3 (a leading/trailing newline dropped on inversion)."""
+    violate the compile(decompile(x)) == x invariant (a leading/trailing
+    newline dropped on inversion)."""
     assert invert_template(jinja_text) is None
 
 
@@ -108,8 +110,9 @@ def test_exact_no_padding_form_still_inverts() -> None:
 def test_state_of_forms_round_trip_byte_exactly_through_decorator(
     jinja_text: str, tmp_path: Path
 ) -> None:
-    """I3 nice branch: the inverted source recompiles through the real
-    `template_sensor` decorator path to the identical `state=` text."""
+    """compile(decompile(x)) == x nice branch: the inverted source recompiles
+    through the real `template_sensor` decorator path to the identical
+    `state=` text."""
     result = invert_template(jinja_text)
     assert result is not None
     reset_declared_template_helpers()
@@ -133,10 +136,10 @@ def test_state_of_forms_round_trip_byte_exactly_through_decorator(
 # `is_state('x', 'y')` -> DOCUMENTED one-time-canonicalization fallback.
 # ---------------------------------------------------------------------------
 
-# The owner's real multi-line Bermuda template, verbatim (MILESTONES M16 test 3).
+# A real multi-line Bermuda template, verbatim.
 BERMUDA_IS_STATE_TEMPLATE = (
-    "{{ is_state('sensor.keaton_watch_beacon_area', 'Living Room') or \n"
-    "             is_state('sensor.keaton_phone_beacon_area', 'Living Room') }}"
+    "{{ is_state('sensor.kai_watch_beacon_area', 'Living Room') or \n"
+    "             is_state('sensor.kai_phone_beacon_area', 'Living Room') }}"
 )
 
 
@@ -148,19 +151,20 @@ def test_is_state_call_form_does_not_invert_cleanly() -> None:
     assert invert_template(jinja_text) is None
 
 
-def test_owner_bermuda_template_falls_back_cleanly() -> None:
-    """The owner's real multi-line `is_state(...) or is_state(...)` template
+def test_real_world_bermuda_template_falls_back_cleanly() -> None:
+    """A real multi-line `is_state(...) or is_state(...)` template
     falls back (byte-exact gate holds) -- never raises, never silently
     produces a false-positive inversion."""
     assert invert_template(BERMUDA_IS_STATE_TEMPLATE) is None
 
 
-def test_owner_bermuda_template_decompiles_to_decorator_fallback_and_round_trips(
+def test_real_world_bermuda_template_decompiles_to_decorator_fallback_and_round_trips(
     tmp_path: Path,
 ) -> None:
     """End-to-end: the gnarly (from this grammar's perspective) `is_state`
     Bermuda template decompiles to the decorator-with-raw-string fallback
-    form, never raises, and round-trips byte-for-byte (I3 through the
+    form, never raises, and round-trips byte-for-byte
+    (compile(decompile(x)) == x through the
     fallback branch) -- exactly like any other out-of-grammar template."""
     reset_declared_template_helpers()
     from hassle import template_sensor
@@ -197,12 +201,12 @@ def test_hand_converted_canonical_form_round_trips_as_python() -> None:
     edit) to the canonical `state_of(...).eq(...) | state_of(...).eq(...)`
     spelling, it inverts and re-renders byte-exactly forever after."""
     canonical = (
-        "{{ (states('sensor.keaton_watch_beacon_area') == 'Living Room') or "
-        "(states('sensor.keaton_phone_beacon_area') == 'Living Room') }}"
+        "{{ (states('sensor.kai_watch_beacon_area') == 'Living Room') or "
+        "(states('sensor.kai_phone_beacon_area') == 'Living Room') }}"
     )
     result = invert_template(canonical)
     assert result is not None
     assert result.source == (
-        "(state_of(e.sensor.keaton_watch_beacon_area).eq('Living Room') | "
-        "state_of(e.sensor.keaton_phone_beacon_area).eq('Living Room'))"
+        "(state_of(e.sensor.kai_watch_beacon_area).eq('Living Room') | "
+        "state_of(e.sensor.kai_phone_beacon_area).eq('Living Room'))"
     )

@@ -1,6 +1,6 @@
-"""M9 test 1: `docs/DSL.md` is generated from the M1 golden cases under
-``fixtures/dsl/`` and can never drift from reality -- the build fails if any
-name in ``hassle.__all__`` lacks a documented DSL<->compiled-YAML pair (or an
+"""`docs/DSL.md` is generated from the golden cases under ``fixtures/dsl/``
+and can never drift from reality -- the build fails if any name in
+``hassle.__all__`` lacks a documented DSL<->compiled-YAML pair (or an
 explicit, documented exemption).
 
 See ``hassle.docs.dsl_reference`` for the generator and
@@ -20,7 +20,7 @@ DSL_FIXTURES = REPO_ROOT / "fixtures" / "dsl"
 
 
 def test_every_all_name_is_covered_or_exempt() -> None:
-    """The coverage check the milestone gates on: every name in
+    """The docs coverage gate: every name in
     ``hassle.__all__`` either has >= 1 backing golden case, or is on the
     explicit, documented exemption list (error/trap classes -- see
     ``hassle.docs.construct_map`` for why each one is exempt)."""

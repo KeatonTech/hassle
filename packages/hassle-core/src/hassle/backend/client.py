@@ -1,17 +1,17 @@
-"""`HaClient` — the async REST + WebSocket transport to Home Assistant Core (M6).
+"""`HaClient` — the async REST + WebSocket transport to Home Assistant Core.
 
 One long-lived access token, straight to HA's own APIs (DESIGN §4, §13). This is
 the low-level async layer; :class:`hassle.backend.direct.DirectBackend` wraps it
-in a synchronous facade that satisfies the F2 `Backend` protocol.
+in a synchronous facade that satisfies the frozen `Backend` protocol.
 
 Design points:
 
-- **REST** (`/api/...`) for automations, scripts, templates, media upload, and
+- **REST** (`/api/...`) for automations, scripts, templates, and
   `get_config`. Transient failures (connection refused, disconnects, timeouts)
   retry with exponential backoff; a 401 is *not* retried — it is a logical
   `HaAuthError` (DESIGN §4: token validity is proven by a call).
 - **WebSocket** (`/api/websocket`) for helpers, registries, `get_services`,
-  `validate_config`, traces, template render, media resolve/remove, and the
+  `validate_config`, traces, template render, and the
   purpose-vocabulary enumeration. The connection auto-(re)connects and
   re-authenticates on demand; commands are id-multiplexed.
 - **Request timeouts** everywhere, so a wedged instance can never hang the CLI.
@@ -105,7 +105,7 @@ class HaClient:
     # -- retry -------------------------------------------------------------
 
     async def _sleep_backoff(self, attempt: int) -> None:
-        # 0.5s, 1s, 2s, 4s ... — deterministic (R8: no randomness/jitter).
+        # 0.5s, 1s, 2s, 4s ... — deterministic, no randomness/jitter.
         await asyncio.sleep(self._backoff_base * (2**attempt))
 
     # -- REST --------------------------------------------------------------
@@ -119,7 +119,6 @@ class HaClient:
         path: str,
         *,
         json: Any = None,
-        data: aiohttp.FormData | None = None,
         expect: str = "json",
     ) -> Any:
         session = await self._ensure_session()
@@ -128,7 +127,7 @@ class HaClient:
         for attempt in range(self._max_retries):
             try:
                 async with session.request(
-                    method, url, json=json, data=data, headers=self._auth_header
+                    method, url, json=json, headers=self._auth_header
                 ) as resp:
                     if resp.status == 401:
                         raise HaAuthError(f"{method} {path}")
@@ -163,9 +162,6 @@ class HaClient:
 
     async def rest_delete(self, path: str) -> Any:
         return await self._rest("DELETE", path)
-
-    async def rest_post_multipart(self, path: str, data: aiohttp.FormData) -> Any:
-        return await self._rest("POST", path, data=data)
 
     # -- WebSocket ---------------------------------------------------------
 
@@ -212,7 +208,7 @@ class HaClient:
             msg = await asyncio.wait_for(ws.receive(), timeout=self._timeout.total)
         except TimeoutError as err:
             # A wedged instance that accepted a command but never replies: surface
-            # a styled connection error (R6), not a bare TimeoutError.
+            # a what/where/fix connection error, not a bare TimeoutError.
             raise HaConnectionError(
                 f"Home Assistant did not respond on the WebSocket within "
                 f"{self._timeout.total}s. Fix: check that the instance is healthy "

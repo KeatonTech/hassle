@@ -63,13 +63,13 @@ __pycache__/
 .pytest_cache/
 
 # Derived artifacts -- regenerated from .hassle/registry.json by `hassle pull`
-# / `hassle stubs`; committing them is pure churn (owner decision, 2026-07-07).
+# / `hassle stubs`; committing them is pure churn.
 # NOTE deliberately KEPT in git: .hassle/registry.json + manifest.lock (the
 # offline sync/validate base -- and the superset of anything the stubs
 # contain, so ignoring typings/ is about noise, not secrecy).
 typings/
 
-# Bundle uv project venv (MILESTONES M17)
+# Bundle uv project venv
 .venv/
 """
 

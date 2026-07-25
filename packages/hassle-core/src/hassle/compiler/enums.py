@@ -1,4 +1,4 @@
-"""Enums for HA's enumerated automation/script options (``ux/dsl-ergonomics``, item 2).
+"""Enums for HA's enumerated automation/script options.
 
 ``Mode`` (HA's automation/script ``mode:``) and ``MaxExceeded`` (``max_exceeded:``) are
 ``StrEnum`` -- a real ``str`` subclass, so passing an enum member anywhere the DSL currently
@@ -7,11 +7,14 @@ compiles to the exact same HA value, byte-identical to the equivalent plain stri
 nothing to normalize: ``Mode.RESTART == "restart"`` and serializes as ``"restart"`` in JSON,
 since ``StrEnum`` members *are* their string value).
 
-Value sets verified against the fixture corpus (``fixtures/configs/*.json``, docs/dsl-f3.md)
+Value sets verified against the fixture corpus (``fixtures/configs/*.json``,
+docs/internals/dsl-extensions.md)
 and HA's own schema (``homeassistant/helpers/script.py``'s ``CONF_MODE``/``CONF_MAX_EXCEEDED``
-option lists, docs/ha-api-notes.md): ``Mode`` is ``single``/``restart``/``queued``/``parallel``;
+option lists, docs/internals/ha-api-notes.md): ``Mode`` is
+``single``/``restart``/``queued``/``parallel``;
 ``MaxExceeded`` is ``silent``/``warning``/``error``. The corpus only contains ``silent``/
-``warning`` examples (``docs/ha-api-notes.md``, recorded finding) -- ``error`` is included on
+``warning`` examples (``docs/internals/ha-api-notes.md``, recorded finding) --
+``error`` is included on
 the strength of HA's schema (every mode/max_exceeded option is a fixed, small, well-known
 enumeration, unlike the open-ended 2026.7 purpose vocabulary, DESIGN §5.4) but has no fixture
 corpus example backing it; the decompiler's fallback-to-raw-string rule (below) means this

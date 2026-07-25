@@ -1,6 +1,5 @@
 """Golden case: `hassle.services` namespace calls, entity-method sugar, and
-plain `service()` calls all compile to byte-identical IR (MILESTONES M18
-test 2).
+plain `service()` calls all compile to byte-identical IR.
 
 Multi-domain (light + switch) to exercise the module `__getattr__` accepting
 more than one domain in the same file.

@@ -1,10 +1,10 @@
-"""Shared fixtures for the M7 `run --live` integration suite (real HA).
+"""Shared fixtures for the `run --live` integration suite (real HA).
 
-Same env-gating convention as `packages/hassle-core/tests/integration/conftest.py`
-(MILESTONES M6): both `HASSLE_TEST_HA_URL` and `HASSLE_TEST_HA_TOKEN` must be set
-or the whole suite skips, so `pytest -m "not integration"` (unit CI) never
-touches the network (R2). The CI integration job runs this alongside the M6
-suite against Dockerized HA `stable` and `dev`.
+Same env-gating convention as `packages/hassle-core/tests/integration/conftest.py`:
+both `HASSLE_TEST_HA_URL` and `HASSLE_TEST_HA_TOKEN` must be set or the whole
+suite skips, so `pytest -m "not integration"` (unit CI) never touches the
+network. The CI integration job runs this alongside the core suite against
+Dockerized HA `stable` and `dev`.
 """
 
 from __future__ import annotations

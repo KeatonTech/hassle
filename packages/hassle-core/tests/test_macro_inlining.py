@@ -1,4 +1,4 @@
-"""M1 test 2 — `@macro` compile-time inlining (DESIGN §5.6).
+"""`@macro` compile-time inlining (DESIGN §5.6).
 
 A macro is an ordinary Python function decorated with `@macro`; calling it
 inside an `@automation`/`@script` body splices its recorded actions into the
@@ -26,9 +26,9 @@ def test_macro_used_by_two_automations_both_get_expansion() -> None:
     # Both automations contain the full macro expansion (two notify calls).
     front_actions = [a["action"] for a in front["actions"]]
     back_actions = [a["action"] for a in back["actions"]]
-    assert front_actions == ["notify.mobile_app_keaton", "notify.mobile_app_spouse"]
+    assert front_actions == ["notify.mobile_app_kai", "notify.mobile_app_spouse"]
     assert back_actions == [
-        "notify.mobile_app_keaton",
+        "notify.mobile_app_kai",
         "notify.mobile_app_spouse",
         "light.turn_on",
     ]
@@ -47,7 +47,7 @@ def test_nested_macros_fully_inline() -> None:
     obj = result.objects["automation:arrival"].to_ha()
     actions = [a["action"] for a in obj["actions"]]
     # welcome_home() -> flash_porch() (2 actions) + its own notify (1 action).
-    assert actions == ["light.turn_on", "light.turn_off", "notify.mobile_app_keaton"]
+    assert actions == ["light.turn_on", "light.turn_off", "notify.mobile_app_kai"]
 
 
 def test_macro_with_compile_time_args_unrolls() -> None:

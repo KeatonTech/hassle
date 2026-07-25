@@ -5,5 +5,5 @@ from hassle import macro, service
 
 @macro
 def notify_adults(message: str):
-    service("notify.mobile_app_keaton", message=message)
+    service("notify.mobile_app_kai", message=message)
     service("notify.mobile_app_spouse", message=message)

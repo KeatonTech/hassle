@@ -1,30 +1,31 @@
-"""MILESTONES M15 work item A, item 2 -- category-on-move sync.
+"""Category-on-move sync.
 
-M11 write-back only ever fires on CREATE. This module (`hassle.sync.
-category_move`) extends the same mechanism to UPDATE: moving an EXISTING
-object to a different category-shaped file is now a category reassignment
-on push, three-way against `ManifestEntry.category` (the F2 amendment MILESTONES
-M15 §"Local moves sync back" authorizes -- "base category slug at last sync").
+Category write-back on push only ever fired on CREATE. This module
+(`hassle.sync.category_move`) extends the same mechanism to UPDATE: moving an
+EXISTING object to a different category-shaped file is now a category
+reassignment on push, three-way against `ManifestEntry.category` (a
+SourceWriter/plan seam amendment: "base category slug at last sync").
 
-The rule (exactly the MILESTONES binding-semantics paragraph):
+The rule:
 
 - local category == base, remote category == base -> noop (nothing to sync).
 - local category != base, remote category == base -> push wins: assign/unassign
   the object's category to match local (the user moved the file; HA hadn't
-  changed) -- extends M11's create-only write-back to updates.
+  changed) -- extends create-only write-back to updates.
 - local category == base, remote category != base -> pull-only: the base
   advances to the new remote category (recorded in the next manifest), no
   push action at all (the object didn't move locally; HA's UI recategorized it).
 - local category != base AND remote category != base, to DIFFERENT values ->
-  CONFLICT (I6): never silently overwritten in either direction.
+  CONFLICT: never silently overwritten in either direction (no local or UI
+  edit is silently lost).
 
 Covers (this file's test names):
 
 1. `test_move_between_category_files_pushes_new_category` -- local move,
    remote unchanged -> category reassigned on push.
 2. `test_move_to_misc_unassigns_category` -- local move to the `misc.py`
-   fallback -> category is UNASSIGNED (the M11-established `{scope: None}`
-   unset primitive, §31.5b).
+   fallback -> category is UNASSIGNED (the `{scope: None}` unset primitive,
+   §31.5b).
 3. `test_remote_only_recategorization_is_pull_only_no_push_action` -- remote
    changed, local didn't -> no push-side category action at all (this is a
    pull-side concern, base simply advances in the next manifest).
@@ -34,12 +35,12 @@ Covers (this file's test names):
 5. `test_noop_when_local_and_remote_both_match_base` -- nothing changed on
    either side -> no category action, no conflict.
 
-All against `FakeBackend` (R2: no network in unit tests), at the `apply_plan`
-level -- the same test shape `test_category_writeback.py` (M11) uses.
+All against `FakeBackend` (no network in unit tests), at the `apply_plan`
+level -- the same test shape `test_category_writeback.py` uses.
 
-Source paths below use the MILESTONES M15 work item B root-level shape
-(`"automatic_hvac.py"`, not the work-item-A-era `"automations/automatic_hvac.py"`)
--- `local_category_for_source_path` delegates entirely to `category_shaped_stem`,
+Source paths below use the root-level shape (`"automatic_hvac.py"`, not the
+older `"automations/automatic_hvac.py"` per-kind-tree shape) --
+`local_category_for_source_path` delegates entirely to `category_shaped_stem`,
 so this file's actual logic under test (the three-way category-move rule) is
 unaffected by which shape the paths use; only the literal strings changed.
 """
@@ -226,8 +227,8 @@ def test_conflicting_move_and_remote_recategorization_is_a_conflict() -> None:
     )
     result = apply_plan(plan, backend, manifest)
 
-    assert result.succeeded is True  # the object's own content update still applies (I6:
-    # a category conflict is metadata-only, never blocks/rolls back the object itself)
+    assert result.succeeded is True  # the object's own content update still applies:
+    # a category conflict is metadata-only, never blocks/rolls back the object itself
     assert len(result.category_conflicts) == 1
     assert "auto_1" in result.category_conflicts[0]
     # Neither side was silently overwritten: remote still shows what HA had

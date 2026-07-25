@@ -1,4 +1,4 @@
-"""M1 test 4 — template expression builder -> exact Jinja strings (DESIGN §5.4).
+"""Template expression builder -> exact Jinja strings (DESIGN §5.4).
 
 Operator overloading on `state(x).value` / `expr(x)` builds nested Jinja
 expressions; the DESIGN §5.4 examples are normative and asserted verbatim here

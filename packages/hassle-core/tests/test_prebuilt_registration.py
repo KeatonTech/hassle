@@ -1,10 +1,10 @@
-"""M1 INTEGRATION — pre-built objects land in CompileResult.objects (§12 gap).
+"""Pre-built objects land in CompileResult.objects.
 
 Helper declarations, ``raw_automation``/``@raw_automation``, and
 ``@blueprint_automation`` are whole top-level objects, not trigger/condition/
-action calls recorded *inside* an automation. The §12 contract gap
-(docs/ha-api-notes.md) was that ``compile_bundle`` only drained the function-
-shaped registry, so these never reached ``CompileResult.objects``.
+action calls recorded *inside* an automation. Previously ``compile_bundle``
+only drained the function-shaped registry, so these never reached
+``CompileResult.objects``.
 
 These tests compile real bundle dirs and assert the objects appear under the
 right object keys, in the canonical plural HA schema.
@@ -60,7 +60,7 @@ def test_blueprint_automation_shape() -> None:
     objects = _compile("blueprint_automation")
     (body,) = [v for k, v in objects.items() if k.startswith("automation:")]
     # inputs= mapped to use_blueprint.input (singular); author-qualified path
-    # (docs/ha-api-notes.md §10.5).
+    # (docs/internals/ha-api-notes.md §10.5).
     assert set(body) >= {"id", "use_blueprint"}
     ub = body["use_blueprint"]
     assert ub["path"] == "hassle/motion_light.yaml"
@@ -81,7 +81,7 @@ def test_prebuilt_and_recorded_objects_coexist() -> None:
 
 
 def test_compile_is_deterministic_for_prebuilt() -> None:
-    # R8: repeated compiles of a prebuilt-object bundle are byte-stable and do
+    # Repeated compiles of a prebuilt-object bundle are byte-stable and do
     # not accumulate duplicates across the process (declared-list reset works).
     first = _compile("helper_declarations")
     second = _compile("helper_declarations")
@@ -89,7 +89,7 @@ def test_compile_is_deterministic_for_prebuilt() -> None:
 
 
 def test_no_prebuilt_leakage_across_bundles_in_one_process() -> None:
-    # R8 isolation: compiling a bundle with prebuilt objects (helpers) must not
+    # Isolation: compiling a bundle with prebuilt objects (helpers) must not
     # leak them into a later compile of an unrelated bundle in the same process
     # — both compile_bundle's reset of the declared-* lists (helpers.py /
     # raw_automation.py) and fresh()'s per-compile Registry must actually take

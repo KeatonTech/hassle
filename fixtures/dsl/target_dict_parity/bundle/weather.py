@@ -1,5 +1,5 @@
-"""Golden case: explicit `target={"entity_id": ...}` dict form (`ux/dsl-ergonomics`,
-item 3) -- the pre-existing behavior, unchanged. Paired with `target_entity_sugar/`'s
+"""Golden case: explicit `target={"entity_id": ...}` dict form -- the
+pre-existing behavior, unchanged. Paired with `target_entity_sugar/`'s
 bare entity/area/floor/label sugar to prove compile parity.
 """
 

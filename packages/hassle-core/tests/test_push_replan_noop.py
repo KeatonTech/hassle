@@ -1,24 +1,24 @@
 """Regression: a push must record base hashes such that an immediate re-plan
-with zero changes is a full NOOP (owner field report, BrandtCamp bundle,
-2026-07-14: an interactive push presented FALSE conflicts for seven objects
-whose remote sides were byte-identical to the owner's own previous push).
-False conflicts train the owner to stop reading conflict prompts, which
-defeats I6 -- so "base recorded correctly by every path that writes it" gets
-pinned here for the field report's kinds (automation, template_sensor).
+with zero changes is a full NOOP.
 
-Also pins the partial-abort path the report asked about: an interrupt
-(KeyboardInterrupt, e.g. Ctrl-C or a dying SSH session) mid-apply previously
-escaped `apply_plan`'s `except Exception` rollback entirely, leaving the
-already-written objects live in HA with STALE manifest bases. Once the owner
-edits those objects locally again, the next plan sees base != remote and
-base != local -> a `both_edited` conflict against the owner's own pushed
-content -- exactly the reported false-conflict signature.
+Bug: an interactive push presented FALSE conflicts for objects whose remote
+sides were byte-identical to the user's own previous push. False conflicts
+train users to stop reading conflict prompts, which defeats "no local or UI
+edit is ever silently lost" -- so "base recorded correctly by every path that
+writes it" gets pinned here for automation and template_sensor kinds.
 
-(The report's cross-version hash-drift hypothesis (2) was investigated and
-refuted for the PR #35 / M21 range: `storage_canonical` is byte-identical
-for automations/template helpers across it, and the template-helper
-`list_remote` read-back shape did not change -- only a group-only listing
-path was added.)
+Also pins the partial-abort path: an interrupt (KeyboardInterrupt, e.g.
+Ctrl-C or a dying SSH session) mid-apply previously escaped `apply_plan`'s
+`except Exception` rollback entirely, leaving the already-written objects
+live in HA with STALE manifest bases. Once the user edits those objects
+locally again, the next plan sees base != remote and base != local -> a
+`both_edited` conflict against the user's own pushed content -- exactly the
+false-conflict signature above.
+
+(A cross-version hash-drift hypothesis was investigated and refuted:
+`storage_canonical` is byte-identical for automations/template helpers
+across the relevant version range, and the template-helper `list_remote`
+read-back shape did not change -- only a group-only listing path was added.)
 """
 
 from __future__ import annotations
@@ -96,8 +96,8 @@ def test_push_update_then_replan_is_noop_automation() -> None:
 
 
 def test_push_update_then_replan_is_noop_template_sensor() -> None:
-    """The field report's config-entry helper kind: five template_sensor
-    `hvac_status_*` helpers false-conflicted against the owner's own push."""
+    """A config-entry helper kind: template_sensor helpers false-conflicted
+    against their own previous push."""
     backend = FakeBackend()
     identity = backend.create(
         "template_sensor",
@@ -169,8 +169,8 @@ def test_interrupt_mid_apply_rolls_back_so_replan_never_false_conflicts() -> Non
     """A KeyboardInterrupt mid-apply must roll back what was already written
     (then re-raise). Without the rollback, the interrupted push leaves the
     already-written objects live with stale manifest bases; a later local
-    edit then re-plans them as `both_edited` conflicts against the owner's
-    OWN pushed content (field report: FALSE conflicts, no UI edit existed)."""
+    edit then re-plans them as `both_edited` conflicts against the user's
+    OWN pushed content (FALSE conflicts, since no UI edit ever existed)."""
     backend = FakeBackend()
     backend.create("automation", {"id": "a1", "alias": "one v1"})
     backend.create("automation", {"id": "a2", "alias": "two v1"})
@@ -210,7 +210,7 @@ def test_interrupt_mid_apply_rolls_back_so_replan_never_false_conflicts() -> Non
     assert backend.list_remote("automation")["a1"]["alias"] == "one v1"
     assert backend.list_remote("automation")["a2"]["alias"] == "two v1"
 
-    # The owner keeps working: edits both objects locally, plans again. The
+    # The user keeps working: edits both objects locally, plans again. The
     # old manifest (never advanced -- the push didn't complete) still agrees
     # with the rolled-back remote, so this is a plain UPDATE, never a conflict.
     local_v3: ObjectMap = {

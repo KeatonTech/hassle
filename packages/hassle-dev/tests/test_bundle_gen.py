@@ -1,18 +1,18 @@
-"""MILESTONES M9 test 3 (real gate): `hassle-dev acceptance-bundle --out DIR`.
+"""`hassle-dev acceptance-bundle --out DIR`.
 
 Covers:
 1. The generator produces a real, freshly-`hassle pull`ed bundle (AGENTS.md,
    docs/, hassle.toml, .hassle/registry.json, canonical decompiled sources) --
    not a hand-written fixture (`hassle_dev.bundle_gen` module docstring).
-2. Determinism (R8): same output basename -> byte-identical tree across
-   independent generations.
+2. Determinism (byte-stable output): same output basename -> byte-identical
+   tree across independent generations.
 3. The untouched bundle is a legitimate `score_task` scoring floor: `hassle
    validate` and `hassle test` both pass (the seeded bug's test is `xfail`,
    not a bare failure -- see the scoring-nuance test below).
 4. Every one of `emit_tasks`'s 10 prompts' presuppositions holds against the
    generated bundle BY CONSTRUCTION -- this is the permanent regression
-   pinning prompts to the bundle the milestone asks for ("makes emit_tasks'
-   docstring true by construction").
+   pinning prompts to the bundle ("makes emit_tasks' docstring true by
+   construction").
 5. The `diagnose_failing_test` scoring nuance itself: untouched (xfailed, not
    a failure) / half-fixed (XPASS -> strict failure) / fully fixed (green).
 """
@@ -60,14 +60,14 @@ def test_generated_bundle_has_no_fake_backend_token_or_pycache(sample_bundle: Pa
     assert not list(sample_bundle.rglob("__pycache__"))
 
 
-# -- MILESTONES M17: uv-project scaffold determinism -------------------------
+# -- uv-project scaffold determinism -----------------------------------------
 
 
 def test_generated_bundle_has_pyproject_without_absolute_path(sample_bundle: Path) -> None:
-    # `hassle pull` (driven by this generator) now scaffolds `pyproject.toml`
-    # (MILESTONES M17) -- it must use the bare-dependency shape here (no
-    # [tool.uv.sources]), never embedding a path specific to the machine/
-    # checkout that happened to run this generator (R8/M9 test 3 precondition).
+    # `hassle pull` (driven by this generator) scaffolds `pyproject.toml` --
+    # it must use the bare-dependency shape here (no [tool.uv.sources]),
+    # never embedding a path specific to the machine/checkout that happened
+    # to run this generator (a determinism precondition).
     pyproject = sample_bundle / "pyproject.toml"
     assert pyproject.is_file()
     text = pyproject.read_text(encoding="utf-8")
@@ -107,7 +107,7 @@ def test_manifest_lock_tracks_every_seeded_object(sample_bundle: Path) -> None:
     }
 
 
-# -- 2. determinism (R8) -----------------------------------------------------
+# -- 2. determinism (byte-stable output) -------------------------------------
 
 
 def test_generation_is_byte_identical_across_runs(tmp_path: Path) -> None:
@@ -143,9 +143,9 @@ def test_untouched_bundle_test_output_shows_the_seeded_xfail(sample_bundle: Path
 
 
 def _misc_source(bundle: Path) -> str:
-    """MILESTONES M15: every seeded object here is uncategorized, so ALL of
-    them (automations, the helper, the script) share the one root-level
-    misc.py -- this helper is named for that shared file, not any one kind."""
+    """Every seeded object here is uncategorized, so ALL of them
+    (automations, the helper, the script) share the one root-level misc.py
+    -- this helper is named for that shared file, not any one kind."""
     return (bundle / "misc.py").read_text(encoding="utf-8")
 
 
@@ -230,11 +230,11 @@ def test_presupposition_refactor_into_macro(sample_bundle: Path) -> None:
     (same service, same shape) -- real duplication to extract, not falling
     back to "add a second one first".
 
-    MILESTONES M18: `notify.notify` exists in the acceptance snapshot, so a
-    real `hassle pull` now decompiles it to the typed namespace form
-    (`notify.notify(...)`) rather than `service("notify.notify", ...)` --
-    the duplication presupposition itself is unaffected (still MORE THAN ONE
-    call site), only the literal call-site spelling changed.
+    `notify.notify` exists in the acceptance snapshot, so a real `hassle
+    pull` decompiles it to the typed namespace form (`notify.notify(...)`)
+    rather than `service("notify.notify", ...)` -- the duplication
+    presupposition itself is unaffected (still MORE THAN ONE call site),
+    only the literal call-site spelling changed.
     """
     src = _misc_source(sample_bundle)
     assert src.count("notify.notify(") >= 2

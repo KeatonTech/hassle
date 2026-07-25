@@ -1,11 +1,11 @@
-"""M1 test 5 (core subset) — trap-catching + compile error snapshots (R6).
+"""Trap-catching + compile error snapshots.
 
 Error messages are product surface: each states *what*, *where* (file:line), and
 *the fix*, in one paragraph, and is snapshot-tested. Snapshots live under
 ``tests/snapshots/errors/`` and change only with a visible diff.
 
-Covered here (the M1-core subset — the full trap family incl. the `raw_automation`
-non-JSON case belongs to the templates/actions workstreams):
+Covered here (the core-compiler subset — the full trap family incl. the
+`raw_automation` non-JSON case belongs to the templates/actions builders):
   - `CompileTimeBranchError` from `__bool__` on a state/condition expression,
     naming file:line and showing the `with if_then(...)` rewrite hint.
   - duplicate id across a bundle.
@@ -15,7 +15,6 @@ non-JSON case belongs to the templates/actions workstreams):
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
@@ -29,25 +28,17 @@ from hassle.compiler import (
     compile_bundle,
 )
 from hassle.compiler.recording import recording, when
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    """Compare against a stored snapshot; write it if HASSLE_UPDATE_SNAPSHOTS is set."""
-    import os
-
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    """Replace absolute paths with a stable basename so snapshots are portable."""
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 def test_compile_time_branch_error_message() -> None:
@@ -99,7 +90,7 @@ def test_dsl_call_outside_context_message() -> None:
 def test_duplicate_id_error_names_reconcile_flow_when_one_site_is_a_ui_splice(
     tmp_path: Path,
 ) -> None:
-    """Polish-batch item 3: a loop-splice reconcile (a metaprogrammed object's
+    """A loop-splice reconcile (a metaprogrammed object's
     UI edit got appended under the `# hassle: updated from UI on <date>`
     marker -- see `SplicingSourceWriter.splice_object`'s append path) produces
     a DuplicateObjectError the next time the bundle compiles, because the

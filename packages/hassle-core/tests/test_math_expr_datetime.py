@@ -1,6 +1,6 @@
-"""M1.1 -- datetime helpers (MILESTONES M1.1 deliverables): as_datetime,
-timedelta_, as_timestamp, today_at. Each mirrors an HA Jinja extension 1:1,
-same convention as the trig/round builders (bare function-call rendering).
+"""Datetime helpers: as_datetime, timedelta_, as_timestamp, today_at. Each
+mirrors an HA Jinja extension 1:1, same convention as the trig/round builders
+(bare function-call rendering).
 """
 
 from __future__ import annotations

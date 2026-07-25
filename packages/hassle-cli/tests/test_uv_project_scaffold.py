@@ -1,8 +1,7 @@
-"""MILESTONES M17: `hassle init`/`hassle pull` scaffold `pyproject.toml` at
-the bundle root (bundle-as-uv-project), with a `[tool.uv.sources]` local-path
-entry when a toolchain source checkout is resolvable. See
-`hassle_cli.uv_project` module docstring for the full resolution-order
-semantics and `MILESTONES.md`'s M17 section for the binding test list.
+"""`hassle init`/`hassle pull` scaffold `pyproject.toml` at the bundle root
+(bundle-as-uv-project), with a `[tool.uv.sources]` local-path entry when a
+toolchain source checkout is resolvable. See `hassle_cli.uv_project` module
+docstring for the full resolution-order semantics.
 """
 
 from __future__ import annotations
@@ -66,8 +65,8 @@ def test_init_bundle_scaffolds_pyproject(tmp_path: Path) -> None:
 
 
 def test_auto_detect_resolves_this_repo_as_a_toolchain_checkout() -> None:
-    # Real, incidental positive case (M17 test list item 1's second half):
-    # this very test suite runs against an editable install of `hassle-cli`
+    # Real, incidental positive case: this very test suite runs against an
+    # editable install of `hassle-cli`
     # from THIS repo's own checkout, so auto-detection (no configured_path)
     # must find it without any faking.
     import hassle_cli

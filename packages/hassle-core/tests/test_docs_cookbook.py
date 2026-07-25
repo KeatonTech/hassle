@@ -1,7 +1,7 @@
-"""docs/COOKBOOK.md generator (DESIGN §12, MILESTONES M9 deliverable 1):
->= 20 recipes, each = automation (decorator-form triggers) + passing sim
-test, sourced from `fixtures/cookbook/` (never hand-written prose that could
-drift from the actual recipe bundle).
+"""docs/COOKBOOK.md generator (DESIGN §12): >= 20 recipes, each = automation
+(decorator-form triggers) + passing sim test, sourced from
+`fixtures/cookbook/` (never hand-written prose that could drift from the
+actual recipe bundle).
 """
 
 from __future__ import annotations
@@ -27,8 +27,7 @@ def test_each_recipe_has_a_title_and_source() -> None:
 
 def test_each_recipe_compiles_cleanly() -> None:
     """Every recipe file must compile as part of the whole bundle (this is
-    also exercised by CI's `hassle-dev docs` gate against the real bundle,
-    MILESTONES M9 test 2)."""
+    also exercised by CI's `hassle-dev docs` gate against the real bundle)."""
     from hassle.compiler import compile_bundle
 
     result = compile_bundle(COOKBOOK_BUNDLE)

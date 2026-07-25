@@ -1,15 +1,13 @@
-"""MILESTONES M21 test 4 -- plan/apply for the config-entry group-helper
-domain: apply order (after storage/template helpers, before scripts/
-automations), CREATE-collision drift + rollback (§8.2 semantics unchanged),
-options-flow UPDATE going through the same re-verify-before-write path as
-every other kind, and NOOP short-circuit on canonical equality (fuzz coverage
-of the new kinds).
+"""Plan/apply for the config-entry group-helper domain: apply order (after
+storage/template helpers, before scripts/automations), CREATE-collision
+drift + rollback (§8.2 semantics unchanged), options-flow UPDATE going
+through the same re-verify-before-write path as every other kind, and NOOP
+short-circuit on canonical equality (fuzz coverage of the group-helper kinds).
 
 The apply engine (`hassle.sync.apply.apply_plan`) is kind-agnostic -- these
 tests prove the group-helper kinds slot into that existing machinery with
 ZERO changes to the plan/apply decision logic, only the `_KIND_ORDER`
-dependency-ordering tuple (M21 addition), mirroring
-`test_apply_template_helpers.py` (M10).
+dependency-ordering tuple, mirroring `test_apply_template_helpers.py`.
 """
 
 from __future__ import annotations

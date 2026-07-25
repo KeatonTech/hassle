@@ -1,9 +1,9 @@
 """Intermediate representation (IR) for Home Assistant objects.
 
-Freeze point **F1** (end of M0) covers everything exported here: the IR model
+This is the frozen IR schema: everything exported here -- the IR model
 schema, the canonical JSON serialization, and the object-key format
-(``"automation:<id>"`` etc.). Downstream milestones depend on these being
-stable; changes require a MILESTONES.md update in the same PR (R5).
+(``"automation:<id>"`` etc.) -- is a stable interface downstream code
+depends on.
 """
 
 from __future__ import annotations

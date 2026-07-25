@@ -1,4 +1,4 @@
-"""Golden case (M7.1): DESIGN §6-shaped tree bundle. This mirrors DESIGN §5.3's
+"""Golden case: DESIGN §6-shaped tree bundle. This mirrors DESIGN §5.3's
 worked example verbatim -- imports a helper from `helpers/` and a macro from
 `lib/`, both one subdirectory below the bundle root."""
 

@@ -1,4 +1,4 @@
-"""Golden case: the template expression builder (DESIGN §5.4, M1 test 4).
+"""Golden case: the template expression builder (DESIGN §5.4).
 
 Exercises: `state(x).value` numeric coercion, comparisons/arithmetic/boolean ops
 building nested Jinja, `expr(entity_ref)` shorthand, and `template("{{ raw }}")`

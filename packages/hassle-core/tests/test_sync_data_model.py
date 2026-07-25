@@ -1,10 +1,11 @@
-"""F2 — the plan/apply data model (`hassle.sync`) — DESIGN §8.1/§8.2.
+"""The plan/apply data model (`hassle.sync`), part of the frozen
+SourceWriter/plan seam — DESIGN §8.1/§8.2.
 
 Covers the shape of `PlanAction`, `Plan`/`PlanEntry`, `Conflict`/`ConflictKind`,
 `Manifest`/`ManifestEntry`, and `ApplyResult`, independent of the plan/apply/pull
-engines themselves (those get their own test files). This is the "F2 skeleton"
-freeze-point contract: M6/M7 depend on these shapes existing and behaving as
-documented in docs/backend.md.
+engines themselves (those get their own test files). These shapes are a
+freeze-point contract that later engine code depends on existing and
+behaving as documented in docs/internals/backend-protocol.md.
 """
 
 from __future__ import annotations
@@ -150,7 +151,7 @@ def test_manifest_shape_matches_design_8_1() -> None:
 
 def test_manifest_never_calls_wall_clock_itself() -> None:
     # Manifest is a plain data model: synced_at is whatever the caller supplies,
-    # never computed internally (R8 — no wall-clock in core logic).
+    # never computed internally (deterministic — no wall-clock in core logic).
     m1 = Manifest(synced_at="frozen-value", ha_version="1.0", objects={})
     assert m1.synced_at == "frozen-value"
 
@@ -193,7 +194,7 @@ def test_apply_result_records_outcome_per_object() -> None:
 
 
 def test_ha_normalization_drift_is_not_an_update() -> None:
-    """Owner field report (29 perpetually-spurious plan updates): HA's
+    """Regression (29 perpetually-spurious plan updates in the field): HA's
     storage collections store input_number numerics as floats and fill
     mode='slider'; timers store duration as H:MM:SS (no hour zero-pad) and
     fill restore=False. A local config differing ONLY by those is the same
@@ -284,7 +285,7 @@ def test_real_helper_changes_still_update() -> None:
 
 
 def test_omitted_step_counter_and_long_timer_normalize_too() -> None:
-    """PR #34 review: HA also defaults input_number step=1, counter
+    """HA also defaults input_number step=1, counter
     restore/initial/step, timer duration, and renders >=24h durations as
     '1 day, H:MM:SS'."""
     from hassle.ir.canonical import storage_canonical
@@ -303,7 +304,7 @@ def test_omitted_step_counter_and_long_timer_normalize_too() -> None:
 
 
 def test_migration_raw_base_hash_still_matches_unchanged_sides() -> None:
-    """PR #34 review: a pre-upgrade manifest recorded RAW hashes. A remote
+    """A pre-upgrade manifest recorded RAW hashes. A remote
     UI edit with local unchanged must stay a clean remote-side refresh, not
     a phantom conflict."""
     from hassle.ir.canonical import sha256_hash
@@ -340,7 +341,7 @@ def test_migration_raw_base_hash_still_matches_unchanged_sides() -> None:
 
 
 def test_defaulted_step_base_never_phantom_conflicts() -> None:
-    """PR #34 delta review: post-upgrade steady state -- the manifest base
+    """Post-upgrade steady state -- the manifest base
     was recorded from real HA (float step present), the local config omits
     step, the remote gets a UI rename. Local is UNCHANGED: this must be a
     clean remote-side refresh, never a conflict."""

@@ -1,17 +1,13 @@
-"""M12 test 2 -- a `CATEGORY` module global that does not slugify to its
-file's stem produces a validation Finding (what/where/fix, snapshot-tested).
+"""A `CATEGORY` module global that does not slugify to its file's stem
+produces a validation Finding (what/where/fix, snapshot-tested).
 
-`slugify(CATEGORY)` MUST equal the file stem (MILESTONES M12's binding
-semantics block) -- mismatch is a distinct, additive Finding type
-(`category-slug-mismatch`), never a hard compile error (the object itself
-must still validate/apply fine; MILESTONES M11 test-3-style isolation, this
-milestone's test 2).
+`slugify(CATEGORY)` MUST equal the file stem -- mismatch is a distinct,
+additive Finding type (`category-slug-mismatch`), never a hard compile error:
+the object itself must still validate/apply fine, isolated from the mismatch.
 """
 
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
 
 import pytest
@@ -19,9 +15,11 @@ import pytest
 from hassle.compiler.bundle import compile_bundle
 from hassle.registry.snapshot import RegistrySnapshot
 from hassle.registry.validate import validate_bundle
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = REPO_ROOT / "fixtures" / "registry" / "home.json"
+
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "findings"
 
 
@@ -31,21 +29,16 @@ def snapshot() -> RegistrySnapshot:
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 def _write_bundle(tmp_path: Path, filename: str, code: str) -> Path:
-    # MILESTONES M15 work item B: category-shaped files are root-level now
-    # (`<slug>.py`), not under a per-kind tree (`automations/<slug>.py`).
+    # Category-shaped files are root-level (`<slug>.py`), not under a
+    # per-kind tree (`automations/<slug>.py`).
     bundle = tmp_path / "bundle"
     bundle.mkdir(exist_ok=True)
     (bundle / filename).write_text(code, encoding="utf-8")
@@ -103,9 +96,9 @@ def auto_hvac_1():
 def test_mismatch_does_not_block_other_object_validation(
     tmp_path: Path, snapshot: RegistrySnapshot
 ) -> None:
-    """M11 test-3-style isolation: a CATEGORY mismatch is its own Finding but
-    never prevents the object itself from validating (no other findings for
-    the well-formed automation body)."""
+    """A CATEGORY mismatch is its own Finding but never prevents the object
+    itself from validating (no other findings for the well-formed automation
+    body)."""
     bundle = _write_bundle(
         tmp_path,
         "automatic_hvac.py",

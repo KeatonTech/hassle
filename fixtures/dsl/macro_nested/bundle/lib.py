@@ -1,4 +1,4 @@
-"""Nested macros (M1 test 2): a macro calling another macro."""
+"""Nested macros: a macro calling another macro."""
 
 from hassle import macro, service
 
@@ -12,4 +12,4 @@ def flash_porch():
 @macro
 def welcome_home(message: str):
     flash_porch()
-    service("notify.mobile_app_keaton", message=message)
+    service("notify.mobile_app_kai", message=message)

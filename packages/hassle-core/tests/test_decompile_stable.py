@@ -1,4 +1,5 @@
-"""M2 test 2 — decompiler stability (R8 determinism) and the fixed-point property.
+"""Decompiler stability (deterministic, byte-stable output) and the fixed-point
+property.
 
 - ``decompile(x)`` twice -> byte-identical output (no wall-clock, no randomness,
   no dict-iteration-order dependence).

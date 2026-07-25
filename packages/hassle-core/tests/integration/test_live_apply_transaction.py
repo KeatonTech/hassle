@@ -1,13 +1,13 @@
-"""MILESTONES M6 tests 4 & 5 — transactional apply against real HA.
+"""Transactional apply against real HA.
 
-- test 4 (`test_apply_rollback_live`): a push batch whose 3rd object is crafted
+- `test_apply_rollback_live`: a push batch whose 3rd object is crafted
   invalid (rejected by HA) → objects 1-2 are restored; HA state is hash-identical
   to pre-apply.
-- test 5 (`test_apply_aborts_on_drift_live`): an object mutated via HA's API
+- `test_apply_aborts_on_drift_live`: an object mutated via HA's API
   between plan and apply → apply aborts before writing anything. Includes the
-  **CREATE-collision** case (M5 review finding): an object appearing under a
+  **CREATE-collision** case: an object appearing under a
   planned-create identity between plan and apply is drift too.
-- The M4 finding folded in here: does HA rewrite inner legacy `platform:` →
+- A separate finding folded in here: does HA rewrite inner legacy `platform:` →
   `trigger:` on storage? (`normalize_ha` preserves inner `platform:`.) Verified
   directly against HA below.
 """
@@ -155,7 +155,7 @@ def test_apply_aborts_on_create_collision_live(ha: DirectBackend) -> None:
 
 
 def test_ha_does_not_rewrite_inner_platform_to_trigger(ha: DirectBackend) -> None:
-    """M4 finding: normalize_ha preserves inner `platform:`; verify HA agrees.
+    """normalize_ha preserves inner `platform:`; verify HA agrees.
 
     If this ever fails on a future HA (inner `platform:` rewritten to `trigger:`
     on storage), `normalize_ha` needs the extra rule and this is the evidence.

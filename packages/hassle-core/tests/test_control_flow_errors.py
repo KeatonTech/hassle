@@ -1,16 +1,14 @@
-"""M1 actions/control-flow error coverage (R6: what/where/fix, snapshot-tested).
+"""Actions/control-flow error coverage (what/where/fix, snapshot-tested).
 
 Covers `ElseWithoutIfError` -- `with else_then():`/`with else_if(...):` used
 where the immediately-preceding action in the current list is not an
-`if_then`/`choose` container. This is the actions/control-flow workstream's
-own error class (docs/m1-internal-api.md §5), added alongside the M1-core
-errors in `hassle/compiler/errors.py`.
+`if_then`/`choose` container. This is the actions/control-flow error class
+(docs/internals/compiler-api.md §5), defined alongside the core-compiler errors in
+`hassle/compiler/errors.py`.
 """
 
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
 
 import pytest
@@ -19,21 +17,17 @@ from hassle import service, state
 from hassle.compiler import ElseWithoutIfError
 from hassle.compiler.control_flow import else_if, else_then, if_then
 from hassle.compiler.recording import recording
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 def test_else_then_without_preceding_if_message() -> None:

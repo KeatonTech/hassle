@@ -1,4 +1,4 @@
-"""Golden case (M19, owner-directed typing resolution): `field_default(...)`
+"""Golden case: `field_default(...)`
 is the typed-default helper for a `@shared_script` signature parameter
 annotated `TemplateExpr` -- the BODY-TRUE type (every field-named parameter
 is a runtime template marker inside the body, never its declared Python
@@ -9,8 +9,8 @@ is TYPED as returning `TemplateExpr`, so the parameter's own default
 expression type-checks against its `TemplateExpr` annotation without the
 self-inconsistent `tag: TemplateExpr = ""` a bare literal default would be.
 
-Caller-side typing is unaffected either way (verified empirically,
-MILESTONES M19 typing investigation): a caller passing a plain literal
+Caller-side typing is unaffected either way (verified empirically): a
+caller passing a plain literal
 (`dismiss_tagged_notification(tag="guest_reminder")`) is unaffected by
 whatever this signature's own annotations say -- `@shared_script`'s returned
 caller wrapper is `(*args: Any, **kwargs: Any) -> None`, fully decoupled.

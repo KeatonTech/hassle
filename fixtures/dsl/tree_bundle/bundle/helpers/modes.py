@@ -1,5 +1,5 @@
 """helpers/modes.py — declarative; synced like any object; referenced by import
-elsewhere in the tree (DESIGN §5.3/§5.7). Exercises the M7.1 loader recursing
+elsewhere in the tree (DESIGN §5.3/§5.7). Exercises the bundle loader recursing
 into subdirectory packages."""
 
 from hassle import input_boolean

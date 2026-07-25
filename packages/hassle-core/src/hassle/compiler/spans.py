@@ -1,10 +1,10 @@
-"""Source spans — file:line of the DSL call that produced an IR node (M1 test 6).
+"""Source spans — file:line of the DSL call that produced an IR node.
 
 A span is captured by walking the call stack at record time to the first frame
 *outside* the compiler package — i.e. the user's DSL line. Spans ride on IR nodes
 as non-serialized metadata (attached in the compiler's span map, never in the
-config body), so they never appear in ``to_ha()`` output (that would break I3 and
-hashing). DESIGN §7.2.
+config body), so they never appear in ``to_ha()`` output (that would break
+compile(decompile(x)) == x and hashing). DESIGN §7.2.
 """
 
 from __future__ import annotations

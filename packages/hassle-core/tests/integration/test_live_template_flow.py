@@ -1,51 +1,49 @@
-"""MILESTONES M10 test 1 (integration half) — the config-entry template-helper
-flow verified end-to-end against real Home Assistant (M6 pattern: this suite
-is the AUTHORITATIVE verification of the flow shapes documented in
-docs/ha-api-notes.md §26; any mismatch found here supersedes the doc, updated
-in the same PR as the fix).
+"""The config-entry template-helper flow verified end-to-end against real
+Home Assistant: this suite is the AUTHORITATIVE verification of the flow
+shapes documented in docs/internals/ha-api-notes.md §26; any mismatch found here
+supersedes the doc.
 
-**This suite is exactly what caught real bugs, across several CI rounds:**
+**This suite is exactly what caught real bugs:**
 
-- Round 1 (§26.0): config-entry flow create/step-submission, options-flow,
+- (§26.0) config-entry flow create/step-submission, options-flow,
   and entry removal were originally modeled as WebSocket commands; every
   test here failed identically on both HA `stable` and `dev` with
   `HaApiError: WS command failed: Unknown command.`. Root cause: those three
   operations are REST views (`homeassistant/components/config/
   config_entries.py`), not WS commands (only entry *listing*,
   `config_entries/get`, is genuinely WS).
-- Round 2 (§26.6): with the transport fixed, step submission itself 400'd:
+- (§26.6) with the transport fixed, step submission itself 400'd:
   `{"errors": {"base": ["extra keys not allowed @ data['_template_type']",
   "extra keys not allowed @ data['unique_id']"], "set_value": "required key
   not provided"}}`. Three findings: (1) the form step must be EXACTLY the
   domain's own fields, no bookkeeping keys; (2) `template_number`/
   `template_select` require a write-target action sequence (`set_value`/
   `select_option`); (3) `unique_id` is rejected outright -- there is no
-  settable unique id, so identity is now derived from `name` (slugified),
-  re-freezing MILESTONES M10's identity section.
-- Round 3 (§26.7): CREATE worked, but READ-BACK and UPDATE were still wrong
+  settable unique id, so identity is derived from `name` (slugified).
+- (§26.7) CREATE worked, but READ-BACK and UPDATE were still wrong
   -- `config_entries/get` never carries an entry's options at all; fixed by
   reading them back via an options-flow's suggested values instead.
-- Round 4 (§26.10): the plan-noop test still failed with an int-vs-float
+- (§26.10) the plan-noop test still failed with an int-vs-float
   hash mismatch -- HA's `NumberSelector` always stores `template_number`'s
   `min`/`max`/`step` as floats, so the compiler now coerces to match.
-- Round 5 (this file): the round-4 fix landed in the COMPILER
-  (`hassle.compiler.template_helpers`), but this suite's local configs were
-  hand-written raw dicts with `int` `min`/`max`/`step` that never went
-  through the compiler -- so the plan-noop test kept failing with the
-  identical diff even after the compiler was fixed. **Every `local`/plan
-  config in this file is now produced by actually calling the DSL builders
+- A later fix landed in the COMPILER (`hassle.compiler.template_helpers`),
+  but this suite's local configs were hand-written raw dicts with `int`
+  `min`/`max`/`step` that never went through the compiler -- so the
+  plan-noop test kept failing with the identical diff even after the
+  compiler was fixed. **Every `local`/plan config in this file is now
+  produced by actually calling the DSL builders
   (`hassle.compiler.template_helpers.template_number` et al.) and reading
   back `.to_ha()`**, exactly the way the real product's `push`/`plan`
   pipeline compiles a bundle and hands the compiler's output to
   `compute_plan`/`apply_plan` -- never a hand-authored dict. This is also
-  more faithful to I5's spirit (tests exercise compiled IR, not hand-typed
-  approximations of it); `create`/`update`'s own tests happened to pass
-  with raw ints throughout rounds 1-4 only because HA coerces server-side
+  more faithful to the simulator's spirit (tests exercise compiled IR, not
+  hand-typed approximations of it); `create`/`update`'s own tests happened
+  to pass with raw ints throughout only because HA coerces server-side
   regardless of what's submitted, which masked this file never actually
   exercising the compiler at all.
 
-Fixed in `hassle/backend/direct.py` (rounds 1-3) and
-`hassle/compiler/template_helpers.py` (round 4); see docs/ha-api-notes.md
+Fixed in `hassle/backend/direct.py` and
+`hassle/compiler/template_helpers.py`; see docs/internals/ha-api-notes.md
 §26.0-§26.10 for the full correction history.
 
 Covers:
@@ -53,16 +51,14 @@ Covers:
   `/api/config/config_entries/flow[/{flow_id}]` for create, REST
   `/api/config/config_entries/options/flow[/{flow_id}]` for update, REST
   `DELETE /api/config/config_entries/entry/{entry_id}` for delete —
-  docs/ha-api-notes.md §26.1-26.3).
+  docs/internals/ha-api-notes.md §26.1-26.3).
 - the same cycle for the other three template domains (sensor/binary_sensor/
-  select), proving the plugin generalizes across the domain (MILESTONES M10
-  "scoped to the template domain first ... at minimum" number/sensor/
-  binary_sensor/select).
+  select), proving the plugin generalizes across the domain (scoped to the
+  template domain first: number/sensor/binary_sensor/select).
 - plan/apply integration: compute_plan + apply_plan drive a real create,
-  and a second push is a no-op (round-trip byte-stable, I3 applied to
-  options bodies).
-- CREATE-collision + rollback against the real config-entry apply path
-  (MILESTONES M10 test 4).
+  and a second push is a no-op (round-trip byte-stable, compile(decompile(x))
+  == x applied to options bodies).
+- CREATE-collision + rollback against the real config-entry apply path.
 """
 
 from __future__ import annotations
@@ -96,9 +92,10 @@ _BUILDERS = {
 
 def _compiled(domain: str, **kwargs: Any) -> dict[str, Any]:
     """Produce a template-helper config the way the real product does: through
-    the DSL builder, not a hand-authored dict (round 5, docs/ha-api-notes.md
+    the DSL builder, not a hand-authored dict (docs/internals/ha-api-notes.md
     §26.10 -- a raw `int` `min`/`max`/`step` never exercises the compiler's
-    float coercion, and I5's spirit is that tests exercise compiled IR)."""
+    float coercion, and the simulator's spirit is that tests exercise
+    compiled IR)."""
     reset_declared_template_helpers()
     _BUILDERS[domain](**kwargs)
     (helper,) = declared_template_helpers()
@@ -144,7 +141,8 @@ def test_template_number_create_read_update_delete_cycle(ha: DirectBackend) -> N
     )
     updated = ha.list_remote("template_number")[identity]
     assert updated["state"] == "{{ 5 }}"
-    # I2 analog: entry_id unchanged across an options-flow update.
+    # Analogous to never changing an existing object's HA id: entry_id
+    # unchanged across an options-flow update.
     assert ha.entry_id_for("template_number", identity) == entry_id_before
 
     ha.delete("template_number", identity)
@@ -315,7 +313,7 @@ def test_template_helper_rollback_restores_prior_options_live(ha: DirectBackend)
     restored = ha.list_remote("template_number")[identity]
     assert sha256_hash(restored) == before_hash
     # Rollback-by-recreate is a real recreate at the HA level: document the
-    # entry_id-changes caveat (docs/ha-api-notes.md §26.3) rather than assert
+    # entry_id-changes caveat (docs/internals/ha-api-notes.md §26.3) rather than assert
     # it is preserved -- the object key and stored options are identical
     # either way, which is what the plan/apply engine actually depends on.
     assert ha.entry_id_for("template_number", identity) is not None

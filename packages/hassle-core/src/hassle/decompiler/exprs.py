@@ -1,12 +1,13 @@
 """Decompile a single trigger/condition/action dict to a DSL source expression.
 
 Each ``decompile_*`` function returns a Python source snippet (a single
-expression, no trailing newline) that reproduces the given HA dict via the F3
-DSL surface (docs/dsl-f3.md), or returns ``None`` when the shape isn't modeled
--- the caller falls back to the granular ``raw_*`` escape hatch (DESIGN §5.8).
+expression, no trailing newline) that reproduces the given HA dict via the
+frozen DSL surface (docs/internals/dsl-extensions.md), or returns ``None`` when the
+shape isn't modeled -- the caller falls back to the granular ``raw_*`` escape
+hatch (DESIGN §5.8).
 
-Nothing here mutates its input, and nothing depends on wall-clock or randomness
-(R8): the same dict always decompiles to the same source string.
+Nothing here mutates its input, and nothing depends on wall-clock or
+randomness: the same dict always decompiles to the same source string.
 """
 
 from __future__ import annotations
@@ -63,7 +64,7 @@ def render_entity_position(value: Any) -> str:
     triggers, helper refs). A bare id matching the entity-id shape becomes
     ``e.<domain>.<object_id>``; a list becomes ``[e.a.b, e.c.d]`` (each entry
     rendered independently so a non-conforming entry still round-trips as a
-    plain literal rather than dropping data, I3). ``EntityRef`` is a ``str``
+    plain literal rather than dropping data). ``EntityRef`` is a ``str``
     subclass (``hassle.compiler.helpers.EntityRef``), so this substitution
     compiles to the exact same HA value as the literal it replaces -- purely
     cosmetic source-level sugar, zero IR drift.
@@ -77,11 +78,11 @@ def render_entity_position(value: Any) -> str:
 
 
 # The one dict key where an entity-position value can appear nested (DESIGN
-# §7.3 owner feedback): `target={"entity_id": ...}`. Rendered as a real dict
-# via `render_literal`, whose per-key dispatch (`render_entity_literal_at`)
+# §7.3): `target={"entity_id": ...}`. Rendered as a real dict via
+# `render_literal`, whose per-key dispatch (`render_entity_literal_at`)
 # special-cases this key so `target={"entity_id": e.light.hallway}` -- still
 # an ordinary dict literal, `EntityRef` is a `str` subclass, so it compiles
-# byte-identical (I3).
+# byte-identical (compile(decompile(x)) == x).
 _ENTITY_ID_DICT_KEYS = frozenset({"entity_id"})
 
 
@@ -277,10 +278,10 @@ def decompile_trigger(body: dict[str, Any]) -> str | None:
 
 
 def _is_entity_id_shape(value: Any) -> bool:
-    """True for a bare entity-id string, or a list of them (real-world
-    smoke-test addition: the HA UI always stores entity_id as a list, even for
-    a single entity -- a singleton list must decompile back to a list, never
-    normalized to a scalar, I3)."""
+    """True for a bare entity-id string, or a list of them: the HA UI always
+    stores entity_id as a list, even for a single entity -- a singleton list
+    must decompile back to a list, never normalized to a scalar
+    (compile(decompile(x)) == x)."""
     if isinstance(value, str):
         return True
     if isinstance(value, list):
@@ -350,9 +351,9 @@ def _trig_time(body: dict[str, Any]) -> str | None:
         return None
     parts = [f"at={render_literal(body['at'])}"]
     if "weekday" in body:
-        # Real-world smoke-test finding: HA's `time` trigger schema also
-        # accepts `weekday` (docs/ha-api-notes.md), though it was originally
-        # documented condition-only.
+        # HA's `time` trigger schema also accepts `weekday`
+        # (docs/internals/ha-api-notes.md), though it was originally documented
+        # condition-only.
         parts.append(f"weekday={render_literal(body['weekday'])}")
     call = f"time({', '.join(parts)})"
     suffix = _with_options_suffix(body)
@@ -560,11 +561,11 @@ def _cond_state(body: dict[str, Any]) -> str | None:
     if not set(body) <= known or "entity_id" not in body:
         return None
     entity_id = body["entity_id"]
-    # `entity_id` (and `state`) accept a list too (residue-coverage round 2,
-    # docs/ha-api-notes.md §20): the HA UI stores a state CONDITION's fields as
-    # lists even for a single entity/value, mirroring round 1's trigger fix
-    # (`_is_entity_id_shape`) -- a singleton list must stay a list, never
-    # normalized to a scalar (I3).
+    # `entity_id` (and `state`) accept a list too (docs/internals/ha-api-notes.md §20):
+    # the HA UI stores a state CONDITION's fields as lists even for a single
+    # entity/value, mirroring the trigger fix (`_is_entity_id_shape`) -- a
+    # singleton list must stay a list, never normalized to a scalar
+    # (compile(decompile(x)) == x).
     if not _is_entity_id_shape(entity_id):
         return None
     call = f"state({render_entity_position(entity_id)})"

@@ -1,6 +1,6 @@
 {
   "alias": "Dismiss notification",
-  "description": "Companion script for automation_calls_script_with_metadata.json (ux/shared-script-calls, owner feedback): a managed script with a declared field, called directly (not via script.turn_on) by a sibling automation.",
+  "description": "Companion script for automation_calls_script_with_metadata.json: a managed script with a declared field, called directly (not via script.turn_on) by a sibling automation.",
   "fields": {
     "notification_id": {
       "default": ""

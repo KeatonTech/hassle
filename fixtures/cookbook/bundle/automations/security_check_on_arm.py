@@ -17,4 +17,4 @@ def cookbook_security_check_on_arm():
             state("lock.front_door").is_("locked"),
         )
     )
-    service("notify.mobile_app_keaton", message="Armed: all secure")
+    service("notify.mobile_app_kai", message="Armed: all secure")

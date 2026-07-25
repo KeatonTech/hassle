@@ -1,4 +1,4 @@
-"""FakeBackend — in-memory Backend for M5 (docs/ha-api-notes.md §11).
+"""FakeBackend — in-memory Backend for unit tests (docs/internals/ha-api-notes.md §11).
 
 Seeded from shapes in docs/ha-api-captures/ (hand-written Python fixture data
 modeled on those captures, not parsed at runtime — see module docstring in
@@ -8,7 +8,7 @@ Key behaviors under test:
 - normalizes create/update input through `hassle.ir.normalize_ha` before storing
   (legacy singular -> plural, `service:` -> `action:`), exactly like real HA;
 - helper create/update/delete addressed by domain + id (the `{domain}_id`
-  convention, docs/ha-api-notes.md §4);
+  convention, docs/internals/ha-api-notes.md §4);
 - tracks writes since last reset so tests can assert zero writes during pull.
 """
 

@@ -1,5 +1,5 @@
-"""``ux/dsl-ergonomics``, item 2 -- `Mode`/`MaxExceeded` StrEnum for HA's
-enumerated `mode:`/`max_exceeded:` automation/script options.
+"""`Mode`/`MaxExceeded` StrEnum for HA's enumerated `mode:`/`max_exceeded:`
+automation/script options.
 
 `StrEnum` IS a `str` subclass: `Mode.RESTART == "restart"` and serializes
 identically, so passing an enum member anywhere the DSL accepts `mode=`/
@@ -38,8 +38,8 @@ def _write_bundle(tmp_path, source: str) -> str:
 
 
 def test_enum_mode_compiles_byte_identical_to_plain_string(tmp_path) -> None:
-    """Explicit test (per the work item): builders accept enum or str, and
-    compiling either produces byte-identical IR."""
+    """Builders accept enum or str, and compiling either produces
+    byte-identical IR."""
     from hassle.compiler.bundle import compile_bundle
 
     enum_source = (

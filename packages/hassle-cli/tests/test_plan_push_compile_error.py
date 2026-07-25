@@ -1,5 +1,5 @@
-"""Reviewer follow-up (task #15, PR #4): `hassle validate` catches `CompileError`
-and reports it cleanly (what/where/fix, exit 1, plain + `--json`) -- see
+"""`hassle validate` catches `CompileError` and reports it cleanly
+(what/where/fix, exit 1, plain + `--json`) -- see
 `hassle_cli.cli.validate` and `test_validate_template_helper_compile_error.py`.
 
 But `_build_plan` (shared by `hassle plan`, `hassle status`, and `hassle push`)
@@ -25,7 +25,7 @@ def _write_broken_bundle(root: Path, registry_snapshot_json: dict, *, backend_to
         json.dumps(registry_snapshot_json), encoding="utf-8"
     )
     (root / "hassle.toml").write_text(
-        f'ha_url = "fake://{backend_token}"\nformat_version = 1\nmirror = false\n',
+        f'ha_url = "fake://{backend_token}"\nformat_version = 1\n',
         encoding="utf-8",
     )
     (root / "helpers.py").write_text(

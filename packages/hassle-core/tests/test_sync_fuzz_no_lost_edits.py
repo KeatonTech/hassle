@@ -1,4 +1,4 @@
-"""Fuzz test for I6 (MILESTONES M5 test 7) — no edit is ever silently lost.
+"""Fuzz test: no local or UI edit is ever silently lost.
 
 Model: a single object (key "automation:fuzz") tracked through three "true
 values" — base (what the manifest says was last synced), local (what the
@@ -28,11 +28,11 @@ We check this by re-deriving the "expected loseable" condition independently
 of compute_plan and asserting the two agree at every step, for 1000
 deterministically-seeded random sequences.
 
-**M10 addition:** the same harness is re-run (a separate 1000-seed
+The same harness is also re-run (a separate 1000-seed
 parametrization) against a `template_number` object instead of an
-`automation`, proving I6 holds for the new config-entry-backed kind too — the
-plan/pull/push engines are kind-agnostic, so this is a coverage extension, not
-a new code path.
+`automation`, proving the invariant holds for the config-entry-backed kind
+too — the plan/pull/push engines are kind-agnostic, so this is a coverage
+extension, not a new code path.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ class _FuzzState:
         self.identity = identity
         self.kind = kind
         self.object_key = object_key
-        # M10 addition: a pluggable value factory so the same fuzz harness
+        # A pluggable value factory so the same fuzz harness
         # covers a differently-shaped kind (e.g. template_number's
         # unique_id/state shape) without touching the original automation
         # path's exact behavior (default reproduces the original inline body).
@@ -140,7 +140,8 @@ def _assert_no_silent_loss(
     if at_risk:
         assert entry.action is PlanAction.CONFLICT, (
             f"seed={seed} step={step_num} ({phase}): both sides diverged from base and "
-            f"from each other but action was {entry.action}, not conflict -- I6 violated"
+            f"from each other but action was {entry.action}, not conflict -- "
+            "an edit would be silently lost"
         )
 
 
@@ -262,15 +263,15 @@ def test_i6_fuzz_no_silent_data_loss(seed: int) -> None:
 
 
 def test_i6_fuzz_runs_exactly_1000_seeds() -> None:
-    # Documents the required fuzz volume (MILESTONES M5 test 7: "1 000 random
-    # sequences"); the parametrized test above IS the 1000 runs, this test
+    # Documents the required fuzz volume (1 000 random
+    # sequences); the parametrized test above IS the 1000 runs, this test
     # just pins the count so a future edit can't quietly shrink coverage.
     assert len(list(range(1000))) == 1000
 
 
-# -- M10: fuzz extension for the config-entry template-helper kind ----------
+# -- Fuzz extension for the config-entry template-helper kind ---------------
 #
-# Identity redesign (docs/ha-api-notes.md §26.6): a template helper's
+# Identity redesign (docs/internals/ha-api-notes.md §26.6): a template helper's
 # identity is DERIVED from `name` (slugified) -- there is no separate,
 # stable `id` field the way automation/script/storage-helper kinds have.
 # `name` must therefore stay CONSTANT across every "distinct edit" in this

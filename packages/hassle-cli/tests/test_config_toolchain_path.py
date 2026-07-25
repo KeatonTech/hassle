@@ -1,8 +1,7 @@
-"""MILESTONES M17: `hassle.toml` gains a `toolchain_path` key (config-surface
-addition) -- the highest-priority entry in `hassle_cli.uv_project`'s
-toolchain resolution order. Purely config load/persist coverage here; the
-resolution-order semantics themselves are covered in
-`test_uv_project_scaffold.py`.
+"""`hassle.toml` gains a `toolchain_path` key -- the highest-priority entry
+in `hassle_cli.uv_project`'s toolchain resolution order. Purely config
+load/persist coverage here; the resolution-order semantics themselves are
+covered in `test_uv_project_scaffold.py`.
 """
 
 from __future__ import annotations
@@ -41,7 +40,7 @@ def test_persist_toolchain_path_writes_new_line(tmp_path: Path) -> None:
 
 def test_persist_toolchain_path_replaces_existing_line_preserving_others(tmp_path: Path) -> None:
     (tmp_path / "hassle.toml").write_text(
-        '# a comment\nha_url = "http://x"\ntoolchain_path = "/old/path"\nmirror = false\n',
+        '# a comment\nha_url = "http://x"\ntoolchain_path = "/old/path"\nignore = []\n',
         encoding="utf-8",
     )
 
@@ -52,7 +51,7 @@ def test_persist_toolchain_path_replaces_existing_line_preserving_others(tmp_pat
     assert "/new/path" in text
     assert "# a comment" in text
     assert 'ha_url = "http://x"' in text
-    assert "mirror = false" in text
+    assert "ignore = []" in text
     config = load_config(tmp_path)
     assert config.toolchain_path == "/new/path"
 

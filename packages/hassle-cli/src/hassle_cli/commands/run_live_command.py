@@ -41,7 +41,7 @@ def execute_live_run(root: Path, target: str, *, skip_conditions: bool, console:
 
         def resolve_shadow_entity_id(shadow_id: str) -> str:
             """The automation `entity_id` is `slug(alias)`, NOT `slug(id)`
-            (docs/ha-api-notes.md §10.2, confirmed against real HA in M0.V) --
+            (docs/internals/ha-api-notes.md §10.2, confirmed against real HA) --
             `automation.{shadow_id}` was a latent bug that made every live
             trigger silently target a nonexistent entity (§29 addendum: this,
             not disabled-automation semantics, is why no trace ever appeared).
@@ -87,8 +87,8 @@ def execute_live_run(root: Path, target: str, *, skip_conditions: bool, console:
         # Read the poll bound off the module at call time (not as bound
         # defaults on run_shadow_session) so tests can monkeypatch
         # hassle_cli.run_live.DEFAULT_TRACE_POLL_TIMEOUT/_INTERVAL down to
-        # keep the permanently-empty-trace test fast (R2/R8: no real
-        # multi-second wait in a unit test).
+        # keep the permanently-empty-trace test fast (unit tests never touch
+        # the network or wait on a real clock).
         result = run_shadow_session(
             backend,
             object_key,
@@ -105,12 +105,12 @@ def execute_live_run(root: Path, target: str, *, skip_conditions: bool, console:
     if result.trace:
         console.print(render_trace_timeline(result.trace))
     else:
-        # Never silent (coordinator finding, docs/ha-api-notes.md §29): the
+        # Never silent (docs/internals/ha-api-notes.md §29): the
         # shadow ran and was cleaned up, but no trace ever appeared even
         # after `stream_trace`'s bounded poll -- tell the user explicitly
         # instead of just printing "shadow run complete" and nothing else.
         # Note the shadow is already deleted by the time we get here (cleanup
-        # always runs, MILESTONES M7 test 5) -- there is nothing left to
+        # always runs) -- there is nothing left to
         # inspect for THIS run; the fix hint points at HA's own automation
         # traces list for the next attempt / a longer-running one instead.
         console.print(

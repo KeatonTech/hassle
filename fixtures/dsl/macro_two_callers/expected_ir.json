@@ -12,7 +12,7 @@
     "conditions": [],
     "actions": [
       {
-        "action": "notify.mobile_app_keaton",
+        "action": "notify.mobile_app_kai",
         "data": {
           "message": "Front door opened"
         }
@@ -38,7 +38,7 @@
     "conditions": [],
     "actions": [
       {
-        "action": "notify.mobile_app_keaton",
+        "action": "notify.mobile_app_kai",
         "data": {
           "message": "Back door opened"
         }

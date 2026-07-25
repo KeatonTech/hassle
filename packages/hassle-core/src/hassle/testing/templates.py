@@ -71,7 +71,7 @@ def _build_globals_and_filters(
         "today_at": today_at_fn,
         "as_timestamp": as_timestamp_fn,
         "iif": _iif,
-        # HA math set (DESIGN §10.1 / MILESTONES M4 deliverables line): stock
+        # HA math set (DESIGN §10.1): stock
         # jinja2 has none of these as bare globals.
         "sin": math.sin,
         "cos": math.cos,
@@ -185,7 +185,8 @@ class TemplateEngine:
 def _extract_undefined_name(message: str) -> str:
     # jinja2's UndefinedError text is like "'some_name' is undefined" or
     # "'dict object' has no attribute 'some_name'" -- best-effort extraction
-    # of the offending identifier so the error names the construct (R6).
+    # of the offending identifier so the error names the construct
+    # (what/where/fix).
     if "'" in message:
         parts = message.split("'")
         if len(parts) >= 2:
@@ -196,7 +197,7 @@ def _extract_undefined_name(message: str) -> str:
 def _extract_filter_name(message: str) -> str | None:
     # jinja2's TemplateAssertionError text for an unknown filter/test is
     # "No filter named 'some_filter'." / "No test named 'some_test'." --
-    # extract the quoted name so the error names the construct (R6) instead
+    # extract the quoted name so the error names the construct instead
     # of the generic "invalid template syntax".
     if "No filter named" in message or "No test named" in message:
         parts = message.split("'")

@@ -1,4 +1,4 @@
-"""M13 test 4 — refresh-overwrite consequence: a bundle has a decorator-form
+"""Refresh-overwrite consequence: a bundle has a decorator-form
 template-helper function; the remote `state=` is edited (simulating a UI
 edit) into something the bounded inverter (`hassle.decompiler.template_invert`)
 cannot invert; `hassle pull`'s REFRESH splice replaces the function's BODY via
@@ -7,17 +7,16 @@ through the real CLI (mirrors
 `test_pull_refresh_triggers_decorator_form.py`'s pattern for the trigger-
 decorator feature).
 
-**MILESTONES M14 update:** the fallback branch is ALSO the decorator form now
-(owner feedback) -- the downgrade below no longer replaces the decorator with
-the call form; it re-splices the SAME decorator shape with a `return
-"<verbatim Jinja>"` body instead of the inverted expression. Deliberate
-consequence (documented, MILESTONES M13, refined M14): cleaner
-expression-bodied Python is an offer, not a guarantee -- once the remote
-value falls outside the bounded grammar, the next pull silently downgrades
-the local source's `return` body to the (always-correct) raw string, but
-keeps the decorator shape (so a helper flipping between branches keeps its
-function name and its decorator kwargs, MILESTONES M14). I6 still holds:
-nothing is lost, the config is fully present in the fallback string.
+The fallback branch is ALSO the decorator form -- the downgrade below does
+not replace the decorator with the call form; it re-splices the SAME
+decorator shape with a `return "<verbatim Jinja>"` body instead of the
+inverted expression. Deliberate consequence: cleaner expression-bodied
+Python is an offer, not a guarantee -- once the remote value falls outside
+the bounded grammar, the next pull silently downgrades the local source's
+`return` body to the (always-correct) raw string, but keeps the decorator
+shape (so a helper flipping between branches keeps its function name and
+its decorator kwargs). No local or UI edit is silently lost: nothing is
+lost, the config is fully present in the fallback string.
 """
 
 from __future__ import annotations
@@ -73,8 +72,8 @@ def test_pull_refresh_downgrades_noninvertible_template_helper_to_string_body(
 
     after = (git_repo / "sensor_helper.py").read_text(encoding="utf-8")
 
-    # M14: the function STAYS a decorator -- only its `return` body downgrades
-    # to the verbatim raw string (I6: the config is fully present, and the
+    # The function STAYS a decorator -- only its `return` body downgrades
+    # to the verbatim raw string (the config is fully present, and the
     # decorator shape/function name survive the downgrade too).
     assert "def average_temp():" in after, after
     assert "@template_sensor(" in after, after
@@ -83,8 +82,9 @@ def test_pull_refresh_downgrades_noninvertible_template_helper_to_string_body(
     assert "state=" not in decorator_line, after
     assert non_invertible_state in after, after
 
-    # No data loss (I3/I6): the bundle still compiles and reproduces the
-    # drifted remote state exactly.
+    # No data loss (compile(decompile(x)) == x, and no edit is silently
+    # lost): the bundle still compiles and reproduces the drifted remote
+    # state exactly.
     from hassle.compiler import compile_bundle
 
     compiled = compile_bundle(git_repo)

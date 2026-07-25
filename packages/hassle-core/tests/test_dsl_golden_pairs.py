@@ -1,4 +1,4 @@
-"""M1 test 1 + test 7 — DSL bundle -> IR golden pairs, and byte-determinism (R8).
+"""DSL bundle -> IR golden pairs, and byte-determinism.
 
 `compile_bundle` imports a bundle dir in isolation, runs each registered object's
 function once inside a recording context, and emits ``{object_key: ha_json}`` in
@@ -19,7 +19,7 @@ ERROR_CASES: list[DslCase] = error_cases()
 
 
 def test_dsl_cases_present() -> None:
-    # At least the five seeded M1-core cases must exist.
+    # At least the core seeded cases must exist.
     names = {c.name for c in CASES}
     assert {"minimal", "state_delay_service", "loop_three_rooms", "kitchen_sink_lite"} <= names
 
@@ -47,7 +47,7 @@ def test_dsl_error_case(case: DslCase) -> None:
 
 @pytest.mark.parametrize("case", CASES, ids=[c.name for c in CASES])
 def test_compile_deterministic(case: DslCase) -> None:
-    # R8: two independent compiles produce byte-identical canonical JSON.
+    # Two independent compiles produce byte-identical canonical JSON.
     first = compile_bundle(case.bundle_dir)
     second = compile_bundle(case.bundle_dir)
 

@@ -1,7 +1,7 @@
-"""Golden case: `triggers=` decorator metadata (ux/triggers-in-decorator,
-task #10) -- the new canonical form for a `state()` trigger, side by side with
-`fixtures/dsl/state_delay_service/` (the equivalent `when()` form) to prove
-compile parity: both must produce byte-identical IR.
+"""Golden case: `triggers=` decorator metadata -- the canonical form for a
+`state()` trigger, side by side with `fixtures/dsl/state_delay_service/`
+(the equivalent `when()` form) to prove compile parity: both must produce
+byte-identical IR.
 """
 
 from hassle import automation, delay, service, state

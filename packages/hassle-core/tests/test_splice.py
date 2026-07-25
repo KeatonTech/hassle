@@ -1,10 +1,10 @@
-"""M2 test 4 — LibCST splice preserves the rest of the file (DESIGN §7.3).
+"""LibCST splice preserves the rest of the file (DESIGN §7.3).
 
 Given a file with 3 automations + hand-written comments, splicing a new body for
 the middle one must leave the other two ``def``s and all surrounding comments
 byte-identical, and the spliced def must carry the
-``# hassle: updated from UI on <date>`` marker (R8: the date is a parameter the
-caller passes -- never wall-clock in core logic).
+``# hassle: updated from UI on <date>`` marker (deterministic: the date is a
+parameter the caller passes -- never wall-clock in core logic).
 """
 
 from __future__ import annotations
@@ -69,8 +69,9 @@ def test_splice_preserves_rest_of_file() -> None:
 
 
 def test_splice_marker_uses_caller_supplied_date_not_wallclock() -> None:
-    # R8: no wall-clock in core logic -- the marker date is whatever the caller
-    # passes, not `date.today()`. A date far from "today" proves it.
+    # Deterministic: no wall-clock in core logic -- the marker date is
+    # whatever the caller passes, not `date.today()`. A date far from
+    # "today" proves it.
     before = _read("before.py")
     new_def = _read("new_middle_def.py")
 

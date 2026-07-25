@@ -1,10 +1,10 @@
-"""M9 error-message audit finding: `hassle run <target>` with a malformed
-target (missing `::`) or an unknown automation name previously raised a bare
-`ValueError`/`KeyError` with no "Fix:" clause and no clean CLI-level exit
-(both propagated as an uncaught traceback -- CliRunner is invoked with
-`catch_exceptions=False` in this suite, matching real subprocess behavior,
-so an untranslated exception would crash the process). Fixed: both now
-degrade to a clean exit code 1 with what/where/fix text (R6).
+"""`hassle run <target>` with a malformed target (missing `::`) or an
+unknown automation name previously raised a bare `ValueError`/`KeyError`
+with no "Fix:" clause and no clean CLI-level exit (both propagated as an
+uncaught traceback -- CliRunner is invoked with `catch_exceptions=False` in
+this suite, matching real subprocess behavior, so an untranslated exception
+would crash the process). Fixed: both now degrade to a clean exit code 1
+with what/where/fix text.
 """
 
 from __future__ import annotations

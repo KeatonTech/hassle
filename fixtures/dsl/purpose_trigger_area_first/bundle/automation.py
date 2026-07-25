@@ -1,4 +1,4 @@
-"""Golden case: purpose-specific trigger, area target, behavior=first (M1 test 10).
+"""Golden case: purpose-specific trigger, area target, behavior=first.
 
 Mirrors fixtures/configs/automation_purpose_trigger_area_behavior_first.json.
 """

@@ -689,9 +689,9 @@
       "platform": "person"
     },
     {
-      "entity_id": "person.keaton",
-      "name": "Keaton",
-      "original_name": "Keaton",
+      "entity_id": "person.kai",
+      "name": "Kai",
+      "original_name": "Kai",
       "area_id": null,
       "device_id": "device_person_2",
       "labels": [],
@@ -709,9 +709,9 @@
       "platform": "gps"
     },
     {
-      "entity_id": "device_tracker.keaton_phone",
-      "name": "Keaton's Phone",
-      "original_name": "Keaton's Phone",
+      "entity_id": "device_tracker.kai_phone",
+      "name": "Kai's Phone",
+      "original_name": "Kai's Phone",
       "area_id": null,
       "device_id": "device_person_2",
       "labels": [],
@@ -1093,9 +1093,9 @@
       "platform": "script"
     },
     {
-      "entity_id": "notify.mobile_app_keaton",
-      "name": "Mobile App Keaton",
-      "original_name": "Mobile App Keaton",
+      "entity_id": "notify.mobile_app_kai",
+      "name": "Mobile App Kai",
+      "original_name": "Mobile App Kai",
       "area_id": null,
       "device_id": null,
       "labels": [],
@@ -2053,8 +2053,8 @@
     },
     {
       "entity_id": "input_text.material_you_image_url_6814bc",
-      "name": "Material You Base Color Source Image Path/URL Keaton",
-      "original_name": "Material You Base Color Source Image Path/URL Keaton",
+      "name": "Material You Base Color Source Image Path/URL Kai",
+      "original_name": "Material You Base Color Source Image Path/URL Kai",
       "area_id": null,
       "device_id": null,
       "labels": [],
@@ -2443,7 +2443,7 @@
     },
     {
       "device_id": "device_person_2",
-      "name": "Keaton",
+      "name": "Kai",
       "area_id": null
     },
     {
@@ -2878,7 +2878,7 @@
     }
   },
   "purpose_vocabulary": {
-    "_comment": "Enumerated purpose-specific trigger/condition types (HA 2026.7+). Shape provisional \u2014 M6 will capture the real WS API enumeration (MILESTONES M6 test 8). Contains all types used by M0.1 fixtures plus realistic extensions.",
+    "_comment": "Enumerated purpose-specific trigger/condition types (HA 2026.7+). Shape provisional \u2014 pending capture of the real WS API enumeration. Contains all types used by the corpus's purpose-vocabulary fixtures plus realistic extensions.",
     "triggers": [
       "motion.detected",
       "motion.cleared",

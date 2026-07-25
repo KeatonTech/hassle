@@ -1,7 +1,7 @@
 """Renders a `hassle.sync.Plan` (DESIGN §8.2: "renders the table with colors +
 DSL-level diffs").
 
-- `UPDATE` entries that are modernization-only (MILESTONES M7 test 4b) are
+- `UPDATE` entries that are modernization-only are
   labeled "modernization (one-time)" instead of a plain "update", so users
   aren't alarmed by a diff they didn't cause.
 - `CONFLICT` entries get the 3-way DSL diff (`hassle_cli.diffing.dsl_diff`)

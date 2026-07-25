@@ -1,4 +1,4 @@
-"""Macro with args (M1 test 2): args are compile-time Python values."""
+"""Macro with args: args are compile-time Python values."""
 
 from hassle import macro, service
 

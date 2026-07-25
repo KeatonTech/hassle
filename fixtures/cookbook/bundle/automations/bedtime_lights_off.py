@@ -19,5 +19,5 @@ def cookbook_bedtime_lights_off():
             )
         with c.default():
             service(
-                "notify.mobile_app_keaton", message="Bedtime lights off (guest mode: alarm skipped)"
+                "notify.mobile_app_kai", message="Bedtime lights off (guest mode: alarm skipped)"
             )

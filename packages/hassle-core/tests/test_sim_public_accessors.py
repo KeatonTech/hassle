@@ -1,7 +1,7 @@
-"""M7 review cleanup (M7.1 item 5c): `hassle.testing.Simulator` gets public
-accessors for "all recorded calls" and "known automation object keys" so
-callers outside the package (the CLI's `cli.py`/`run_sim.py`) never reach into
-the private `_calls`/`_engines_by_key` attributes.
+"""`hassle.testing.Simulator` gets public accessors for "all recorded calls"
+and "known automation object keys" so callers outside the package (the CLI's
+`cli.py`/`run_sim.py`) never reach into the private `_calls`/`_engines_by_key`
+attributes.
 """
 
 from __future__ import annotations

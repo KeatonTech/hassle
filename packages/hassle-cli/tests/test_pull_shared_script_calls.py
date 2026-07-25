@@ -1,8 +1,7 @@
-"""`ux/shared-script-calls` (owner feedback): end-to-end (FakeBackend) `hassle
-pull` rewrites a caller's `script.<id>` action to a real function call, with a
-cross-file `from <module> import <fn>` import when the script and its
-caller land in different destination files (category-based placement,
-DESIGN §7.3, `bundle_ops.default_source_path`; MILESTONES M15 work item B:
+"""End-to-end (FakeBackend): `hassle pull` rewrites a caller's `script.<id>`
+action to a real function call, with a cross-file `from <module> import <fn>`
+import when the script and its caller land in different destination files
+(category-based placement, DESIGN §7.3, `bundle_ops.default_source_path`;
 root-level, cross-kind file layout).
 """
 
@@ -122,17 +121,16 @@ def test_pull_rewrites_cross_file_script_call_with_import(
 def test_pull_rewrites_rich_field_script_call_same_batch(
     git_repo: Path, cli, fake_backend, toml_writer
 ) -> None:
-    """`ux/shared-script-rich-fields`, task 3: a script whose every field
-    carries `selector`/`name`/`description` (the shape the HA UI always
-    saves, mirroring `call_to_action_notification`) is called by an
-    automation in the SAME pull batch -- the widened emit decision must
-    still pick `@shared_script` (not fall back to `@script`), and the caller
-    rewrite must still fire.
+    """A script whose every field carries `selector`/`name`/`description`
+    (the shape the HA UI always saves, mirroring `call_to_action_notification`)
+    is called by an automation in the SAME pull batch -- the widened emit
+    decision must still pick `@shared_script` (not fall back to `@script`),
+    and the caller rewrite must still fire.
 
-    MILESTONES M15 work item B: both objects here are uncategorized, so they
-    both land in the SAME shared root-level `misc.py` (mixed-kind) -- this is
-    now a same-FILE call (no import needed at all), not just a same-batch
-    one. `test_pull_rewrites_cross_file_script_call_with_import` above is the
+    Both objects here are uncategorized, so they both land in the SAME
+    shared root-level `misc.py` (mixed-kind) -- this is a same-FILE call (no
+    import needed at all), not just a same-batch one.
+    `test_pull_rewrites_cross_file_script_call_with_import` above is the
     genuinely cross-FILE case (distinct categories -> distinct destination
     files)."""
     backend, token = fake_backend
@@ -152,7 +150,7 @@ def test_pull_rewrites_rich_field_script_call_same_batch(
             },
             "sequence": [
                 {
-                    "service": "notify.mobile_app_keaton",
+                    "service": "notify.mobile_app_kai",
                     "data": {
                         "title": "{{ title }}",
                         "message": "{{ message }}",

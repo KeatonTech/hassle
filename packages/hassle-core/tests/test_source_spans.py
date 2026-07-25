@@ -1,8 +1,9 @@
-"""M1 test 6 — every recorded trigger/condition/action carries file:line.
+"""Every recorded trigger/condition/action carries file:line.
 
 Spans are captured by frame inspection at record time and ride on IR nodes as
 non-serialized metadata: they map an IR node back to the DSL call that produced
-it, but MUST NOT appear in ``to_ha()`` output (that would break I3/hashing).
+it, but MUST NOT appear in ``to_ha()`` output (that would break the
+compile(decompile(x)) == x invariant and hashing).
 """
 
 from __future__ import annotations

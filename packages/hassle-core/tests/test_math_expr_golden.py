@@ -1,6 +1,5 @@
-"""M1.1 test 4 -- `shade_tracks_sun` golden, byte-for-byte against the corpus
-fixture (MILESTONES M1.1 test 4, M0 corpus addendum:
-fixtures/configs/automation_math_shade_sun.json).
+"""`shade_tracks_sun` golden, byte-for-byte against the corpus
+fixture (fixtures/configs/automation_math_shade_sun.json).
 
 This pins the builder's exact parenthesization and function-vs-filter choices:
 `state_attr(...)` and `cos(...)` render as bare function calls; `round_(...)`

@@ -1,9 +1,8 @@
-"""MILESTONES M10 test 4 (round-4 CI regression) — `template_number`'s
+"""Regression — `template_number`'s
 `min`/`max`/`step` must compile to `float`, matching what real HA's
-`NumberSelector` form field always stores (docs/ha-api-notes.md §26.10).
+`NumberSelector` form field always stores (docs/internals/ha-api-notes.md §26.10).
 
-**The CI failure, verbatim** (both HA `stable` and `dev`, run 28811559165,
-`test_template_helper_plan_apply_create_then_noop_on_repush`):
+**The observed failure, verbatim** (`test_template_helper_plan_apply_create_then_noop_on_repush`):
 
 ```
 local  = {..., 'min': 0,   'max': 8,   'step': 1}
@@ -28,7 +27,7 @@ plan comparison stays a plain hash equality with no comparison-time special
 case (DESIGN §8.2). `FakeBackend` models the same coercion on create/update
 so a unit-level plan/apply test catches this class of bug without a live HA.
 
-The I3 round-trip side (a pulled `template_number` has floats; recompiling
+The round-trip side (a pulled `template_number` has floats; recompiling
 decompiled source reproduces them) is covered by the existing
 `test_decompile_template_helpers.py::
 test_decompile_recompile_round_trip_is_byte_stable_for_options_body`, which
@@ -158,7 +157,7 @@ def test_plan_apply_create_then_noop_on_repush_with_fakebackend() -> None:
     # Regression for the exact CI failure: a DSL author writing the natural
     # int literals (`min=0, max=8, step=1`) must plan NOOP against the
     # FakeBackend remote after a create + repush, exactly mirroring
-    # test_m10_template_flow.py::test_template_helper_plan_apply_create_then_noop_on_repush.
+    # test_live_template_flow.py::test_template_helper_plan_apply_create_then_noop_on_repush.
     # `local_config` is the COMPILED IR (via the real builder, not a
     # hand-written dict) -- otherwise this test wouldn't exercise the
     # compile-time coercion fix at all.

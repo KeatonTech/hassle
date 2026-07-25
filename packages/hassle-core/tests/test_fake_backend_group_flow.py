@@ -1,22 +1,20 @@
-"""MILESTONES M21 test 2 -- capture-driven backend tests for the config-entry
-group-helper domain (docs/ha-api-notes.md §38).
+"""Capture-driven backend tests for the config-entry group-helper domain
+(docs/internals/ha-api-notes.md §38).
 
 `FakeBackend` models the multi-step config-entry flow (create: menu step
 choosing the flavor, then a form step -> `create_entry`) and options-flow
 (update: one form step -> `create_entry`, same `entry_id`) shapes, mirroring
-the M10 template-helper flow tests (`test_fake_backend_template_flow.py`) --
+the template-helper flow tests (`test_fake_backend_template_flow.py`) --
 this suite is transport-agnostic: it exercises the SAME `Backend.create`/
-`update`/`delete`/`list_remote` methods every other kind uses (F2 untouched).
+`update`/`delete`/`list_remote` methods every other kind uses (the frozen
+SourceWriter/plan seam untouched).
 
 **Identity (§38.1):** there is no `unique_id` -- identity is derived from
 `name` (slugified), same as template helpers.
 
-**CI-corrected (PR #35, both HA stable and dev): the group options-flow
-schema does NOT include `name`, same as template (docs/ha-api-notes.md §38.1,
-amended).** The owner's live capture note ("options flows re-present the same
-form... with current values as suggested values") was ambiguous and read as
-"the exact same schema, `name` included" in the original M21 implementation
--- CI found real HA 400s an options-flow submission that carries `name`:
+**The group options-flow schema does NOT include `name`, same as template**
+(docs/internals/ha-api-notes.md §38.1): submitting an options-flow update that carries
+`name` produces a real HA 400,
 `{"errors": {"base": ["extra keys not allowed @ data['name']"]}}`, on both
 `stable` and `dev`. A group's title is simply not editable through the
 options flow -- exactly like template, a rename is an identity change
@@ -49,7 +47,7 @@ GROUP_DOMAINS = (
 
 def _extra_fields(domain: str) -> dict[str, object]:
     """The extra field each domain's form schema requires/accepts beyond
-    name/entities/hide_members (docs/ha-api-notes.md §38.1)."""
+    name/entities/hide_members (docs/internals/ha-api-notes.md §38.1)."""
     if domain == "group_sensor":
         return {"type": "mean"}
     if domain in ("group_binary_sensor", "group_light", "group_switch"):
@@ -119,7 +117,7 @@ def test_group_cover_update_drives_options_flow_same_entry_id() -> None:
     backend.reset_write_tracking()
     log_len_before = len(backend.flow_log)
 
-    # `name` is NOT resubmitted (docs/ha-api-notes.md §38.1, CI-corrected --
+    # `name` is NOT resubmitted (docs/internals/ha-api-notes.md §38.1, CI-corrected --
     # the options-flow schema never includes it; real HA 400s if it's sent).
     backend.update(
         "group_cover",
@@ -149,11 +147,11 @@ def test_group_cover_update_drives_options_flow_same_entry_id() -> None:
 
 
 def test_group_cover_update_silently_strips_name_at_the_public_api_boundary() -> None:
-    # `update()` (F2, the `Backend`-protocol-facing method) still takes the
+    # `update()` (the `Backend`-protocol-facing method) still takes the
     # FULL local config, exactly like every other kind -- `name` is stripped
     # before it ever reaches the simulated options-flow submission, mirroring
     # `DirectBackend._aupdate_group_helper` protecting a caller from ever
-    # producing the real HA 400 (docs/ha-api-notes.md §38.1). A caller must
+    # producing the real HA 400 (docs/internals/ha-api-notes.md §38.1). A caller must
     # never see this as an error.
     backend = FakeBackend()
     identity = backend.create(
@@ -171,7 +169,7 @@ def test_group_cover_update_silently_strips_name_at_the_public_api_boundary() ->
 
 def test_group_cover_internal_options_flow_submission_rejects_name_field() -> None:
     # The internal flow-submission step itself (mirroring the real
-    # options-flow schema, docs/ha-api-notes.md §38.1) must reject `name` if
+    # options-flow schema, docs/internals/ha-api-notes.md §38.1) must reject `name` if
     # it ever reached it -- `update()`'s stripping (previous test) is what
     # actually prevents this in practice; this test pins the lower-level
     # simulation's fidelity to the real 400 directly.
@@ -218,8 +216,8 @@ def test_group_cover_delete_is_entry_removal() -> None:
 
 
 def test_group_cover_recreate_after_delete_gets_fresh_entry_id() -> None:
-    # Rollback caveat parity with M10 test 4 (docs/ha-api-notes.md §38
-    # mirrors §26.3): a DELETE then re-CREATE under the same name-derived
+    # Rollback caveat parity with the template-helper flow (docs/internals/ha-api-notes.md
+    # §38 mirrors §26.3): a DELETE then re-CREATE under the same name-derived
     # identity is NOT the same HA object -- a fresh entry_id is assigned.
     backend = FakeBackend()
     identity = backend.create(
@@ -345,7 +343,7 @@ def test_group_writes_counted_like_any_other_kind() -> None:
 
 
 def test_group_entry_ids_are_separate_from_template_entry_ids() -> None:
-    # M21: a separate bookkeeping dict from TEMPLATE_DOMAINS' -- no cross-talk.
+    # A separate bookkeeping dict from TEMPLATE_DOMAINS' -- no cross-talk.
     backend = FakeBackend()
     backend.create(
         "group_cover", {"name": "Shared Name", "entities": ["cover.a"], "hide_members": False}

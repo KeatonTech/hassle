@@ -1,4 +1,4 @@
-"""``ux/dsl-ergonomics``, item 3 -- bare entity target sugar.
+"""Bare entity target sugar.
 
 `service(..., target=e.weather.forecast_home)` (an `EntityRef`/`str`, or a list of
 them) compiles to `target={"entity_id": ...}` identically; `area()`/`floor()`/

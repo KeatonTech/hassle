@@ -1,12 +1,12 @@
 """Apply engine — push-side plan execution against Backend (DESIGN §8.2).
 
 Covers:
-- test_apply_reverifies_hashes (MILESTONES M5 test 3): remote drifts between
-  plan and apply -> abort, nothing written.
-- test_apply_order_and_rollback (MILESTONES M5 test 4): helpers -> scripts ->
-  automations order; injected failure at each step -> previously-applied
-  objects restored from snapshot; FakeBackend final state == initial state.
-- test_manifest_updates_only_on_success (MILESTONES M5 test 6).
+- test_apply_reverifies_hashes: remote drifts between plan and apply ->
+  abort, nothing written.
+- test_apply_order_and_rollback: helpers -> scripts -> automations order;
+  injected failure at each step -> previously-applied objects restored from
+  snapshot; FakeBackend final state == initial state.
+- test_manifest_updates_only_on_success.
 """
 
 from __future__ import annotations
@@ -310,7 +310,7 @@ def test_manifest_unchanged_on_failure() -> None:
 
 
 def test_apply_plan_reports_per_entry_progress() -> None:
-    """Task #39 (additive): on_progress fires once per push entry, 1-based,
+    """on_progress fires once per push entry, 1-based,
     before the entry is applied -- the CLI's heartbeat during a long push."""
     backend = FakeBackend()
     plan = Plan(
@@ -342,8 +342,8 @@ def test_apply_plan_reports_per_entry_progress() -> None:
 
 
 def test_create_whose_backend_identity_diverges_fails_loud_and_rolls_back() -> None:
-    """Owner field report: HA ignores a helper create's supplied id and
-    derives its own from the name. When they diverge, the manifest entry can
+    """HA ignores a helper create's supplied id and derives its own from the
+    name. When they diverge, the manifest entry can
     never match the remote object, and every subsequent push silently
     creates ANOTHER copy (`_2`, `_3`, ...). The apply engine must catch the
     divergence: delete the just-created object and fail with a message
@@ -371,8 +371,8 @@ def test_create_whose_backend_identity_diverges_fails_loud_and_rolls_back() -> N
 
 
 def test_rollback_recreates_a_rolled_back_delete() -> None:
-    """Field crash (BrandtCamp push, 2026-07-14): step 1 DELETEd a timer, a
-    later step failed, and rollback tried to UPDATE the already-deleted timer
+    """Regression: step 1 DELETEd a timer, a later step failed, and rollback
+    tried to UPDATE the already-deleted timer
     -- HaApiError "Unable to find timer_id ..." escaped as a raw traceback
     and the deletion was never restored. Rolling back a DELETE must recreate
     the object (slug-keyed kinds land back on the same identity, §17.5)."""

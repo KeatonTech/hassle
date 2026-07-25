@@ -1,4 +1,4 @@
-"""A deterministic fake clock (DESIGN §10.1, R8: no wall-clock, no sleeps).
+"""A deterministic fake clock (DESIGN §10.1: no wall-clock, no sleeps).
 
 The simulator's notion of "now" is entirely driven by :meth:`FakeClock.at` /
 :meth:`FakeClock.advance`; nothing in this module reads the real system clock.

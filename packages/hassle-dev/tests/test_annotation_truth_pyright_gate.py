@@ -1,7 +1,7 @@
-"""Type-annotation truth pass — the pyright gate (task #28).
+"""Type-annotation truth pass — the pyright gate.
 
-Field evidence from the owner's real bundle (Pylance standard mode): the
-DECOMPILED code is correct HA-wise, but the DSL's OWN annotations reject it --
+Evidence from a real bundle (Pylance standard mode): the DECOMPILED
+code is correct HA-wise, but the DSL's OWN annotations reject it --
 
 - `state(entity_id=[e.input_select.day_phase])` -- entity classes aren't
   `str`-typed, and `list[X]` is invariant, so a list of entity refs never
@@ -14,32 +14,31 @@ DECOMPILED code is correct HA-wise, but the DSL's OWN annotations reject it --
 
 This is the RED-FIRST gate: it must fail against current `main` (no source
 changes yet), for the reasons named above -- not some unrelated pyright
-error. Two independent bundles are checked, matching the task brief:
+error. Two independent bundles are checked:
 
 1. The REAL acceptance sample bundle (`hassle_dev.bundle_gen.generate_sample_bundle`,
-   which drives the actual `hassle pull` pipeline -- MILESTONES M9's
-   generator), with the full generated `typings/` tree, pyright'd exactly as
-   a fresh cold-opened bundle would be (matching the scaffolded
-   `.vscode/settings.json` + `pyrightconfig.json` convention established by
-   `test_registry_stubs_pyright_init_template.py`, escalated here to
-   `standard` mode per this task's explicit brief -- the owner's field report
-   was captured in Pylance *standard* mode).
+   which drives the actual `hassle pull` pipeline), with the full generated
+   `typings/` tree, pyright'd exactly as a fresh cold-opened bundle would be
+   (matching the scaffolded `.vscode/settings.json` + `pyrightconfig.json`
+   convention established by `test_registry_stubs_pyright_init_template.py`,
+   escalated here to `standard` mode -- the bug this gate responds to was
+   observed in Pylance *standard* mode).
 2. A synthetic bundle decompiled from rich corpus shapes this repo already
    has fixtures for -- multi-entity targets, `numeric_state`, template
    helpers, and (via `snapshot=`) namespace service calls
-   (`hassle.services.<domain>.<method>(target=..., ...)`, MILESTONES M18) --
-   plus one hand-built purpose-trigger automation with a MULTI-AREA target
+   (`hassle.services.<domain>.<method>(target=..., ...)`) -- plus one
+   hand-built purpose-trigger automation with a MULTI-AREA target
    (`target: {"area_id": ["back_yard", "front_yard"]}`), since no existing
    corpus fixture happens to carry a list-valued `area_id` (every purpose-
-   trigger fixture in the corpus targets a single area/floor/device) and the
-   owner's field report specifically named that shape.
+   trigger fixture in the corpus targets a single area/floor/device) and
+   that was the exact shape observed.
 
-No vacuous filtering (the mistake that let three prior bugs ship, per this
-task's brief): every assertion enumerates the full set of diagnostic
-`rule`s it checks (`reportArgumentType`, `reportAttributeAccessIssue`,
-`reportUndefinedVariable`, `reportUnknownVariableType`) rather than filtering
-down to just one, and prints every offending diagnostic on failure so a
-future regression is diagnosable from CI output alone.
+No vacuous filtering (the mistake that let three prior bugs ship): every
+assertion enumerates the full set of diagnostic `rule`s it checks
+(`reportArgumentType`, `reportAttributeAccessIssue`, `reportUndefinedVariable`,
+`reportUnknownVariableType`) rather than filtering down to just one, and
+prints every offending diagnostic on failure so a future regression is
+diagnosable from CI output alone.
 """
 
 from __future__ import annotations
@@ -93,9 +92,9 @@ def _run_pyright(cwd: Path) -> subprocess.CompletedProcess[str]:
 
 
 def _write_pyrightconfig_standard(root: Path, *, extra_paths: list[str]) -> None:
-    """`typeCheckingMode: "standard"` -- matches this task's explicit brief
-    ("match what the scaffolded settings set: standard") and the owner's
-    field report, which was captured in Pylance *standard* mode."""
+    """`typeCheckingMode: "standard"` -- matches what the scaffolded
+    settings set, and the bug this gate responds to, which was observed in
+    Pylance *standard* mode."""
     config = {
         "typeCheckingMode": "standard",
         "stubPath": "typings",
@@ -173,7 +172,7 @@ def _load_fixture(name: str) -> dict[str, object]:
 def _multi_area_purpose_trigger_config() -> dict[str, object]:
     """Hand-built (DESIGN §5.4 shape): a purpose trigger targeting MULTIPLE
     areas -- `target: {"area_id": ["back_yard", "front_yard"]}` -- the exact
-    shape the owner's field report named (`area(["back_yard", "front_yard"])`).
+    shape observed in the wild (`area(["back_yard", "front_yard"])`).
     No fixture in `fixtures/configs/` happens to carry a list-valued
     `area_id`/`floor_id`/`label_id`/`device_id` target (every purpose-trigger
     fixture there targets a single area/floor/device), so this is
@@ -350,7 +349,7 @@ def test_rich_corpus_shapes_bundle_is_pyright_clean_in_standard_mode(
 
 
 def test_multi_area_target_decompiles_to_area_list_call(rich_shapes_bundle: Path) -> None:
-    """Regression pin (R4): confirms the hand-built multi-area fixture above
+    """Regression pin: confirms the hand-built multi-area fixture above
     actually DID decompile through the `area([...])` list-arg call form (not,
     say, silently collapsing to a single area or falling back to `raw_*`) --
     so gate 2 is exercising the real shape it claims to, not accidentally

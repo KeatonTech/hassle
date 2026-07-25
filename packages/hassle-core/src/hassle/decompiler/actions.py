@@ -8,7 +8,8 @@ relative to the block they're emitted into); the caller is responsible for the
 surrounding indentation level.
 
 Falls back to ``raw_action({...})`` for any action shape not modeled here
-(DESIGN §5.8, I3) -- never drops data.
+(DESIGN §5.8: compile(decompile(x)) must equal x for any config) -- never
+drops data.
 """
 
 from __future__ import annotations
@@ -27,8 +28,8 @@ if TYPE_CHECKING:
 INDENT = "    "
 
 # The enclosing `@shared_script`'s own declared field names, while
-# decompiling THAT script's own body (MILESTONES M19) -- `None` everywhere
-# else (automation decompilation, a plain `@script`'s body, ...). Module-level
+# decompiling THAT script's own body -- `None` everywhere else (automation
+# decompilation, a plain `@script`'s body, ...). Module-level
 # rather than threaded as a parameter through every action-decompiling
 # function (`_if_then`/`_choose`/`_repeat`/`_parallel`/...): decompiling one
 # object's action tree is a single synchronous recursive call with no
@@ -44,8 +45,8 @@ _active_shared_script_fields: frozenset[str] | None = None
 @contextlib.contextmanager
 def shared_script_field_context(field_names: frozenset[str] | None) -> Generator[None]:
     """Decompile a ``@shared_script``'s own body with ``field_names`` active
-    (MILESTONES M19) -- a bare-name Jinja read matching one of these inverts
-    to the bare parameter form instead of ``var(name)``/a raw string.
+    -- a bare-name Jinja read matching one of these inverts to the bare
+    parameter form instead of ``var(name)``/a raw string.
     ``field_names=None`` is a no-op (used for the ``@script`` fallback and
     every non-script-body decompile), so this context manager is safe to wrap
     around every :func:`~hassle.decompiler.codegen._script_source` call
@@ -61,26 +62,24 @@ def shared_script_field_context(field_names: frozenset[str] | None) -> Generator
 
 def _reserved_top_level_names() -> frozenset[str]:
     """Every name a fresh whole-bundle decompile already binds at module
-    scope: the F3 star-import surface (``hassle.__all__``) plus the entities
-    accessor alias (``e``). Several REAL HA service domains are also frozen
-    DSL names (``automation``, ``script``, ``zone``, ``time``, ``schedule``,
-    ``event``, ``device``, ``sun``, ``tag``, ``template``, ``mqtt``,
-    ``webhook``, ``calendar``, ``timer``, ``on``, ``area``, every
+    scope: the frozen DSL star-import surface (``hassle.__all__``) plus the
+    entities accessor alias (``e``). Several REAL HA service domains are also
+    frozen DSL names (``automation``, ``script``, ``zone``, ``time``,
+    ``schedule``, ``event``, ``device``, ``sun``, ``tag``, ``template``,
+    ``mqtt``, ``webhook``, ``calendar``, ``timer``, ``on``, ``area``, every
     ``input_*``/``counter`` helper builder, ...) -- a plain, unaliased
     ``from hassle.services import automation`` would silently SHADOW the
     ``@automation`` decorator import above it (both are module-level
     ``automation``, and Python import order means the later one wins),
-    breaking every automation in the file (MILESTONES M18 regression, found
-    via the fixture corpus's own ``automation.trigger``-calling fixtures).
-    :func:`_service_domain_alias` uses this set to decide when a namespace
-    import needs an alias instead.
+    breaking every automation in the file. :func:`_service_domain_alias` uses
+    this set to decide when a namespace import needs an alias instead.
     """
     import hassle
 
     return frozenset(hassle.__all__) | {"e"}
 
 
-def _indent_lines(lines: list[str], levels: int = 1) -> list[str]:
+def indent_lines(lines: list[str], levels: int = 1) -> list[str]:
     prefix = INDENT * levels
     return [f"{prefix}{line}" if line else line for line in lines]
 
@@ -90,24 +89,23 @@ def _raw_action(body: Any) -> list[str]:
 
 
 def _render_data_value(value: Any) -> str:
-    """Render one action ``data``/``target`` value -- the same
-    ``render_literal(v)`` every call site used before M19, EXCEPT a string
-    that inverts through the bounded Jinja inverter (M13/M16,
-    `hassle.decompiler.template_invert`) using the active shared-script's own
-    field names (MILESTONES M19 test 3): a bare field read (``"{{ tag }}"``)
-    or a larger invertible expression over fields (``concat(tag, "_x")``)
+    """Render one action ``data``/``target`` value -- plain
+    ``render_literal(v)``, EXCEPT a string that inverts through the bounded
+    Jinja inverter (`hassle.decompiler.template_invert`) using the active
+    shared-script's own field names: a bare field read (``"{{ tag }}"``) or a
+    larger invertible expression over fields (``concat(tag, "_x")``)
     decompiles through that composed source instead of the raw string.
     Recurses into dicts/lists (matching a real corpus shape,
     ``shared_script_rich_fields``'s ``data={"actions": [{"title": "{{
     action_button }}", ...}], "tag": "{{ tag }}"}``) so a field read nested
     inside either still gets the bare-parameter treatment, not just a
-    top-level value. Falls back to ``render_literal`` (the raw string, I3)
-    for anything the inverter doesn't accept -- never partial output, same
+    top-level value. Falls back to ``render_literal`` (the raw string) for
+    anything the inverter doesn't accept -- never partial output, same
     acceptance rule `invert_template` already enforces for template-helper
     ``state=``. ``_active_shared_script_fields`` is ``None`` outside a
     shared-script body's own decompile (the common case, and every
     non-script-body call site), so this is a pure passthrough to
-    ``render_literal`` there -- the M19 threading can never affect
+    ``render_literal`` there -- field-aware rewriting can never affect
     automation/plain-``@script`` decompilation.
     """
     if _active_shared_script_fields is None:
@@ -131,8 +129,8 @@ def _render_data_value(value: Any) -> str:
     return render_literal(value)
 
 
-# Per-step `alias`/`enabled` (residue-coverage round 2, docs/ha-api-notes.md
-# §20): the UI names and toggles individual steps. Every action shape below
+# Per-step `alias`/`enabled` (docs/internals/ha-api-notes.md §20): the UI names and
+# toggles individual steps. Every action shape below
 # accepts both, layered onto its own `known` set, so a step carrying them is
 # never forced to `raw_action` merely for that reason.
 _STEP_OPTION_KEYS = frozenset({"alias", "enabled"})
@@ -140,10 +138,10 @@ _STEP_OPTION_KEYS = frozenset({"alias", "enabled"})
 
 @dataclass(frozen=True)
 class CallTarget:
-    """Where a MANAGED script's decompiled function call actually resolves
-    (``ux/shared-script-calls``): the function name, and the import line to
-    emit for it (``None`` when the callee is decompiled in the SAME module --
-    a plain same-file function call, no import needed).
+    """Where a MANAGED script's decompiled function call actually resolves:
+    the function name, and the import line to emit for it (``None`` when the
+    callee is decompiled in the SAME module -- a plain same-file function
+    call, no import needed).
 
     ``known_fields`` is the callee's declared field names, used to check the
     "every data key is a declared field" rewrite condition; ``None`` means
@@ -156,7 +154,7 @@ class CallTarget:
 
 class CallResolver:
     """Resolves a ``script.<object_id>`` action's call target for the
-    function-call rewrite (``ux/shared-script-calls``, owner feedback).
+    function-call rewrite.
 
     Built once per :func:`~hassle.decompiler.codegen.decompile_bundle` call by
     ``codegen.py`` (which knows both the objects in THIS batch -- no import
@@ -181,10 +179,9 @@ class CallResolver:
     ) -> None:
         self._targets = targets
         self._cycle_broken = cycle_broken
-        # MILESTONES M18: the registry snapshot backing the typed service-
-        # namespace canonical form (`None` -- no snapshot supplied to
-        # `decompile_bundle` -- always falls back to `service(...)`, matching
-        # the pre-M18 corpus round-trip test's call shape exactly).
+        # The registry snapshot backing the typed service-namespace canonical
+        # form (`None` -- no snapshot supplied to `decompile_bundle` --
+        # always falls back to `service(...)`).
         self.snapshot = snapshot
         # Domains the namespace form actually used across this decompile batch
         # (populated as a side effect of `decompile_action`), mapped to the
@@ -202,9 +199,9 @@ class CallResolver:
         """The LOCAL NAME a ``domain`` namespace call binds to in this file:
         the domain name itself, unless it collides with the star-import
         surface (``_reserved_top_level_names``), in which case an
-        ``svc_<domain>`` alias is used instead (MILESTONES M18 regression
-        fix: ``automation``/``script``/``zone``/... are both real HA service
-        domains AND frozen DSL names). Memoized per resolver instance so the
+        ``svc_<domain>`` alias is used instead (``automation``/``script``/
+        ``zone``/... are both real HA service domains AND frozen DSL names).
+        Memoized per resolver instance so the
         SAME call within one decompile batch always renders the same name,
         and recorded in :attr:`used_service_domains` as a side effect."""
         if domain in self.used_service_domains:
@@ -220,10 +217,10 @@ class CallResolver:
 def decompile_action(body: Any, *, resolver: CallResolver | None = None) -> list[str]:
     """Decompile one action dict to source lines, or the ``raw_action`` fallback.
 
-    ``resolver`` (``ux/shared-script-calls``): when supplied, a direct
-    ``{"action": "script.<id>", ...}`` call to a MANAGED script known to
-    ``resolver`` decompiles to a real function call instead of ``service()``
-    (see :func:`_service_call`'s docstring for the exact rewrite conditions).
+    ``resolver``: when supplied, a direct ``{"action": "script.<id>", ...}``
+    call to a MANAGED script known to ``resolver`` decompiles to a real
+    function call instead of ``service()`` (see :func:`_service_call`'s
+    docstring for the exact rewrite conditions).
     """
     if not isinstance(body, dict):
         return _raw_action(body)
@@ -284,22 +281,22 @@ def decompile_action(body: Any, *, resolver: CallResolver | None = None) -> list
     return _raw_action(action_body)
 
 
-# A direct script call's own known keys (task spec: "the action is the direct
-# script.<id> form" -- only `data`/`metadata`/`alias`/`enabled` are
-# reproducible via the call; ANY other key -- `target`, `data_template`,
-# `response_variable`, `continue_on_error` -- falls back to service()).
+# A direct script call's own known keys: only `data`/`metadata`/`alias`/
+# `enabled` are reproducible via the call; ANY other key -- `target`,
+# `data_template`, `response_variable`, `continue_on_error` -- falls back to
+# service().
 _SCRIPT_CALL_KNOWN_KEYS = frozenset({"action", "data", "metadata"}) | _STEP_OPTION_KEYS
 
 
 def _script_call(body: dict[str, Any], resolver: CallResolver) -> list[str] | None:
     """Rewrite a direct ``{"action": "script.<id>", ...}`` call to
     ``<fn_name>(<data as kwargs>, metadata={...})`` when every condition
-    holds; ``None`` falls back to :func:`_service_call` (``service()`` form,
-    never raw -- task spec: "unknown scripts stay service()").
+    holds; ``None`` falls back to :func:`_service_call` (``service()`` form --
+    an unknown script id never decompiles to raw).
 
-    Conditions (task spec): every ``data`` key is a declared field of the
-    target script; the action is the direct ``script.<id>`` form (not
-    ``script.turn_on``); no ``target``/``data_template``/``response_variable``/
+    Conditions: every ``data`` key is a declared field of the target script;
+    the action is the direct ``script.<id>`` form (not ``script.turn_on``);
+    no ``target``/``data_template``/``response_variable``/
     ``continue_on_error`` extras beyond what the call reproduces.
     """
     action = body["action"]
@@ -343,8 +340,8 @@ def _is_plain_service_call(body: dict[str, Any]) -> bool:
 
 
 def _step_option_kwargs_src(body: dict[str, Any]) -> list[str]:
-    """Render `alias=`/`enabled=` present in ``body`` (residue-coverage round 2,
-    docs/ha-api-notes.md §20) as ``key=value`` source fragments."""
+    """Render `alias=`/`enabled=` present in ``body`` (docs/internals/ha-api-notes.md
+    §20) as ``key=value`` source fragments."""
     parts: list[str] = []
     if "alias" in body:
         parts.append(f"alias={render_literal(body['alias'])}")
@@ -361,9 +358,9 @@ def _delay_duration_kwargs(value: Any) -> list[str] | None:
 
     HA accepts a delay as a dict of units, an ``"HH:MM:SS"`` string, or a bare
     number of seconds -- all functionally equivalent. The typed ``delay()``
-    builder only emits the dict form (docs/ha-api-notes.md's M2 findings), so
-    decompiling a string/numeric delay to it modernizes the representation --
-    cosmetic, same treatment as the trigger-discriminator modernization
+    builder only emits the dict form (docs/internals/ha-api-notes.md), so decompiling a
+    string/numeric delay to it modernizes the representation -- cosmetic,
+    same treatment as the trigger-discriminator modernization
     (test_roundtrip_corpus.py's ``_modernized`` documents and accounts for
     this for the round-trip test specifically).
     """
@@ -398,7 +395,7 @@ def _delay_source(body: dict[str, Any]) -> str | None:
 
 def _target_src(target: Any) -> str:
     """Render a stored ``target`` dict as the bare entity-target sugar
-    (``ux/dsl-ergonomics``, item 3, DESIGN §7.3) when it has exactly one key --
+    (DESIGN §7.3) when it has exactly one key --
     ``entity_id`` (a bare ref/list, reusing the entity-position renderer) or
     ``area_id``/``floor_id``/``label_id``/``device_id`` (an ``area()``/``floor()``/
     ``label()``/``device_id()`` call) -- else the plain dict literal (multi-key
@@ -423,34 +420,31 @@ def _is_kwarg_safe_key(key: str) -> bool:
     (``light.turn_on(brightness_pct=60)``) -- a valid identifier that is not a
     reserved word (``class``, ``import``, ...). HA service field names are
     otherwise unconstrained strings; anything that fails this check keeps the
-    action in `service(...)` form (MILESTONES M18 decompiler canonical-form
-    rule: "every data key is a valid Python kwarg")."""
+    action in `service(...)` form (every data key must be a valid Python
+    kwarg to use the typed namespace form)."""
     return key.isidentifier() and not keyword.iskeyword(key)
 
 
 def _namespace_service_call(
     body: dict[str, Any], snapshot: RegistrySnapshot, resolver: CallResolver
 ) -> list[str] | None:
-    """Typed service-namespace canonical form (MILESTONES M18): a plain
-    service-call action whose literal ``"domain.service"`` exists in the
-    registry snapshot AND whose ``data`` keys are all kwarg-expressible
-    identifiers decompiles to ``<domain>.<service>(target=..., **fields)``
-    instead of ``service(...)``. Returns ``None`` (caller falls back to
-    :func:`_service_call`) for: a templated service name (no dot-delimited
-    literal to look up), a domain/service absent from the snapshot, or any
-    non-kwarg-safe data key -- I3 byte-exact through either branch, since both
-    forms compile to the identical ``{"action": ..., ...}`` IR (the namespace
-    form's builder is `hassle.services`, which delegates to the exact same
-    `service()` verb, MILESTONES M18 test 2).
+    """Typed service-namespace canonical form: a plain service-call action
+    whose literal ``"domain.service"`` exists in the registry snapshot AND
+    whose ``data`` keys are all kwarg-expressible identifiers decompiles to
+    ``<domain>.<service>(target=..., **fields)`` instead of ``service(...)``.
+    Returns ``None`` (caller falls back to :func:`_service_call`) for: a
+    templated service name (no dot-delimited literal to look up), a
+    domain/service absent from the snapshot, or any non-kwarg-safe data key
+    -- byte-exact through either branch, since both forms compile to the
+    identical ``{"action": ..., ...}`` IR (the namespace form's builder is
+    `hassle.services`, which delegates to the exact same `service()` verb).
 
     ``resolver.service_domain_name(domain)`` gives the LOCAL name this call
     binds to (aliased to ``svc_<domain>`` when ``domain`` collides with the
     star-import surface, e.g. ``automation``/``script``/``zone`` are both real
-    HA service domains and frozen DSL names -- a regression found via the
-    fixture corpus's own `automation.trigger`-calling fixtures) -- called only
-    once this function has committed to emitting the namespace form, so a
-    domain that ultimately falls back to `service()` never contributes an
-    alias/import.
+    HA service domains and frozen DSL names) -- called only once this
+    function has committed to emitting the namespace form, so a domain that
+    ultimately falls back to `service()` never contributes an alias/import.
     """
     action = body["action"]
     if "{{" in action:
@@ -501,17 +495,17 @@ def _service_call(body: dict[str, Any]) -> list[str]:
     elif data is not None:
         parts.append(f"data={render_literal(data)}")
     if "data_template" in body:
-        # Legacy templated-data key (residue-coverage round 2): a sibling of
-        # `data`, never folded into it -- round-trips exactly as HA stores it.
+        # Legacy templated-data key: a sibling of `data`, never folded into
+        # it -- round-trips exactly as HA stores it.
         parts.append(f"data_template={render_literal(body['data_template'])}")
     if "response_variable" in body:
         parts.append(f"response_variable={render_literal(body['response_variable'])}")
     if "continue_on_error" in body:
         parts.append(f"continue_on_error={render_literal(body['continue_on_error'])}")
     if "metadata" in body:
-        # Emitted even when `{}` (the common case, real-world smoke-test finding):
-        # every action the HA UI saves carries this key, so eliding an empty
-        # metadata would hash-drift every UI-authored action on recompile (I3).
+        # Emitted even when `{}`: every action the HA UI saves carries this
+        # key, so eliding an empty metadata would hash-drift every
+        # UI-authored action on recompile (compile(decompile(x)) == x).
         parts.append(f"metadata={render_literal(body['metadata'])}")
     parts.extend(_step_option_kwargs_src(body))
     return [f"service({', '.join(parts)})"]
@@ -557,18 +551,18 @@ def _if_then(body: dict[str, Any], resolver: CallResolver | None) -> list[str] |
     header_parts = [cond_src, *_step_option_kwargs_src(body)]
     out = [f"with if_then({', '.join(header_parts)}):"]
     if not then_lines:
-        out.extend(_indent_lines(["pass"]))
+        out.extend(indent_lines(["pass"]))
     else:
-        out.extend(_indent_lines(_flatten(then_lines)))
+        out.extend(indent_lines(_flatten(then_lines)))
     if "else" in body:
         else_lines = _actions_block(body["else"], resolver)
         if else_lines is None:
             return None
         out.append("with else_then():")
         if not else_lines:
-            out.extend(_indent_lines(["pass"]))
+            out.extend(indent_lines(["pass"]))
         else:
-            out.extend(_indent_lines(_flatten(else_lines)))
+            out.extend(indent_lines(_flatten(else_lines)))
     return out
 
 
@@ -585,8 +579,8 @@ def _choose(body: dict[str, Any], resolver: CallResolver | None) -> list[str] | 
         if not isinstance(branch, dict):
             return None
         branch_dict = cast("dict[str, Any]", branch)
-        # A `choose` branch may carry its own `alias`/`enabled` (residue-coverage
-        # round 3, docs/ha-api-notes.md §21): the HA UI names/toggles individual
+        # A `choose` branch may carry its own `alias`/`enabled`
+        # (docs/internals/ha-api-notes.md §21): the HA UI names/toggles individual
         # branches, distinct from the whole `choose` block's own alias/enabled
         # (already handled below) and from any step's own alias/enabled inside
         # the branch's sequence.
@@ -615,21 +609,21 @@ def _choose(body: dict[str, Any], resolver: CallResolver | None) -> list[str] | 
     choose_header_parts = _step_option_kwargs_src(body)
     out = [f"with choose({', '.join(choose_header_parts)}) as c:"]
     for when_args, seq_lines in branch_srcs:
-        out.extend(_indent_lines([f"with c.when_({when_args}):"]))
+        out.extend(indent_lines([f"with c.when_({when_args}):"]))
         if not seq_lines:
-            out.extend(_indent_lines(["pass"], levels=2))
+            out.extend(indent_lines(["pass"], levels=2))
         else:
-            out.extend(_indent_lines(seq_lines, levels=2))
+            out.extend(indent_lines(seq_lines, levels=2))
     if "default" in body:
         default_lines = _actions_block(body["default"], resolver)
         if default_lines is None:
             return None
-        out.extend(_indent_lines(["with c.default():"]))
+        out.extend(indent_lines(["with c.default():"]))
         flat_default = _flatten(default_lines)
         if not flat_default:
-            out.extend(_indent_lines(["pass"], levels=2))
+            out.extend(indent_lines(["pass"], levels=2))
         else:
-            out.extend(_indent_lines(flat_default, levels=2))
+            out.extend(indent_lines(flat_default, levels=2))
     return out
 
 
@@ -646,10 +640,10 @@ def _repeat(body: dict[str, Any], resolver: CallResolver | None) -> list[str] | 
 
     header: str | None = None
     if "count" in repeat and set(repeat) == {"count", "sequence"}:
-        # MILESTONES M19: `count` is the blessed spelling for a shared-script
-        # runtime repeat count (`repeat_count(times)`, the marker HA natively
-        # supports as a template string) -- field-aware so a bare field read
-        # decompiles to the bare parameter, not the raw `"{{ times }}"`.
+        # `count` is the blessed spelling for a shared-script runtime repeat
+        # count (`repeat_count(times)`, the marker HA natively supports as a
+        # template string) -- field-aware so a bare field read decompiles to
+        # the bare parameter, not the raw `"{{ times }}"`.
         args = ", ".join([_render_data_value(repeat["count"]), *step_kwargs])
         header = f"with repeat_count({args}):"
     elif "while" in repeat and set(repeat) == {"while", "sequence"}:
@@ -680,9 +674,9 @@ def _repeat(body: dict[str, Any], resolver: CallResolver | None) -> list[str] | 
         return None
     out = [header]
     if not flat_seq:
-        out.extend(_indent_lines(["pass"]))
+        out.extend(indent_lines(["pass"]))
     else:
-        out.extend(_indent_lines(flat_seq))
+        out.extend(indent_lines(flat_seq))
     return out
 
 
@@ -697,10 +691,10 @@ def _parallel(body: dict[str, Any], resolver: CallResolver | None) -> list[str] 
     # fixtures/configs/automation_parallel_action.json) becomes a top-level
     # statement inside `with parallel():`. Any other branch shape -- more than
     # one step in its sequence, or the branch itself carrying `alias`/`enabled`
-    # (residue-coverage round 3, docs/ha-api-notes.md §21: the HA UI can name/
-    # toggle a whole multi-step parallel branch, distinct from any one step's
-    # own alias/enabled) -- needs the explicit `with p.branch(...):` form, so
-    # `with parallel() as p:` is used instead of the bare `with parallel():`.
+    # (docs/internals/ha-api-notes.md §21: the HA UI can name/toggle a whole multi-step
+    # parallel branch, distinct from any one step's own alias/enabled) --
+    # needs the explicit `with p.branch(...):` form, so `with parallel() as
+    # p:` is used instead of the bare `with parallel():`.
     branch_plans: list[tuple[bool, dict[str, Any], list[str]]] = []
     any_explicit = False
     for branch in branch_list:
@@ -732,23 +726,23 @@ def _parallel(body: dict[str, Any], resolver: CallResolver | None) -> list[str] 
         for _, _, seq_lines in branch_plans:
             flat.extend(seq_lines)
         if not flat:
-            out.extend(_indent_lines(["pass"]))
+            out.extend(indent_lines(["pass"]))
         else:
-            out.extend(_indent_lines(flat))
+            out.extend(indent_lines(flat))
         return out
 
     p_args = ", ".join(header_parts)
     out = [f"with parallel({p_args}) as p:"]
     for is_bare, branch_dict, seq_lines in branch_plans:
         if is_bare:
-            out.extend(_indent_lines(seq_lines))
+            out.extend(indent_lines(seq_lines))
             continue
         branch_kwargs = _step_option_kwargs_src(branch_dict)
-        out.extend(_indent_lines([f"with p.branch({', '.join(branch_kwargs)}):"]))
+        out.extend(indent_lines([f"with p.branch({', '.join(branch_kwargs)}):"]))
         if not seq_lines:
-            out.extend(_indent_lines(["pass"], levels=2))
+            out.extend(indent_lines(["pass"], levels=2))
         else:
-            out.extend(_indent_lines(seq_lines, levels=2))
+            out.extend(indent_lines(seq_lines, levels=2))
     return out
 
 

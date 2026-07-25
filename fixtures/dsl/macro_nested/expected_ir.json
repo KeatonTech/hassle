@@ -5,7 +5,7 @@
     "triggers": [
       {
         "trigger": "state",
-        "entity_id": "person.keaton",
+        "entity_id": "person.kai",
         "to": "home"
       }
     ],
@@ -24,7 +24,7 @@
         }
       },
       {
-        "action": "notify.mobile_app_keaton",
+        "action": "notify.mobile_app_kai",
         "data": {
           "message": "Welcome home"
         }

@@ -1,8 +1,7 @@
-"""M12 -- CATEGORY capture must be SCOPED to category-shaped files only
-(reviewer finding, PR #7 BLOCKED: empirically reproduced regression against
-main). MILESTONES M15 work item B updates the shape itself to root-level,
-cross-kind (docs/ha-api-notes.md §31.6) -- this file's SCOPING guarantee is
-unchanged, just re-pinned against the new shape.
+"""CATEGORY capture must be SCOPED to category-shaped files only. The
+category-shaped-file convention itself is root-level, cross-kind
+(docs/internals/ha-api-notes.md §31.6) -- this file's SCOPING guarantee is unchanged,
+just re-pinned against that shape.
 
 `_import_bundle_modules` originally used a bare `hasattr(module, "CATEGORY")`
 with no path-shape filter at all -- so ANY bundle file with a module-level
@@ -18,8 +17,9 @@ user code -- `lib/constants.py`, a nested path, the RETIRED
   `InvalidCategoryGlobalError` -- the ENTIRE bundle failed to compile, even
   though that file has nothing to do with HA UI categories at all.
 
-Both were a regression against bundles that were green on `main` (the name
-`CATEGORY` was unremarkable before this milestone). The fix: only interpret
+Both were a regression against bundles that previously compiled cleanly (the
+name `CATEGORY` was, before category-global support, an unremarkable ordinary
+identifier). The fix: only interpret
 `CATEGORY` for a file matching `hassle.ir.keys.category_shaped_stem`'s
 root-level ``<stem>.py`` shape (stem != "misc", no nesting at all) -- checked
 AT CAPTURE TIME, so the non-str guard itself only ever fires for a

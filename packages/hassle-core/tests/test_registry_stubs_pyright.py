@@ -1,9 +1,9 @@
-"""M3 milestone test 5 (the big one): pyright actually runs against a sample
-bundle + the generated stubs, and a seeded typo produces the expected error.
+"""Pyright actually runs against a sample bundle + the generated stubs, and a
+seeded typo produces the expected error.
 
-"This is explicitly the editor story end-to-end without an editor" — the
-milestone brief. No network: pyright runs fully offline against local files
-only (it does not fetch anything for a stdlib-only check like this).
+This is the editor story end-to-end without an editor. No network: pyright
+runs fully offline against local files only (it does not fetch anything for
+a stdlib-only check like this).
 
 Mechanism: a temp directory containing
   - a `hassle/registry/__init__.pyi` stub file at the same import path pyright
@@ -140,8 +140,8 @@ def test_pyright_accepts_correct_entity_reference(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# M18 test 5 extension: the generated `hassle.services` stub is
-# typo-squiggle effective too. Unlike `entities` (a module-level variable
+# The generated `hassle.services` stub is typo-squiggle effective too. Unlike
+# `entities` (a module-level variable
 # inside the real `hassle/registry/__init__.py`), `hassle.services` is itself
 # a real top-level module at runtime -- so its stub is a plain submodule stub
 # file at `typings/hassle/services.pyi` (not nested inside another `.pyi`'s
@@ -199,12 +199,11 @@ def test_pyright_accepts_correct_service_call(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Coordinator-flagged regression: a `typings/hassle/` dir with ONLY submodule
-# stubs (registry/services) and no top-level `typings/hassle/__init__.pyi`
+# Regression: a `typings/hassle/` dir with ONLY submodule stubs
+# (registry/services) and no top-level `typings/hassle/__init__.pyi`
 # risks pyright treating `hassle` as a namespace/partial stub package for
 # that dotted path, silently hiding the REAL package's own top-level surface
-# (`from hassle import *` names). This is the assertion class that was
-# MISSING from the M8/M18 pyright integration tests -- it must hold with the
+# (`from hassle import *` names). This assertion class must hold with the
 # FULL typings tree (entities + services + the reexport stub) present.
 # ---------------------------------------------------------------------------
 

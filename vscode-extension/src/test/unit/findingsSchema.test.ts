@@ -8,7 +8,7 @@ import {
 // Canned --json output, matching the shape
 // packages/hassle-cli/tests/test_cli_commands.py::test_validate_json_reports_findings_with_stable_schema
 // asserts on the Python side -- this is the shared-contract snapshot test's
-// TypeScript half (MILESTONES M8 test 3).
+// TypeScript half of the shared-schema snapshot test.
 const CANNED_FINDING_JSON = JSON.stringify({
   findings: [
     {
@@ -72,7 +72,7 @@ describe("findingsSchema: parseValidateJson", () => {
   });
 });
 
-describe("findingsSchema: formatValidateFailureMessage (M8 polish-batch item 1)", () => {
+describe("findingsSchema: formatValidateFailureMessage", () => {
   it("keeps the original 'check the CLI version' message for genuinely unparseable NON-empty stdout", () => {
     const msg = formatValidateFailureMessage("not json at all", new Error("Unexpected token"));
     assert.ok(msg.includes("could not parse"));

@@ -16,8 +16,8 @@ from hassle_cli.uv_project import scaffold_pyproject
 #
 # `python.analysis.stubPath` MUST equal the directory `hassle stubs` actually
 # writes into -- `typings/hassle/registry/__init__.pyi` (`hassle_cli.cli`'s
-# `stubs` command; `hassle.registry.stubs.generate_entities_stub`). This is
-# the M8 layer-1 finding: an earlier version of this generator/`stubs` wrote
+# `stubs` command; `hassle.registry.stubs.generate_entities_stub`). An
+# earlier version of this generator/`stubs` wrote
 # to `.hassle/entities.pyi`, a path no pyright config pointed at, so the
 # generated types were silently never picked up by any real editor. Verified
 # end-to-end (not just by convention) in
@@ -27,14 +27,13 @@ from hassle_cli.uv_project import scaffold_pyproject
 # `python.analysis.extraPaths` includes `.` (the bundle root) so Pylance
 # resolves the same PEP 420 namespace-package cross-file imports
 # (`from lib.x import y`, `from helpers.modes import guest_mode`) the
-# compiler's own loader does (DESIGN §6, docs/ha-api-notes.md §17.9).
-# `python.defaultInterpreterPath` points at the bundle's own uv-project venv
-# (MILESTONES M17): without it, VS Code's Python extension may keep/select an
+# compiler's own loader does (DESIGN §6, docs/internals/ha-api-notes.md §17.9).
+# `python.defaultInterpreterPath` points at the bundle's own uv-project venv:
+# without it, VS Code's Python extension may keep/select an
 # interpreter that has no `hassle` installed, and every `from hassle import *`
 # name shows as undefined even though the entity stubs (interpreter-
-# independent) still resolve -- exactly the owner field report this line
-# fixes. It is a DEFAULT: VS Code ignores it once a user explicitly selects
-# an interpreter for the workspace.
+# independent) still resolve. It is a DEFAULT: VS Code ignores it once a
+# user explicitly selects an interpreter for the workspace.
 VSCODE_SETTINGS = {
     "python.analysis.stubPath": "typings",
     "python.analysis.extraPaths": ["."],
@@ -75,7 +74,7 @@ Put here:
 
   @macro
   def notify_adults(message: str):
-      e.notify.mobile_app_keaton(message=message)
+      e.notify.mobile_app_kai(message=message)
       e.notify.mobile_app_spouse(message=message)
   ```
 
@@ -138,8 +137,8 @@ def scaffold_lib_and_tests_readmes(root: Path) -> list[str]:
 
 
 def scaffold_agent_docs(root: Path) -> list[str]:
-    """Write `AGENTS.md` + `docs/DSL.md` + `docs/COOKBOOK.md` (DESIGN §12,
-    MILESTONES M9 deliverable 1). Unlike `lib/README.md`/`tests/README.md`
+    """Write `AGENTS.md` + `docs/DSL.md` + `docs/COOKBOOK.md` (DESIGN §12).
+    Unlike `lib/README.md`/`tests/README.md`
     (user territory, "only if missing"), these are wholly machine-generated
     content the user is never expected to hand-edit -- so they are
     REWRITTEN every time (same convention as `.vscode/settings.json`), which
@@ -147,9 +146,9 @@ def scaffold_agent_docs(root: Path) -> list[str]:
     them after an upgrade + re-`init`/`pull`. `AGENTS.md` is bundle-specific
     (its header names the bundle directory); `docs/DSL.md`/`docs/COOKBOOK.md`
     are the same reference content for every bundle, shipped as package data
-    (`hassle.docs.static`, refreshed only via `hassle-dev docs --update`,
-    R3) since the installed CLI doesn't carry the fixture corpus these are
-    generated from.
+    (`hassle.docs.static`, refreshed only via `hassle-dev docs --update` --
+    golden files are regenerated, never hand-edited) since the installed CLI
+    doesn't carry the fixture corpus these are generated from.
 
     Shared by `hassle init` and `hassle pull` (when it scaffolds directories
     a bundle predating this change never had)."""
@@ -198,9 +197,9 @@ def scaffold_vscode_settings(root: Path) -> list[str]:
 
 
 def scaffold_pyproject_file(root: Path) -> list[str]:
-    """Write `pyproject.toml` at `root` IF MISSING (MILESTONES M17:
-    bundle-as-uv-project) -- never touches an existing one (I6, same
-    convention as `lib/README.md`/`tests/README.md`; unlike
+    """Write `pyproject.toml` at `root` IF MISSING (bundle-as-uv-project) --
+    never touches an existing one (no local or UI edit is ever silently
+    lost, same convention as `lib/README.md`/`tests/README.md`; unlike
     `.vscode/settings.json`, which is wholly machine-generated and always
     rewritten). Reads the bundle's `toolchain_path` config (if any) so an
     explicit setting beats auto-detection (`hassle_cli.uv_project`'s
@@ -220,15 +219,15 @@ def init_bundle(root: Path) -> list[str]:
     Returns a list of human-readable steps taken, for the CLI to print."""
     steps: list[str] = []
 
-    # DESIGN §6's tree layout (docs/ha-api-notes.md §17.9 RESOLVED: the loader
+    # DESIGN §6's tree layout (docs/internals/ha-api-notes.md §17.9 RESOLVED: the loader
     # recurses, so these are real importable packages, not just organizational
     # convenience). No `__init__.py` in any of them -- the bundle loader
     # relies on PEP 420 namespace packages (the bundle root is put on
     # `sys.path` at compile time), so none is needed for
     # `from lib.x import y`-style cross-file imports to work.
     #
-    # MILESTONES M15 work item B: the OLD per-kind trees (`automations/`,
-    # `scripts/`, `helpers/`) are RETIRED and no longer scaffolded -- the
+    # The OLD per-kind trees (`automations/`,
+    # `scripts/`, `helpers/`) are retired and no longer scaffolded -- the
     # category-first layout is root-level `<slug>.py` files, created on
     # demand by the compiler/decompiler (`misc.py` for every uncategorized
     # object), never empty directories a fresh `init` pre-creates.
@@ -244,7 +243,7 @@ def init_bundle(root: Path) -> list[str]:
         write_default_config(root)
         steps.append(f"wrote {CONFIG_FILENAME}")
 
-    # MILESTONES M17: bundle-as-uv-project scaffold -- after hassle.toml
+    # Bundle-as-uv-project scaffold -- after hassle.toml
     # exists (a fresh one has no `toolchain_path`, but a pre-existing bundle
     # re-running `init` may already have one set by hand).
     steps.extend(scaffold_pyproject_file(root))

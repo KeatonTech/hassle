@@ -1,13 +1,13 @@
 """``modernize_for_comparison`` — the bounded, deterministic transform a
-decompile+recompile cycle is EXPECTED to apply, promoted to production
-(``fix/self-check-value-compare``, coordinator field-failure fix).
+decompile+recompile cycle is EXPECTED to apply.
 
 This is the exact transform `packages/hassle-core/tests/test_roundtrip_corpus.py`'s
 `_modernized` test helper already applied to its *expectation* before comparing —
-moved here so production code (the pull-side self-checks, `hassle_cli.pull_apply`/
+shared here so production code (the pull-side self-checks, `hassle.sync.pull_apply`/
 `hassle_cli.cli`) can perform the identical, context-free comparison a raw canonical-
 hash equality check cannot: `compile(decompile(x))` is expected to modernize two
-cosmetic shapes relative to `normalize_ha(x)`, never anything else --
+cosmetic shapes relative to `normalize_ha(x)`, never anything else -- see
+docs/internals/sync.md for why this comparison must be context-free.
 
 - **Inner trigger discriminator:** `platform:` -> `trigger:` (every TYPED trigger
   builder always emits the modern spelling; `device` triggers are excluded -- DESIGN

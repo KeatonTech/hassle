@@ -1,8 +1,6 @@
-"""`ux/shared-script-calls-fix` (coordinator task 3): a safety backstop --
-after `hassle pull` writes files, recompile the bundle. If it doesn't
-actually compile (a decompiler bug -- the exact field failure this fix
-branch addresses, or any other coordination bug we haven't found yet),
-`hassle pull` must:
+"""A safety backstop: after `hassle pull` writes files, recompile the
+bundle. If it doesn't actually compile (a decompiler bug), `hassle pull`
+must:
 
 - print a what/where/fix error stating this is a Hassle decompiler bug (not
   a user mistake), asking the user to report it, and noting that a
@@ -12,16 +10,16 @@ branch addresses, or any other coordination bug we haven't found yet),
   the user needs them to file a useful bug report, and a subsequent fixed
   `hassle pull --allow-dirty` will just overwrite them again).
 
-Two backstops now exist (coordinator task 4 adds the second, cheaper one):
+Two backstops exist:
 
 1. A pre-write, adopt-batches-only self-check
-   (`hassle_cli.pull_apply._self_check_adopt_batches`,
+   (`hassle.sync.pull_apply._self_check_adopt_batches`,
    `test_pull_adopt_batch_self_check.py`) that fires BEFORE any file is
    written, for a broken ADOPT batch considered in isolation.
 2. THIS module's post-write, whole-real-bundle-tree recompile
    (`hassle_cli.cli.pull`), which additionally covers anything the narrower
    pre-write check can't see -- in particular `_refresh`'s single-object
-   splice path (see `hassle_cli.pull_apply`'s module docstring for why that
+   splice path (see `hassle.sync.pull_apply`'s module docstring for why that
    path isn't pre-write-self-checked).
 
 Simulated here by monkeypatching the decompiler to emit deliberately broken
@@ -80,7 +78,7 @@ def test_pull_backstop_catches_noncompiling_refresh_output(
         },
     )
 
-    import hassle_cli.pull_apply as pull_apply_mod
+    from hassle.sync import pull_apply as pull_apply_mod
 
     def _broken_decompile_bundle(objects, *, script_refs=None):
         return (

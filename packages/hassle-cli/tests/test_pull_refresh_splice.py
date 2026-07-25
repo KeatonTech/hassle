@@ -1,12 +1,11 @@
 """Regression: `hassle pull`'s REFRESH must splice ONLY the drifted object's
-def in place (M2's LibCST splicer, DESIGN §7.3), never rewrite the whole file.
+def in place (the LibCST splicer, DESIGN §7.3), never rewrite the whole file.
 
-Found while implementing ux/triggers-in-decorator (pre-existing on main at
-748b461): `hassle_cli.cli.pull` handed `apply_pull_with_decompiler` a
-`WholeFileSourceWriter`, whose `splice_object` is the documented M5 whole-file
+`hassle_cli.cli.pull` handed `apply_pull_with_decompiler` a
+`WholeFileSourceWriter`, whose `splice_object` is the documented whole-file
 overwrite stand-in -- so refreshing one drifted object clobbered every sibling
-object (and every hand-written comment) sharing its source file. I6: a local
-edit (the sibling def, the comment) was silently lost.
+object (and every hand-written comment) sharing its source file. No local
+edit (the sibling def, the comment) may ever be silently lost.
 """
 
 from __future__ import annotations
@@ -79,7 +78,8 @@ def test_pull_refresh_preserves_sibling_objects_in_same_file(
     # And the spliced-in replacement carries the UI-update marker (DESIGN §7.3).
     assert "# hassle: updated from UI on " in after, after
 
-    # Both objects still compile from disk under their original ids (I2).
+    # Both objects still compile from disk under their original ids (an
+    # existing object's HA id must never change).
     compiled = compile_bundle(git_repo)
     assert "automation:hall_light_on_motion" in compiled.objects, sorted(compiled.objects)
     assert "automation:porch_light_on_motion" in compiled.objects, sorted(compiled.objects)

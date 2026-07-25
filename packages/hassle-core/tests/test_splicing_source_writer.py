@@ -1,11 +1,12 @@
-"""`SplicingSourceWriter` — M2's LibCST splicer wired into the F2 seam.
+"""`SplicingSourceWriter` — the LibCST splicer wired into the SourceWriter/plan seam.
 
 Regression companion to `hassle-cli/tests/test_pull_refresh_splice.py` (pull's
 REFRESH clobbered sibling objects sharing a source file, because the CLI used
 `WholeFileSourceWriter`'s documented whole-file stand-in): a real
 `SourceWriter` whose `splice_object` surgically replaces one object's
 statement (and whose `delete_object` surgically removes one), leaving every
-sibling statement and hand-written comment untouched (I6).
+sibling statement and hand-written comment untouched (no local or UI edit is
+ever silently lost).
 """
 
 from __future__ import annotations
@@ -132,7 +133,8 @@ def test_splice_missing_file_writes_whole_content(tmp_path: Path) -> None:
 
 def test_splice_object_absent_from_file_appends_never_clobbers(tmp_path: Path) -> None:
     # A stale manifest can point a refresh at a file the object is no longer
-    # in -- the siblings must survive (I6); the refreshed def is appended.
+    # in -- the siblings must survive (no edit is silently lost); the
+    # refreshed def is appended.
     writer = SplicingSourceWriter(updated_on="2026-07-04")
     target = _write(tmp_path)
 
@@ -208,7 +210,7 @@ def test_splicing_source_writer_satisfies_protocol(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Polish-batch item 3: loop-splice reconcile warning. A compile-time loop
+# Loop-splice reconcile warning. A compile-time loop
 # generates an object with no single literal statement for the splicer to
 # target -- the append path fires (same as a stale-manifest miss), but here
 # the file's CURRENT content already compiles to that object key (it's
@@ -250,7 +252,8 @@ def test_splice_of_metaprogrammed_object_appends_and_warns(tmp_path: Path) -> No
     writer.splice_object(target, "automation:motion_kitchen", KITCHEN_REPLACEMENT)
 
     after = target.read_text(encoding="utf-8")
-    # I6: the loop is untouched, the UI edit is appended, nothing is lost.
+    # No edit is silently lost: the loop is untouched, the UI edit is
+    # appended, nothing is lost.
     assert "for room in ROOMS:" in after
     assert "def motion_kitchen_ui_edit():" in after
     assert "# hassle: updated from UI on 2026-07-05" in after
@@ -286,7 +289,7 @@ def test_reconcile_warnings_reset_per_writer_instance(tmp_path: Path) -> None:
 
 # ---------------------------------------------------------------------------
 # `find_object_statement_name`'s fallback must never match a statement that
-# declares a DIFFERENT object (reviewer finding on this workstream): the plain
+# declares a DIFFERENT object: the plain
 # name-equals-identity fallback exists for object forms the resolver doesn't
 # model, not for statements it DOES model whose identity simply differs --
 # matching those would splice over (or delete) the wrong object. Reachable
@@ -340,11 +343,12 @@ def test_fallback_still_matches_unmodeled_statement_forms() -> None:
 # ---------------------------------------------------------------------------
 # Two defs may legally share a NAME while declaring different ids (identity is
 # the `id=` kwarg; the def name is arbitrary -- both compile, each registering
-# under its own id). Reviewer finding on this workstream: the splice/remove
+# under its own id). Regression: the splice/remove
 # transformers matched EVERY top-level statement with the target's name, so on
 # such a file a refresh spliced the target over BOTH defs (destroying the
 # sibling's source) and a drop removed BOTH -- leaving only imports, which
-# `delete_object` then unlinked, silently losing the still-live sibling (I6;
+# `delete_object` then unlinked, silently losing the still-live sibling (no
+# edit is ever silently lost;
 # the next push would have deleted it from HA too). Targeting must go by the
 # statement's declared (kind, identity), never by name alone.
 # ---------------------------------------------------------------------------

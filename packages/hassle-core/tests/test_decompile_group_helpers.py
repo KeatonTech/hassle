@@ -1,19 +1,19 @@
-"""MILESTONES M21 test 3 -- decompile/adopt of group-helper objects into
-`helpers/` (root-level, M15 layout), with I3 round-trip byte-stability
-applied to the config-entry options body.
+"""Decompile/adopt of group-helper objects into `helpers/` (root-level
+layout), with compile(decompile(x)) == x round-trip byte-stability applied to
+the config-entry options body.
 
 `GroupHelperConfig` decompiles to the plain assignment call form (mirrors the
 nine storage-collection helpers, `hassle.decompiler.codegen._helper_source`)
--- unlike template helpers (M13/M14), there is no Jinja `state=` field to
+-- unlike template helpers, there is no Jinja `state=` field to
 defer into a decorator body, so no decorator form exists for group at all.
 There is no identity kwarg to rename -- `GroupHelperConfig` has no `id`/
-`unique_id` field at all (docs/ha-api-notes.md §38.1). Identity is derived
+`unique_id` field at all (docs/internals/ha-api-notes.md §38.1). Identity is derived
 from `name` (slugified) at both compile and decompile time.
 
 Nested groups (a group whose members are groups) decompile as PLAIN entity
 references -- a member entity id renders as an ordinary string literal via
 `render_literal`, never the `e.<domain>.<id>` cosmetic entity-reference form
--- `entities` list order preserved verbatim both directions (I3).
+-- `entities` list order preserved verbatim both directions.
 """
 
 from __future__ import annotations
@@ -106,7 +106,7 @@ def test_entities_list_order_preserved_verbatim() -> None:
 
 
 def test_decompile_recompile_round_trip_is_byte_stable_for_options_body(tmp_path: Path) -> None:
-    """I3 applied to a config-entry options body: compile(decompile(x)) == x."""
+    """Applied to a config-entry options body: compile(decompile(x)) == x."""
     result = compile_bundle(FIXTURE)
     original_ir = {key: obj.to_ha() for key, obj in result.objects.items()}
 

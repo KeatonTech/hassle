@@ -1,13 +1,13 @@
-"""M3 milestone test 5: `.pyi` stub generator (entities + typed service methods).
+"""`.pyi` stub generator (entities + typed service methods).
 
 Golden-tests the generated stub content against `fixtures/registry/home.json`
 byte-for-byte (a plain pytest-managed golden comparison, regenerated only via
 `HASSLE_UPDATE_SNAPSHOTS=1`, mirroring the errors-snapshot pattern).
 
-ux/stub-docstrings: the per-entity friendly name moved from a trailing `#`
-comment (invisible to Pylance) to an attribute docstring -- a string-literal
-statement immediately following the attribute declaration, which pyright/
-Pylance surface on hover and in the completion documentation pane.
+The per-entity friendly name is emitted as an attribute docstring -- a
+string-literal statement immediately following the attribute declaration,
+which pyright/Pylance surface on hover and in the completion documentation
+pane -- rather than a trailing `#` comment (invisible to Pylance).
 """
 
 from __future__ import annotations
@@ -74,19 +74,19 @@ def test_stub_supports_indexing_form(snapshot: RegistrySnapshot) -> None:
 
 
 def test_stub_entity_classes_inherit_str(snapshot: RegistrySnapshot) -> None:
-    """Regression test (task #28, annotation-truth pass): every generated
-    ``<Domain>Entity`` class must inherit ``str`` -- matching the REAL
-    runtime type (``hassle.compiler.helpers.EntityRef(str)``). Before this,
+    """Regression: every generated ``<Domain>Entity`` class must inherit
+    ``str`` -- matching the REAL runtime type
+    (``hassle.compiler.helpers.EntityRef(str)``). Before this,
     ``BinarySensorEntity``/``LightEntity``/etc. had no relationship to ``str``
     at all, so a decompiled bundle's ``state(e.binary_sensor.hall_motion)``
     was a pyright error (`reportArgumentType`) even though it is correct,
     runnable code.
 
-    M20 update (entity-first conditions): every entity class now ALSO always
-    carries the typed ``.state`` accessor property, so a domain with no
-    services no longer collapses to the one-line ``class X(str): ...`` form
-    -- ``BinarySensorEntity`` (a domain this fixture snapshot gives no
-    services to) is exactly the case that used to collapse and now doesn't.
+    Every entity class also always carries the typed ``.state`` accessor
+    property, so a domain with no services no longer collapses to the
+    one-line ``class X(str): ...`` form -- ``BinarySensorEntity`` (a domain
+    this fixture snapshot gives no services to) is exactly the case that
+    used to collapse and now doesn't.
     """
     stub = generate_entities_stub(snapshot)
     assert "class LightEntity(str):" in stub
@@ -188,7 +188,7 @@ def _snapshot_with_entity(
 
 
 def test_stub_docstring_escapes_quotes_and_backslash() -> None:
-    """Torture test (ux/stub-docstrings): a display name containing both a
+    """Torture test: a display name containing both a
     double quote and a backslash must still produce a parseable, ruff-format-
     clean `.pyi`."""
     entity = EntityInfo(
@@ -231,7 +231,7 @@ def test_stub_docstring_falls_back_to_entity_id_when_both_names_none() -> None:
     doc_line = lines[idx + 1].strip()
     assert "sensor.no_name" in doc_line
     # No device resolves here -- entity_id must appear exactly ONCE in the
-    # docstring, never the doubled "x -- x" wart (ux/stub-device-names).
+    # docstring, never the doubled "x -- x" wart.
     assert doc_line.count("sensor.no_name") == 1
 
 
@@ -242,10 +242,9 @@ def _line_after(stub: str, attr_prefix: str) -> str:
 
 
 def test_stub_docstring_uses_device_name_when_entity_names_are_null() -> None:
-    """ux/stub-device-names: `has_entity_name` integrations (Matter, etc.)
-    leave BOTH `entity.name` and `entity.original_name` null -- the friendly
-    name lives on the device instead (HA's own composition rule). Mirrors
-    the owner's real showcase entity:
+    """`has_entity_name` integrations (Matter, etc.) leave BOTH `entity.name`
+    and `entity.original_name` null -- the friendly name lives on the device
+    instead (HA's own composition rule). Example:
     `cover.primary_bedroom_bedroom_privacy_curtain` with a device named
     "Primary Bedroom Privacy Curtain" via `name_by_user`."""
     device = DeviceInfo(
@@ -341,7 +340,7 @@ def test_stub_docstring_device_with_no_name_at_all_falls_back_to_entity_id_once(
 
 
 def test_stub_docstring_long_line_truncates_area_first() -> None:
-    """The >100-char fallback rule (R7): truncate/drop the area clause first,
+    """The >100-char fallback rule: truncate/drop the area clause first,
     keeping the display name + entity_id (the load-bearing part for the
     digit-leading rule) intact."""
     long_area_name = "A" * 90

@@ -12,7 +12,7 @@ import { CliRunner } from "./cliRunner";
  * value into `kind:id` -- the same `object_key` shape `hassle explain` takes
  * (`hassle_cli/cli.py`'s `explain` command; `kind:object_id`, DESIGN §6).
  * A full DSL-aware "automation under cursor" resolution is LSP-shaped
- * (layer 3, out of scope for M8 per the milestone brief) -- this regex
+ * (layer 3, out of scope for this extension for now) -- this regex
  * approach covers the common case (one decorated function per screenful)
  * without a real parser.
  */

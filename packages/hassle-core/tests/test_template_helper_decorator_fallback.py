@@ -1,19 +1,17 @@
-"""MILESTONES M14 -- decorator form is the canonical template-helper output,
-both decompile branches.
+"""Decorator form is the canonical template-helper output, both decompile
+branches.
 
-Owner feedback on M13: the non-invertible fallback branch should ALSO emit
+The non-invertible fallback branch also emits
 the decorator shape, with the raw Jinja template as the verbatim string body
-of the `return` statement -- same IR, same I3 guarantee, but hand-converting
-a helper to Python later means rewriting only the `return` expression. The
-call form stays valid DSL (F3, unchanged) -- it just stops being canonical
-decompiler OUTPUT.
+of the `return` statement -- same IR, same round-trip guarantee, but
+hand-converting a helper to Python later means rewriting only the `return`
+expression. The call form stays valid DSL (part of the frozen top-level DSL
+surface, unchanged) -- it just stops being canonical decompiler OUTPUT.
 
 Both decompile branches (`hassle.decompiler.codegen._template_helper_source`)
-now emit `@builder(...)` / `def <ident>(): return ...`; the only difference is
-the body -- an inverted `TemplateExpr` expression (M13's "nice" branch) vs. a
-verbatim raw-string `return "..."` (this milestone's fallback branch).
-
-Test numbering below matches MILESTONES.md's "Write these tests first" list.
+emit `@builder(...)` / `def <ident>(): return ...`; the only difference is
+the body -- an inverted `TemplateExpr` expression (the "nice" branch) vs. a
+verbatim raw-string `return "..."` (the fallback branch).
 """
 
 from __future__ import annotations
@@ -60,15 +58,16 @@ def _ruff_format(source: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Test 1: golden update -- the non-invertible fixture(s) now decompile to the
-# decorator-with-string form; I3 still holds through the fallback branch.
+# Golden update -- the non-invertible fixture(s) now decompile to the
+# decorator-with-string form; the round-trip invariant still holds through
+# the fallback branch.
 # ---------------------------------------------------------------------------
 
 
 def test_noninvertible_template_helpers_decompile_to_decorator_form() -> None:
     """The `template_helper_declarations` objects whose `state=` is outside
     the bounded inverter's grammar -- `active_hvac_zones` (a `selectattr`
-    filter chain) and `any_door_open` (`is_state(...)`; M16 update: `house_
+    filter chain) and `any_door_open` (`is_state(...)`; `house_
     scene`'s bare `states(...)` read is now INSIDE the grammar, see
     test_decompile_template_helpers.py's module docstring) -- decompile to
     the DECORATOR form, not the call form: `@builder(...)` / `def <ident>():
@@ -86,8 +85,8 @@ def test_noninvertible_template_helpers_decompile_to_decorator_form() -> None:
         assert "return " in source
         # `state=`/`options=` never appear as decorator KWARGS any more --
         # `options=` (template_select's second template) stays a kwarg
-        # unchanged (MILESTONES: "template_select options= stays a kwarg"),
-        # so only check `state=` is gone from the decorator's own kwargs.
+        # unchanged, so only check `state=` is gone from the decorator's own
+        # kwargs.
         decorator_line = source.split("\n", 1)[0]
         assert "state=" not in decorator_line
 
@@ -95,8 +94,9 @@ def test_noninvertible_template_helpers_decompile_to_decorator_form() -> None:
 def test_noninvertible_template_helper_fallback_body_is_verbatim_state_string() -> None:
     """The `return` body's string literal, parsed back via `ast`, is
     byte-identical to the stored `state=` Jinja text -- no re-rendering, no
-    normalization, just the raw stored string (I3's fallback-branch
-    guarantee: the raw escape hatch never drops or alters data)."""
+    normalization, just the raw stored string (the round-trip invariant's
+    fallback-branch guarantee: the raw escape hatch never drops or alters
+    data)."""
     result = compile_bundle(FALLBACK_FIXTURE)
     obj = result.objects["template_number:active_hvac_zones"]
     stored_state = obj.to_ha()["state"]
@@ -110,7 +110,7 @@ def test_noninvertible_template_helper_fallback_body_is_verbatim_state_string() 
 
 
 def test_noninvertible_template_helper_round_trips_byte_stably(tmp_path: Path) -> None:
-    """I3 fallback branch: compile(decompile(x)) == x for every object whose
+    """Fallback branch: compile(decompile(x)) == x for every object whose
     state falls outside the bounded inverter's grammar."""
     result = compile_bundle(FALLBACK_FIXTURE)
     original_ir = {key: obj.to_ha() for key, obj in result.objects.items()}
@@ -118,7 +118,7 @@ def test_noninvertible_template_helper_round_trips_byte_stably(tmp_path: Path) -
     lines = [
         "from hassle import (",
         "    expr,",
-        "    state_of,",  # M16: house_scene now inverts (bare states() read)
+        "    state_of,",  # house_scene now inverts (bare states() read)
         "    template_binary_sensor,",
         "    template_number,",
         "    template_select,",
@@ -139,7 +139,7 @@ def test_noninvertible_template_helper_round_trips_byte_stably(tmp_path: Path) -
 
 
 # ---------------------------------------------------------------------------
-# Test 2: quoting torture test -- templates with `"""`, `'''`, backslashes,
+# Quoting torture test -- templates with `"""`, `'''`, backslashes,
 # leading/trailing newlines, and both quote characters round-trip
 # byte-exactly (through the real `template_sensor`/decompile/recompile path).
 # ---------------------------------------------------------------------------
@@ -186,8 +186,8 @@ def test_quoting_torture_round_trips_byte_exactly(gnarly: str, tmp_path: Path) -
 
 @pytest.mark.parametrize("gnarly", TORTURE_TEMPLATES)
 def test_quoting_torture_is_ruff_format_stable(gnarly: str) -> None:
-    """Emitted source is a fixed point of `ruff format` (R8 determinism +
-    hand-editability: the repo's own pull/decompile pipeline formats
+    """Emitted source is a fixed point of `ruff format` (deterministic output
+    + hand-editability: the repo's own pull/decompile pipeline formats
     decompiled output, so a second format pass must never change it again)."""
     from hassle import template_sensor
     from hassle.compiler.registry import current_registry, fresh
@@ -204,18 +204,19 @@ def test_quoting_torture_is_ruff_format_stable(gnarly: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 3: invertible-branch output unchanged (regression) -- the M13
+# Invertible-branch output unchanged (regression) -- the
 # decorator-expression golden fixture decompiles BYTE-IDENTICALLY before and
-# after M14.
+# after the fallback branch's decorator form was added.
 # ---------------------------------------------------------------------------
 
 
 def test_invertible_branch_golden_fixture_is_byte_identical_to_source() -> None:
     """`fixtures/dsl/template_helper_decorator_form/bundle/helpers.py` is
-    the M13 golden DSL source for the invertible branch -- decompiling the IR
+    the golden DSL source for the invertible branch -- decompiling the IR
     it compiles to must reproduce, for every object, the SAME decorator
-    shape (builder decorator + inverted `TemplateExpr` body) M13 already
-    produced; this milestone must not touch that branch's output at all."""
+    shape (builder decorator + inverted `TemplateExpr` body) it already
+    produced; the fallback branch's decorator form must not touch this
+    branch's output at all."""
     result = compile_bundle(INVERTIBLE_FIXTURE)
     expected_builder = {
         "template_number:active_hvac_zones": "template_number",
@@ -227,7 +228,7 @@ def test_invertible_branch_golden_fixture_is_byte_identical_to_source() -> None:
         obj = result.objects[key]
         source = decompile_object(key, obj)
         assert source.startswith(f"@{builder}(")
-        # The M13 "nice" branch never returns a bare string literal -- it
+        # The "nice" branch never returns a bare string literal -- it
         # returns the inverted TemplateExpr source (an expression built from
         # `expr`/`state`/entity refs, never a `return "..."` constant).
         module = ast.parse(source)
@@ -235,14 +236,14 @@ def test_invertible_branch_golden_fixture_is_byte_identical_to_source() -> None:
         (return_stmt,) = [n for n in func_def.body if isinstance(n, ast.Return)]
         assert not isinstance(return_stmt.value, ast.Constant), (
             f"{key} regressed to the raw-string fallback body; "
-            "the M13 invertible branch must stay unchanged"
+            "the invertible branch must stay unchanged"
         )
 
 
 def test_invertible_branch_average_temp_body_source_is_unchanged() -> None:
-    """Pin the exact source text M13 produced for the one object whose state
+    """Pin the exact source text produced for the one object whose state
     IS inside the bounded inverter's grammar -- a byte-for-byte regression
-    check for spec test 3."""
+    check."""
     result = compile_bundle(INVERTIBLE_FIXTURE)
     obj = result.objects["template_sensor:average_temp"]
     source = decompile_object("template_sensor:average_temp", obj)
@@ -255,11 +256,10 @@ def test_invertible_branch_average_temp_body_source_is_unchanged() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 5: byte-stable re-decompile (R8 determinism) -- decompiling the same
+# Byte-stable re-decompile (deterministic output) -- decompiling the same
 # IR twice, independently, produces byte-identical source for the fallback
-# branch (test 3's own fixture already covers the invertible branch
-# elsewhere; this covers the NEW fallback-branch codegen path this milestone
-# adds).
+# branch (the invertible branch is already covered elsewhere; this covers
+# the fallback-branch codegen path).
 # ---------------------------------------------------------------------------
 
 

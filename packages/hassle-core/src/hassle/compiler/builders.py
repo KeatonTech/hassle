@@ -1,10 +1,10 @@
-"""The M1-core builder set: ``state`` (trigger+condition), ``service``, ``delay``.
+"""The core builder set: ``state`` (trigger+condition), ``service``, ``delay``.
 
-This is the *proof of the pattern*, not the full builder catalog. The
-triggers/conditions and actions/control-flow workstreams add the rest by
+This is the *proof of the pattern*, not the full builder catalog. Other
+builder families (triggers/conditions, actions/control-flow) add the rest by
 implementing the protocols in :mod:`hassle.compiler.protocols` — they do not
 edit this file. Every builder here emits canonical (already plural / ``action:``)
-HA dicts so compiler output is byte-stable (R8).
+HA dicts so compiler output is byte-stable.
 """
 
 from __future__ import annotations
@@ -54,8 +54,8 @@ class StateExpr(_NoBool):
 
     ``entity_id`` (and ``.to()``/``.is_()``'s ``value``) accept
     ``str | Sequence[str]`` (real-world smoke-test addition; widened from
-    ``str | list[str]`` to ``str | Sequence[str]`` in the task #28
-    annotation-truth pass -- ``list[X]`` is invariant, so a decompiled
+    ``str | list[str]`` to ``str | Sequence[str]`` --
+    ``list[X]`` is invariant, so a decompiled
     bundle's ``state(e.binary_sensor.hall_motion)`` -- an ``EntityRef``/entity
     stub CLASS, a ``str`` subclass but not literally ``str`` -- and
     ``state([e.binary_sensor.a, e.binary_sensor.b])`` -- a ``list`` of THOSE,
@@ -65,8 +65,8 @@ class StateExpr(_NoBool):
     typecheck; a bare ``str`` is itself a ``Sequence[str]``, so the
     single-entity form is unaffected): the HA UI always stores these as
     *lists*, even for a single entity/value, and a singleton list must
-    round-trip as a list — never normalized to a scalar (I3,
-    docs/ha-api-notes.md).
+    round-trip as a list — never normalized to a scalar (compile(decompile(x))
+    must equal x for any config, docs/internals/ha-api-notes.md).
     """
 
     def __init__(self, entity_id: str | Sequence[str]) -> None:
@@ -127,8 +127,8 @@ class StateExpr(_NoBool):
         return self.with_options(id=id, enabled=enabled, variables=variables, for_=for_)
 
     def is_not(self, value: Any) -> _NotStateExpr:
-        """``state(x).is_not(v)`` -- condition-only negation (M20, entity-first
-        conditions milestone). Mirrors ``.is_()`` exactly (same argument shape,
+        """``state(x).is_not(v)`` -- condition-only negation. Mirrors
+        ``.is_()`` exactly (same argument shape,
         including a list ``value``) but wraps the resulting ``state`` condition
         in HA's ``not`` combinator, compiling byte-identical to
         ``not_(state(x).is_(v))`` (``hassle.compiler.conditions.not_``).
@@ -191,8 +191,8 @@ def state(entity_id: str | Sequence[str]) -> StateExpr:
 
     ``entity_id`` accepts a single entity or a sequence of them (real-world
     smoke-test addition: the HA UI always stores this as a list, even for one
-    entity; widened to ``Sequence[str]`` in the task #28 annotation-truth
-    pass -- see :class:`StateExpr`'s docstring).
+    entity; widened to ``Sequence[str]`` -- see :class:`StateExpr`'s
+    docstring).
     """
     return StateExpr(entity_id)
 
@@ -201,17 +201,17 @@ class _StateAccessor(_NoBool):  # pyright: ignore[reportUnusedClass]
     # Constructed only from `hassle.compiler.helpers.EntityRef.state` (a
     # cross-module, lazily-imported reference -- same avoidance convention as
     # every other helpers<->builders seam in this file) and referenced
-    # directly by this milestone's tests -- never instantiated from within
+    # directly by tests -- never instantiated from within
     # `builders.py` itself, which is the one thing pyright's strict
     # `reportUnusedClass` actually checks for an underscore-prefixed class.
-    """``entity.state`` (MILESTONES M20, entity-first conditions) — a
+    """``entity.state`` (entity-first conditions) — a
     comparison accessor bound to one entity id, returned by
     :attr:`~hassle.compiler.helpers.EntityRef.state` (a defined property,
-    so it wins over M18's service-method ``__getattr__`` — no HA domain has
-    a service literally named ``state``).
+    so it wins over the entity-method sugar's ``__getattr__`` — no HA domain
+    has a service literally named ``state``).
 
     Every comparison compiles to the exact same IR the corresponding classic
-    builder call would (golden-equivalence, this milestone's test 1):
+    builder call would (golden-equivalence):
 
     - ``==``/``!=``   -> ``state(...).is_(v)`` / ``state(...).is_not(v)``
     - ``>``/``<``     -> ``numeric_state(..., above=v)`` / ``(..., below=v)``
@@ -258,8 +258,7 @@ class _StateAccessor(_NoBool):  # pyright: ignore[reportUnusedClass]
     # is no reason to make it a landmine for a future caller either (e.g. a
     # test helper deduplicating accessors in a set) -- explicit opt-back-in to
     # plain identity hashing/equality-by-identity-for-hash-bucketing (the
-    # `object.__hash__` default), matching the "hash-story finding" this
-    # milestone's spec asked to be documented.
+    # `object.__hash__` default) -- a deliberate, documented choice.
     __hash__ = object.__hash__
 
     def __gt__(self, other: float) -> NumericStateExpr:
@@ -297,14 +296,14 @@ class _StateAccessor(_NoBool):  # pyright: ignore[reportUnusedClass]
 
 
 class _StateComparisonExpr(_NoBool):
-    """The condition-builder object ``entity.state == v`` / ``!= v`` returns
-    (MILESTONES M20). Wraps a real ``StateExpr``/``_NotStateExpr`` — its
+    """The condition-builder object ``entity.state == v`` / ``!= v`` returns.
+    Wraps a real ``StateExpr``/``_NotStateExpr`` — its
     ``to_condition()`` delegates directly, so it compiles byte-identical to
-    the equivalent classic builder form (this milestone's test 1).
+    the equivalent classic builder form.
 
     A dedicated wrapper (rather than returning the inner ``StateExpr``/
     ``_NotStateExpr`` directly) so the ``in``-operator trap and the
-    trigger/condition non-confusion story (test 3) both have one exact type
+    trigger/condition non-confusion story both have one exact type
     to reason about: this object is CONDITION-ONLY (no ``to_trigger``), so
     passing it to ``when(...)`` fails with a plain, honest
     ``AttributeError`` on the missing method rather than silently compiling
@@ -343,26 +342,27 @@ class ServiceAction:
     live at the top level, not inside ``data``); passing them keeps this the one
     service-call builder (no separate ``service_ext``).
 
-    ``metadata=`` (real-world smoke-test addition, docs/ha-api-notes.md §19): the
+    ``metadata=`` (real-world smoke-test addition, docs/internals/ha-api-notes.md §19): the
     HA UI stamps ``"metadata": {}`` on every action it saves. It is emitted
     whenever passed, **including when empty** — a real UI-authored config always
     carries it, so eliding an empty ``metadata`` would hash-drift every such
-    action on every decompile+recompile cycle (I3). ``None`` (the default) omits
-    the field entirely, for DSL-authored actions that never had one.
+    action on every decompile+recompile cycle (compile(decompile(x)) must
+    equal x for any config). ``None`` (the default) omits the field
+    entirely, for DSL-authored actions that never had one.
 
-    ``data_template=`` (residue-coverage round 2, docs/ha-api-notes.md §20): the
-    legacy templated-data key. HA still stores it verbatim on a real UI-authored
-    action; it is a *sibling* of ``data``, never folded into it — a real config
-    may carry ``data_template`` alone, ``data`` alone, or (rarely) both, and each
-    round-trips exactly as stored (I3).
+    ``data_template=`` (docs/internals/ha-api-notes.md §20): the legacy templated-data
+    key. HA still stores it verbatim on a real UI-authored action; it is a
+    *sibling* of ``data``, never folded into it — a real config may carry
+    ``data_template`` alone, ``data`` alone, or (rarely) both, and each
+    round-trips exactly as stored.
 
-    ``alias=``/``enabled=`` (residue-coverage round 2): the UI names and toggles
-    individual steps. Both are additive, top-level action fields, same treatment
-    as ``metadata=``/``data_template=`` — omitted by default, emitted verbatim
+    ``alias=``/``enabled=``: the UI names and toggles individual steps. Both
+    are additive, top-level action fields, same treatment as
+    ``metadata=``/``data_template=`` — omitted by default, emitted verbatim
     when passed (including ``enabled=False``).
 
-    ``target=`` also accepts the bare entity target sugar (``ux/dsl-ergonomics``, item 3,
-    DESIGN §5.3/§7.3): a bare entity ref/string or a list of them (``{"entity_id": ...}``), or
+    ``target=`` also accepts the bare entity target sugar (DESIGN §5.3/§7.3):
+    a bare entity ref/string or a list of them (``{"entity_id": ...}``), or
     an ``area()``/``floor()``/``label()``/``device_id()`` target helper object (``{"area_id":
     ...}`` etc.) — normalized to HA's stored target dict shape by
     :func:`~hassle.compiler.purpose.normalize_target`. An already-built dict passes through
@@ -398,7 +398,7 @@ class ServiceAction:
         self._data = merged
         # Presence, not truthiness (same rule as metadata): the UI stores
         # `"data": {}` on field-less calls; eliding it on recompile would
-        # hash-drift the action and raw the containing block (I3).
+        # hash-drift the action and raw the containing block.
         self._data_present = data is not None or bool(fields)
 
     def to_action(self) -> dict[str, Any]:
@@ -429,8 +429,8 @@ class DelayAction:
     The dict form (rather than an ``HH:MM:SS`` string) is deterministic and is what
     HA accepts natively; it round-trips without ambiguity.
 
-    ``alias=``/``enabled=`` (residue-coverage round 2, docs/ha-api-notes.md §20):
-    the UI names and toggles individual steps, including a bare ``delay``. Same
+    ``alias=``/``enabled=`` (docs/internals/ha-api-notes.md §20): the UI names and
+    toggles individual steps, including a bare ``delay``. Same
     additive treatment as :class:`ServiceAction`'s — keyword-only so they never
     collide with a duration unit passed via ``**duration``.
     """

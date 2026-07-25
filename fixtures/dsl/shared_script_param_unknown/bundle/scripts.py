@@ -1,5 +1,5 @@
 """Error case: param() references a name absent from the shared script's
-signature (M1 test 5 / scope item 6)."""
+signature."""
 
 from hassle import param, service, shared_script
 

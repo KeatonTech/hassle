@@ -1,5 +1,5 @@
-"""DESIGN §10.1 / MILESTONES M4: purpose-specific triggers (2026.7+) are
-unsupported for trigger *evaluation* in v1 -- too large a vocabulary to
+"""DESIGN §10.1: purpose-specific triggers (2026.7+) are unsupported for
+trigger *evaluation* in v1 -- too large a vocabulary to
 reimplement faithfully. `sim.fire(automation, trigger_ctx={...})` is the
 documented path, so *no automation is untestable*, some just skip trigger
 evaluation. This file proves a purpose-trigger automation is fully testable

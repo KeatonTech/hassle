@@ -1,11 +1,12 @@
-"""M1.1 — runtime-math expression surface (MILESTONES M1.1, DESIGN §5.4 extension).
+"""Runtime-math expression surface (DESIGN §5.4 extension).
 
 Symbolic-expression extension of the template builder: math builders mirroring
 HA's Jinja math set 1:1 (sin/cos/tan/asin/acos/atan/atan2/sqrt/log,
 round_/min_/max_/abs_), constants (PI/E_/TAU) rendering to Jinja names (never
 folded to a Python float literal), `.attr()` entity-attribute access, `var()`
 runtime-variable references, and `param()` upgraded to a composable Expr.
-Everything here is an F3 ADDITION (docs/dsl-f3.md); no existing name changes.
+Everything here is an ADDITION to the frozen top-level DSL surface
+(docs/internals/dsl-extensions.md); no existing name changes.
 
 Test 1 (acceptance examples, verbatim) and test 2 (reflected-operator/
 precedence torture test) live here. Test 3 (trap boundary) lives in
@@ -38,7 +39,7 @@ from hassle.compiler.scripts import param
 from hassle.compiler.templates import TemplateExpr, var
 
 # ---------------------------------------------------------------------------
-# Test 1 — acceptance examples verbatim (MILESTONES M1.1 test 1)
+# Test 1 — acceptance examples verbatim
 # ---------------------------------------------------------------------------
 
 
@@ -137,7 +138,7 @@ def test_concat_is_explicit_string_join() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 2 — reflected-operator / precedence torture test (MILESTONES M1.1 test 2)
+# Test 2 — reflected-operator / precedence torture test
 # ---------------------------------------------------------------------------
 
 
@@ -179,7 +180,7 @@ def test_nested_mixed_ops_precedence_grouping() -> None:
     assert result2.to_template() == "{{ 2 * (x + y) }}"
 
     # Wrong grouping would silently drop the parens; extra parens are fine
-    # (over-parenthesizing is explicitly acceptable per the milestone), but
+    # (over-parenthesizing is explicitly acceptable by design), but
     # *missing* parens that change semantics is the failure this test guards.
     result3 = (x - y) / (x + y)
     assert result3.to_template() == "{{ (x - y) / (x + y) }}"
@@ -192,7 +193,7 @@ def test_deeply_nested_mixed_ops() -> None:
     # so it chains flat too -- matching Python/Jinja's own left-to-right,
     # same-precedence binding. Under-grouping (dropping a *necessary* paren,
     # which would silently change meaning) is the failure this test guards;
-    # extra parens remain acceptable elsewhere per the milestone.
+    # extra parens remain acceptable elsewhere by design.
     x = var("x")
     y = var("y")
     z = var("z")

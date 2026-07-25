@@ -1,6 +1,6 @@
-"""M2 test 3 — DSL-coverage metric: >= 90% of fixture objects decompile with zero
-``raw_*`` nodes; the report lists the exceptions (a tracked, machine-readable
-artifact per MILESTONES M2 / R6-adjacent "tracked over time" requirement).
+"""DSL-coverage metric: >= 90% of fixture objects decompile with zero
+``raw_*`` nodes; the report lists the exceptions as a tracked,
+machine-readable artifact.
 
 ``analyze_coverage`` walks the *decompiled* form (not the JSON) so it counts
 what actually ended up as ``raw_trigger``/``raw_condition``/``raw_action``/

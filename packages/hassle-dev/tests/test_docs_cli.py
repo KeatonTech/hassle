@@ -1,10 +1,10 @@
-"""Guards the `hassle-dev docs` CI gate (MILESTONES M9 tests 1-2):
+"""Guards the `hassle-dev docs` CI gate:
 
-- fails if any `hassle.__all__` name lacks a documented pair (test 1),
-- fails if the cookbook bundle doesn't compile/validate/simulate clean
-  (test 2),
-- `--update` writes `docs/DSL.md` and `docs/COOKBOOK.md` in place (R3-style:
-  mirrors `hassle-dev goldens --update`), a bare run checks for drift.
+- fails if any `hassle.__all__` name lacks a documented pair,
+- fails if the cookbook bundle doesn't compile/validate/simulate clean,
+- `--update` writes `docs/DSL.md` and `docs/COOKBOOK.md` in place (mirrors
+  `hassle-dev goldens --update`: regenerated, never hand-edited), a bare
+  run checks for drift.
 """
 
 from __future__ import annotations

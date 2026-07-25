@@ -1,4 +1,4 @@
-"""DSL golden-pair regeneration for `hassle-dev goldens [--update]` (R3).
+"""DSL golden-pair regeneration for `hassle-dev goldens [--update]`.
 
 Each ``fixtures/dsl/<case>/`` with a ``bundle/`` and an ``expected_ir.json`` is a
 golden pair: compiling ``bundle/`` must reproduce ``expected_ir.json`` exactly (the
@@ -8,8 +8,8 @@ without it the command *checks* the pairs and reports drift (CI gate).
 Error cases (``expected_error.json`` instead of ``expected_ir.json``) are skipped
 here — their contract is asserted in the test suite, not regenerated.
 
-Golden files change **only** through this command, and the PR must show the diff
-(R3): never hand-edit ``expected_ir.json``.
+Golden files change **only** through this command, and the diff should be
+reviewed: never hand-edit ``expected_ir.json``.
 """
 
 from __future__ import annotations
@@ -45,14 +45,14 @@ def _dump(ir: dict[str, Any]) -> str:
 
 
 def _type_strict_equal(a: Any, b: Any) -> bool:
-    """Like ``==``, but ``0 != 0.0`` (CI round 4 finding, docs/ha-api-notes.md
+    """Like ``==``, but ``0 != 0.0`` (docs/internals/ha-api-notes.md
     §26.10): plain ``==`` on parsed JSON structures treats an `int` and a
     numerically-equal `float` as equal (`{"min": 0} == {"min": 0.0}` is
     `True` in Python), so `run_goldens`'s drift check silently missed an
     `int`-vs-`float` compiled-IR change entirely -- `--update` reported "up
     to date" even though the compiler's actual output had changed from `0`
     to `0.0`. Golden files exist to catch EXACTLY this kind of byte-level
-    drift (R3's "compiling must reproduce expected_ir.json exactly"), so the
+    drift ("compiling must reproduce expected_ir.json exactly"), so the
     comparison must be type-strict, recursively, not just numerically equal.
     ``bool`` is intentionally exempted from the int/float split it would
     otherwise trigger (`isinstance(True, int)` is `True` in Python, but
@@ -87,7 +87,7 @@ def run_goldens(dsl_dir: Path, *, update: bool) -> GoldenReport:
         actual_text = _dump(actual)
         current_text = expected_path.read_text(encoding="utf-8")
         # Compare structurally (indentation/key-order agnostic) but rewrite in the
-        # canonical dumped form on update. Type-strict (docs/ha-api-notes.md
+        # canonical dumped form on update. Type-strict (docs/internals/ha-api-notes.md
         # §26.10): plain `!=` would miss an int-vs-float drift entirely.
         if not _type_strict_equal(json.loads(current_text), actual):
             if update:

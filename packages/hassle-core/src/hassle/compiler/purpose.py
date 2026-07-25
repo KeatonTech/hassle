@@ -1,27 +1,28 @@
-"""Purpose-specific trigger/condition builder (DESIGN §5.4, §4 quirks; M1 test 10).
+"""Purpose-specific trigger/condition builder (DESIGN §5.4, §4 quirks).
 
 HA 2026.7 made a new namespaced trigger/condition vocabulary
 (``trigger: <domain>.<event>``, e.g. ``motion.detected``) the UI default: one
 *generic* typed builder rather than 200+ hand-written ones, since the
-vocabulary is instance data validated in M3, not code (docs/m1-internal-api.md
-§1). ``on(type_string, target=..., behavior=..., for_=..., **options)`` builds a
+vocabulary is validated as data (docs/internals/compiler-api.md §1), not hardcoded here.
+``on(type_string, target=..., behavior=..., for_=..., **options)`` builds a
 trigger; ``met(type_string, target=...)`` builds a condition. Both compile to
 the exact stored shape pinned by ``fixtures/configs/automation_purpose_*.json``:
 ``{"trigger"|"condition": <type>, "target": {...}, "behavior": ..., "options": {...}}``.
 
 Target forms (DESIGN §5.4): a plain entity_id string (the ``e.<domain>.<id>``
-stub sugar is a later-milestone convenience over the same primitive),
-``area("...")``, ``floor("...")``, ``label("...")``, ``device_id("...")``.
-Type strings pass through unvalidated here — vocabulary validation is M3.
+stub sugar is a convenience over the same primitive), ``area("...")``,
+``floor("...")``, ``label("...")``, ``device_id("...")``. Type strings pass
+through unvalidated here — vocabulary validation happens elsewhere, against
+real data, not hardcoded in this module.
 
-**Annotation-truth pass (task #28):** each target-helper constructor
+**Multi-value targets:** each target-helper constructor
 (``area``/``floor``/``label``/``device_id``) accepts ``str | Sequence[str]``,
 not just a bare ``str`` -- a real decompiled bundle's purpose trigger can
 target MULTIPLE areas/floors/labels/devices (HA stores ``target.area_id`` as
 a list whenever more than one area is selected, same "list-valued target
 field" shape already established for ``state()``'s ``entity_id`` /
-``service()``'s ``target=``), and ``area(["back_yard", "front_yard"])`` was a
-hard pyright error before this pass even though it round-trips correctly.
+``service()``'s ``target=``), so ``area(["back_yard", "front_yard"])`` must
+type-check and round-trip correctly.
 """
 
 from __future__ import annotations
@@ -71,8 +72,8 @@ class DeviceIdTarget:
 def area(area_id: str | Sequence[str]) -> AreaTarget:
     """``area("office")`` — a purpose-trigger/condition target (DESIGN §5.4).
 
-    Also accepts a sequence of area ids (``area(["back_yard", "front_yard"])``,
-    task #28) — HA stores a multi-area purpose-trigger target as a list.
+    Also accepts a sequence of area ids (``area(["back_yard", "front_yard"])``)
+    — HA stores a multi-area purpose-trigger target as a list.
     """
     return AreaTarget(area_id)
 
@@ -80,7 +81,7 @@ def area(area_id: str | Sequence[str]) -> AreaTarget:
 def floor(floor_id: str | Sequence[str]) -> FloorTarget:
     """``floor("upstairs")`` — a purpose-trigger/condition target (DESIGN §5.4).
 
-    Also accepts a sequence of floor ids (task #28), same rationale as ``area()``.
+    Also accepts a sequence of floor ids, same rationale as ``area()``.
     """
     return FloorTarget(floor_id)
 
@@ -88,7 +89,7 @@ def floor(floor_id: str | Sequence[str]) -> FloorTarget:
 def label(label_id: str | Sequence[str]) -> LabelTarget:
     """``label("security")`` — a purpose-trigger/condition target (DESIGN §5.4).
 
-    Also accepts a sequence of label ids (task #28), same rationale as ``area()``.
+    Also accepts a sequence of label ids, same rationale as ``area()``.
     """
     return LabelTarget(label_id)
 
@@ -96,7 +97,7 @@ def label(label_id: str | Sequence[str]) -> LabelTarget:
 def device_id(device_id: str | Sequence[str]) -> DeviceIdTarget:
     """``device_id("...")`` — a purpose-trigger/condition target (DESIGN §5.4).
 
-    Also accepts a sequence of device ids (task #28), same rationale as ``area()``.
+    Also accepts a sequence of device ids, same rationale as ``area()``.
     """
     return DeviceIdTarget(device_id)
 
@@ -110,14 +111,15 @@ def _target_dict(target: Any) -> dict[str, Any]:
 
 def normalize_target(target: Any) -> dict[str, Any] | None:
     """Normalize a ``target=`` argument to HA's stored target dict shape
-    (``ux/dsl-ergonomics``, item 3: bare entity target sugar, DESIGN §5.3/§7.3).
+    (bare entity target sugar, DESIGN §5.3/§7.3).
 
     Accepts, in addition to an already-built dict (passed through byte-identical, the
     pre-existing behavior every ``service()`` caller relies on):
 
     - a bare entity ref/string, or a list of them -- ``{"entity_id": ...}`` (list shape
       preserved: a singleton list stays a list, matching the same "never collapse a stored
-      list to a scalar" rule DESIGN §5.4/docs/ha-api-notes.md §19.2 already established for
+      list to a scalar" rule DESIGN §5.4 / docs/internals/ha-api-notes.md §19.2
+      already established for
       ``state()``'s ``entity_id``);
     - an ``area(...)``/``floor(...)``/``label(...)``/``device_id(...)`` target helper object
       (already used by ``on()``/``met()``, DESIGN §5.4) -- ``{"area_id": ...}`` etc.
@@ -125,7 +127,7 @@ def normalize_target(target: Any) -> dict[str, Any] | None:
     ``None`` passes through unchanged (no ``target=`` given at all). Every case here is a
     ``str`` subclass (``EntityRef``) or produces plain ``str`` values, so this is purely
     cosmetic sugar -- it compiles to the identical HA value the equivalent hand-written dict
-    literal would (I3).
+    literal would.
     """
     if target is None:
         return None

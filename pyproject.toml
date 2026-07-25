@@ -36,7 +36,8 @@ dev = [
 line-length = 100
 target-version = "py312"
 src = ["packages/hassle-core/src", "packages/hassle-cli/src", "packages/hassle-dev/src"]
-# `new_middle_def.py` is a single-object *splice fragment* (M2 test fixture) --
+# `new_middle_def.py` is a single-object *splice fragment* (a decompiler test
+# fixture) --
 # a replacement body meant to be spliced into an existing file that already
 # carries the imports, not a standalone importable bundle (unlike every real
 # fixtures/dsl/*/bundle/*.py, which import from `hassle` and lint clean).
@@ -46,7 +47,7 @@ extend-exclude = ["fixtures/splice/three_automations/new_middle_def.py"]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.ruff.lint.flake8-bugbear]
-# `field_default(...)` (MILESTONES M19, owner-directed typing resolution) is
+# `field_default(...)` is
 # the identity function AT RUNTIME -- it returns its argument completely
 # unchanged, so reusing the single value computed once at function-definition
 # time (B008's actual concern: a MUTABLE default shared/mutated across calls)
@@ -61,7 +62,7 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 extend-immutable-calls = ["hassle.field_default", "hassle.compiler.scripts.field_default"]
 
 [tool.pyright]
-# Frozen rule (CLAUDE.md / R7): pyright --strict on hassle-core.
+# Frozen rule: pyright --strict on hassle-core.
 include = ["packages/hassle-core/src"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
@@ -71,6 +72,6 @@ reportMissingTypeStubs = false
 testpaths = ["packages/hassle-core/tests", "packages/hassle-dev/tests", "packages/hassle-cli/tests"]
 addopts = "-ra"
 markers = [
-    "integration: tests that talk to a real Dockerized HA (M6+); never run in unit CI",
-    "hassle_bundle(path): M4 simulator tests -- bundle directory the `sim` fixture compiles",
+    "integration: tests that talk to a real Dockerized HA; never run in unit CI",
+    "hassle_bundle(path): simulator tests -- bundle directory the `sim` fixture compiles",
 ]

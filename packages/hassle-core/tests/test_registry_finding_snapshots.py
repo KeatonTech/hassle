@@ -1,4 +1,4 @@
-"""M3 milestone test 6: error snapshots for the top 10 Finding types (R6).
+"""Error snapshots for the top 10 Finding types (what/where/fix format).
 
 Same pattern as `tests/test_compile_errors.py`: snapshot files under
 `tests/snapshots/findings/`, normalized to strip absolute directory prefixes,
@@ -7,8 +7,6 @@ written by `HASSLE_UPDATE_SNAPSHOTS=1`.
 
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
 
 import pytest
@@ -16,9 +14,11 @@ import pytest
 from hassle.compiler.bundle import compile_bundle
 from hassle.registry.snapshot import RegistrySnapshot
 from hassle.registry.validate import validate_bundle
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = REPO_ROOT / "fixtures" / "registry" / "home.json"
+
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "findings"
 
 
@@ -28,16 +28,11 @@ def snapshot() -> RegistrySnapshot:
 
 
 def _check_snapshot(name: str, actual: str) -> None:
-    path = SNAP_DIR / f"{name}.txt"
-    if os.environ.get("HASSLE_UPDATE_SNAPSHOTS"):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(actual + "\n", encoding="utf-8")
-    assert path.is_file(), f"missing snapshot {path}; set HASSLE_UPDATE_SNAPSHOTS=1 to write it"
-    assert actual == path.read_text(encoding="utf-8").rstrip("\n")
+    check_snapshot(SNAP_DIR, name, actual)
 
 
 def _normalize(msg: str) -> str:
-    return re.sub(r"(/[^\s:]+/)([^/\s:]+\.py)", r"\2", msg)
+    return normalize_error(msg, mask_lines_for=Path(__file__).name)
 
 
 def _write_bundle(tmp_path: Path, code: str) -> Path:
@@ -151,7 +146,7 @@ from hassle import automation, on, service, when
 @automation(id="a", alias="A")
 def a():
     when(on("battery.low", target="sensor.wireless_device_battery"))
-    service("notify.mobile_app_keaton", message="low battery")
+    service("notify.mobile_app_kai", message="low battery")
 """,
     )
     _check_snapshot("renamed_purpose_type", text)
@@ -229,9 +224,9 @@ def a():
 
 
 def test_snapshot_unknown_service(tmp_path: Path, snapshot: RegistrySnapshot) -> None:
-    """MILESTONES M18 (N2, reviewer non-blocking note): the `unknown-service`
-    Finding, snapshot-tested like every other Finding here (R6) rather than
-    just substring-asserted in test_service_namespaces.py."""
+    """The `unknown-service` Finding, snapshot-tested like every other
+    Finding here rather than just substring-asserted in
+    test_service_namespaces.py."""
     text = _find_one(
         tmp_path,
         snapshot,

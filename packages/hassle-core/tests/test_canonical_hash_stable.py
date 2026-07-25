@@ -1,4 +1,4 @@
-"""M0 test 3 — canonical hashing: key-order-invariant, semantics-sensitive (R8)."""
+"""Canonical hashing: key-order-invariant, semantics-sensitive, byte-stable output."""
 
 from __future__ import annotations
 

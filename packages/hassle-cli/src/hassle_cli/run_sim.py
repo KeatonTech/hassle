@@ -15,7 +15,7 @@ from hassle.testing import Simulator, simulate
 
 class InvalidRunTargetError(ValueError):
     """`hassle run <target>` was given a target with no `::` separator
-    (R6: what/where/fix -- M9 error-message audit finding)."""
+    (error messages state what/where/fix)."""
 
     def __init__(self, target: str) -> None:
         self.target = target
@@ -29,7 +29,7 @@ class InvalidRunTargetError(ValueError):
 
 class UnknownRunTargetError(KeyError):
     """`hassle run <target>` named a function not found in the compiled
-    bundle (R6: what/where/fix -- M9 error-message audit finding)."""
+    bundle (error messages state what/where/fix)."""
 
     def __init__(self, function_name: str, known: list[str]) -> None:
         self.function_name = function_name
@@ -43,8 +43,8 @@ class UnknownRunTargetError(KeyError):
 
     def __str__(self) -> str:
         # KeyError.__str__ re-reprs its args (Python quirk); the base
-        # Exception message built above is what R6 requires -- surface it
-        # directly instead of KeyError's usual double-quoted repr.
+        # Exception message built above is the what/where/fix text -- surface
+        # it directly instead of KeyError's usual double-quoted repr.
         return self.args[0]
 
 

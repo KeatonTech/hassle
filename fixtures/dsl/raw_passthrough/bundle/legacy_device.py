@@ -2,7 +2,7 @@
 
 The raw action is authored in legacy `service:` form to prove the containing
 object's whole-body `normalize_ha` pass rewrites it to `action:`, exactly as
-HA itself would on storage (docs/ha-api-notes.md §10.1) -- the raw builders
+HA itself would on storage (docs/internals/ha-api-notes.md §10.1) -- the raw builders
 themselves do not touch the dict.
 """
 

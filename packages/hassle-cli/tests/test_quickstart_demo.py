@@ -1,5 +1,5 @@
-"""M7 done-gate (MILESTONES M7 "Done when"): the DESIGN §8.4 daily loop, demoed
-end-to-end from a fresh directory in < 10 commands, against `FakeBackend`.
+"""The DESIGN §8.4 daily loop, demoed end-to-end from a fresh directory in
+< 10 commands, against `FakeBackend`.
 
 The loop (DESIGN §8.4):
 
@@ -14,7 +14,7 @@ The loop (DESIGN §8.4):
 
 This test IS the scripted transcript: each `hassle` invocation is one counted
 command (plain shell/git steps are not Hassle commands and don't count against
-the <10 budget, matching the milestone's "demoable ... in < 10 commands" framing
+the <10 budget, matching the original "demoable ... in < 10 commands" goal
 of the CLI's own command count).
 """
 
@@ -66,9 +66,9 @@ def test_full_daily_loop_in_under_ten_hassle_commands(
 
     # Author a bundle file by hand (not a `hassle` command -- editing .py files
     # is the human's job in the loop). DSL sources live at the bundle root
-    # (MILESTONES M15 work item B: category-first layout, root-level
-    # `<slug>.py` files -- the old `automations/`/`scripts/`/`helpers/` trees
-    # are retired and no longer scaffolded by `hassle init`).
+    # (category-first layout, root-level `<slug>.py` files -- not the old
+    # `automations/`/`scripts/`/`helpers/` trees, which are no longer
+    # scaffolded by `hassle init`).
     (project / "hallway.py").write_text(
         """
 from hassle import automation, service, state, when

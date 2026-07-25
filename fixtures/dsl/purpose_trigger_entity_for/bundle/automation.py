@@ -1,4 +1,4 @@
-"""Golden case: purpose-specific trigger, entity target, `for_=` duration (M1 test 10).
+"""Golden case: purpose-specific trigger, entity target, `for_=` duration.
 
 Mirrors fixtures/configs/automation_purpose_trigger_entity_target.json.
 """
