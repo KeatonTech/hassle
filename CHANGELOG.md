@@ -47,5 +47,32 @@ a delta from a previous version.
   diagnostics and a compiled-YAML panel.
 - MIT license, `CONTRIBUTING.md`, and `SECURITY.md`.
 
+### Security
+
+A pre-release audit hardened the boundary between Home Assistant and the
+local machine. Since there was no prior release, these are hardening notes
+rather than fixes to a shipped version:
+
+- Config fetched from HA can never reach generated bundle source outside a
+  literal position. Values render through `repr`; stored field names that
+  aren't safe Python identifiers route into `**{...}` literals instead of
+  identifier positions. Previously a crafted blueprint path, helper/script
+  field name, or service-call data key could inject Python that `hassle pull`
+  then executed during its own pre-write self-check.
+- The simulator renders templates in `jinja2.sandbox.SandboxedEnvironment`,
+  matching Home Assistant's own posture, so a template stored in HA cannot
+  reach Python builtins during `hassle test`.
+- `hassle pull` refuses to write through a symlink or to any path resolving
+  outside the bundle root, and resolves relative destinations against the
+  bundle root rather than the process working directory.
+- Strings supplied by HA are stripped of terminal control sequences before
+  being printed.
+- `hassle login` prompts for the token with hidden input instead of requiring
+  it in `argv`; `hassle doctor`'s secret scan recurses the bundle and detects
+  JWT-shaped literals, key-name variants, and URL-embedded credentials; and
+  the CLI warns when the HA URL is plain HTTP to a non-private address.
+- Workflows declare `permissions: contents: read`, as does the CI workflow
+  scaffolded into new bundles.
+
 [Unreleased]: https://github.com/KeatonTech/hassle/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/KeatonTech/hassle/releases/tag/v0.1.0
