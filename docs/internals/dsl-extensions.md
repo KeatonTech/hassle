@@ -286,7 +286,11 @@ Python's own `TypeError` from `bind_partial`, at compile time.
 - `delay(*, alias=, enabled=, **units)` — dict-form delay. `alias=`/`enabled=`
   are keyword-only so they never collide with a duration unit.
 - `variables(**kwargs)` — a `variables` action.
-- `stop(message=None, *, error=None)` — a `stop` action.
+- `stop(message=None, *, error=None, response_variable=None)` — a `stop`
+  action. `response_variable=` names a run variable whose value becomes
+  the script's response (HA script responses): pair with the call side's
+  `service("script.<id>", response_variable=...)` to receive it, e.g.
+  behavior scripts returning `{position, priority}` bid dicts.
 - `fire_event(event_type, **event_data)` — the fire-event **action** (distinct
   from the `event` **trigger** builder below).
 
