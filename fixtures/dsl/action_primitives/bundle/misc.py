@@ -23,4 +23,6 @@ def misc_primitives():
         message="done",
         continue_on_error=True,
     )
-    stop(message="all done", error=False)
+    # response_variable= (ux/script-responses): the named run variable's
+    # value becomes the script/automation response (HA script responses).
+    stop(message="all done", error=False, response_variable="greeting")

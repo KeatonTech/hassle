@@ -360,8 +360,10 @@
 > written independently against the same pre-merge 106-name baseline, each
 > claiming "106 → 108" for their own two additions. The actual combined
 > surface after M19 + capture/emit is 110 names; with `m20/entity-conditions`'s
-> three error additions the final total is **113 names** (verified at merge
-> time: `len(hassle.__all__) == 113`). No name collisions anywhere.
+> three error additions the total was **113 names** at that merge (verified
+> then: `len(hassle.__all__) == 113`; later widenings have moved it — 125 as
+> of 2026-07-24 — so recompute rather than trust any written total). No name
+> collisions anywhere.
 
 > **Widened 2026-07-24 (`ux/script-responses`, owner request, F3-additive,
 > +0 names — `stop` was already frozen; only its accepted kwargs widened):**

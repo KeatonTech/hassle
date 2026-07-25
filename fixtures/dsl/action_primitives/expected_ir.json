@@ -40,7 +40,8 @@
       },
       {
         "stop": "all done",
-        "error": false
+        "error": false,
+        "response_variable": "greeting"
       }
     ]
   }

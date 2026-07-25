@@ -414,14 +414,25 @@ def _maybe_expand_script_call(
     as does any script not in this bundle.
     """
     name = str(action["action"])
-    if not name.startswith("script."):
+    caller_response_variable = action.get("response_variable")
+
+    def _deliver_none() -> bool:
+        # Unmodeled response sources (non-script services, opaque script
+        # entity-management, scripts outside this bundle): the permissive
+        # contract is uniform -- `none`, never Jinja-undefined (which would
+        # kill the simulation at the first read).
+        if caller_response_variable is not None:
+            ctx.variables[str(caller_response_variable)] = None
         return True
+
+    if not name.startswith("script."):
+        return _deliver_none()
     slug = name.removeprefix("script.")
     if slug in _OPAQUE_SCRIPT_SERVICES:
-        return True
+        return _deliver_none()
     script_config = ctx.scripts.get(slug)
     if script_config is None:
-        return True
+        return _deliver_none()
     if ctx.script_call_depth >= _MAX_SCRIPT_CALL_DEPTH:
         raise ScriptRecursionError(slug, _MAX_SCRIPT_CALL_DEPTH)
     sequence: list[dict[str, Any]] = script_config.get("sequence", [])
@@ -447,7 +458,6 @@ def _maybe_expand_script_call(
         script_call_depth=ctx.script_call_depth + 1,
     )
     completed = yield from run_actions(sequence, callee_ctx)
-    caller_response_variable = action.get("response_variable")
     if caller_response_variable is not None:
         # HA script responses: the callee's stop(response_variable=...)
         # value lands in the caller's variables under the CALLER's name.

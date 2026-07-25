@@ -82,6 +82,80 @@ def test_missing_response_yields_none(tmp_path: Path) -> None:
     sim.assert_called("notify.phone", message="empty")
 
 
+_NESTED = """
+    from hassle import automation, service, shared_script, state, stop, variables, when
+
+    @shared_script(id="bidder", alias="Bidder")
+    def bidder():
+        variables(bid={"position": "open", "priority": 40})
+        stop("bid", response_variable="bid")
+
+    @shared_script(id="coordinator", alias="Coordinator")
+    def coordinator():
+        service("script.bidder", response_variable="inner")
+        variables(best=[{"position": "{{ inner.position }}"}])
+        stop("done", response_variable="best")
+
+    @automation(id="a", alias="a")
+    def a():
+        when(state("button.go").to("on"))
+        service("script.coordinator", response_variable="outer")
+        service("notify.phone", message="{{ outer[0].position }}")
+"""
+
+
+def test_nested_script_responses_compose(tmp_path: Path) -> None:
+    """The blind-auction shape: a coordinator script calls a bidder with
+    response_variable and returns a value derived from it -- the outer
+    automation reads the chained result (reviewer suggestion #2)."""
+    sim = build_sim(tmp_path, _NESTED)
+    sim.state_change("button.go", "off", "on")
+    sim.assert_called("notify.phone", message="open")
+
+
+_ERROR_RESPONDER = """
+    from hassle import automation, service, shared_script, state, stop, variables, when
+
+    @shared_script(id="failer", alias="Failer")
+    def failer():
+        variables(bid={"position": "open"})
+        stop("bad", error=True, response_variable="bid")
+
+    @automation(id="a", alias="a")
+    def a():
+        when(state("button.go").to("on"))
+        service("script.failer", response_variable="result")
+        service("switch.turn_on", entity_id="switch.after")
+"""
+
+
+def test_error_stop_with_response_still_halts_the_caller(tmp_path: Path) -> None:
+    sim = build_sim(tmp_path, _ERROR_RESPONDER)
+    sim.state_change("button.go", "off", "on")
+    sim.assert_not_called("switch.turn_on")
+
+
+_UNMODELED_RESPONSE = """
+    from hassle import automation, service, state, when
+
+    @automation(id="a", alias="a")
+    def a():
+        when(state("button.go").to("on"))
+        service("weather.get_forecasts", type="daily", response_variable="fc")
+        service("notify.phone", message="{{ 'empty' if fc is none else 'set' }}")
+"""
+
+
+def test_unmodeled_service_response_yields_none_not_undefined(tmp_path: Path) -> None:
+    """Reviewer suggestion #1: the permissive no-response contract must be
+    uniform. A response_variable on a service the simulator doesn't model
+    (weather.get_forecasts) seeds `none` instead of leaving the name
+    Jinja-undefined, which killed the simulation at the first read."""
+    sim = build_sim(tmp_path, _UNMODELED_RESPONSE)
+    sim.state_change("button.go", "off", "on")
+    sim.assert_called("notify.phone", message="empty")
+
+
 def test_stop_with_response_decompile_recompiles_to_identical_ir() -> None:
     config = {
         "alias": "Bidder",
