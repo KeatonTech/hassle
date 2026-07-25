@@ -13,7 +13,9 @@ IR always produces byte-identical source regardless of dict iteration order
 
 from __future__ import annotations
 
+import keyword
 import subprocess
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -221,7 +223,7 @@ def _blueprint_source(obj: AutomationConfig, ident: str) -> str | None:
     inputs = cast("dict[str, Any]", raw_inputs)
     if set(use_blueprint) != {"path", "input"}:
         return None
-    kwargs = [f"id={obj.identity!r}", f'use_blueprint="{path}"']
+    kwargs = [f"id={obj.identity!r}", f"use_blueprint={path!r}"]
     if body.get("alias") is not None:
         kwargs.append(f"alias={body['alias']!r}")
     if body.get("description") is not None:
@@ -547,8 +549,7 @@ def _script_source(obj: ScriptConfig, ident: str, resolver: CallResolver | None)
         if not terse and fields is not None:
             decorator_kwargs.append(f"fields={render_literal(fields)}")
     sequence = body.pop("sequence", [])
-    for key, value in body.items():
-        decorator_kwargs.append(f"{key}={_mode_or_max_exceeded_src(key, value)}")
+    decorator_kwargs.extend(_kwarg_parts(body, _mode_or_max_exceeded_src))
 
     decorator_name = "shared_script" if as_shared_script else "script"
     signature = _shared_script_signature(fields) if as_shared_script else ""
@@ -586,11 +587,41 @@ _TEMPLATE_HELPER_BUILDER_NAMES = {domain: domain for domain in TEMPLATE_DOMAINS}
 _GROUP_HELPER_BUILDER_NAMES = {domain: domain for domain in GROUP_DOMAINS}
 
 
+def _is_safe_kwarg_name(name: str) -> bool:
+    """True if ``name`` can be written as a bare ``name=`` keyword argument."""
+    return name.isidentifier() and not keyword.iskeyword(name)
+
+
+def _kwarg_parts(
+    body: Mapping[str, Any],
+    render: Callable[[str, Any], str] = lambda _key, value: render_literal(value),
+) -> list[str]:
+    """Render ``body`` as keyword-argument source fragments.
+
+    A field name is data fetched from Home Assistant, and the IR preserves
+    unknown fields verbatim, so a stored field can be named anything at all --
+    including something that is not a Python identifier. A name cannot be
+    escaped the way a value can, so anything unsafe goes through ``**{...}``,
+    where it is a dict key rendered by :func:`render_literal` (a literal, never
+    code). Safe names keep the readable ``name=value`` spelling.
+    """
+    parts: list[str] = []
+    unsafe: dict[str, Any] = {}
+    for key, value in body.items():
+        if _is_safe_kwarg_name(key):
+            parts.append(f"{key}={render(key, value)}")
+        else:
+            unsafe[key] = value
+    if unsafe:
+        parts.append(f"**{render_literal(unsafe)}")
+    return parts
+
+
 def _helper_source(obj: HelperConfig, ident: str) -> str:
     body = dict(obj.to_ha())
     domain = obj.kind()
     builder = _HELPER_BUILDER_NAMES[domain]
-    kwargs = [f"{k}={render_literal(v)}" for k, v in body.items()]
+    kwargs = _kwarg_parts(body)
     return f"{ident} = {builder}({', '.join(kwargs)})\n"
 
 
@@ -610,7 +641,7 @@ def _group_helper_source(obj: GroupHelperConfig, ident: str) -> str:
     body = dict(obj.to_ha())
     domain = obj.kind()
     builder = _GROUP_HELPER_BUILDER_NAMES[domain]
-    kwargs = [f"{k}={render_literal(v)}" for k, v in body.items()]
+    kwargs = _kwarg_parts(body)
     return f"{ident} = {builder}({', '.join(kwargs)})\n"
 
 
@@ -627,7 +658,7 @@ def _template_helper_call_form_source(obj: TemplateHelperConfig, ident: str) -> 
     body = dict(obj.to_ha())
     domain = obj.kind()
     builder = _TEMPLATE_HELPER_BUILDER_NAMES[domain]
-    kwargs = [f"{k}={render_literal(v)}" for k, v in body.items()]
+    kwargs = _kwarg_parts(body)
     return f"{ident} = {builder}({', '.join(kwargs)})\n"
 
 
@@ -694,7 +725,7 @@ def _template_helper_source(obj: TemplateHelperConfig, ident: str) -> str:
         return _template_helper_call_form_source(obj, ident)
 
     inverted = invert_template(state)
-    decorator_kwargs = [f"{k}={render_literal(v)}" for k, v in body.items() if k != "state"]
+    decorator_kwargs = _kwarg_parts({k: v for k, v in body.items() if k != "state"})
     return_expr = inverted.source if inverted is not None else _raw_template_return_source(state)
     return (
         f"@{builder}({', '.join(decorator_kwargs)})\ndef {ident}():\n{INDENT}return {return_expr}\n"
