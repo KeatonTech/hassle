@@ -99,7 +99,7 @@ API with a long-lived access token, same trust model as any other HA client.
 ```sh
 mkdir my-house && cd my-house
 hassle init                                  # scaffold the bundle + AGENTS.md/docs/
-hassle login --url http://homeassistant.local:8123 --token <a long-lived access token>
+hassle login --url http://homeassistant.local:8123   # prompts for the token (hidden input)
 hassle pull                                  # adopt everything currently in HA
 git add -A && git commit -m "sync: initial pull"
 
@@ -116,8 +116,12 @@ is a no-op). This exact loop is scripted as a CI-run regression test
 (`packages/hassle-cli/tests/test_quickstart_demo.py`), not just a README claim.
 
 Get a long-lived access token from HA: **Profile → Security → Long-Lived Access
-Tokens**. It's stored in your OS keychain (`keyring`), never written into the
-bundle — `hassle doctor` scans for one accidentally committed anyway.
+Tokens**. `hassle login` prompts for it with hidden input (never echoed, never on
+the command line, so it can't land in shell history or another local user's `ps`
+output) — or set the `HASSLE_TOKEN` env var for scripts/CI; `--token <value>` still
+works too, but only the prompt/env-var forms avoid putting the token in argv. It's
+stored in your OS keychain (`keyring`), never written into the bundle — `hassle
+doctor` scans for one accidentally committed anyway.
 
 ## What you get in a bundle
 

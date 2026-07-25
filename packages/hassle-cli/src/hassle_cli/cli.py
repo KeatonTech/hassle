@@ -16,32 +16,39 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 import click
-from rich.markup import escape as _escape_markup
 
 from hassle_cli import bundle_ops, git_support, init_cmd, manifest_io
 from hassle_cli.config import CURRENT_BUNDLE_FORMAT, find_bundle_root, load_config
-from hassle_cli.render import get_console
+from hassle_cli.render import get_console, safe_render, sanitize_for_terminal
 
 if TYPE_CHECKING:
     from hassle.compiler.errors import CompileError
 
 
 def _esc(value: object) -> str:
-    """Escape ``str(value)`` for safe interpolation into a rich-markup
-    f-string passed to ``Console.print``.
+    """Sanitize + escape ``str(value)`` for safe interpolation into a
+    rich-markup f-string passed to ``Console.print``.
 
     Rich's default `Console.print` parses `[...]`-bracketed substrings as
     markup tags -- silently swallowing them (or raising, for a malformed
     tag) if they happen to appear in interpolated data Hassle does not
     control (a bundle's own `CATEGORY` name, an object key, an exception
-    message, a validator Finding's text, ...). Every call site below that
-    embeds such data inside a still-markup-enabled `console.print(f"[style]...
-    {data}...[/style]")` call must route ``data`` through this first. Static,
-    Hassle-authored text (the surrounding `[style]`/`[/style]` tags and
-    plain English) is never escaped -- only the dynamic segment. See
-    docs/internals/cli.md for the bug this discipline exists to prevent.
+    message, a validator Finding's text, an HA version string, ...). Every
+    call site below that embeds such data inside a still-markup-enabled
+    `console.print(f"[style]...{data}...[/style]")` call must route ``data``
+    through this first. Static, Hassle-authored text (the surrounding
+    `[style]`/`[/style]` tags and plain English) is never escaped -- only the
+    dynamic segment. See docs/internals/cli.md for the markup bug this
+    discipline exists to prevent.
+
+    Delegates to `hassle_cli.render.safe_render` (the shared choke point
+    every remote-string print in this CLI routes through, `plan_render.py`
+    included), which ALSO strips C0/C1 control characters before escaping
+    markup -- markup-escaping alone does not stop an HA-supplied string from
+    carrying a raw ANSI escape sequence (Rich's own control-code stripping
+    does not cover ESC either); see that module's docstring.
     """
-    return _escape_markup(str(value))
+    return safe_render(value)
 
 
 def _bundle_root_or_fail(explicit: Path | None = None) -> Path:
@@ -128,6 +135,17 @@ def _report_compile_error(exc: CompileError, root: Path, *, as_json: bool = Fals
     raise SystemExit(1) from exc
 
 
+def _warn_if_plaintext_http(url: str) -> None:
+    """DESIGN §14: warn (never block) when `url` is plain http to a host that
+    doesn't look private/local -- see `hassle_cli.http_warning` for why this
+    fires every invocation rather than "once"."""
+    from hassle_cli.http_warning import plaintext_http_warning
+
+    warning = plaintext_http_warning(url)
+    if warning is not None:
+        get_console().print(f"[yellow]{_esc(warning)}[/yellow]")
+
+
 def _require_backend_config(root: Path) -> tuple[str, str]:
     import os
 
@@ -140,6 +158,7 @@ def _require_backend_config(root: Path) -> tuple[str, str]:
     env_url = os.environ.get("HASSLE_HA_URL")
     if env_url:
         env_token = os.environ.get("HASSLE_TOKEN", "")
+        _warn_if_plaintext_http(env_url)
         return env_url, env_token
 
     config = load_config(root)
@@ -155,6 +174,7 @@ def _require_backend_config(root: Path) -> tuple[str, str]:
     except TokenResolutionError as exc:
         click.echo(str(exc), err=True)
         raise SystemExit(2) from exc
+    _warn_if_plaintext_http(config.ha_url)
     return config.ha_url, token
 
 
@@ -196,7 +216,18 @@ def init(path: Path | None) -> None:
 
 @main.command()
 @click.option("--url", required=True, help="HA base URL, e.g. http://homeassistant.local:8123")
-@click.option("--token", required=True, help="A long-lived access token.")
+@click.option(
+    "--token",
+    envvar="HASSLE_TOKEN",
+    prompt="Long-lived access token",
+    hide_input=True,
+    help=(
+        "A long-lived access token. Optional -- prefer leaving it out: precedence is "
+        "--token (lands in shell history and `ps`/`/proc/<pid>/cmdline` -- only for "
+        "scripts/CI) > HASSLE_TOKEN env var > an interactive hidden prompt (the "
+        "documented path; never echoed, never on the command line)."
+    ),
+)
 def login(url: str, token: str) -> None:
     """Validate a token against HA and store it in the system keyring."""
     from hassle.backend.errors import HaAuthError, HaConnectionError
@@ -204,6 +235,7 @@ def login(url: str, token: str) -> None:
     from hassle_cli.token import store_token
 
     console = get_console()
+    _warn_if_plaintext_http(url)
     try:
         with DirectBackend(url, token):
             pass
@@ -249,7 +281,11 @@ def pull(allow_dirty: bool) -> None:
         DecompiledValueMismatchError,
         apply_pull_with_decompiler,
     )
-    from hassle.sync.source_writer import SplicingSourceWriter
+    from hassle.sync.source_writer import (
+        SourceWriteOutsideBundleRootError,
+        SplicingSourceWriter,
+        SymlinkWriteRefusedError,
+    )
     from hassle_cli import backend_factory
     from hassle_cli.doctor import find_committed_tokens
     from hassle_cli.git_support import commit_message_for_pull
@@ -259,9 +295,10 @@ def pull(allow_dirty: bool) -> None:
 
     committed = find_committed_tokens(root)
     if committed:
+        path, reason = committed[0]
         console.print(
-            f"[red]hassle pull: a token was found committed in {_esc(committed[0][0].name)}. "
-            "Fix: remove the `token = ...` line, run `hassle login` to store it in the "
+            f"[red]hassle pull: found a possible committed secret in {_esc(path.name)} "
+            f"({_esc(reason)}). Fix: remove it, run `hassle login` to store the token in the "
             "system keyring instead, and rotate the exposed token in HA.[/red]"
         )
         raise SystemExit(1)
@@ -459,10 +496,16 @@ def pull(allow_dirty: bool) -> None:
     # regression: `WholeFileSourceWriter` here rewrote the whole file per
     # refreshed object). The marker date is stamped at this CLI edge (core
     # logic never calls a clock; the CLI edge is the one documented exception,
-    # same as `manifest_io`'s `last_synced`).
+    # same as `manifest_io`'s `last_synced`). `bundle_root=root` is this
+    # writer's defense-in-depth containment check (`hassle.sync.source_writer`
+    # module docstring) -- every write it performs for this pull is now
+    # refused if it would land outside `root`, or if the destination is a
+    # symlink (dangling or not).
     from datetime import UTC, datetime
 
-    writer = SplicingSourceWriter(updated_on=datetime.now(UTC).strftime("%Y-%m-%d"))
+    writer = SplicingSourceWriter(
+        updated_on=datetime.now(UTC).strftime("%Y-%m-%d"), bundle_root=root
+    )
     # Real HA display names for every categorized object in this plan, keyed
     # by destination path -- `apply_pull_with_decompiler`
     # only actually emits `CATEGORY` for a path that doesn't exist on disk
@@ -501,6 +544,14 @@ def pull(allow_dirty: bool) -> None:
             "affected file(s), so there is nothing to clean up.[/bold red]"
         )
         raise SystemExit(1) from exc
+    except (SymlinkWriteRefusedError, SourceWriteOutsideBundleRootError) as exc:
+        # Defense-in-depth (`hassle.sync.source_writer` module docstring):
+        # not reachable from real HA data today (category/entity names are
+        # slugified before they ever become a path component), but a stale
+        # manifest or a declaration span outside the bundle could still
+        # trigger it -- the error itself is already what/where/fix.
+        console.print(f"[bold red]hassle pull: {_esc(exc)}[/bold red]")
+        raise SystemExit(1) from exc
 
     # A loop-splice reconcile -- `writer.reconcile_warnings`
     # (SplicingSourceWriter, `hassle.sync.source_writer`) is populated when a
@@ -512,8 +563,14 @@ def pull(allow_dirty: bool) -> None:
     # `[...]`-bearing string: the warning text embeds a bundle-relative path
     # and object key, neither escaped for rich markup -- interpolated
     # user/bundle data is never trusted as markup (see docs/internals/cli.md).
+    # `sanitize_for_terminal`: the embedded object key can be HA-supplied
+    # (an id) -- `markup=False` stops Rich from parsing `[tag]`s but not a
+    # raw ANSI escape from reaching the terminal (`hassle_cli.render` module
+    # docstring).
     for warning in writer.reconcile_warnings:
-        console.print(f"hassle pull: {warning}", style="yellow", markup=False)
+        console.print(
+            f"hassle pull: {sanitize_for_terminal(warning)}", style="yellow", markup=False
+        )
 
     # Safety backstop: pull just wrote real DSL source from the decompiler --
     # recompile the bundle it produced before trusting it (manifest
@@ -547,7 +604,9 @@ def pull(allow_dirty: bool) -> None:
         if isinstance(exc, DuplicateObjectError) and any(
             exc.object_key in warning for warning in writer.reconcile_warnings
         ):
-            console.print(f"hassle pull: {exc}", style="bold red", markup=False)
+            console.print(
+                f"hassle pull: {sanitize_for_terminal(str(exc))}", style="bold red", markup=False
+            )
             console.print(
                 "hassle pull: this is expected, not a Hassle bug -- see the reconcile "
                 "warning above. The files just written are left in place; reconcile the "
@@ -1376,9 +1435,11 @@ def run(target: str, live: bool, yes: bool, skip_conditions: bool) -> None:
 @main.command()
 @click.option("--sweep-shadows", is_flag=True, default=False)
 def doctor(sweep_shadows: bool) -> None:
-    """Diagnostics: committed-secret scan, orphaned shadow sweep, HA version check."""
+    """Diagnostics: committed-secret scan, webhook-ID census, orphaned shadow
+    sweep, HA version check."""
     from hassle.backend.version import TESTED_HA_MAX, TESTED_HA_MIN, version_warning
-    from hassle_cli.doctor import find_committed_tokens, sweep_orphaned_shadows
+    from hassle.compiler.errors import CompileError
+    from hassle_cli.doctor import find_committed_tokens, find_webhook_ids, sweep_orphaned_shadows
     from hassle_cli.uv_project import doctor_report_lines
 
     console = get_console()
@@ -1388,12 +1449,37 @@ def doctor(sweep_shadows: bool) -> None:
     committed = find_committed_tokens(root)
     if committed:
         problems += 1
-        for path, _value in committed:
+        for path, reason in committed:
             console.print(
-                f"[red]doctor: found a committed token in {path.name}. "
-                "Fix: remove the `token = ...` line, run `hassle login` to store it in the "
-                "system keyring, and rotate the exposed token in HA.[/red]"
+                f"[red]doctor: found a possible committed secret in {_esc(path.name)} "
+                f"({_esc(reason)}). Fix: remove it, run `hassle login` to store the token in "
+                "the system keyring, and rotate the exposed token in HA.[/red]"
             )
+
+    # Webhook-ID census (DESIGN §14; SECURITY.md "What ends up in your
+    # repository"): purely informational, so a compile failure here must
+    # never turn into a doctor "problem" -- `hassle validate` is the command
+    # that surfaces compile errors; this best-effort census just stays quiet
+    # about the count if the bundle doesn't currently compile.
+    try:
+        local_objects, _compile_result = bundle_ops.compile_local_objects(root)
+    except CompileError:
+        console.print(
+            "[dim]doctor: skipped the webhook-ID census -- this bundle doesn't currently "
+            "compile (see `hassle validate`).[/dim]"
+        )
+    else:
+        webhook_ids = find_webhook_ids(local_objects)
+        if webhook_ids:
+            console.print(
+                f"[yellow]doctor: this bundle contains {len(webhook_ids)} webhook "
+                f"{'id' if len(webhook_ids) == 1 else 'ids'}. A webhook_id is a bearer "
+                "secret -- anyone who knows it can trigger that automation with no "
+                "authentication. Fix: do not publish this bundle's repository publicly "
+                "without removing/rotating them first.[/yellow]"
+            )
+        else:
+            console.print("[dim]doctor: 0 webhook ids in this bundle.[/dim]")
 
     # "HA tested-version range surfaced in hassle doctor" -- the range itself
     # is always shown (offline, a static constant, safe under the "unit tests
@@ -1418,6 +1504,7 @@ def doctor(sweep_shadows: bool) -> None:
             from hassle_cli import backend_factory
             from hassle_cli.token import resolve_token
 
+            _warn_if_plaintext_http(config.ha_url)
             token = resolve_token(config.ha_url) or ""
             with backend_factory.connect(config.ha_url, token) as backend:
                 ha_version = getattr(backend, "ha_version", None)
@@ -1427,12 +1514,16 @@ def doctor(sweep_shadows: bool) -> None:
                     f"[yellow]doctor: swept {len(swept)} orphaned shadow automation(s)[/yellow]"
                 )
             if ha_version:
+                # `ha_version` is remote-supplied (GET /api/config); `warning`
+                # (from `version_warning`) embeds it verbatim too -- both
+                # routed through `_esc` (control-code stripping + markup
+                # escaping), never interpolated raw.
                 warning = version_warning(ha_version)
                 if warning is not None:
-                    console.print(f"[yellow]doctor: {warning}[/yellow]")
+                    console.print(f"[yellow]doctor: {_esc(warning)}[/yellow]")
                 else:
                     console.print(
-                        f"[dim]doctor: connected Home Assistant {ha_version} (in range)[/dim]"
+                        f"[dim]doctor: connected Home Assistant {_esc(ha_version)} (in range)[/dim]"
                     )
 
     if problems:
