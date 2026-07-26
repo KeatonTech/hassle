@@ -38,6 +38,7 @@ silently lost.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any
 
@@ -49,7 +50,9 @@ from hassle.sync.category_writeback import (
 __all__ = ["CategoryMoveResult", "local_category_for_source_path", "sync_category_on_move"]
 
 
-def local_category_for_source_path(kind: str, source_path: str | None) -> str | None:
+def local_category_for_source_path(
+    kind: str, source_path: str | None, package_roots: Collection[str] | None = None
+) -> str | None:
     """The category-name slug `source_path` implies for `kind`, or `None` if
     uncategorized (the `misc.py` fallback, no source path at all, or a path
     that isn't category-shaped for this kind).
@@ -61,7 +64,7 @@ def local_category_for_source_path(kind: str, source_path: str | None) -> str | 
     gets a category also decides what an UPDATEd object's *current* local
     category is.
     """
-    return _category_slug_from_source_path(kind, source_path)
+    return _category_slug_from_source_path(kind, source_path, package_roots)
 
 
 @dataclass(frozen=True)

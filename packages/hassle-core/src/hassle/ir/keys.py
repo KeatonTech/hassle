@@ -16,6 +16,8 @@ storage-collection WS API the nine ``HELPER_DOMAINS`` use.
 
 from __future__ import annotations
 
+from collections.abc import Collection
+
 from slugify import slugify as _unicode_slugify
 
 # The nine storage-collection helper domains Hassle manages in v1 (DESIGN §4, §13).
@@ -117,7 +119,9 @@ def slugify(name: str) -> str:
     return slug or "item"
 
 
-def category_shaped_stem(source_path: str) -> str | None:
+def category_shaped_stem(
+    source_path: str, *, package_roots: Collection[str] | None = None
+) -> str | None:
     """The category-name slug/stem a bundle file's OWN placement implies, or
     `None` if `source_path` doesn't have the category-shaped, ROOT-LEVEL
     ``<stem>.py`` shape at all -- any nested path (``lib/x.py``,
@@ -156,7 +160,25 @@ def category_shaped_stem(source_path: str) -> str | None:
         return None
     parts = source_path.split("/")
     if len(parts) != 1:
-        return None  # nested (incl. the retired automations//scripts//helpers/ trees)
+        # Nested. A CATEGORY PACKAGE is the one nested shape that IS
+        # category-shaped: every module under a root-level package directory
+        # (recursively -- depth below the root creates no sub-categories)
+        # takes the package's own name, exactly as if it had been declared in
+        # a root-level `<pkg>.py`. `package_roots` is supplied by the caller
+        # (computed once from the filesystem at compile time, see
+        # `hassle.compiler.bundle.discover_category_packages`) rather than
+        # probed here, so this predicate stays pure and string-only for the
+        # push/move call sites that only ever hold a path. Omitting it
+        # reproduces pre-package behaviour exactly: every nested path is
+        # uncategorized, which is what `lib/`, `tests/`, `docs/` and
+        # dot-directories rely on (they carry no `__init__.py`, so they are
+        # never in `package_roots` either).
+        if not package_roots:
+            return None
+        root = parts[0]
+        if root not in package_roots or root == "misc":
+            return None
+        return root
     stem = parts[0][: -len(".py")]
     if not stem or stem == "misc":
         return None

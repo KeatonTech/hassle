@@ -195,6 +195,29 @@ class InvalidCategoryGlobalError(CompileError):
         )
 
 
+class AmbiguousCategorySourceError(CompileError):
+    """A category is claimed by BOTH a root-level file and a package directory.
+
+    ``automatic_hvac.py`` and ``automatic_hvac/`` (a directory holding an
+    ``__init__.py``) both declare themselves the source for the same category.
+    Picking one silently would attribute half the objects to a file the owner
+    thinks is dead, and push-side category write-back has no way to say which
+    placement is authoritative — so this is a compile-time error rather than a
+    coin flip.
+    """
+
+    def __init__(self, package: str) -> None:
+        self.package = package
+        super().__init__(
+            f"Category `{package}` is claimed twice: by the file `{package}.py` and by the "
+            f"package `{package}/` (a directory with an `__init__.py`). Both would tag their "
+            f"objects with the same category, and nothing decides which placement owns it. "
+            f"Fix: keep one — move `{package}.py`'s objects into a module inside `{package}/` "
+            f"(e.g. `{package}/{package}.py`) and delete the file, or delete `{package}/"
+            f"__init__.py` so the directory is ordinary nested support code again."
+        )
+
+
 class NoRecordingContextError(CompileError):
     """A recording call (``when``/``only_if``/service/``delay``) ran outside a context.
 

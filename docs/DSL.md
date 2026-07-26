@@ -74,6 +74,35 @@ push (the HA UI owns renames). `hassle pull` writes this line itself whenever it
 creates a new category file, so display names round-trip through source; refreshing
 an already-existing file never duplicates or moves the line.
 
+### A category can be a package, not just a file
+
+A category's source may be a **Python package** instead of a single file: a
+root-level directory holding an `__init__.py`. Every module inside it
+(recursively) is attributed to ONE category — the package's own name — exactly
+as if every object had been declared in a single root-level `<slug>.py`:
+
+```
+automatic_hvac/          <- the category is `automatic_hvac`
+    __init__.py
+    climate.py           <- objects here...
+    prompts.py           <- ...and here...
+    holds.py             <- ...all tag as `automatic_hvac`
+lib/                     <- no __init__.py: ordinary support code, uncategorized
+    helpers.py
+```
+
+This is for splitting one large area across several files without inventing a
+category per file. Splitting is a pure reorganization: the same objects compile
+to byte-identical IR either way.
+
+`__init__.py` is the opt-in marker and the only discriminator, so `lib/`,
+`tests/`, `docs/` and dot-directories keep behaving exactly as before — an
+existing bundle cannot change behaviour until someone adds one deliberately. A
+`CATEGORY` global inside a package module is anchored to the PACKAGE's name
+(`slugify(CATEGORY)` must equal the package's own name). A package and a
+same-named root-level file (`automatic_hvac/` and `automatic_hvac.py`) both
+claiming one category is a compile-time error rather than a silent coin flip.
+
 ## Upgrade / plan-labeling note
 
 `hassle push`ing a legacy-form remote object (inner `platform:`, scalar `delay:`,

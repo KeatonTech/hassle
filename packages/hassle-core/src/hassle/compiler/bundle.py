@@ -39,7 +39,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from hassle.compiler.errors import DuplicateObjectError, InvalidCategoryGlobalError
+from hassle.compiler.errors import (
+    AmbiguousCategorySourceError,
+    DuplicateObjectError,
+    InvalidCategoryGlobalError,
+)
 from hassle.compiler.recording import RecordedNode, Recorder, record_trigger, recording
 from hassle.compiler.registry import PrebuiltObject, RegisteredObject, fresh
 from hassle.compiler.spans import SourceSpan
@@ -95,6 +99,11 @@ class CompileResult:
     # map, exactly like `_spans`/`_decl_spans` -- never part of the frozen IR
     # schema.
     _category_globals: dict[str, CategoryGlobal] = field(default_factory=_empty_category_globals)
+    # Root-level directories that are CATEGORY PACKAGES (a dir holding an
+    # `__init__.py`): every module inside is attributed to the package's own
+    # name. A sidecar exactly like `_category_globals` -- never part of the
+    # frozen IR schema. Consumers pass it to `category_shaped_stem`.
+    _category_packages: frozenset[str] = frozenset()
 
     def add(
         self,
@@ -150,6 +159,17 @@ class CompileResult:
         trigger/condition/action line within it.
         """
         return self._decl_spans.get(object_key)
+
+    def set_category_packages(self, packages: frozenset[str]) -> None:
+        """Record the bundle's category packages (see
+        :func:`discover_category_packages`)."""
+        self._category_packages = packages
+
+    @property
+    def category_packages(self) -> frozenset[str]:
+        """Root-level package directories whose modules all share one
+        category -- pass to `hassle.ir.keys.category_shaped_stem`."""
+        return self._category_packages
 
     def set_category_global(self, source_path: str, category: CategoryGlobal) -> None:
         """Record ``source_path``'s (bundle-relative, POSIX) ``CATEGORY``
@@ -295,16 +315,51 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
     reset_declared_group_helpers()
     reset_declared_raw_automations()
 
+    category_packages = discover_category_packages(bundle_path)
+
     reg = fresh()
     with _sandboxed_import(bundle_path):
-        category_globals = _import_bundle_modules(bundle_path)
+        category_globals = _import_bundle_modules(bundle_path, category_packages)
     # Snapshot the registry before compiling (compile opens recorders that must not
     # see leftover registrations). Pre-built objects (helpers / raw / blueprint)
     # ride the `prebuilt` stream; function-shaped registrations ride `objects`.
     result = compile_registered(list(reg.objects), list(reg.prebuilt))
     for source_path, category in category_globals.items():
         result.set_category_global(source_path, category)
+    result.set_category_packages(category_packages)
     return result
+
+
+def discover_category_packages(bundle_path: Path) -> frozenset[str]:
+    """Finds the bundle's CATEGORY PACKAGES: root-level directories holding an
+    ``__init__.py``
+
+    Every module under such a directory is attributed to one category -- the
+    package's own name -- exactly as if declared in a root-level ``<pkg>.py``
+    (see :func:`hassle.ir.keys.category_shaped_stem`). ``__init__.py`` is the
+    opt-in marker and the ONLY discriminator, which is what keeps `lib/`,
+    `tests/`, `docs/` and dot-directories unchanged: they are PEP 420
+    namespace directories, so an existing bundle cannot change behaviour until
+    someone deliberately adds an ``__init__.py``.
+
+    Symlinked directories are skipped for the same sandbox-escape reason the
+    module walk skips them (see this module's docstring). A package that
+    collides with a same-named root-level file is
+    :class:`~hassle.compiler.errors.AmbiguousCategorySourceError` -- nothing
+    decides which placement owns the category, so it is not guessed.
+    """
+    packages: set[str] = set()
+    for child in sorted(bundle_path.iterdir()):
+        if child.is_symlink() or not child.is_dir():
+            continue
+        if child.name.startswith(".") or child.name == "__pycache__":
+            continue
+        if not (child / "__init__.py").is_file():
+            continue
+        if (bundle_path / f"{child.name}.py").is_file():
+            raise AmbiguousCategorySourceError(child.name)
+        packages.add(child.name)
+    return frozenset(packages)
 
 
 class _sandboxed_import:
@@ -436,7 +491,9 @@ def _category_global_span(py: Path) -> SourceSpan | None:
     return None
 
 
-def _import_bundle_modules(bundle_path: Path) -> dict[str, CategoryGlobal]:
+def _import_bundle_modules(
+    bundle_path: Path, category_packages: frozenset[str] = frozenset()
+) -> dict[str, CategoryGlobal]:
     """Import every ``*.py`` module in the bundle tree (sorted, stable), at
     any depth under a subdirectory (DESIGN §6/§7.3, docs/internals/ha-api-notes.md
     §17.9 RESOLVED).
@@ -497,7 +554,9 @@ def _import_bundle_modules(bundle_path: Path) -> dict[str, CategoryGlobal]:
         spec.loader.exec_module(module)
 
         source_path = py.relative_to(bundle_path).as_posix()
-        if category_shaped_stem(source_path) is not None and hasattr(module, "CATEGORY"):
+        if category_shaped_stem(
+            source_path, package_roots=category_packages
+        ) is not None and hasattr(module, "CATEGORY"):
             value = module.CATEGORY
             if not isinstance(value, str):
                 raise InvalidCategoryGlobalError(str(py), value)
