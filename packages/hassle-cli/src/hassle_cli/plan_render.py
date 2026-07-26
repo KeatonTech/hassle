@@ -6,6 +6,13 @@ DSL-level diffs").
   aren't alarmed by a diff they didn't cause.
 - `CONFLICT` entries get the 3-way DSL diff (`hassle_cli.diffing.dsl_diff`)
   plus the `--accept-local`/`--accept-remote` hint (DESIGN §8.2).
+
+Every value rendered here can originate from Home Assistant (`object_key`'s
+identity half, the decompiled diff text, a conflict's raw `local`/`remote`
+config) -- all routed through `hassle_cli.render.safe_render`/
+`sanitize_for_terminal` before they reach `Console.print` (see that module's
+docstring for why `markup=False` alone is not enough: Rich does not strip
+ANSI control codes, only parse markup tags).
 """
 
 from __future__ import annotations
@@ -14,6 +21,7 @@ from rich.console import Console
 
 from hassle.sync import Plan, PlanAction
 from hassle_cli.diffing import dsl_diff, is_modernization_only_diff
+from hassle_cli.render import safe_render, sanitize_for_terminal
 
 _ACTION_STYLES: dict[PlanAction, str] = {
     PlanAction.NOOP: "dim",
@@ -44,7 +52,12 @@ def render_plan(console: Console, plan: Plan, *, show_noop: bool = False) -> Non
         )
         label = _label_for(entry, entry.action, modernization)
         style = _ACTION_STYLES.get(entry.action, "")
-        console.print(f"[{style}]{label:>24}[/{style}]  {entry.object_key}")
+        # `entry.object_key`'s identity half can be HA-supplied (an
+        # automation/script `id`, an entity id) -- `safe_render` strips
+        # control codes and escapes markup before it reaches this
+        # still-markup-enabled `console.print` (previously only the CONFLICT
+        # diff below had the `markup=False` fix; this line did not).
+        console.print(f"[{style}]{label:>24}[/{style}]  {safe_render(entry.object_key)}")
 
         if entry.action is PlanAction.CONFLICT:
             conflict = entry.conflict
@@ -63,13 +76,21 @@ def render_plan(console: Console, plan: Plan, *, show_noop: bool = False) -> Non
                 # console width would otherwise split a long decompiled line
                 # (e.g. a multi-kwarg `@automation(...)`) across several
                 # visual lines with no `-`/`+` prefix on the continuation,
-                # making the diff ambiguous to read.
-                console.print(diff_text, style="", markup=False, soft_wrap=True)
+                # making the diff ambiguous to read. `markup=False` only
+                # stops Rich from parsing `[tag]`s -- it does NOT stop a raw
+                # ANSI escape (e.g. a malicious alias decompiled into this
+                # diff) from reaching the terminal, so `sanitize_for_terminal`
+                # (control-code stripping only, never markup-escaping: that
+                # would corrupt the diff's own `[...]` list literals) runs
+                # here too.
+                console.print(
+                    sanitize_for_terminal(diff_text), style="", markup=False, soft_wrap=True
+                )
             else:
                 console.print("  (local)")
-                console.print(f"  {local}")
+                console.print(f"  {safe_render(local)}")
                 console.print("  (remote)")
-                console.print(f"  {remote}")
+                console.print(f"  {safe_render(remote)}")
             console.print(
                 f"  resolve with: hassle push --accept-local {entry.object_key}"
                 f"  |  --accept-remote {entry.object_key}"

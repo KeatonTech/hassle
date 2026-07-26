@@ -78,6 +78,81 @@ def test_login_success_stores_token(tmp_path: Path, cli, monkeypatch) -> None:
     assert stored.get("http://homeassistant.local:8123") == "good-token"
 
 
+def test_login_prompts_for_token_when_flag_omitted(tmp_path: Path, cli, monkeypatch) -> None:
+    """The security-audit fix (medium): `--token` on the command line lands in
+    shell history and is visible to other local users via `ps`/
+    `/proc/<pid>/cmdline` for the duration of the call. The documented path
+    is now: omit `--token` and Hassle prompts for it (hidden input, click's
+    `prompt=True, hide_input=True` -- never echoed, never in argv)."""
+    stored = _patch_login_probe_and_keyring(monkeypatch)
+
+    project = tmp_path / "house"
+    project.mkdir()
+    result = cli(
+        ["login", "--url", "http://homeassistant.local:8123"],
+        cwd=project,
+        input="prompted-secret-token\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert stored.get("http://homeassistant.local:8123") == "prompted-secret-token"
+    # hide_input=True: the typed value is never echoed back into output.
+    assert "prompted-secret-token" not in result.output
+
+
+def test_login_explicit_token_flag_still_works_without_prompting(
+    tmp_path: Path, cli, monkeypatch
+) -> None:
+    """Scripts/CI rely on `--token <value>` working with no interactive
+    prompt -- explicitly passing it must short-circuit the prompt entirely
+    (no stdin is consumed/required)."""
+    stored = _patch_login_probe_and_keyring(monkeypatch)
+
+    project = tmp_path / "house"
+    project.mkdir()
+    result = cli(
+        ["login", "--url", "http://homeassistant.local:8123", "--token", "explicit-token"],
+        cwd=project,
+        # No `input=` -- if this command tried to prompt, click would hit
+        # EOF on an empty stdin and the command would fail/abort.
+    )
+    assert result.exit_code == 0, result.output
+    assert stored.get("http://homeassistant.local:8123") == "explicit-token"
+
+
+def test_login_uses_hassle_token_env_var_without_prompting(
+    tmp_path: Path, cli, monkeypatch
+) -> None:
+    """`HASSLE_TOKEN` (already the env override for backend auth,
+    `hassle_cli.token`) also supplies `hassle login`'s `--token` when the flag
+    is omitted -- and, like the explicit flag, must never prompt."""
+    stored = _patch_login_probe_and_keyring(monkeypatch)
+
+    project = tmp_path / "house"
+    project.mkdir()
+    result = cli(
+        ["login", "--url", "http://homeassistant.local:8123"],
+        cwd=project,
+        env={"HASSLE_TOKEN": "env-supplied-token"},
+    )
+    assert result.exit_code == 0, result.output
+    assert stored.get("http://homeassistant.local:8123") == "env-supplied-token"
+
+
+def test_login_explicit_flag_beats_env_var(tmp_path: Path, cli, monkeypatch) -> None:
+    """Precedence: --token flag > HASSLE_TOKEN env var > interactive prompt."""
+    stored = _patch_login_probe_and_keyring(monkeypatch)
+
+    project = tmp_path / "house"
+    project.mkdir()
+    result = cli(
+        ["login", "--url", "http://homeassistant.local:8123", "--token", "flag-token"],
+        cwd=project,
+        env={"HASSLE_TOKEN": "env-token"},
+    )
+    assert result.exit_code == 0, result.output
+    assert stored.get("http://homeassistant.local:8123") == "flag-token"
+
+
 def test_login_bad_token_gives_clean_401_error(tmp_path: Path, cli, monkeypatch) -> None:
     from hassle.backend.errors import HaAuthError
 

@@ -954,12 +954,27 @@ they're near-identical). Designed-for future plugins, in rough order:
 - One credential: an HA **long-lived access token**, used directly against HA's APIs — the same
   trust model as any HA client. No new listening service, no second auth system, outbound
   connections only.
+- `hassle login --url ...` never requires the token as a command-line argument: omitting
+  `--token` prompts for it (click `prompt=True, hide_input=True` — hidden, never echoed, never
+  in argv, so it can't land in shell history or another local user's `ps`/`/proc/<pid>/cmdline`
+  view). `--token <value>` still works (scripts/CI), and `HASSLE_TOKEN` is checked before the
+  prompt as well; precedence is `--token` flag > `HASSLE_TOKEN` env var > interactive prompt.
 - Token storage on laptop: macOS Keychain / Secret Service via `keyring`, `HASSLE_TOKEN` env
   override for CI. Never written into the bundle (pull refuses if it finds one in `hassle.toml`;
-  `hassle doctor` scans for accidentally committed secrets).
+  `hassle doctor` scans for accidentally committed secrets — recursively, across file types and
+  key-name variants (`token`/`access_token`/`ha_token`/`HASSLE_TOKEN`), JWT-shaped literals, and
+  credentials embedded in a URL, not just a top-level `hassle.toml`'s `token =` key).
 - TLS: whatever the user's HA URL provides (local HTTP on LAN, or their existing reverse-proxy /
-  Nabu Casa setup). The CLI warns once when the configured URL is plain http to a non-private
-  address.
+  Nabu Casa setup). The CLI warns when the configured URL is plain http to a non-private
+  address — on `login`, and on every command that builds a backend (`hassle_cli.http_warning`).
+  This fires on **every matching invocation**, not "once": a CLI is a fresh process each run,
+  with no cross-invocation state to track "already warned" against, so "once" (an earlier
+  version of this doc's wording) was never implementable as literally written.
+- A `webhook_id` is a bearer capability (anyone who knows it can `POST /api/webhook/<id>` with no
+  authentication and fire that automation), and `hassle pull` writes it verbatim into the bundle's
+  committed source. `hassle doctor` reports how many the bundle contains — informational, never a
+  failing check, since having webhook triggers is normal — so publishing the bundle's repository
+  is a deliberate, informed choice.
 - The compiler executes bundle Python **on the laptop only** (it's the user's own code). Nothing
   Hassle uploads to HA is executable by Hassle — only HA-native JSON configs.
 

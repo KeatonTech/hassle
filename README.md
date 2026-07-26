@@ -1,5 +1,9 @@
 # Hassle
 
+[![CI](https://github.com/KeatonTech/hassle/actions/workflows/ci.yml/badge.svg)](https://github.com/KeatonTech/hassle/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+
 **H**ome **A**ssistant **S**cript **S**ync for **L**ocal **E**diting —
 Terraform for your home automations.
 
@@ -80,11 +84,11 @@ preserved in [`docs/history/`](docs/history/).
 uv tool install "git+https://github.com/KeatonTech/hassle#subdirectory=packages/hassle-cli"
 ```
 
-(Verified: `uv` resolves the sibling `hassle-core` package from the same repo
-checkout automatically — no extra index or `--find-links` needed. Not on PyPI
-yet; this is an install-from-git tool, same rationale as running any Terraform
-provider straight from its repo before a first tagged release. `pipx` works too,
-same syntax.)
+That tracks `main`; append `@v0.1.0` to the URL fragment's repo part to pin a
+release instead. `uv` resolves the sibling `hassle-core` package from the same
+repo checkout automatically — no extra index or `--find-links` needed. Not on
+PyPI yet, so this is an install-from-git tool for now; `pipx` works too, same
+syntax.
 
 Requires Python 3.12+. No Home Assistant add-on, no Supervisor, no second
 listening service — just this CLI talking to your HA instance's own REST/WebSocket
@@ -95,7 +99,7 @@ API with a long-lived access token, same trust model as any other HA client.
 ```sh
 mkdir my-house && cd my-house
 hassle init                                  # scaffold the bundle + AGENTS.md/docs/
-hassle login --url http://homeassistant.local:8123 --token <a long-lived access token>
+hassle login --url http://homeassistant.local:8123   # prompts for the token (hidden input)
 hassle pull                                  # adopt everything currently in HA
 git add -A && git commit -m "sync: initial pull"
 
@@ -112,8 +116,12 @@ is a no-op). This exact loop is scripted as a CI-run regression test
 (`packages/hassle-cli/tests/test_quickstart_demo.py`), not just a README claim.
 
 Get a long-lived access token from HA: **Profile → Security → Long-Lived Access
-Tokens**. It's stored in your OS keychain (`keyring`), never written into the
-bundle — `hassle doctor` scans for one accidentally committed anyway.
+Tokens**. `hassle login` prompts for it with hidden input (never echoed, never on
+the command line, so it can't land in shell history or another local user's `ps`
+output) — or set the `HASSLE_TOKEN` env var for scripts/CI; `--token <value>` still
+works too, but only the prompt/env-var forms avoid putting the token in argv. It's
+stored in your OS keychain (`keyring`), never written into the bundle — `hassle
+doctor` scans for one accidentally committed anyway.
 
 ## What you get in a bundle
 
@@ -250,6 +258,14 @@ against the real command tree, so the README cannot drift from the code.
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the engineering rules (tests
 first, golden-file discipline, compatibility contracts, error-message style)
 and the full set of verification gates.
+
+## Security
+
+Your HA token lives in your OS keyring, never in the bundle. Note that a
+bundle is executable Python, and that a committed bundle contains webhook IDs
+(which are bearer secrets) and a full map of your home — read
+[`SECURITY.md`](SECURITY.md) before publishing a bundle repository, and to
+report a vulnerability.
 
 ## License
 

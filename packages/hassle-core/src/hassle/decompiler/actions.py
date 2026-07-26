@@ -490,8 +490,17 @@ def _service_call(body: dict[str, Any]) -> list[str]:
     data = body.get("data")
     if isinstance(data, dict):
         data_dict = cast("dict[str, Any]", data)
+        # A field name is remote data and cannot be escaped in an identifier
+        # position, so anything that isn't a safe kwarg name stays inside a
+        # `data=` dict literal, where `render_literal` renders it as data.
+        unsafe: dict[str, Any] = {}
         for k, v in data_dict.items():
-            parts.append(f"{k}={_render_data_value(v)}")
+            if _is_kwarg_safe_key(k):
+                parts.append(f"{k}={_render_data_value(v)}")
+            else:
+                unsafe[k] = v
+        if unsafe:
+            parts.append(f"data={render_literal(unsafe)}")
     elif data is not None:
         parts.append(f"data={render_literal(data)}")
     if "data_template" in body:

@@ -379,7 +379,7 @@ dev = [
 
 [[package]]
 name = "hassle-cli"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/hassle-cli" }
 dependencies = [
     { name = "click" },
@@ -398,7 +398,7 @@ requires-dist = [
 
 [[package]]
 name = "hassle-core"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/hassle-core" }
 dependencies = [
     { name = "aiohttp" },
@@ -421,7 +421,7 @@ requires-dist = [
 
 [[package]]
 name = "hassle-dev"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "packages/hassle-dev" }
 dependencies = [
     { name = "hassle-cli" },

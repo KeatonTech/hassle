@@ -13,7 +13,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from hassle.sync.source_writer import SourceWriter, SplicingSourceWriter
+import pytest
+
+from hassle.sync.source_writer import (
+    SourceWriteOutsideBundleRootError,
+    SourceWriter,
+    SplicingSourceWriter,
+    SymlinkWriteRefusedError,
+)
 
 TWO_AUTOMATIONS = """\
 from hassle import automation, service, state, when
@@ -207,6 +214,89 @@ def test_delete_missing_file_is_noop(tmp_path: Path) -> None:
 
 def test_splicing_source_writer_satisfies_protocol(tmp_path: Path) -> None:
     assert isinstance(SplicingSourceWriter(updated_on="2026-07-04"), SourceWriter)
+
+
+# ---------------------------------------------------------------------------
+# Write-side containment (security hardening -- module docstring of
+# `hassle.sync.source_writer`). `SplicingSourceWriter.splice_object`/
+# `delete_object` read the destination (`path.exists()`/`read_text()`)
+# BEFORE delegating to `write_whole_file` for the actual write, so they need
+# their own up-front check -- covered separately from
+# `test_source_writer.py`'s `WholeFileSourceWriter` coverage.
+# ---------------------------------------------------------------------------
+
+
+def test_splice_object_refuses_path_outside_bundle_root(tmp_path: Path) -> None:
+    bundle_root = tmp_path / "bundle"
+    bundle_root.mkdir()
+    writer = SplicingSourceWriter(updated_on="2026-07-04", bundle_root=bundle_root)
+    with pytest.raises(SourceWriteOutsideBundleRootError):
+        writer.splice_object(Path("../escaped.py"), "automation:x", HALL_REPLACEMENT)
+    assert not (tmp_path / "escaped.py").exists()
+
+
+def test_splice_object_allows_normal_path_within_bundle_root(tmp_path: Path) -> None:
+    bundle_root = tmp_path
+    (bundle_root / "hallway.py").write_text(TWO_AUTOMATIONS, encoding="utf-8")
+    writer = SplicingSourceWriter(updated_on="2026-07-04", bundle_root=bundle_root)
+
+    writer.splice_object(Path("hallway.py"), "automation:hall_light_on_motion", HALL_REPLACEMENT)
+
+    after = (bundle_root / "hallway.py").read_text(encoding="utf-8")
+    assert "Hallway light on motion (UI edit)" in after
+    assert PORCH_BLOCK in after, after
+
+
+def test_delete_object_refuses_path_outside_bundle_root(tmp_path: Path) -> None:
+    bundle_root = tmp_path / "bundle"
+    bundle_root.mkdir()
+    outside = tmp_path / "escaped.py"
+    outside.write_text(TWO_AUTOMATIONS, encoding="utf-8")
+    writer = SplicingSourceWriter(updated_on="2026-07-04", bundle_root=bundle_root)
+    with pytest.raises(SourceWriteOutsideBundleRootError):
+        writer.delete_object(outside, "automation:hall_light_on_motion")
+    assert outside.read_text(encoding="utf-8") == TWO_AUTOMATIONS
+
+
+def test_splice_object_refuses_dangling_symlink(tmp_path: Path) -> None:
+    """The reported vulnerability: a dangling symlink committed in a bundle
+    (`misc.py -> /outside/target`) has `exists() is False`, so the old code
+    fell straight through `if not path.exists(): self.write_whole_file(...)`
+    into a write outside the bundle. Now refused before that check runs."""
+    target = tmp_path / "misc.py"
+    target.symlink_to(tmp_path / "nonexistent" / "target.py")
+    writer = SplicingSourceWriter(updated_on="2026-07-04")
+
+    with pytest.raises(SymlinkWriteRefusedError):
+        writer.splice_object(target, "automation:hall_light_on_motion", HALL_REPLACEMENT)
+    assert not (tmp_path / "nonexistent").exists()
+
+
+def test_splice_object_refuses_non_dangling_symlink_no_raw_traceback(tmp_path: Path) -> None:
+    """A non-dangling symlink to a non-Python file must not reach
+    `hassle.decompiler.splice`'s LibCST parser (which would surface as a raw
+    traceback) -- refused with a clear `SymlinkWriteRefusedError` instead."""
+    real_file = tmp_path / "notes.txt"
+    real_file.write_text("just some prose, not python at all {{{ ]][[ \n", encoding="utf-8")
+    link = tmp_path / "misc.py"
+    link.symlink_to(real_file)
+    writer = SplicingSourceWriter(updated_on="2026-07-04")
+
+    with pytest.raises(SymlinkWriteRefusedError):
+        writer.splice_object(link, "automation:hall_light_on_motion", HALL_REPLACEMENT)
+    assert real_file.read_text(encoding="utf-8").startswith("just some prose")
+
+
+def test_delete_object_refuses_symlink(tmp_path: Path) -> None:
+    real_file = tmp_path / "hallway.py"
+    real_file.write_text(TWO_AUTOMATIONS, encoding="utf-8")
+    link = tmp_path / "misc.py"
+    link.symlink_to(real_file)
+    writer = SplicingSourceWriter(updated_on="2026-07-04")
+
+    with pytest.raises(SymlinkWriteRefusedError):
+        writer.delete_object(link, "automation:hall_light_on_motion")
+    assert real_file.read_text(encoding="utf-8") == TWO_AUTOMATIONS
 
 
 # ---------------------------------------------------------------------------

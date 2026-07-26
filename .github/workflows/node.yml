@@ -20,6 +20,10 @@ concurrency:
 # with its own toolchain, dependency lockfile, and release artifact (a
 # `.vsix`, never published from CI); it has nothing to do with the
 # `hassle`/`hassle-cli` Python package matrix.
+# Least privilege: nothing here needs to write to the repository.
+permissions:
+  contents: read
+
 jobs:
   unit:
     name: unit tests (no VS Code needed)

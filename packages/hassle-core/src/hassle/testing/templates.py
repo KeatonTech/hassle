@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import jinja2
+import jinja2.sandbox
 
 from hassle.testing.errors import UnsupportedTemplateError
 
@@ -126,7 +127,14 @@ class TemplateEngine:
     def __init__(self, states: StateStore, clock_now: Any) -> None:
         self._states = states
         self._clock_now = clock_now
-        self._env = jinja2.Environment(undefined=jinja2.StrictUndefined, autoescape=False)
+        # Sandboxed because templates arrive from Home Assistant config and
+        # are rendered here on the developer's machine: a plain Environment
+        # lets any object's attributes walk to Python builtins. HA renders the
+        # same templates in a SandboxedEnvironment too. `autoescape=False` is
+        # correct -- the output is HA config text, not HTML.
+        self._env = jinja2.sandbox.SandboxedEnvironment(
+            undefined=jinja2.StrictUndefined, autoescape=False
+        )
         globals_, filters = _build_globals_and_filters(states, clock_now)
         # timedelta arithmetic (DESIGN §10.1): now() - now() etc. must work
         # without extra plumbing -- jinja2's native `-`/`+` on datetimes
