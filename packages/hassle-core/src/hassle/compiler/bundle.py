@@ -331,8 +331,8 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
 
 
 def discover_category_packages(bundle_path: Path) -> frozenset[str]:
-    """The bundle's CATEGORY PACKAGES: root-level directories holding an
-    ``__init__.py`` (owner request, 2026-07-24).
+    """Finds the bundle's CATEGORY PACKAGES: root-level directories holding an
+    ``__init__.py``
 
     Every module under such a directory is attributed to one category -- the
     package's own name -- exactly as if declared in a root-level ``<pkg>.py``
