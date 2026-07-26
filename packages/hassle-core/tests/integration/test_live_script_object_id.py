@@ -9,8 +9,8 @@ as ``script.dining_bid_manual_hold``) driven through the real compile → plan
 → push path against a live instance, on both the ``stable`` and ``dev``
 images CI runs.
 
-It also pins the HA-side half of docs/internals/ha-api-notes.md §17.5's
-2026-07-26 amendment: **scripts have no id-from-alias-slug rule.** HA stores
+It also pins the HA-side half of docs/internals/ha-api-notes.md §17.5:
+**scripts have no id-from-alias-slug rule.** HA stores
 a script under the object_id in the REST path
 (``/api/config/script/config/{object_id}``) and its entity is
 ``script.<object_id>``; ``alias`` is only the friendly name. If some future

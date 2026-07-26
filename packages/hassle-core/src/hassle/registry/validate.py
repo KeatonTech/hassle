@@ -519,7 +519,7 @@ def _validate_helper_slugs(
     concern.
 
     **Helpers only -- do NOT generalize this to scripts or automations**
-    (docs/internals/ha-api-notes.md §17.5, amendment 2026-07-26). The rule is
+    (docs/internals/ha-api-notes.md §17.5). The rule is
     a property of HA's WS storage-collection ``create``, which really does
     derive the item id from ``slugify(name)``. Neither config-REST kind works
     that way: a script is stored under the object_id in its REST path
@@ -570,7 +570,7 @@ def _validate_helper_slugs(
         # Manifest membership is the definitive "adopted" signal: entity-id
         # inference fails when the entity was renamed after creation (field
         # evidence: storage id front_bedroom_occupied, entity renamed after
-        # the room became an office -- §17.5, amended 2026-07-05).
+        # the room became an office -- §17.5).
         if f"{obj.kind()}:{supplied_id}" in adopted_helper_keys:
             continue
         entity_id = f"{obj.kind()}.{supplied_id}"

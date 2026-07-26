@@ -319,8 +319,8 @@ def _identity_of(object_key: str) -> str:
 #: a script's object_id is EXTRINSIC (`ScriptConfig` has no `id` field), so
 #: "caller-keyed" says nothing about whether the object_id actually reached
 #: the backend -- it did not, for the whole of M5-M11, and the exemption is
-#: what made that silent (docs/internals/ha-api-notes.md §17.5 script-side
-#: amendment; `tests/test_script_create_object_id.py`).
+#: what made that silent (docs/internals/ha-api-notes.md §17.5;
+#: `tests/test_script_create_object_id.py`).
 _CALLER_KEYED_KINDS = frozenset({"automation"})
 
 
@@ -340,7 +340,7 @@ def _create_body(kind: str, identity: str, local: dict[str, Any]) -> dict[str, A
     by slugifying `alias` -- which is exactly how a pushed
     `@script(id="dining_bid_manual", alias="Dining Bid: Manual Hold")` became
     `script.dining_bid_manual_hold` in a real home, breaking its callers
-    (§17.5 script-side amendment).
+    (§17.5).
 
     Both backends strip `id` back out before it reaches storage
     (`DirectBackend._awrite_script` before the POST, `FakeBackend._stored_body`

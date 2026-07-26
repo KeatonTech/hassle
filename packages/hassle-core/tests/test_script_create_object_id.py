@@ -25,8 +25,8 @@ scripts as "caller-keyed ... so their create is always exact", which was
 true of the protocol and false of the payload, so the divergence was silent.
 
 Home Assistant honors the caller-supplied script object_id; it does NOT
-derive one from ``alias`` (docs/internals/ha-api-notes.md §17.5's script-side
-amendment, and the live-HA proof in
+derive one from ``alias`` (docs/internals/ha-api-notes.md §17.5, and the
+live-HA proof in
 `tests/integration/test_live_category_writeback.py::
 test_push_create_script_scope_assigns_category`, whose script's alias slug
 differs from its object_id). Automations are likewise unaffected -- their

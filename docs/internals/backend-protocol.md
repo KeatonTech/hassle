@@ -47,7 +47,7 @@ class Backend(Protocol):
   shipped backends already do (`DirectBackend._awrite_script`,
   `FakeBackend._stored_body`); what changed is that the caller now reliably
   supplies it, instead of leaving the backends to invent an id by slugifying
-  `alias` (ha-api-notes §17.5, amendment 2026-07-26 — the field bug where a
+  `alias` (ha-api-notes §17.5 — the field bug where a
   pushed `@script(id="dining_bid_manual", alias="Dining Bid: Manual Hold")`
   became `script.dining_bid_manual_hold`). A backend that cannot honor the
   supplied object_id must return the identity it *did* assign;
