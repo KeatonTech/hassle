@@ -143,3 +143,53 @@ def test_short_placeholder_value_is_not_flagged(bundle_dir: Path) -> None:
     (bundle_dir / "example.py").write_text('token = "x"\n', encoding="utf-8")
     found = find_committed_tokens(bundle_dir)
     assert found == []
+
+
+# ---------------------------------------------------------------------------
+# Binary detection is by content, not by filename.
+#
+# An extension list can only ever be a guess: it goes stale as new formats
+# appear, and it says nothing about a file whose name doesn't match its
+# content. Neither direction is an attack (this scans your own bundle -- a
+# secret hidden from the scanner is hidden from you), but both are real
+# false-negative/false-positive sources, so the check reads the bytes.
+# ---------------------------------------------------------------------------
+
+_JWT = "eyJ" + "a" * 60 + "." + "b" * 80 + "." + "c" * 60
+
+
+def test_finds_a_token_in_a_text_file_with_an_unrecognized_extension(bundle_dir: Path) -> None:
+    """A filename tells us nothing: this is plain text whatever it's called."""
+    (bundle_dir / "notes.bak").write_text(f'token = "{_JWT}"\n', encoding="utf-8")
+    assert [p.name for p, _ in find_committed_tokens(bundle_dir)] == ["notes.bak"]
+
+
+def test_finds_a_token_in_a_text_file_named_like_a_binary(bundle_dir: Path) -> None:
+    """A `.png` that is actually text is still scanned -- the old extension
+    list skipped it outright."""
+    (bundle_dir / "secrets.png").write_text(f"access_token: {_JWT}\n", encoding="utf-8")
+    assert [p.name for p, _ in find_committed_tokens(bundle_dir)] == ["secrets.png"]
+
+
+def test_skips_real_binary_content_whatever_it_is_named(bundle_dir: Path) -> None:
+    """Genuinely binary content is skipped even with a text-looking name, so
+    random bytes can't produce a bogus match."""
+    payload = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + bytes(range(256)) * 4
+    (bundle_dir / "image.py").write_bytes(payload)
+    (bundle_dir / "archive.txt").write_bytes(b"PK\x03\x04\x00\x00" + bytes(range(256)))
+    assert find_committed_tokens(bundle_dir) == []
+
+
+def test_skips_a_binary_file_that_happens_to_contain_a_jwt_shaped_run(bundle_dir: Path) -> None:
+    """A compiled artifact embedding a token-shaped string is not a committed
+    secret; scanning binaries as text is what produces that false positive."""
+    (bundle_dir / "compiled.pyc").write_bytes(b"\x00\x01\x02" + _JWT.encode() + b"\x00\xff")
+    assert find_committed_tokens(bundle_dir) == []
+
+
+def test_utf8_text_with_non_ascii_is_still_scanned(bundle_dir: Path) -> None:
+    """Binary detection must not reject ordinary non-ASCII source."""
+    (bundle_dir / "café.py").write_text(
+        f'# comentário aqui — ç\nhassle_token = "{_JWT}"\n', encoding="utf-8"
+    )
+    assert len(find_committed_tokens(bundle_dir)) == 1

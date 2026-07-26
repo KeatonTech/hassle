@@ -20,40 +20,18 @@ if TYPE_CHECKING:
 # (vendored, for any bundle with a `.vscode`/tooling npm dependency).
 _SKIP_DIR_NAMES = frozenset({".git", ".venv", "typings", "__pycache__", "node_modules"})
 
-# Extensions that are essentially never text -- skipped outright rather than
-# risking a "successful" UTF-8 decode of binary garbage producing a
-# nonsensical match.
-_BINARY_SUFFIXES = frozenset(
-    {
-        ".pyc",
-        ".so",
-        ".dylib",
-        ".dll",
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".ico",
-        ".webp",
-        ".woff",
-        ".woff2",
-        ".ttf",
-        ".eot",
-        ".zip",
-        ".tar",
-        ".gz",
-        ".whl",
-        ".db",
-        ".sqlite",
-        ".sqlite3",
-        ".pdf",
-    }
-)
+# Binary files are skipped, because decoding one as text can turn random
+# bytes into a nonsensical "match". They are identified by CONTENT, not by
+# filename: a NUL byte in the first block (the same heuristic git and grep
+# use) or a failed UTF-8 decode. An extension list would be strictly worse --
+# it goes stale as formats appear, and it says nothing about a file whose
+# name doesn't describe its content, so a token pasted into `notes.png` would
+# be skipped while a compiled artifact named `.py` would still be scanned.
+_BINARY_SNIFF_BYTES = 8192
 
 # Skip anything bigger than this -- a committed secret is a short line, not
 # something hiding in a multi-megabyte file; keeps the scan fast on bundles
-# with large generated/data files and avoids wasted work on the rare binary
-# file an extension check didn't catch.
+# with large generated or data files.
 _MAX_SCAN_BYTES = 2_000_000
 
 # Key names a long-lived HA token commonly ends up assigned to, across TOML/
@@ -96,8 +74,6 @@ def _scan_candidates(bundle_root: Path) -> list[Path]:
         rel_parts = path.relative_to(bundle_root).parts[:-1]
         if any(part in _SKIP_DIR_NAMES for part in rel_parts):
             continue
-        if path.suffix.lower() in _BINARY_SUFFIXES:
-            continue
         try:
             if path.stat().st_size > _MAX_SCAN_BYTES:
                 continue
@@ -107,22 +83,41 @@ def _scan_candidates(bundle_root: Path) -> list[Path]:
     return candidates
 
 
+def _read_text_if_not_binary(path: Path) -> str | None:
+    """The file's text, or ``None`` if it is binary or unreadable.
+
+    Binary is decided by content: a NUL byte in the first block, or bytes
+    that aren't valid UTF-8. Decoding with ``errors="ignore"`` instead would
+    happily turn a compiled artifact into "text" and let a byte run that
+    happens to look like a token be reported as a committed secret.
+    """
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    if b"\0" in data[:_BINARY_SNIFF_BYTES]:
+        return None
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def find_committed_tokens(bundle_root: Path) -> list[tuple[Path, str]]:
     """Recursively scan the bundle for a committed HA token: a
     `token`/`access_token`/`ha_token`/`HASSLE_TOKEN`-shaped key assignment, a
     JWT-shaped literal (HA's own long-lived-token format) anywhere, or
     credentials embedded directly in a URL (`https://user:tok@host`). Skips
-    `.git/`, `.venv/`, `typings/`, `__pycache__/`, `node_modules/` and
-    binary-looking files.
+    `.git/`, `.venv/`, `typings/`, `__pycache__/`, `node_modules/`, files
+    over the size cap, and binary files (detected by content, not by name).
 
     Returns `(path, reason)` pairs. `reason` is a short, safe-to-print
     category -- it never contains the matched secret value itself (DESIGN
     §14: the token must never appear in Hassle's own output)."""
     found: list[tuple[Path, str]] = []
     for path in _scan_candidates(bundle_root):
-        try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
+        text = _read_text_if_not_binary(path)
+        if text is None:
             continue
 
         key_match = _TOKEN_KEY_RE.search(text)
