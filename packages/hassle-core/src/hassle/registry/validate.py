@@ -518,6 +518,22 @@ def _validate_helper_slugs(
     otherwise); a `HelperConfig` with no `name` set is not this validator's
     concern.
 
+    **Helpers only -- do NOT generalize this to scripts or automations**
+    (docs/internals/ha-api-notes.md §17.5, amendment 2026-07-26). The rule is
+    a property of HA's WS storage-collection ``create``, which really does
+    derive the item id from ``slugify(name)``. Neither config-REST kind works
+    that way: a script is stored under the object_id in its REST path
+    (``/api/config/script/config/{object_id}``) and an automation under its
+    intrinsic ``id`` field -- ``alias`` is only a friendly name for both. A
+    field report of a pushed ``@script(id="dining_bid_manual",
+    alias="Dining Bid: Manual Hold")`` landing as
+    ``script.dining_bid_manual_hold`` looked like this rule generalizing, but
+    the alias slug came from Hassle's own create path, not HA (fixed in
+    `hassle.sync.apply._create_body`). A ``script-id-alias-mismatch`` Finding
+    would therefore be *wrong advice on product surface*: it would tell
+    owners to rename working entities, and for an adopted script it would ask
+    them to change an existing object's HA id (invariant I2).
+
     **Scoped to NEW declarations (§17.5):** the slug-derivation rule is a
     property of the WS-API *creation* path -- it says nothing about a helper
     that already exists. A live registry's ``.storage`` can legitimately hold

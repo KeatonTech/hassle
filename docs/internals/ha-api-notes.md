@@ -850,6 +850,60 @@ from adopted), the Finding still fires so a real bug isn't silently hidden,
 but at softened `"note"` severity with fix text explaining the uncertainty
 and pointing at `hassle pull`/`hassle stubs --refresh`.
 
+**Amendment 2026-07-26 (BrandtCamp field evidence): scripts do NOT have this
+rule — the slug HA appeared to derive was Hassle's own.** The reported
+symptom looked exactly like the helper rule generalizing to scripts:
+`@script(id="dining_bid_manual", alias="Dining Bid: Manual Hold")` was pushed
+and came back as `script.dining_bid_manual_hold` (= `slugify(alias)`),
+silently breaking the callers that invoked `script.dining_bid_manual` (the
+owner renamed by hand; BrandtCamp commit e16747a). **HA did nothing of the
+kind.** A script is stored under the object_id in the REST path
+(`POST /api/config/script/config/{object_id}`, §3) and its entity is
+`script.<object_id>`; `alias` is only the friendly name. Live proof already
+in CI, against both the `stable` and `dev` images:
+`tests/integration/test_live_category_writeback.py::test_push_create_script_scope_assigns_category`
+creates a script with `alias="M11 integration script"` under an unrelated
+object_id and then finds its entity-registry row at that object_id, not at
+`m11_integration_script`.
+
+The alias slug came from **Hassle**, in `hassle.sync.apply`. A script's
+object_id is extrinsic — `ScriptConfig` has no `id` field and
+`compiler.bundle._build_script` deliberately keeps the declared id out of the
+body (correct: HA's script read-back has no `id` either, §21/pull-plan-noop).
+But `Backend.create(kind, config)` takes no identity argument, so the id must
+ride *inside* `config`, exactly as `Backend.update` already forwards it
+(`{**config, "id": identity}`). `_apply_one`'s CREATE branch never did that,
+so both backends hit their "no id supplied" fallback and invented one by
+slugifying `alias` (`DirectBackend._awrite_script`,
+`FakeBackend._derive_identity`) — then POSTed to that URL, and HA faithfully
+stored the script exactly where Hassle told it to. The
+`CreatedIdentityDivergedError` guard would have caught the divergence, but
+scripts were exempt from it as "caller-keyed … so their create is always
+exact" — true of the protocol, false of the payload — so the whole thing was
+silent, `hassle push` reported success, and every later push planned another
+create under an identity that matched nothing remote.
+
+Fixed (`hassle.sync.apply._create_body`, regression-tested in
+`packages/hassle-core/tests/test_script_create_object_id.py`): the apply layer
+now carries the declared object_id into `create` for scripts, on both the
+CREATE path and the rollback-restore path (the latter recreates from HA's
+read-back body, which correctly has no `id`, so a rolled-back script delete
+used to resurrect the script at its alias slug too). Both backends already
+strip `id` before storage, so the stored shape and local-vs-remote hashing
+are unchanged. `script` was also **removed** from `_CALLER_KEYED_KINDS`, so
+the divergence guard now covers it: only automations stay exempt, and only
+because an automation's `id` is an intrinsic body field `_build_automation`
+always emits — which is why automations were never affected by any of this.
+
+**Consequence for validation: there is no `script-id-alias-mismatch` rule and
+there must not be one.** A validator Finding telling an owner their script's
+`id` must equal `slugify(alias)` would encode a rule HA does not have; acting
+on it would rename working entities for no reason, and for an adopted script
+it would change an existing object's HA id (invariant I2) on Hassle's advice.
+The helper rule (§17.5 proper) is real because HA's WS storage-collection
+`create` genuinely derives the id; the script "rule" was a Hassle bug wearing
+its costume.
+
 ### 17.6 The config API validates the full schema on every write
 `POST /api/config/automation/config/{id}` rejects a partial body — e.g. an
 "update just the alias" payload missing `actions` returns
