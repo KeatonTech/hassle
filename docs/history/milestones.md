@@ -1104,3 +1104,33 @@ registry validation, like template helpers' declared entities.
 Out of scope: legacy YAML `group:` platform objects (not config entries); the `person`/`zone`
 domains; any write to a group the bundle does not declare (I6 conflict surfacing applies as
 everywhere).
+
+## M22 — Package sources: a category may be a package, not just a file (owner-commissioned)
+
+Owner (2026-07-24): "Right now each file corresponds to a category, which is
+somewhat limiting. Expand hassle so that it can work with either a Python file
+or a Python *package* — e.g. an `automatic_hvac` package that contains multiple
+python files, but they all end up tagged with the automatic-hvac label."
+
+A root-level directory holding an `__init__.py` is a CATEGORY PACKAGE: every
+module inside it (recursively) is attributed to the package's own name, exactly
+as a root-level `<slug>.py` is. `__init__.py` is the opt-in marker and the only
+discriminator, so `lib/`, `tests/`, `docs/` and dot-directories are untouched —
+an existing bundle cannot change behaviour until someone adds one deliberately.
+
+`category_shaped_stem` stays a pure path predicate, learning about packages
+through an explicit `package_roots` argument computed once at compile time
+(`CompileResult.category_packages`) and threaded to the push-side consumers
+(`attempt_category_writeback`, `local_category_for_source_path`, `apply_plan`'s
+additive `category_packages=`) exactly as `category_overrides` already is.
+Omitting it reproduces pre-package behaviour byte for byte.
+
+**Test contract:** the predicate with and without `package_roots` (omitting it
+reproduces pre-package behaviour); a package's modules all compile under the
+package category; support directories stay uncategorized; a package and a
+same-named file both claiming one category is `AmbiguousCategorySourceError`
+(what/where/fix); FILE/PACKAGE PARITY — the same objects split into a package
+compile to byte-identical IR, so splitting is a pure reorganization;
+deterministic module load order; push-side write-back resolves a package module
+to the package category; a `CATEGORY` global inside a package module validates
+against the PACKAGE's name, not the module's stem.

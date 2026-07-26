@@ -51,7 +51,7 @@ from typing import Any, cast
 from hassle.compiler.bundle import CompileResult
 from hassle.compiler.spans import SourceSpan
 from hassle.ir import slugify
-from hassle.ir.keys import GROUP_DOMAINS, humanize_slug
+from hassle.ir.keys import GROUP_DOMAINS, category_shaped_stem, humanize_slug
 from hassle.ir.models import HelperConfig
 from hassle.registry.didyoumean import did_you_mean
 from hassle.registry.extract import as_dict_list, extract_references
@@ -670,7 +670,13 @@ def _validate_category_globals(result: CompileResult) -> list[Finding]:
     its own warning (`hassle.sync.category_writeback`)."""
     findings: list[Finding] = []
     for source_path, category in result.category_globals.items():
-        stem = Path(source_path).stem
+        # For a CATEGORY PACKAGE module the anchor is the PACKAGE's name, not
+        # the module's own stem: `automatic_hvac/climate.py` must slugify-match
+        # `automatic_hvac`, exactly as a root-level `automatic_hvac.py` does.
+        stem = (
+            category_shaped_stem(source_path, package_roots=result.category_packages)
+            or Path(source_path).stem
+        )
         expected_slug = slugify(category.value)
         if expected_slug == stem:
             continue

@@ -60,6 +60,7 @@ like the pre-category-registry HA guard in `DirectBackend._afetch_categories`).
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any
 
@@ -92,7 +93,9 @@ class CategoryWritebackResult:
     warning: str | None = None
 
 
-def _category_slug_from_source_path(kind: str, source_path: str | None) -> str | None:
+def _category_slug_from_source_path(
+    kind: str, source_path: str | None, package_roots: Collection[str] | None = None
+) -> str | None:
     """The category-name slug a CREATEd object's source file implies, or
     `None` if it doesn't have the root-level ``<slug>.py`` shape at all (a
     nested path) or names the ``misc`` fallback file (`misc.py` -> no
@@ -111,7 +114,7 @@ def _category_slug_from_source_path(kind: str, source_path: str | None) -> str |
     del kind
     if source_path is None:
         return None
-    return category_shaped_stem(source_path)
+    return category_shaped_stem(source_path, package_roots=package_roots)
 
 
 def _category_id_for_slug(categories: dict[str, str], slug: str) -> str | None:
@@ -131,6 +134,7 @@ def attempt_category_writeback(
     source_path: str | None,
     *,
     category_override: str | None = None,
+    package_roots: Collection[str] | None = None,
 ) -> CategoryWritebackResult:
     """Try to assign (creating if needed) the category implied by
     `source_path` to the just-CREATEd object `kind:identity`.
@@ -161,7 +165,7 @@ def attempt_category_writeback(
         # scope, §31.2/§31.6): nothing to do.
         return CategoryWritebackResult(attempted=False)
 
-    slug = _category_slug_from_source_path(kind, source_path)
+    slug = _category_slug_from_source_path(kind, source_path, package_roots)
     if slug is None:
         return CategoryWritebackResult(attempted=False)
 

@@ -122,6 +122,7 @@ def apply_plan(
     *,
     synced_at: str | None = None,
     category_overrides: dict[str, str] | None = None,
+    category_packages: frozenset[str] | None = None,
     on_progress: Callable[[int, int, PlanEntry], None] | None = None,
 ) -> ApplyResult:
     """Apply the push-side actions of ``plan`` against ``backend``.
@@ -136,6 +137,14 @@ def apply_plan(
     matching CREATE; a missing/absent entry behaves exactly like the
     `humanize_slug` fallback (byte-identical when no override is supplied at
     all).
+
+    ``category_packages`` (additive): the bundle's CATEGORY PACKAGES --
+    root-level directories holding an `__init__.py`, whose every module
+    shares one category (`CompileResult.category_packages`). Threaded to
+    `local_category_for_source_path`/`attempt_category_writeback` so an
+    object declared in `automatic_hvac/climate.py` resolves to the
+    `automatic_hvac` category exactly as a root-level `automatic_hvac.py`
+    would. Omitting it reproduces pre-package behaviour byte for byte.
 
     ``on_progress`` (additive): called before each push entry is
     applied with ``(index, total, entry)`` (1-based) -- the CLI's visible
@@ -233,7 +242,12 @@ def apply_plan(
             if category_overrides is not None and entry.source_path is not None:
                 override = category_overrides.get(entry.source_path)
             result = attempt_category_writeback(
-                backend, entry.kind, identity, entry.source_path, category_override=override
+                backend,
+                entry.kind,
+                identity,
+                entry.source_path,
+                category_override=override,
+                package_roots=category_packages,
             )
             if result.warning is not None:
                 category_warnings.append(result.warning)
@@ -243,7 +257,7 @@ def apply_plan(
                 # detected as "local changed since base", not perpetually
                 # invisible.
                 resolved_categories[entry.object_key] = local_category_for_source_path(
-                    entry.kind, entry.source_path
+                    entry.kind, entry.source_path, category_packages
                 )
 
         elif entry.action is PlanAction.UPDATE:
@@ -262,7 +276,9 @@ def apply_plan(
             # never UPDATE" rule).
             existing_entry = manifest.objects.get(entry.object_key)
             if existing_entry is not None:
-                local_category = local_category_for_source_path(entry.kind, entry.source_path)
+                local_category = local_category_for_source_path(
+                    entry.kind, entry.source_path, category_packages
+                )
                 move_result = sync_category_on_move(
                     backend,
                     entry.kind,

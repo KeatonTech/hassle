@@ -31,7 +31,6 @@ from pathlib import Path
 from hassle.compiler.bundle import compile_bundle
 from hassle.ir.keys import category_shaped_stem
 
-
 # --- the predicate ---------------------------------------------------------
 
 
@@ -85,13 +84,15 @@ def _write(bundle: Path, rel: str, body: str) -> None:
     path.write_text(body)
 
 
-_AUTOMATION = '''
-from hassle import automation, state
+_AUTOMATION = """
+from hassle import automation, service, state, when
 
-@automation("{name}")
+
+@automation(id="{fn}", alias="{name}")
 def {fn}():
-    state("binary_sensor.{fn}", to="on")
-'''
+    when(state("binary_sensor.{fn}").to("on"))
+    service("light.turn_on", target={{"entity_id": "light.{fn}"}})
+"""
 
 
 def test_package_modules_all_compile_under_the_package_category(tmp_path: Path) -> None:
@@ -184,3 +185,50 @@ def test_package_module_load_order_is_deterministic(tmp_path: Path) -> None:
     second = compile_bundle(bundle)
 
     assert list(first.objects) == list(second.objects)
+
+
+# --- push-side: a package-sourced object still gets its HA category --------
+
+
+def test_writeback_resolves_a_package_module_to_the_package_category() -> None:
+    """`automatic_hvac/climate.py` must assign the `automatic_hvac` category on
+    CREATE, exactly as a root-level `automatic_hvac.py` would -- otherwise
+    splitting a file into a package would silently drop objects' categories."""
+    from hassle.sync.category_move import local_category_for_source_path
+
+    assert (
+        local_category_for_source_path(
+            "automation", "automatic_hvac/climate.py", frozenset({"automatic_hvac"})
+        )
+        == "automatic_hvac"
+    )
+
+
+def test_writeback_without_package_roots_is_unchanged() -> None:
+    from hassle.sync.category_move import local_category_for_source_path
+
+    assert local_category_for_source_path("automation", "automatic_hvac/climate.py") is None
+    assert local_category_for_source_path("automation", "hvac.py") == "hvac"
+
+
+def test_category_global_in_a_package_module_validates_against_the_package_name(
+    tmp_path: Path,
+) -> None:
+    """A `CATEGORY` global inside a package module is anchored to the PACKAGE's
+    name, not the module's own stem -- so the correct declaration produces no
+    `category-slug-mismatch` finding."""
+    from hassle.registry.snapshot import RegistrySnapshot
+    from hassle.registry.validate import validate_bundle
+
+    bundle = tmp_path / "bundle"
+    _write(bundle, "automatic_hvac/__init__.py", "")
+    _write(
+        bundle,
+        "automatic_hvac/climate.py",
+        'CATEGORY = "Automatic Hvac"\n' + _AUTOMATION.format(name="Climate", fn="climate"),
+    )
+
+    result = compile_bundle(bundle)
+    findings = validate_bundle(result, RegistrySnapshot())
+
+    assert [f for f in findings if f.code == "category-slug-mismatch"] == []
