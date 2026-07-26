@@ -811,44 +811,106 @@ media root — §10.4 — and still rides both incidental gates, so `MediaMirror
 keeps the `folder != ""/"."` guard and the `image/png`-upload / `.mp3`-name
 strategy). Re-verify on 2026.7 in CI.
 
-### 17.5 Helpers derive their id from the name slug, ignoring a supplied `id`
-Real HA storage-collection `create` **assigns the item id by slugifying `name`
-and ignores any caller-supplied `id`** (§4). `DirectBackend.create` therefore
-strips `id` from the create payload and returns HA's assigned `result.id`.
-**Divergence from `FakeBackend`:** the M5 `FakeBackend._derive_identity` honors a
-supplied helper `id` if present. This does not affect M6 (DirectBackend matches
-real HA), but the compiler/CLI (M5/M7) should ensure a declared helper's `name`
-slugifies to its intended `id`, or the plan's object key will drift from HA's
-assigned identity. Flagged for M7.
+### 17.5 Storage-collection `create` derives the id from the name slug — the config-REST kinds do not (corrected 2026-07-26)
+**The rule.** Real HA storage-collection `create` (the WS `{domain}/create`
+command behind the nine helper domains, §4) **assigns the item id by
+slugifying `name` and ignores any caller-supplied `id`**. Both backends
+match real HA on this: `DirectBackend._acreate_helper` strips `id` from the
+create payload and returns HA's assigned `result.id`, and
+`FakeBackend._derive_identity` slugifies `name` for every `HELPER_DOMAINS`
+kind. (An early `FakeBackend` honored a supplied helper `id` instead; that
+divergence is gone — while it lasted, a duplicate-create bug (a second helper
+with the same name under a different id) went uncaught in tests.) The same
+"identity is derived from `name`, never caller-supplied" shape recurs for
+template/group config-entry helpers, for a different underlying reason —
+there is no settable `unique_id` on a config flow at all (§26.6).
 
-**Amendment 2026-07-05 (smoke #7 field evidence): the slug rule only
-constrains the WS-API *creation* path — `.storage` contents themselves are
-unconstrained.** A real live registry has helpers whose id does **not**
-equal `slugify(name)` — e.g. an `input_text` with id
-`material_you_image_url_6814bc` and name "Material You Base Color Source
-Image Path/URL Kai" (slug: `material_you_base_color_source_image_path_
-url_kai`). These were created by an external integration writing HA's
-`.storage/*` files directly, bypassing the WS `create` call entirely — so the
-id/name-slug relationship above never applied to them in the first place.
-Nothing in HA enforces id == slugify(name) as an invariant of storage
-*contents*; it is purely a derivation rule of one specific creation path.
+**The rule constrains the WS *creation* path only — `.storage` contents
+themselves are unconstrained** (field evidence 2026-07-05, smoke #7). A real
+live registry has helpers whose id does **not** equal `slugify(name)` — e.g.
+an `input_text` with id `material_you_image_url_6814bc` and name "Material
+You Base Color Source Image Path/URL Kai" (slug:
+`material_you_base_color_source_image_path_url_kai`). Those were created by
+an external integration writing HA's `.storage/*` files directly, bypassing
+the WS `create` call entirely, so the id/name-slug relationship never applied
+to them in the first place. Nothing in HA enforces `id == slugify(name)` as
+an invariant of storage *contents*; it is purely a derivation rule of one
+specific creation path.
 
-Consequence for the M7 `helper-id-name-mismatch` validator Finding
-(`hassle.registry.validate._validate_helper_slugs`): the original,
-unconditional form of this check would tell an owner to "fix" the id of an
-already-live, adopted helper like the one above — advice that, if followed,
-would change `HelperConfig.id` for an object Hassle does not own the
-creation of, breaking the bundle's mapping to a real pre-existing entity
-(a de facto I2 violation via user-actioned "fix" text). **The check is now
-scoped to NEW declarations only**: it fires exclusively when
-`<domain>.<supplied_id>` is absent from the registry snapshot (i.e. nothing
-with that identity exists yet, so Hassle would create it fresh via the WS
-path, where the slug rule genuinely does bite). An id already present in the
-snapshot is adopted, live truth — exempt regardless of name/id mismatch. When
-no registry snapshot is available at all (validation can't distinguish new
-from adopted), the Finding still fires so a real bug isn't silently hidden,
-but at softened `"note"` severity with fix text explaining the uncertainty
-and pointing at `hassle pull`/`hassle stubs --refresh`.
+**What consumes this: the `helper-id-name-mismatch` validator Finding**
+(`hassle.registry.validate._validate_helper_slugs`), which warns that a
+declared helper's id will not survive creation. Because the rule is
+creation-path-only, the check is **scoped to NEW declarations**: it fires
+only when `<domain>.<supplied_id>` is absent from the registry snapshot and
+the object key is absent from the manifest (i.e. nothing with that identity
+exists yet, so Hassle would create it fresh via the WS path, where the rule
+genuinely bites). An id already present in the snapshot, or a key already in
+the manifest, is adopted live truth — exempt regardless of name/id mismatch.
+Both exemption sources are needed: entity-id inference alone fails when the
+entity was renamed after creation (field evidence: storage id
+`front_bedroom_occupied`, entity renamed after the room became an office),
+and manifest membership catches that case. An unconditional check would tell
+an owner to "fix" the id of an already-live helper like the `input_text`
+above — advice that, if followed, changes `HelperConfig.id` for an object
+Hassle did not create, breaking the bundle's mapping to a real pre-existing
+entity (a de facto I2 violation via user-actioned "fix" text). When no
+registry snapshot is available at all, validation cannot tell new from
+adopted: the Finding still fires so a real bug isn't hidden, but at softened
+`"note"` severity, with fix text explaining the uncertainty and pointing at
+`hassle pull` / `hassle stubs --refresh`.
+
+**The rule does NOT extend to scripts or automations, and must not be
+generalized to them** (field evidence 2026-07-26, BrandtCamp bundle). Both
+are config-REST kinds, not storage collections: a script is stored under the
+object_id in its REST path (`/api/config/script/config/{object_id}`, §3) and
+its entity is `script.<object_id>`; an automation is keyed by its intrinsic
+`id` body field (§2). `alias` is only the friendly name for both. Live proof
+runs in CI against the `stable` and `dev` images:
+`tests/integration/test_live_category_writeback.py::test_push_create_script_scope_assigns_category`
+creates a script with `alias="M11 integration script"` under an unrelated
+object_id and then finds its entity-registry row at that object_id, not at
+`m11_integration_script`; `tests/integration/test_live_script_object_id.py`
+pins the same thing through the real compile → plan → push path.
+
+The reason that boundary is written down: a field report looked exactly like
+the rule generalizing. A pushed
+`@script(id="dining_bid_manual", alias="Dining Bid: Manual Hold")` came back
+as `script.dining_bid_manual_hold` (= `slugify(alias)`), silently breaking
+the callers that invoked `script.dining_bid_manual`. **HA did nothing of the
+kind — the slug was Hassle's own.** A script's object_id is extrinsic
+(`ScriptConfig` has no `id` field, and `compiler.bundle._build_script` keeps
+the declared id out of the body — correct, since HA's script read-back has no
+`id` either), while `Backend.create(kind, config)` takes no identity
+argument, so the id must ride inside `config` exactly as `Backend.update`
+already forwards it. `sync.apply._apply_one`'s CREATE branch never did that,
+so both backends hit their "no id supplied" fallback, invented one by
+slugifying `alias` (`DirectBackend._awrite_script`,
+`FakeBackend._derive_identity`), and POSTed to that URL — and HA faithfully
+stored the script exactly where Hassle told it to. The
+`CreatedIdentityDivergedError` guard would have caught the divergence, but
+scripts were exempt from it as "caller-keyed … so their create is always
+exact" — true of the protocol, false of the payload — so `hassle push`
+reported success and every later push planned another create under an
+identity that matched nothing remote.
+
+Fixed in `hassle.sync.apply._create_body` (regression-tested,
+`packages/hassle-core/tests/test_script_create_object_id.py`): the apply
+layer carries the declared object_id into `create` for scripts, on the CREATE
+path and on the rollback-restore path alike (the latter recreates from HA's
+read-back body, which correctly has no `id`, so a rolled-back script delete
+used to resurrect the script at its alias slug too). Both backends already
+strip `id` before storage, so the stored shape and local-vs-remote hashing
+are unchanged. `script` was also removed from `_CALLER_KEYED_KINDS`, so the
+divergence guard now covers it; only automations remain exempt, and only
+because an automation's `id` is an intrinsic body field `_build_automation`
+always emits.
+
+**Consequence for validation: there is no `script-id-alias-mismatch` Finding
+and there must not be one.** It would encode a rule HA does not have — acting
+on it renames working entities for no reason, and for an adopted script it
+asks the owner to change an existing object's HA id (I2) on Hassle's advice.
+The helper rule above is real because HA's WS `create` genuinely derives the
+id; the script "rule" was a Hassle bug wearing its costume.
 
 ### 17.6 The config API validates the full schema on every write
 `POST /api/config/automation/config/{id}` rejects a partial body — e.g. an

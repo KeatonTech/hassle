@@ -46,6 +46,7 @@ so the next plan/push surfaces the identical conflict again.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from hassle.backend.protocol import Backend
 from hassle.ir.canonical import sha256_hash, storage_canonical
@@ -311,7 +312,44 @@ def _identity_of(object_key: str) -> str:
     return identity
 
 
-_CALLER_KEYED_KINDS = frozenset({"automation", "script"})
+#: Kinds whose create is exempt from the `CreatedIdentityDivergedError`
+#: guard because the caller, not HA, keys the object AND the id it keys by
+#: is an intrinsic body field the caller demonstrably sent (an automation's
+#: `id`, `_build_automation`). `script` is deliberately NOT in this set:
+#: a script's object_id is EXTRINSIC (`ScriptConfig` has no `id` field), so
+#: "caller-keyed" says nothing about whether the object_id actually reached
+#: the backend -- it did not, for the whole of M5-M11, and the exemption is
+#: what made that silent (docs/internals/ha-api-notes.md §17.5;
+#: `tests/test_script_create_object_id.py`).
+_CALLER_KEYED_KINDS = frozenset({"automation"})
+
+
+def _create_body(kind: str, identity: str, local: dict[str, Any]) -> dict[str, Any]:
+    """The config body to hand `Backend.create`, carrying the object_id for
+    the kinds whose identity is EXTRINSIC to the body.
+
+    `Backend.create(kind, config)` takes no identity argument -- the identity
+    has to ride inside `config`, exactly as `Backend.update` already forwards
+    it (`{**config, "id": identity}`). For automations and helpers that is
+    free: `id` is an intrinsic field their compiled body already carries. A
+    script's object_id is extrinsic -- it belongs in the REST path
+    (`/api/config/script/config/{object_id}`, docs/internals/ha-api-notes.md
+    §3) and never in the body, so `ScriptConfig` has no `id` field and
+    `_build_script` keeps the declared id out. Without this injection both
+    backends fall through to their "no id supplied" fallback and invent one
+    by slugifying `alias` -- which is exactly how a pushed
+    `@script(id="dining_bid_manual", alias="Dining Bid: Manual Hold")` became
+    `script.dining_bid_manual_hold` in a real home, breaking its callers
+    (§17.5).
+
+    Both backends strip `id` back out before it reaches storage
+    (`DirectBackend._awrite_script` before the POST, `FakeBackend._stored_body`
+    before the store), so the stored/read-back body keeps HA's real shape --
+    no `id` key -- and local-vs-remote hashing is unaffected.
+    """
+    if kind == "script":
+        return {**local, "id": identity}
+    return local
 
 
 class CreatedIdentityDivergedError(Exception):
@@ -338,11 +376,15 @@ class CreatedIdentityDivergedError(Exception):
 def _apply_one(backend: Backend, entry: PlanEntry, identity: str) -> None:
     if entry.action is PlanAction.CREATE:
         assert entry.local is not None
-        actual = backend.create(entry.kind, entry.local)
-        # Only the domains where HA itself assigns identity (storage helpers
-        # slugify the name; template helpers likewise, docs/internals/ha-api-notes.md
-        # §17.5/§26.6) can diverge -- scripts/automations are caller-keyed
-        # (the id rides in the config URL), so their create is always exact.
+        actual = backend.create(entry.kind, _create_body(entry.kind, identity, entry.local))
+        # Every kind whose identity HA assigns (storage helpers slugify the
+        # name; template helpers likewise, docs/internals/ha-api-notes.md
+        # §17.5/§26.6) can diverge -- and so can a script, whose object_id is
+        # extrinsic to the body (`_create_body`): if it ever fails to reach
+        # the backend again, this guard turns the duplicate-forever failure
+        # into a loud, rolled-back error instead of a silently wrong entity
+        # id. Only an automation is exempt: it is keyed by an intrinsic `id`
+        # field its own compiled body always carries.
         if entry.kind not in _CALLER_KEYED_KINDS and actual != identity:
             backend.delete(entry.kind, actual)
             raise CreatedIdentityDivergedError(identity, actual, entry.source_path)
@@ -421,8 +463,12 @@ def _rollback(
                 # errors on real HA -- restore by recreating. Slug-keyed kinds
                 # land back on the same identity (§17.5); config-entry kinds
                 # get a fresh entry_id (the documented rollback caveat,
-                # docs/internals/ha-api-notes.md §26.3).
-                backend.create(kind, previous)  # type: ignore[arg-type]
+                # docs/internals/ha-api-notes.md §26.3). `_create_body`
+                # carries the object_id for a script: the snapshot being
+                # restored is HA's read-back body, which correctly has no
+                # `id`, so without it a rolled-back delete would resurrect
+                # the script at its alias slug rather than where it was.
+                backend.create(kind, _create_body(kind, identity, previous))  # type: ignore[arg-type]
             else:
                 backend.update(kind, identity, previous)
         except Exception as exc:

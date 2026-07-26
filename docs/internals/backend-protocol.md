@@ -33,6 +33,26 @@ class Backend(Protocol):
   from the caller and helper ids by slugifying `name`, per docs/internals/ha-api-notes.md
   §2–§4 — either way, the backend is the source of truth for what identity was
   actually assigned).
+- **`create` has no identity argument, so a caller-keyed identity travels in
+  `config["id"]`** — the same channel `update` uses (`{**config, "id":
+  identity}`). For automations and helpers that is free: `id` is an intrinsic
+  field of their body. A **script's object_id is extrinsic** (it belongs in
+  the REST path, `/api/config/script/config/{object_id}`, ha-api-notes §3;
+  `ScriptConfig` has no `id` field and the compiled body never carries one),
+  so the caller must add it — `hassle.sync.apply._create_body` does, on both
+  the create and the rollback-restore path. An implementer's obligations for
+  `kind == "script"`: key the new object by `config["id"]` when present, and
+  **strip `id` before storing/POSTing** so the stored and read-back body keeps
+  HA's real shape (no `id` key) and local-vs-remote hashing stays exact. Both
+  shipped backends already do (`DirectBackend._awrite_script`,
+  `FakeBackend._stored_body`); what changed is that the caller now reliably
+  supplies it, instead of leaving the backends to invent an id by slugifying
+  `alias` (ha-api-notes §17.5 — the field bug where a
+  pushed `@script(id="dining_bid_manual", alias="Dining Bid: Manual Hold")`
+  became `script.dining_bid_manual_hold`). A backend that cannot honor the
+  supplied object_id must return the identity it *did* assign;
+  `apply_plan` compares it against the declared one and fails loudly
+  (`CreatedIdentityDivergedError`) rather than leaving a mismatch to rot.
 - `update`/`delete` are addressed by `(kind, identity)`. The real HA helper
   WebSocket API keys update/delete payloads as `{domain}_id` (docs/internals/ha-api-notes.md
   §4, quirk #1) — that is a `DirectBackend`/`FakeBackend` **internal**
