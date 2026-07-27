@@ -57,6 +57,54 @@ from hassle.registry.snapshot import PurposeVocabulary, RegistrySnapshot
 # empty/falsy config body -- `None`/`{}` are both valid stored configs.
 _CONFIG_NOT_FOUND = object()
 
+# The dashboard registry item's mutable fields (docs/internals/
+# dashboards-design.md §2.2/§4.1, DB5 2026-07-27 implementation finding):
+# HA's real `lovelace/dashboards/update` schema is PREVENT_EXTRA over exactly
+# these four -- `url_path` is deliberately excluded (a url_path change is
+# delete+create, never an in-place rename, I2) and `id`/`mode` never travel
+# in a write payload at all. The update PAYLOAD must be built from this
+# explicit allowlist, NEVER by copying `meta`'s own keys wholesale (`meta`
+# always carries `url_path` too, and forwarding it verbatim 400s against
+# real HA with `invalid_format`).
+_DASHBOARD_REGISTRY_FIELDS = ("title", "icon", "show_in_sidebar", "require_admin")
+
+# Defaults HA's dashboard registry schema assigns when a field is omitted on
+# create (source-informed, DB0-pending verification --
+# `homeassistant/components/lovelace/dashboard.py`'s
+# `ConfigNotFound`/`DashboardsCollection` schema is believed to default
+# `show_in_sidebar` to True and `require_admin` to False). Sent EXPLICITLY on
+# every UPDATE, never omitted: HA's storage collection MERGES
+# (`{**item, **update}`) rather than replacing the item outright, so a
+# presence-based payload can never clear/revert a field back to its default
+# -- the stale remote value would linger forever, `_advance_manifest` would
+# record that unchanged remote as the new base, and every subsequent
+# `hassle push` would silently re-plan the same no-op update forever
+# (docs/internals/dashboards-design.md §4.1's 2026-07-27 finding).
+_DASHBOARD_FIELD_DEFAULTS: dict[str, Any] = {
+    "show_in_sidebar": True,
+    "require_admin": False,
+}
+
+
+def _dashboard_registry_payload(meta: dict[str, Any]) -> dict[str, Any]:
+    """The FULL desired state of the registry item's mutable fields, built
+    from `_DASHBOARD_REGISTRY_FIELDS` -- never from `meta`'s own keys (see
+    the module-level comment above for why). `icon` is sent explicitly as
+    `None` when absent from `meta` (clearing it, convergent update);
+    `show_in_sidebar`/`require_admin` fall back to their source-informed
+    defaults rather than being omitted."""
+    if not meta.get("title"):
+        raise ValueError(
+            "dashboard config's meta has no 'title' (required for "
+            "lovelace/dashboards/update)"
+        )
+    payload: dict[str, Any] = {"title": meta["title"], "icon": meta.get("icon")}
+    for field_name in ("show_in_sidebar", "require_admin"):
+        payload[field_name] = meta.get(field_name, _DASHBOARD_FIELD_DEFAULTS[field_name])
+    assert set(payload) == set(_DASHBOARD_REGISTRY_FIELDS)
+    assert "url_path" not in payload
+    return payload
+
 # The template integration's config-flow menu step_id per domain
 # (docs/internals/ha-api-notes.md §26.1); verified against a real HA instance by
 # `test_live_template_flow.py`.
@@ -872,8 +920,11 @@ class DirectBackend:
         meta = config.get("meta")
         view_config = config.get("config")
         if meta is not None:
+            if not isinstance(meta, dict):
+                raise ValueError("dashboard config's meta must be a dict or null")
+            meta = cast("dict[str, Any]", meta)
             dashboard_id = await self._aresolve_dashboard_id(identity)
-            payload = {k: v for k, v in meta.items() if k not in ("id", "mode")}
+            payload = _dashboard_registry_payload(meta)
             await self._client.ws_command(
                 "lovelace/dashboards/update", dashboard_id=dashboard_id, **payload
             )
