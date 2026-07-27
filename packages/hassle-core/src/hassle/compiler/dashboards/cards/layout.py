@@ -212,7 +212,7 @@ def entity_filter(
 register_card(
     CardSpec(
         type="vertical-stack",
-        declared=frozenset({"type", "title", "visibility", "cards"}),
+        declared=_STACK_DECLARED,
         builder="c.vertical_stack",
         container="cards",
         context_manager=True,
@@ -221,7 +221,7 @@ register_card(
 register_card(
     CardSpec(
         type="horizontal-stack",
-        declared=frozenset({"type", "visibility", "cards"}),
+        declared=_HSTACK_DECLARED,
         builder="c.horizontal_stack",
         container="cards",
         context_manager=True,
@@ -230,7 +230,7 @@ register_card(
 register_card(
     CardSpec(
         type="grid",
-        declared=frozenset({"type", "columns", "square", "title", "visibility", "cards"}),
+        declared=_GRID_DECLARED,
         builder="c.grid",
         container="cards",
         context_manager=True,
@@ -239,7 +239,7 @@ register_card(
 register_card(
     CardSpec(
         type="conditional",
-        declared=frozenset({"type", "conditions", "visibility", "card"}),
+        declared=_CONDITIONAL_DECLARED,
         builder="c.conditional",
         container="card",
         context_manager=True,
@@ -248,9 +248,7 @@ register_card(
 register_card(
     CardSpec(
         type="entity-filter",
-        declared=frozenset(
-            {"type", "entities", "state_filter", "show_empty", "visibility", "card"}
-        ),
+        declared=_ENTITY_FILTER_DECLARED,
         builder="c.entity_filter",
         entity_params=("entities",),
         container="card",

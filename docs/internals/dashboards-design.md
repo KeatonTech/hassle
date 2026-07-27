@@ -175,9 +175,31 @@ Known-risk items DB0 must pin down (each gets a ha-api-notes subsection):
    registry call, rather than silently double-creating — DB0 should capture
    this exact request/response pair to confirm the error shape (and that it
    really is loud, not a silent no-op).
+10. **Does `icon: null` survive a `lovelace_dashboards/update` round-trip?**
+    (review-round finding, 2026-07-27.) `DirectBackend._dashboard_registry_payload`
+    sends `icon: None` on every registry update, but two source-informed
+    readings of HA's storage-collection merge conflict on what that does:
+    either the registry item's `icon` key is genuinely persisted as JSON
+    `null` and comes back that way from `dashboards/list`, or an explicit
+    `None` is treated as "no change"/"remove" and the key never appears (or
+    is dropped) in the stored item. This determines whether the decompiler's
+    BLOCK-1 fix (§6.2: a modeled key present with JSON `null` escalates that
+    node to the raw ladder rather than silently dropping the key) is reachable
+    from a real pull, or only from hand-constructed/`raw_dashboard`-authored
+    envelopes — the decompiler now handles both readings correctly regardless,
+    so this is a DB0 confirmation item, not a blocker.
 
 DB0 also captures raw request/response pairs into `docs/ha-api-captures/`
 exactly as M0.V did.
+
+**Known test-fixture limitation (not a DB0 item, flagged here for
+visibility):** `FakeBackend.update` stores the local envelope it is given
+verbatim, rather than modelling HA's actual registry-item merge semantics (the
+open question in item 10 above). Update-convergence is therefore only
+asserted at the payload level in this repo's unit tests today — an
+end-to-end convergence test against HA's real merge behavior (once DB0
+confirms it) is a DB0 follow-on, not something FakeBackend can honestly
+simulate yet.
 
 ### 2.3 Built-in card inventory (the D-G4 checklist)
 
@@ -1112,18 +1134,18 @@ validated only for shape, documented).
    table in `hassle.registry.dashboard_extract`, reusing the same
    `_check_id`/area-list machinery purpose-trigger targets already use — no
    new validation machinery was needed, so no TODO is left here.
-2. **Span-path grammar discrepancy, flagged not silently worked around.**
-   This section's `child_is_list=False` convention (bare `card` path) is not
-   yet reflected in the merged `c.conditional`/`c.entity_filter` builders
-   (`cards/layout.py`) — neither passes `child_is_list=False` to
-   `push_container`, so `CompileResult.node_span` still returns spans keyed
-   by the indexed `...cards[0].card[0]` spelling in practice, not the bare
-   `...cards[0].card` this section documents. DB7's extraction
-   (`hassle.registry.dashboard_extract._resolve_span`) tries both spellings,
-   falling back to the nearest ancestor span, so no Finding silently loses
-   its `file:line` either way — but the underlying inconsistency belongs to
-   whichever change lands `child_is_list=False` on those two builders (out of
-   DB7's read-only scope for `compiler/dashboards/`).
+2. **Span-path grammar discrepancy, resolved (DB3-fixes, update 2026-07-27).**
+   This section's `child_is_list=False` convention (bare `card` path) is now
+   correctly reflected in the merged `c.conditional`/`c.entity_filter`
+   builders (`cards/layout.py`) — both pass `child_is_list=False` to
+   `push_container`, so `CompileResult.node_span` returns spans keyed by the
+   bare `...cards[0].card` spelling this section documents, not the indexed
+   `...cards[0].card[0]` one. DB7's extraction
+   (`hassle.registry.dashboard_extract._resolve_span`) now uses the bare
+   spelling as its primary lookup and keeps the indexed spelling only as a
+   fallback (for robustness against any future container that does not set
+   the flag), falling back further to the nearest ancestor span if neither
+   resolves — so no Finding silently loses its `file:line` either way.
 3. **`hassle validate --live` did not exist before this change** — DESIGN
    §9's tier table and this section both describe it as already running
    "server-side checks per object kind," but `hassle validate` had no

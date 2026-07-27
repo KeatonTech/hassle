@@ -166,3 +166,36 @@ def test_extra_shadowing_type_raises(card_type: str) -> None:
         with pytest.raises(ExtraShadowsKwargError):
             with view(title="V"), section():
                 _open(spec, fn, args, kwargs)
+
+
+#: Structural child keys: popped by `push_container` before `merge_extra`
+#: ever runs, so passing them via `extra=` can't be used to probe the
+#: shadow check (review-round Minor-1's own scope: builder OPTIONS, not the
+#: container plumbing every `container != "leaf"` row shares).
+_CHILD_KEYS = frozenset({"cards", "card", "sections"})
+
+
+@pytest.mark.parametrize("card_type", sorted(CARD_REGISTRY), ids=sorted(CARD_REGISTRY))
+def test_declared_set_matches_the_builders_own_shadow_check(card_type: str) -> None:
+    """``CardSpec.declared`` must be the SAME set the builder's own
+    ``merge_extra(..., declared=...)`` call enforces -- not a hand-copied
+    literal that can silently drift from it (review-round Minor-1: every
+    family module kept a private ``_X_DECLARED`` frozenset for
+    ``merge_extra`` AND repeated it as a second literal in
+    ``register_card``). Fixed at the source (each ``register_card`` call now
+    passes the SAME module constant the builder uses, zero duplication), so
+    this test can never fail for content reasons anymore -- it fails LOUDLY
+    if a future family ever reintroduces a second, independent literal that
+    drifts: for every key `CardSpec.declared` claims (besides `type`,
+    covered above, and the structural child keys), passing it via `extra=`
+    must be rejected by the REAL builder, not just claimed by the table.
+    """
+    spec = CARD_REGISTRY[card_type]
+    fn = getattr(c, spec.builder.removeprefix("c."))
+    for key in sorted(spec.declared - {"type"} - _CHILD_KEYS):
+        args, kwargs = _minimal_call(fn)
+        kwargs = {**kwargs, "extra": {key: "shadow-attempt"}}
+        with dashboard_recording(url_path="conformance-declared"):  # noqa: SIM117
+            with pytest.raises(ExtraShadowsKwargError):
+                with view(title="V"), section():
+                    _open(spec, fn, args, kwargs)

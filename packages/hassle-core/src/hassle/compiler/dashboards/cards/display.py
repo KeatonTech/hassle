@@ -343,18 +343,7 @@ def heading(
 register_card(
     CardSpec(
         type="entities",
-        declared=frozenset(
-            {
-                "type",
-                "entities",
-                "title",
-                "show_header_toggle",
-                "state_color",
-                "icon",
-                "theme",
-                "visibility",
-            }
-        ),
+        declared=_ENTITIES_DECLARED,
         builder="c.entities",
         entity_params=("entities",),
     )
@@ -362,20 +351,7 @@ register_card(
 register_card(
     CardSpec(
         type="glance",
-        declared=frozenset(
-            {
-                "type",
-                "entities",
-                "title",
-                "show_name",
-                "show_icon",
-                "show_state",
-                "state_color",
-                "columns",
-                "theme",
-                "visibility",
-            }
-        ),
+        declared=_GLANCE_DECLARED,
         builder="c.glance",
         entity_params=("entities",),
     )
@@ -383,24 +359,7 @@ register_card(
 register_card(
     CardSpec(
         type="tile",
-        declared=frozenset(
-            {
-                "type",
-                "entity",
-                "name",
-                "icon",
-                "color",
-                "show_entity_picture",
-                "vertical",
-                "features",
-                "features_position",
-                "state_content",
-                "tap_action",
-                "hold_action",
-                "double_tap_action",
-                "visibility",
-            }
-        ),
+        declared=_TILE_DECLARED,
         builder="c.tile",
         entity_params=("entity",),
     )
@@ -408,22 +367,7 @@ register_card(
 register_card(
     CardSpec(
         type="entity",
-        declared=frozenset(
-            {
-                "type",
-                "entity",
-                "attribute",
-                "name",
-                "icon",
-                "unit",
-                "state_color",
-                "format",
-                "tap_action",
-                "hold_action",
-                "double_tap_action",
-                "visibility",
-            }
-        ),
+        declared=_ENTITY_DECLARED,
         builder="c.entity",
         entity_params=("entity",),
     )
@@ -431,24 +375,7 @@ register_card(
 register_card(
     CardSpec(
         type="button",
-        declared=frozenset(
-            {
-                "type",
-                "entity",
-                "name",
-                "icon",
-                "icon_height",
-                "show_name",
-                "show_icon",
-                "show_state",
-                "state_color",
-                "theme",
-                "tap_action",
-                "hold_action",
-                "double_tap_action",
-                "visibility",
-            }
-        ),
+        declared=_BUTTON_DECLARED,
         builder="c.button",
         entity_params=("entity",),
     )
@@ -456,9 +383,7 @@ register_card(
 register_card(
     CardSpec(
         type="heading",
-        declared=frozenset(
-            {"type", "heading", "heading_style", "icon", "badges", "tap_action", "visibility"}
-        ),
+        declared=_HEADING_DECLARED,
         builder="c.heading",
     )
 )

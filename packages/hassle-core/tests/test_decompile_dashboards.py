@@ -128,6 +128,70 @@ def test_well_formed_dashboard_never_goes_raw() -> None:
 
 
 # ---------------------------------------------------------------------------
+# BLOCK-1 (reviewer finding): a modeled key PRESENT with JSON null is a
+# different stored shape than the key being ABSENT, but every builder's own
+# `put()`/skip-on-None convention means passing `key=None` explicitly is
+# IDENTICAL, at compile time, to omitting the kwarg entirely -- there is no
+# typed-builder call shape that reproduces an explicit null for a modeled
+# key. Silently treating "present as null" the same as "absent" (a bare
+# `.pop(key, None)` + `is not None` check) is therefore an I3 violation: the
+# key would recompile as absent, not null. The only correct handling is the
+# raw ladder, exactly like the empty-badges/always-materialized-key
+# precedents in the same module -- escalate the whole node.
+# ---------------------------------------------------------------------------
+
+
+def test_meta_icon_explicit_null_falls_to_raw_dashboard() -> None:
+    meta = {**_BASE_META, "icon": None}
+    src = _source(meta, {"views": []})
+    assert "@raw_dashboard(" in src
+    assert "'icon': None" in src
+
+
+def test_meta_show_in_sidebar_explicit_null_falls_to_raw_dashboard() -> None:
+    meta = {**_BASE_META, "show_in_sidebar": None}
+    src = _source(meta, {"views": []})
+    assert "@raw_dashboard(" in src
+
+
+def test_meta_field_absent_still_decompiles_typed() -> None:
+    # Sanity check for the fix's OTHER half: a genuinely ABSENT optional meta
+    # field (never present at all) is unaffected -- only PRESENT-with-null
+    # forces raw.
+    src = _source(_BASE_META, {"views": []})  # no icon/show_in_sidebar/require_admin at all
+    assert "@dashboard(" in src
+    assert "raw_dashboard" not in src
+
+
+def test_full_round_trip_for_envelope_with_meta_icon_null() -> None:
+    """The reviewer's concrete reproduction: `DirectBackend.
+    _dashboard_registry_payload` sends `icon: None` on every update; if HA
+    persists it verbatim, a pulled dashboard's `meta.icon` is `None` --
+    `compile(decompile(x)) == x` must still hold for that envelope."""
+    import tempfile
+    from pathlib import Path
+
+    from hassle.compiler.bundle import compile_bundle
+    from hassle.decompiler import decompile_bundle
+    from hassle.ir.canonical import sha256_hash
+
+    config = {
+        "meta": {**_BASE_META, "icon": None},
+        "config": {"views": []},
+    }
+    obj = _dashboard_obj(config["meta"], config["config"])
+    src = decompile_bundle({obj.object_key(): obj})
+    assert "@raw_dashboard(" in src
+
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "objects.py").write_text(src, encoding="utf-8")
+        result = compile_bundle(Path(tmp))
+    assert len(result.objects) == 1
+    (recompiled,) = result.objects.values()
+    assert sha256_hash(recompiled.to_ha()) == sha256_hash(config)
+
+
+# ---------------------------------------------------------------------------
 # Views: the F5 appendix's two coordination points + panel arity + extra=
 # ---------------------------------------------------------------------------
 
@@ -223,6 +287,50 @@ def test_view_dict_badge_with_extra_keys_passes_through_verbatim() -> None:
     assert "badge({'type': 'entity', 'entity': 'light.hallway', 'name': 'Hallway'})" in src
 
 
+# --- BLOCK-1: present-but-null modeled keys (see the module note above) ---
+
+
+def test_view_title_explicit_null_falls_to_raw_view() -> None:
+    view = {"type": "sections", "sections": [], "title": None}
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_view(" in src
+    assert "'title': None" in src
+
+
+def test_view_title_absent_still_decompiles_typed() -> None:
+    view = {"type": "sections", "sections": []}  # no `title` key at all
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_view" not in src
+    assert "with view():" in src
+
+
+def test_view_visibility_explicit_null_falls_to_raw_view() -> None:
+    view = {"type": "sections", "sections": [], "visibility": None}
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_view(" in src
+
+
+def test_view_type_explicit_null_falls_to_raw_view() -> None:
+    # Extra site found during the same audit (not in the reviewer's
+    # explicit list, same bug class): `view()`'s `type=None` sentinel means
+    # "the `type` key is entirely ABSENT" (the legacy masonry shape) -- it
+    # has no shape that reproduces a `type` key PRESENT with an explicit
+    # null, which is a different stored dict than one missing the key.
+    view = {"type": None, "cards": []}
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_view(" in src
+    assert "'type': None" in src
+
+
+def test_view_badges_explicit_null_falls_to_raw_view() -> None:
+    # Extra site found during the same audit: `view()` only ever OMITS
+    # `badges` (zero recorded) or sets it to a real non-empty list -- never
+    # an explicit null.
+    view = {"type": "sections", "sections": [], "badges": None}
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_view(" in src
+
+
 # ---------------------------------------------------------------------------
 # Sections: stricter than view -- ANY unmodeled own key forces raw_section
 # ---------------------------------------------------------------------------
@@ -254,6 +362,32 @@ def test_section_column_span_decompiles_typed() -> None:
     src = _source(_BASE_META, {"views": [view]})
     assert "with section(column_span=2):" in src
     assert "raw_section" not in src
+
+
+# --- BLOCK-1: present-but-null modeled keys (see the module note above) ---
+
+
+def test_section_column_span_explicit_null_falls_to_raw_section() -> None:
+    section = {"type": "grid", "column_span": None, "cards": []}
+    view = {"type": "sections", "sections": [section]}
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_section(" in src
+    assert "'column_span': None" in src
+
+
+def test_section_column_span_absent_still_decompiles_typed() -> None:
+    section = {"type": "grid", "cards": []}  # no `column_span` key at all
+    view = {"type": "sections", "sections": [section]}
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_section" not in src
+    assert "with section():" in src
+
+
+def test_section_visibility_explicit_null_falls_to_raw_section() -> None:
+    section = {"type": "grid", "visibility": None, "cards": []}
+    view = {"type": "sections", "sections": [section]}
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_section(" in src
 
 
 def test_section_with_raw_card_child_stays_typed_around_it() -> None:
@@ -299,6 +433,32 @@ def test_registered_card_type_emits_the_typed_builder_not_raw() -> None:
     src = _source(_BASE_META, {"views": [view]})
     assert "c.tile(entity=e.light.x)" in src
     assert "raw_card" not in src
+
+
+# --- BLOCK-1: present-but-null modeled keys (see the module note above) ---
+
+
+def test_card_visibility_explicit_null_falls_to_raw_card() -> None:
+    view = {
+        "type": "sections",
+        "sections": [
+            {"type": "grid", "cards": [{"type": "tile", "entity": "light.x", "visibility": None}]}
+        ],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card(" in src
+    assert "'visibility': None" in src
+    assert "c.tile" not in src
+
+
+def test_card_visibility_absent_still_decompiles_typed() -> None:
+    view = {
+        "type": "sections",
+        "sections": [{"type": "grid", "cards": [{"type": "tile", "entity": "light.x"}]}],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card" not in src
+    assert "c.tile(entity=e.light.x)" in src
 
 
 # ---------------------------------------------------------------------------
