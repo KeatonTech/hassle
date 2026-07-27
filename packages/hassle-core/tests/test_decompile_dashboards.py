@@ -796,3 +796,28 @@ def test_cards_import_emitted_when_a_known_card_builder_is_used(fake_registry: N
     obj = _dashboard_obj(_BASE_META, {"views": [view]})
     src = decompile_bundle({obj.object_key(): obj})
     assert "from hassle import cards as c" in src
+
+
+def test_typed_emission_does_not_depend_on_import_order() -> None:
+    """Regression (found via `hassle-dev decompile-coverage`): CARD_REGISTRY
+    is populated by `hassle.cards`' import side effect; the decompiler module
+    must force that import itself, or a process that never imported
+    `hassle.cards` raw-falls every card. Proven in a fresh interpreter."""
+    import subprocess
+    import sys
+
+    code = (
+        "from hassle.ir.models import parse\n"
+        "from hassle.decompiler.dashboards import dashboard_source\n"
+        "obj = parse({'meta': {'url_path': 'iso-check', 'title': 'T'}, 'config':"
+        " {'views': [{'type': 'sections', 'sections': [{'type': 'grid', 'cards':"
+        " [{'type': 'tile', 'entity': 'light.x'}]}]}]}}, kind='dashboard')\n"
+        "src = dashboard_source(obj, 'iso_check')\n"
+        "assert 'c.tile(' in src and 'raw_card' not in src, src\n"
+        "print('OK')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "OK"

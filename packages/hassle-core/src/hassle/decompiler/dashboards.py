@@ -55,6 +55,14 @@ import inspect
 from dataclasses import dataclass
 from typing import Any, cast
 
+# CARD_REGISTRY rows are registered as an import side effect of the card
+# family modules, which `hassle.cards` imports. The decompiler must force
+# that import itself: an emitter that only imported `card_registry` would
+# see an EMPTY registry (and raw-fall every card) whenever nothing else in
+# the process had imported `hassle.cards` first — exactly what happened to
+# `hassle-dev decompile-coverage` before this line existed. Regression:
+# test_decompile_dashboards.py::test_typed_emission_does_not_depend_on_import_order.
+import hassle.cards  # noqa: F401  (registry-population side effect)
 from hassle.compiler.dashboards.card_registry import CARD_REGISTRY, CardSpec
 from hassle.compiler.dashboards.decorators import DEFAULT_IDENTITY
 from hassle.compiler.dashboards.structure import (
