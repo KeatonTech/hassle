@@ -885,6 +885,56 @@ the UI actually writes — §2.2 item 4).
   `custom:` cards assert the raw fallback exactly (they are the backstop
   proof, not a coverage failure — same philosophy as DESIGN §5.8).
 
+**DB4 implementation note (2026-07-27):** on the base DB4 was built against,
+none of the card-builder workstreams (DB3) had merged, so `CARD_REGISTRY`
+(§6.1.1) is empty and every real dashboard fixture's actual leaf cards
+(`tile`, `heading`, `button`, ...) are unmodeled — 0/12 corpus dashboards
+decompile clean, dragging the corpus-wide fraction from ~95% to ~84% purely
+because of a dependency this workstream doesn't own (item 8 of DB4's brief
+anticipated exactly this). Rather than let that sink the established
+project-wide `>= 90%` gate (which has protected automation/script coverage
+since M0), `hassle_dev.decompile_coverage` computes the pass/fail gate over
+every kind EXCEPT `"dashboard"`, and reports dashboards' own (currently 0%,
+expected) fraction separately via new `by_kind`/`full_*` JSON fields — the
+literal "own reported percentage" this section already asks for, just also
+kept out of the blocking signal until a card family lands. Both
+`hassle_dev.decompile_coverage`'s and `hassle.decompiler.coverage`'s own test
+suites assert this split explicitly. The natural follow-up, once a card
+family's `CARD_REGISTRY` rows cover the built-in inventory: fold
+`"dashboard"` back into the gated kind set (or drop the exclusion outright).
+
+**DB4 implementation note (2026-07-27), badges:** `badge()`'s own docstring
+(§5.2) reads as if its "verbatim dict" passthrough branch also covers a
+legacy bare-string badge entry — it does not; there is no `badge()` call
+shape that appends a bare string to the `badges` list (see ha-api-notes.md
+§39 for the full finding). The decompiler resolves this by escalating the
+WHOLE enclosing view to `raw_view` when its stored `badges` list contains a
+non-dict entry (or is present as an explicit empty list, which `view()`
+likewise never produces) — a legitimate use of the existing ladder (`badges`
+is an own-structure key of the view, not a nested card), not a new verb.
+
+**DB4 implementation note (2026-07-27), CardSpec.declared forward-compat:**
+a parallel review round is adding an optional `declared: frozenset[str]`
+field to `CardSpec` (the authoritative known-kwarg set for a card's typed
+builder). DB4's generic emitter reads it via
+`getattr(spec, "declared", frozenset())` so it works unchanged whether or
+not the field exists: absent/empty, every REQUIRED (no-default) builder
+parameter is still resolved by name (never through `extra=`, since a call
+cannot omit a required argument) and every OPTIONAL leftover key routes
+through `extra=` wholesale; populated, `declared` becomes the authoritative
+split instead. This also transparently covers the two DB3-review
+coordination points about card families that always materialize a
+particular list key (`entities` for the entities/glance/history-graph/.../
+entity-filter family, `conditions` for `conditional`) and about
+`conditional`'s single-dict `card:` child (container="card") — a card whose
+required key is absent from the stored body already falls back to
+`raw_card` via the same "missing required parameter" check, and a
+`container="card"` row already requires its child to be a dict (any other
+shape, including a legacy list, degrades to `raw_card` defensively). No
+code change was needed for either point; both are exercised by fake
+`CardSpec` rows in `test_decompile_dashboards.py` since no real card family
+has landed on this base to test against directly.
+
 ### 6.3 Round-trip acceptance
 
 The I3 gate extends over the new corpus: for every dashboard fixture `x`,

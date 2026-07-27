@@ -6,6 +6,8 @@ filename convention the corpus is built to:
     automation_*.json        -> kind "automation"      (id lives in the body)
     script_*.json            -> kind "script"          (object_id = filename stem)
     helper_<domain>_*.json   -> kind "<domain>"        (id lives in the body)
+    dashboard_*.json         -> kind "dashboard"       (identity lives in `meta.url_path`,
+                                                         or the "default" sentinel)
 
 `.provenance.md` sidecars are ignored.
 """
@@ -57,6 +59,11 @@ def _kind_for(name: str) -> tuple[str, str | None]:
         # Scripts are keyed by object_id, which is extrinsic to the config body;
         # the filename stem stands in as the object_id for corpus round-tripping.
         return "script", name
+    if name.startswith("dashboard"):
+        # A dashboard's identity lives in `meta.url_path` (or falls to the
+        # "default" sentinel for the default dashboard, §3.1) -- never
+        # extrinsic to the body, so no key_hint is needed (unlike scripts).
+        return "dashboard", None
     if name.startswith("helper_"):
         rest = name[len("helper_") :]
         for dom in sorted(HELPER_DOMAINS, key=len, reverse=True):

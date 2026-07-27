@@ -3718,3 +3718,47 @@ milestone asks to validate, so it needed its own small walker rather than
 falling out of the existing one for free the way `_bundle_declared_keys`'s
 widening (a bundle's own group declares its produced entity, mirroring
 template) did.
+
+## 39. DB4 finding: `badge()` cannot reproduce a legacy bare-string badge — resolved via `raw_view`, not a new `raw_badge` verb
+
+> Source: implementing the dashboard decompiler (workstream DB4) against
+> the corpus fixture `fixtures/configs/dashboard_badges.json`, whose
+> PROVENANCE.md entry explicitly plants "modern object-badge shape and
+> legacy bare entity string badges in different views" — i.e. this gap was
+> deliberately exercised by the fixture, not discovered by accident.
+
+Design §2.2 item 6 and §5.2 both anticipate that HA's `badges` list can
+store a bare entity-id **string** (the legacy shape) alongside the modern
+object form (`{"type": "entity", "entity": ...}`); §5.2's own prose says
+`badge()` "records into the enclosing view's badges list (object-badge form;
+a plain dict passes through verbatim for legacy/unknown badge shapes)" —
+which reads as if the bare-string case is covered by the "plain dict"
+clause. It is not: `hassle.compiler.dashboards.structure.badge()` has
+exactly two branches — a `str` input always builds `{"type": "entity",
+"entity": str(entity_or_dict)}` (the modern object form), and a non-`str`
+input is copied through as a dict. **There is no code path in `badge()`
+that appends a bare string to the `badges` list** — `record_badge`/`view()`
+only ever store `body` (always a dict) into `node.badges`, so a stored
+badge that is a bare string is unrepresentable by *any* call to `badge()`,
+however it's invoked.
+
+This is a real design/reality gap (§5.2's prose overstates what the
+"verbatim dict" branch covers for the bare-string case specifically), but
+`compiler/dashboards/structure.py` is frozen (F5) and out of DB4's scope to
+change, and there is no `raw_badge` verb in the §5.5 ladder to fall back to
+individually. The resolution implemented in `hassle.decompiler.dashboards`:
+a view whose stored `badges` list contains ANY non-dict (bare-string) entry,
+or is present as an explicit empty list (`view()` only ever sets `badges`
+when `if node.badges:` is truthy — never to `[]`), escalates the WHOLE
+enclosing view to `raw_view` — legitimate under the existing ladder's "a
+view whose own structure `view()` cannot produce" rule (§5.5), since the
+`badges` list is exactly such an own-structure key, not a nested child card.
+Verified against the fixture: `dashboard_badges.json`'s "Modern Badges" view
+(object-form badges) decompiles fully typed; its "Legacy Badges" view (bare
+strings) decompiles as one `raw_view({...})` call, and the whole object
+still round-trips byte-identically (`compile(decompile(x)) == x` holds via
+the raw escape hatch, per DESIGN §2). No compiler-side change was made or
+proposed here — flagging this for whoever next touches `badge()`'s
+docstring/behavior, since a future `raw_badge` verb (or a `badge()` shape
+that can emit a bare string) would let such a view decompile with finer
+granularity instead of going fully raw.

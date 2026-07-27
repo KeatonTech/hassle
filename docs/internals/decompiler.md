@@ -3,6 +3,56 @@
 Design rationale that's too long to keep inline in the source. See DESIGN.md §7.3 for the
 user-facing decompile semantics; this file is for maintainers of `hassle.decompiler`.
 
+## The dashboard decompiler (`hassle.decompiler.dashboards`, workstream DB4)
+
+`DashboardConfig` -> DSL source (docs/internals/dashboards-design.md §6.2)
+lives in its own module rather than `codegen.py` because the card-tree walk
+is substantially bigger than an automation/script's flat trigger/condition/
+action lists. A few decisions worth recording here rather than only in the
+module's own docstring:
+
+- **Card emission never hardcodes a card type.** It looks a stored card's
+  `type` up in `CARD_REGISTRY` (docs/internals/dashboards-design.md §6.1.1),
+  resolves the row's `builder` name to the real callable, and drives the
+  call generically off `inspect.signature`. `CardSpec.declared` (an
+  optional, additive field a later registry-backfill workstream may
+  populate) is read via `getattr(spec, "declared", frozenset())` so this
+  module works unchanged whether or not that field exists yet — when it's
+  absent/empty, every REQUIRED (no-default) parameter is still resolved by
+  name (a call can't omit one) and every OPTIONAL leftover key routes
+  through `extra=` wholesale; when populated, `declared` is the
+  authoritative known-kwarg set instead. On the base this was written
+  against, `CARD_REGISTRY` is empty (no card-builder family has merged), so
+  every leaf/container card currently decompiles to `raw_card` — expected,
+  and the tracked coverage signal that a family is still pending, not a bug.
+- **`section()` and `view()` are deliberately asymmetric** in how they treat
+  an unmodeled key: a view's stray key round-trips through its `extra=`
+  valve, but ANY key `section()` doesn't itself model forces the whole
+  section to `raw_section`. This matches §5.5's own wording ("a
+  section/view whose OWN keys are unmodeled..."), read literally for
+  sections; both builders support `extra=` at the compiler level, so this
+  is a decompiler-side policy choice, not a builder limitation.
+- **A container never goes raw merely because a descendant did** (the
+  `ha-api-notes.md` §20.4 precedent, restated for dashboards): an unknown
+  card wrapped inside an otherwise well-formed container/section/view stays
+  `raw_card`, with everything above it staying typed. Every `_try_emit_*`
+  function in this module returns `None` (never raises, never partially
+  emits) exactly when ITS OWN shape can't be modeled, letting the caller
+  degrade at the narrowest possible scope.
+- **`badge()` cannot reproduce a legacy bare-string badge entry** — see
+  `ha-api-notes.md` §39 for the full finding. The decompiler resolves it by
+  escalating the whole enclosing view to `raw_view` (a legitimate use of the
+  existing ladder, `badges` being an own-structure key of the view), not by
+  inventing a `raw_badge` verb outside the frozen F5 ladder.
+- **Import-line detection is a plain substring/regex check** on the already
+  assembled decompiled source (`from hassle import cards as c` / `from
+  hassle.cards import cond`, emitted only when actually used) — the same
+  convention `decompile_bundle` already uses for `TemplateExpr`, chosen for
+  the same reason: `c`/`cond` are never emitted as any other kind of
+  identifier by this decompiler, so a plain regex is exactly as safe as
+  threading a used-flag through every emission function, with far less
+  plumbing.
+
 ## Why a fresh bundle decompile emits a star import
 
 `decompile_bundle` always opens a generated module with `from hassle import *` rather than
