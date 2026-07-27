@@ -480,7 +480,7 @@ def test_apply_pull_adopt_writes_real_decompiled_dashboard_content(
     assert "url_path=" in written and "climate-control" in written
     assert "with view(" in written
     assert "with section():" in written
-    assert "raw_card(" in written  # `tile` is unmodeled on this base (CARD_REGISTRY empty)
+    assert "c.tile(" in written  # typed emission (DB3's families are merged)
 
     compiled_keys = set(compile_bundle(tmp_path).objects)
     assert compiled_keys == {"dashboard:climate-control"}

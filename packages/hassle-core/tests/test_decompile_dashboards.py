@@ -268,17 +268,35 @@ def test_section_with_raw_card_child_stays_typed_around_it() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cards: unknown type -> raw_card (CARD_REGISTRY is empty on this base)
+# Cards: unknown type -> raw_card (a type string absent from CARD_REGISTRY)
 # ---------------------------------------------------------------------------
 
 
 def test_unknown_card_type_falls_to_raw_card() -> None:
+    # "someday-new-card" stands in for a built-in type from a future HA
+    # release Hassle doesn't know yet -- absent from CARD_REGISTRY, so it
+    # must round-trip via raw_card, never error (DESIGN §2.3).
+    view = {
+        "type": "sections",
+        "sections": [
+            {"type": "grid", "cards": [{"type": "someday-new-card", "entity": "light.x"}]}
+        ],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card({'type': 'someday-new-card', 'entity': " in src
+
+
+def test_registered_card_type_emits_the_typed_builder_not_raw() -> None:
+    # The registry-driven inverse of the test above: with DB3's families
+    # merged, a stored tile emits `c.tile(...)` (this test replaced the
+    # empty-registry-era expectation that tile fell to raw_card).
     view = {
         "type": "sections",
         "sections": [{"type": "grid", "cards": [{"type": "tile", "entity": "light.x"}]}],
     }
     src = _source(_BASE_META, {"views": [view]})
-    assert "raw_card({'type': 'tile', 'entity': " in src
+    assert "c.tile(entity=e.light.x)" in src
+    assert "raw_card" not in src
 
 
 def test_custom_card_fixture_asserts_raw_fallback_exactly() -> None:
@@ -295,9 +313,13 @@ def test_custom_card_fixture_asserts_raw_fallback_exactly() -> None:
     obj = parse(config, kind="dashboard")
     assert isinstance(obj, DashboardConfig)
     src = dashboard_source(obj, "custom_cards")
-    assert src.count("raw_card(") == 3  # mushroom-entity-card, bubble-card, and the plain tile
+    # The two custom: cards raw-fall; the plain tile beside them now emits
+    # its typed builder (DB3's families are merged), proving the ladder
+    # never raws a sibling merely because a custom card sits next to it.
+    assert src.count("raw_card(") == 2  # mushroom-entity-card and bubble-card
     assert "custom:mushroom-entity-card" in src
     assert "custom:bubble-card" in src
+    assert "c.tile(" in src
     assert "raw_view" not in src and "raw_section" not in src and "raw_dashboard" not in src
 
 
