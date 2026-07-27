@@ -23,11 +23,11 @@ import copy
 import json
 from typing import Any
 
+from _dashboard_fixtures import DASHBOARD_ENVELOPE, DEFAULT_DASHBOARD_ENVELOPE
+
 from hassle.ir.canonical import canonical_json, storage_canonical
 from hassle.ir.modernize import modernize_for_comparison
 from hassle.ir.normalize import normalize_ha
-
-from _dashboard_fixtures import DASHBOARD_ENVELOPE, DEFAULT_DASHBOARD_ENVELOPE
 
 # The minimal reproduction, kept separate from the big fixture so the failure
 # message points straight at the bug.
@@ -249,7 +249,7 @@ def test_modernize_for_comparison_never_mutates_a_dashboard_input() -> None:
     original = copy.deepcopy(DASHBOARD_ENVELOPE)
     out = modernize_for_comparison(DASHBOARD_ENVELOPE, kind="dashboard")
     assert out is not DASHBOARD_ENVELOPE
-    assert DASHBOARD_ENVELOPE == original
+    assert original == DASHBOARD_ENVELOPE
 
 
 def test_modernize_for_comparison_still_modernizes_automations() -> None:

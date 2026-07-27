@@ -17,6 +17,8 @@ import copy
 import json
 from typing import Any
 
+from _dashboard_fixtures import DASHBOARD_ENVELOPE, DEFAULT_DASHBOARD_ENVELOPE
+
 from hassle.ir import (
     OBJECT_KINDS,
     canonical_json,
@@ -27,9 +29,6 @@ from hassle.ir import (
 )
 from hassle.ir.keys import DASHBOARD_KIND
 from hassle.ir.models import DashboardConfig
-
-from _dashboard_fixtures import DASHBOARD_ENVELOPE, DEFAULT_DASHBOARD_ENVELOPE
-
 
 # -- kind registration -----------------------------------------------------
 

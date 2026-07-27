@@ -20,6 +20,11 @@ The rules, verified against the real POST->GET capture pair
 - **Inner ``platform:`` is preserved** — HA pluralizes only the outer block key, it
   does not rewrite the trigger discriminator on read-back.
 
+**Exempt kind: ``dashboard``.** Lovelace stores its config body verbatim and a
+card's ``tap_action``/``hold_action`` payload legitimately carries a legacy
+``service:`` key, so ``normalize_ha`` is an exact identity function for that
+kind -- see :func:`normalize_ha` and docs/internals/dashboards-design.md §3.3.
+
 This is compatible with the frozen IR schema: it adds a new public function to
 ``hassle.ir`` and touches no existing frozen surface. It never mutates its input.
 """
@@ -27,6 +32,8 @@ This is compatible with the frozen IR schema: it adds a new public function to
 from __future__ import annotations
 
 from typing import Any
+
+from hassle.ir.keys import DASHBOARD_KIND
 
 # Outer automation block keys: singular -> plural.
 _OUTER_BLOCK_RENAMES: dict[str, str] = {
@@ -46,10 +53,30 @@ def normalize_ha(config: dict[str, Any], *, kind: str) -> dict[str, Any]:
 
     ``kind`` is ``"automation"`` (outer-key pluralization applies) or ``"script"``
     / any other kind (only the recursive ``service:`` -> ``action:`` rewrite
-    applies; scripts carry a ``sequence``, not ``triggers``/``actions``).
+    applies; scripts carry a ``sequence``, not ``triggers``/``actions``) --
+    except ``"dashboard"``, which is exempt entirely (see below).
 
     The input is never mutated; a new dict is returned.
     """
+    if kind == DASHBOARD_KIND:
+        # EXEMPT: an exact identity function (docs/internals/dashboards-design.md
+        # §3.3). A Lovelace card body legitimately contains `service:` keys of
+        # its own -- inside `tap_action`/`hold_action`/`double_tap_action`
+        # payloads using the legacy `{action: "call-service", service: "..."}`
+        # form -- and the Lovelace store saves the config body VERBATIM: no
+        # schema validation, no normalization, unlike the automation/script
+        # config API this module exists to mirror. Rewriting one of those keys
+        # would silently break the card AND make the object hash drift, showing
+        # up as a phantom conflict on every subsequent plan.
+        #
+        # Stated at the KIND level deliberately. The generic branch below only
+        # recurses into a body's top-level `actions`/`sequence` keys, so a
+        # well-formed `{"meta", "config"}` envelope would survive it untouched
+        # today even without this guard -- but that is an accident of the
+        # current recursion depth, not a contract, and `IRObject` is
+        # `extra="allow"` (a `@raw_dashboard` body may carry any top-level key).
+        # For this kind, nothing is EVER rewritten, whatever the body's shape.
+        return _deep_copy_mapping(config)
     out: dict[str, Any] = {}
     for key, value in config.items():
         if kind == "automation" and key in _OUTER_BLOCK_RENAMES:
@@ -123,6 +150,16 @@ def _normalize_repeat(value: Any) -> Any:
     for k, v in value.items():  # type: ignore[misc]
         out[k] = _normalize_action_container(v) if k == "sequence" else _deep_copy(v)
     return out
+
+
+def _deep_copy_mapping(config: dict[str, Any]) -> dict[str, Any]:
+    """A deep copy of a whole body -- identity of VALUE, not of object.
+
+    ``normalize_ha``'s frozen contract is "never mutates its input", and
+    callers rely on being free to mutate the result, so the dashboard exemption
+    copies rather than handing the caller's own dict straight back.
+    """
+    return {key: _deep_copy(value) for key, value in config.items()}
 
 
 def _deep_copy(value: Any) -> Any:
