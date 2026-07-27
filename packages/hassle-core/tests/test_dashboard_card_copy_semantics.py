@@ -127,3 +127,20 @@ def test_two_calls_sharing_one_value_compile_independent_cards(
     assert card_a[key] is not card_b[key]
     _mutate(card_a[key])
     assert card_a[key] != card_b[key]
+
+
+def test_deepcopy_of_an_option_dict_carrying_an_entity_ref_survives() -> None:
+    """Regression: `put_copy`'s deepcopy died on EntityRef's two-argument
+    __new__ (`TypeError: missing 1 required positional argument`) the first
+    time a decompiled bundle recompiled a card whose `tap_action` carried an
+    `e.<domain>.<id>` ref. Immutable refs now copy as themselves."""
+    import copy
+
+    from hassle.compiler.helpers import EntityRef
+
+    ref = EntityRef("light", "bedroom")
+    copied = copy.deepcopy({"target": {"entity_id": ref}})
+    inner = copied["target"]["entity_id"]
+    assert inner == "light.bedroom"
+    assert isinstance(inner, EntityRef)
+    assert inner is ref  # immutable: deepcopy returns self
