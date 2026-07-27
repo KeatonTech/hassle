@@ -3,19 +3,29 @@
 - `hassle plan`/`status`/`pull` kind lists are `OBJECT_KINDS`-driven
   (`bundle_ops.remote_objects_from_backend(backend, list(OBJECT_KINDS))`), so
   they need no per-kind code to pick up the new `dashboard` kind -- pinned
-  here against a bundle/backend with no dashboards at all, proving the
-  kind's mere presence in `OBJECT_KINDS` doesn't break the commands that loop
-  over every kind.
+  against a bundle/backend with no dashboards at all (proving the kind's
+  mere presence in `OBJECT_KINDS` doesn't break the commands that loop over
+  every kind) AND, non-vacuously, against a backend that HAS a seeded
+  dashboard (proving `hassle plan` actually surfaces it as `adopt
+  dashboard:<url_path>` -- the empty-backend smoke tests alone would still
+  pass with the whole feature reverted).
 - `hassle explain` renders a compiled object generically (`explain.as_yaml`
   is a thin `yaml.safe_dump` over whatever dict it's given) -- verified
   directly against a `DashboardConfig` envelope's `to_ha()` output, since
   nothing in this repo can compile a real `@dashboard`/`@raw_dashboard` body
   yet (workstreams DB2/DB3).
 
-`hassle.backend.fake.FakeBackend`'s own dashboard CRUD support is workstream
-DB5's scope and isn't needed for the smoke tests below: `list_remote` is
-already kind-generic (see the module docstring of
-`test_pull_dashboards_placement.py` for the same point re: `create`).
+`hassle.backend.fake.FakeBackend` has real dashboard CRUD support (DB5
+landed) -- used directly below via `backend.create("dashboard", ...)`, same
+as every other kind's CLI tests.
+
+**Explicit DB4 handoff item**: nothing here attempts an end-to-end `hassle
+pull` against a backend with a seeded dashboard -- that currently dies
+inside `hassle.decompiler.decompile_bundle` (no dispatch branch for
+`DashboardConfig` yet). The PLAN-level assertion below is deliberately as
+far as this workstream goes; DB4 owns the pull-side gap once the decompiler
+branch lands (see also `test_pull_dashboards_placement.py`'s module
+docstring).
 """
 
 from __future__ import annotations
@@ -55,6 +65,30 @@ def test_status_runs_clean_with_dashboard_kind_registered_and_no_dashboards(
     toml_writer(git_repo, backend_token=token)
     result = cli(["status"], cwd=git_repo)
     assert result.exit_code == 0, result.output
+
+
+def test_plan_shows_adopt_for_a_seeded_dashboard(
+    git_repo: Path, cli, fake_backend, toml_writer
+) -> None:
+    # Non-vacuous (reviewer note): the two smoke tests above pass even with
+    # the whole dashboard feature reverted, since there are no dashboards to
+    # find. This one seeds a real dashboard on the (real, DB5-backed)
+    # FakeBackend and asserts `hassle plan` actually reports it as an ADOPT --
+    # plan-level only (see the module docstring for why pull isn't exercised
+    # here).
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    backend.create(
+        "dashboard",
+        {
+            "meta": {"url_path": "climate-control", "title": "Climate"},
+            "config": {"views": []},
+        },
+    )
+    result = cli(["plan"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+    assert "adopt" in result.output, result.output
+    assert "dashboard:climate-control" in result.output, result.output
 
 
 def test_pull_runs_clean_with_dashboard_kind_registered_and_no_dashboards(

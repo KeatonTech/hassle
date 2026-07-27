@@ -1,9 +1,10 @@
 """Dashboard placement + pull-routing tests (docs/internals/dashboards-design.md
-§7): `default_source_path`'s dashboard branch (module-safe naming,
-`_SCOPE_FOR_KIND`'s deliberate omission, `category_shaped_stem`'s
-"uncategorized" treatment of `dashboards/x.py`), the on-demand `dashboards/`
-directory scaffold (no `__init__.py`), and the adopt-append safety net that
-keeps ADOPT from clobbering an existing file at a dashboard's default path.
+§7): `default_source_path`'s dashboard branch (module-safe naming, sanitized
+against path traversal; `_SCOPE_FOR_KIND`'s deliberate omission;
+`category_shaped_stem`'s "uncategorized" treatment of `dashboards/x.py`), the
+on-demand `dashboards/` directory scaffold (no `__init__.py`), and the
+adopt-append safety net that keeps ADOPT from clobbering an existing file at
+a dashboard's default path.
 
 **Hard dependency boundary**: `decompile_object` support for
 :class:`~hassle.ir.models.DashboardConfig` is workstream DB4's scope and
@@ -13,13 +14,23 @@ hasn't landed on this branch yet, so nothing here can drive
 instead drives the STUB pull engine (`hassle.sync.pull.apply_pull` +
 `_placeholder_dsl_source`) with `RecordingSourceWriter`/real tmp-dir writers,
 which is enough to pin the PLACEMENT and ROUTING contract (which file,
-whole-file write vs. splice/append) independent of decompiled content. DB4
-should extend this file with real decompiler-backed adopt/refresh/splice
-cases once `decompile_object` supports `DashboardConfig`.
+whole-file write vs. byte-preserving append) independent of decompiled
+content. DB4 should extend this file with real decompiler-backed
+adopt/refresh/splice cases once `decompile_object` supports `DashboardConfig`.
+
+**Explicit DB4 handoff item**: `hassle.backend.fake.FakeBackend` now has real
+dashboard CRUD support (DB5 landed), so a bundle CAN seed a live dashboard
+end-to-end -- but running a real `hassle pull` against a seeded dashboard
+still dies inside `hassle.decompiler.decompile_bundle` (no dispatch branch for
+`DashboardConfig` yet, DB4's scope). `test_cli_dashboard_kind_smoke.py`'s
+plan-level smoke test proves the PLAN side is fine; nothing here or there
+attempts an end-to-end `hassle pull` with a seeded dashboard -- DB4 owns that
+gap once the decompiler branch lands.
 """
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -30,8 +41,15 @@ from hassle.sync.category_writeback import (
     _SCOPE_FOR_KIND,  # pyright: ignore[reportPrivateUsage]
 )
 from hassle.sync.models import Plan, PlanAction, PlanEntry
-from hassle.sync.pull import apply_pull
-from hassle.sync.source_writer import RecordingSourceWriter, SplicingSourceWriter
+from hassle.sync.pull import (  # pyright: ignore[reportPrivateUsage]
+    _placeholder_dsl_source,
+    apply_pull,
+)
+from hassle.sync.source_writer import (
+    RecordingSourceWriter,
+    SplicingSourceWriter,
+    WholeFileSourceWriter,
+)
 from hassle_cli.bundle_ops import default_source_path
 
 # ---------------------------------------------------------------------------
@@ -99,6 +117,51 @@ def test_category_shaped_stem_treats_dashboards_path_as_uncategorized() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Placement safety: identity is never trusted as a bare filename component
+# ---------------------------------------------------------------------------
+#
+# `default_source_path`'s dashboard branch derives a filename from an
+# identity that (pre-DB0-verification) is only HYPOTHESIZED to always
+# contain a hyphen and nothing else unusual -- the read path (this function)
+# must not depend on that hypothesis holding, since it decides where
+# `write_whole_file` (mkdir + write, no bundle-root containment check of its
+# own) lands on disk.
+
+
+def test_default_source_path_path_traversal_identity_stays_inside_dashboards_dir() -> None:
+    path = default_source_path("dashboard:../../../tmp/pwned-x")
+    assert path == "dashboards/tmppwned_x.py"
+    assert ".." not in path
+    assert path.count("/") == 1  # exactly "dashboards/<name>.py", no nested escape
+
+
+def test_default_source_path_empty_identity_falls_back_to_safe_name() -> None:
+    expected_digest = hashlib.sha256(b"").hexdigest()[:8]
+    assert default_source_path("dashboard:") == f"dashboards/dashboard_{expected_digest}.py"
+
+
+def test_default_source_path_dot_only_identity_falls_back_to_safe_name() -> None:
+    expected_digest = hashlib.sha256(b"...").hexdigest()[:8]
+    assert default_source_path("dashboard:...") == f"dashboards/dashboard_{expected_digest}.py"
+
+
+def test_default_source_path_all_underscore_identity_falls_back_to_safe_name() -> None:
+    # "---" hyphen->underscore's to "___" -- valid characters, but content-free
+    # (an all-underscore module name is legal Python but a useless filename;
+    # the safe-fallback rule applies here too, per the sanitizer's contract).
+    expected_digest = hashlib.sha256(b"---").hexdigest()[:8]
+    assert default_source_path("dashboard:---") == f"dashboards/dashboard_{expected_digest}.py"
+
+
+def test_default_source_path_normal_url_paths_are_unaffected_by_sanitization() -> None:
+    # Sanity: the traversal/empty-identity guards never touch a normal,
+    # already-safe url_path.
+    assert default_source_path("dashboard:climate-control") == "dashboards/climate_control.py"
+    assert default_source_path("dashboard:default") == "dashboards/default.py"
+    assert default_source_path("dashboard:3d-printer-view") == "dashboards/_3d_printer_view.py"
+
+
+# ---------------------------------------------------------------------------
 # Scaffolding: dashboards/ created on demand, without __init__.py
 # ---------------------------------------------------------------------------
 
@@ -119,19 +182,22 @@ _CLIMATE_ENVELOPE = {
 }
 
 
-def test_adopt_scaffolds_dashboards_directory_without_init_py(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    plan = Plan(
+def _climate_adopt_plan() -> Plan:
+    return Plan(
         entries=[
             _adopt_entry(
                 "dashboard:climate-control", "dashboards/climate_control.py", _CLIMATE_ENVELOPE
             )
         ]
     )
+
+
+def test_adopt_scaffolds_dashboards_directory_without_init_py(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
     writer = SplicingSourceWriter(updated_on="2026-07-27")
-    apply_pull(plan, writer)
+    apply_pull(_climate_adopt_plan(), writer)
 
     dashboards_dir = tmp_path / "dashboards"
     assert dashboards_dir.is_dir()
@@ -150,91 +216,113 @@ def test_adopt_scaffolds_dashboards_directory_with_recording_writer(
     # pins that the routing call itself names the right, un-prefixed path
     # (no directory is implicitly widened into a package).
     monkeypatch.chdir(tmp_path)
-    plan = Plan(
-        entries=[
-            _adopt_entry(
-                "dashboard:climate-control", "dashboards/climate_control.py", _CLIMATE_ENVELOPE
-            )
-        ]
-    )
     writer = RecordingSourceWriter()
-    apply_pull(plan, writer)
+    apply_pull(_climate_adopt_plan(), writer)
     assert list(writer.written_files) == [Path("dashboards/climate_control.py")]
 
 
 # ---------------------------------------------------------------------------
-# Adopt-append safety: never write_whole_file over an existing path
+# Adopt-append safety: never lose existing bytes at the default path
 # ---------------------------------------------------------------------------
+#
+# `adopt_write` must preserve pre-existing content BY CONSTRUCTION (read +
+# concatenate + one `write_whole_file` call) rather than by delegating to a
+# writer's own `splice_object` -- `WholeFileSourceWriter.splice_object` IS
+# `write_whole_file` (no preservation at all), and
+# `SplicingSourceWriter.splice_object` falls back to a plain
+# `write_whole_file` whenever the new content isn't one spliceable statement
+# plus imports, which the stub engine's placeholder content (comment-only)
+# always is -- so routing ADOPT to `splice_object` was never actually safe
+# for it. These tests reproduce the reviewer's exact regression scenario
+# (adopting onto a `dashboards/climate_control.py` that already holds
+# `# hand-authored, keep me` / `CONSTANT = 42`) against BOTH real writers.
+
+_EXISTING_HAND_AUTHORED = "# hand-authored, keep me\nCONSTANT = 42\n"
 
 
-def test_adopt_routes_through_splice_when_default_path_already_exists(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A brand-new adopted dashboard's default target path already has real
-    content on disk (a hand-authored file, or two identities collapsing onto
-    the same module-safe stem -- docs/internals/dashboards-design.md §7).
-    ADOPT must route through the splice/append path -- `RecordingSourceWriter`
-    exposes this as `spliced_objects`, never `written_files`."""
-    monkeypatch.chdir(tmp_path)
+def _seed_existing_file(tmp_path: Path) -> Path:
     dashboards_dir = tmp_path / "dashboards"
     dashboards_dir.mkdir()
     existing_path = dashboards_dir / "climate_control.py"
-    existing_path.write_text("# hand-authored, keep me\n", encoding="utf-8")
+    existing_path.write_text(_EXISTING_HAND_AUTHORED, encoding="utf-8")
+    return existing_path
 
-    plan = Plan(
-        entries=[
-            _adopt_entry(
-                "dashboard:climate-control", "dashboards/climate_control.py", _CLIMATE_ENVELOPE
-            )
-        ]
-    )
-    writer = RecordingSourceWriter()
-    apply_pull(plan, writer)
 
-    assert writer.written_files == {}
-    assert len(writer.spliced_objects) == 1
-    path, object_key, _content = writer.spliced_objects[0]
-    assert path == Path("dashboards/climate_control.py")
-    assert object_key == "dashboard:climate-control"
+def test_adopt_preserves_existing_file_bytes_with_whole_file_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    existing_path = _seed_existing_file(tmp_path)
+
+    writer = WholeFileSourceWriter()
+    apply_pull(_climate_adopt_plan(), writer)
+
+    written = existing_path.read_text(encoding="utf-8")
+    assert "# hand-authored, keep me" in written, written
+    assert "CONSTANT = 42" in written, written
+
+
+def test_adopt_preserves_existing_file_bytes_with_splicing_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    existing_path = _seed_existing_file(tmp_path)
+
+    writer = SplicingSourceWriter(updated_on="2026-07-27")
+    apply_pull(_climate_adopt_plan(), writer)
+
+    written = existing_path.read_text(encoding="utf-8")
+    assert "# hand-authored, keep me" in written, written
+    assert "CONSTANT = 42" in written, written
+
+
+def test_adopt_still_lands_new_content_after_existing_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Preservation must not come at the cost of the adopt itself: the new
+    # object's content still has to land in the file, appended AFTER the
+    # pre-existing bytes.
+    monkeypatch.chdir(tmp_path)
+    existing_path = _seed_existing_file(tmp_path)
+
+    writer = WholeFileSourceWriter()
+    apply_pull(_climate_adopt_plan(), writer)
+
+    written = existing_path.read_text(encoding="utf-8")
+    assert "dashboard:climate-control" in written, written
+    assert written.index("CONSTANT = 42") < written.index("dashboard:climate-control"), written
 
 
 def test_adopt_of_brand_new_path_still_writes_whole_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The common case is unaffected: nothing pre-exists at the target path,
-    # so ADOPT still creates it directly via write_whole_file.
+    # so ADOPT still creates it directly via write_whole_file (a single call,
+    # no read-and-merge needed).
     monkeypatch.chdir(tmp_path)
-    plan = Plan(
-        entries=[
-            _adopt_entry(
-                "dashboard:climate-control", "dashboards/climate_control.py", _CLIMATE_ENVELOPE
-            )
-        ]
-    )
     writer = RecordingSourceWriter()
-    apply_pull(plan, writer)
+    apply_pull(_climate_adopt_plan(), writer)
     assert writer.spliced_objects == []
     assert list(writer.written_files.keys()) == [Path("dashboards/climate_control.py")]
+    assert writer.written_files[Path("dashboards/climate_control.py")] == _placeholder_dsl_source(
+        "dashboard:climate-control", _CLIMATE_ENVELOPE
+    )
 
 
 def test_splicing_writer_append_path_is_kind_agnostic_for_dashboards(tmp_path: Path) -> None:
-    """Low-level proof that `SplicingSourceWriter`'s existing append-under-
-    marker behavior (already proven for `automation` in
-    `test_pull_adopt_preserves_existing_file.py::
-    test_apply_pull_adopt_splices_into_existing_file`) needs no
-    dashboard-specific code at all: it only cares that the object statement
-    isn't found in the existing file, never about the object's kind.
+    """Low-level proof that `SplicingSourceWriter.splice_object`'s existing
+    append-under-marker behavior (used by REFRESH, still exercised directly
+    here -- `adopt_write` no longer calls `splice_object` at all, see the
+    section above) needs no dashboard-specific code: it only cares that the
+    object statement isn't found in the existing file, never about the
+    object's kind. This test feeds it syntactically-valid content (unlike the
+    stub engine's placeholder), which is the case `splice_object` is actually
+    designed for.
 
     Uses hand-written, syntactically-valid DSL source standing in for what
     DB4's decompiler will eventually produce -- this repo has no typed
     dashboard DSL yet (workstreams DB2/DB3), so `@raw_dashboard` here is
-    never imported/compiled, only spliced as text; `_DEF_DECORATOR_KINDS`
-    (docs/internals/dashboards-design.md §6.2) doesn't recognize it as a
-    `dashboard` declaration yet either (DB4's job), so `find_object_statement_
-    name` falls through to "not found here" regardless -- which is exactly
-    the correct determination for a brand-new adopt into a file that has
-    never defined this object, so the append path fires for the right
-    reason even ahead of DB4.
+    never imported/compiled, only spliced as text.
     """
     existing_source = "# hand-authored, keep me\nCONSTANT = 42\n"
     path = tmp_path / "dashboards" / "climate_control.py"
@@ -255,3 +343,61 @@ def test_splicing_writer_append_path_is_kind_agnostic_for_dashboards(tmp_path: P
     assert "CONSTANT = 42" in written
     assert "def climate_control" in written
     assert "climate-control" in written
+
+
+# ---------------------------------------------------------------------------
+# Contract completeness: batching and moved-file routing
+# ---------------------------------------------------------------------------
+
+
+def test_n_new_dashboards_adopt_into_n_distinct_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Distinct new dashboards land at distinct default-placement files (no
+    # collision) -- N adopts, N files, each written once.
+    monkeypatch.chdir(tmp_path)
+    slugs = ("climate-control", "security-panel", "guest-mode")
+    entries = [
+        _adopt_entry(
+            f"dashboard:{slug}",
+            f"dashboards/{slug.replace('-', '_')}.py",
+            {"meta": {"url_path": slug, "title": slug}, "config": {"views": []}},
+        )
+        for slug in slugs
+    ]
+    writer = RecordingSourceWriter()
+    apply_pull(Plan(entries=entries), writer)
+    assert sorted(str(p) for p in writer.written_files) == [
+        "dashboards/climate_control.py",
+        "dashboards/guest_mode.py",
+        "dashboards/security_panel.py",
+    ]
+    assert writer.spliced_objects == []
+
+
+def test_refresh_splices_wherever_the_user_moved_the_dashboard() -> None:
+    # REFRESH routes to `entry.source_path` verbatim (kind-agnostic,
+    # `hassle.sync.pull._refresh`) -- if the manifest records that the user
+    # relocated a dashboard's source out of its original default placement
+    # (e.g. into a shared `lib/dashboards.py`), refresh targets THAT file,
+    # never recomputing a fresh default location. Pinned here for dashboards
+    # specifically since §7's per-dashboard-file default makes "the user
+    # moved it" a realistic scenario for this kind.
+    moved_path = "lib/dashboards.py"
+    plan = Plan(
+        entries=[
+            PlanEntry(
+                object_key="dashboard:climate-control",
+                kind=DASHBOARD_KIND,
+                action=PlanAction.REFRESH,
+                remote=_CLIMATE_ENVELOPE,
+                source_path=moved_path,
+            )
+        ]
+    )
+    writer = RecordingSourceWriter()
+    apply_pull(plan, writer)
+    assert len(writer.spliced_objects) == 1
+    path, object_key, _content = writer.spliced_objects[0]
+    assert path == Path(moved_path)
+    assert object_key == "dashboard:climate-control"

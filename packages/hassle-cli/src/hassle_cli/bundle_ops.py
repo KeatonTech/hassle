@@ -8,6 +8,8 @@ declaration-site span (`CompileResult.decl_span_for`), for `PlanEntry.source_pat
 
 from __future__ import annotations
 
+import hashlib
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -153,18 +155,38 @@ def category_display_names_for_paths(
     return names
 
 
+_MODULE_UNSAFE_CHARS = re.compile(r"[^a-z0-9_]")
+
+
 def _dashboard_module_name(identity: str) -> str:
     """``dashboard:<identity>`` -> the module-safe stem for
     ``dashboards/<module_name>.py`` (docs/internals/dashboards-design.md §7):
     hyphens become underscores (a real ``url_path`` must contain one, and the
-    sentinel identity ``"default"`` has none, so this is the only
-    non-identifier character this identity space can contain), then the stub
-    generator's leading-digit rule (`hassle.registry.stubs._attr_name`): a
-    leading digit gets a single underscore prefix (Python identifiers/module
-    names can't start with a digit).
+    sentinel identity ``"default"`` has none), then the stub generator's
+    leading-digit rule (`hassle.registry.stubs._attr_name`): a leading digit
+    gets a single underscore prefix (Python identifiers/module names can't
+    start with a digit).
+
+    **Sanitized against path traversal (should-fix, reviewer note on DB6):**
+    the hyphen requirement on a real ``url_path`` is source-informed, DB0-
+    pending verification (docs/internals/dashboards-design.md §2.2 item 1)
+    and enforced nowhere on THIS read path -- this function must not assume
+    an identity is otherwise well-formed. After the hyphen substitution,
+    every character other than ``[a-z0-9_]`` is DROPPED (never merely
+    escaped) -- in particular ``/``, ``\\``, and ``.``, so a
+    directory-traversal-shaped identity (``../../../tmp/pwned-x``) can never
+    place the resulting path outside ``dashboards/``. If the result is empty
+    or entirely underscores (an empty, dot-only, or hyphen/underscore-only
+    identity), it falls back to a deterministic, content-derived safe name
+    (``dashboard_<8 hex chars of sha256(identity)>``) rather than emitting a
+    degenerate filename like ``dashboards/.py``.
     """
     module_name = identity.replace("-", "_")
-    if module_name and module_name[0].isdigit():
+    module_name = _MODULE_UNSAFE_CHARS.sub("", module_name)
+    if not module_name or module_name.strip("_") == "":
+        digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:8]
+        return f"dashboard_{digest}"
+    if module_name[0].isdigit():
         module_name = f"_{module_name}"
     return module_name
 

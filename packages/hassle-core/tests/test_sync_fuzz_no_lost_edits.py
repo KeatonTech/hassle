@@ -153,10 +153,9 @@ def _run_sequence(
     object_key: str = OBJECT_KEY,
     identity: str = "fuzz",
     value_factory: Any = None,
-    backend_factory: Any = None,
 ) -> None:
     rng = random.Random(seed)
-    backend = (backend_factory or FakeBackend)()
+    backend = FakeBackend()
     state = _FuzzState(
         backend, identity, kind=kind, object_key=object_key, value_factory=value_factory
     )
@@ -258,16 +257,30 @@ def _same(a: dict[str, object] | None, b: dict[str, object] | None) -> bool:
     return sha256_hash(a) == sha256_hash(b)
 
 
+def _parametrized_seed_count(test_func: Any) -> int:
+    """Read the ACTUAL number of `seed` values `test_func` is parametrized
+    over (via its `@pytest.mark.parametrize("seed", ...)` mark), rather than
+    restating a literal `1000` next to it -- a prior version of each
+    "runs_exactly_1000_seeds" test below asserted `len(list(range(1000))) ==
+    1000`, which is a tautology about a FRESH literal, not a check on the
+    parametrized test it claims to document: it would stay green even if the
+    parametrize decorator's own range shrank to 10. This introspects the
+    real mark instead, so it actually fails if the two ever diverge."""
+    for mark in test_func.pytestmark:
+        if mark.name == "parametrize" and mark.args[0] == "seed":
+            return len(mark.args[1])
+    raise AssertionError(f"{test_func.__name__} has no 'seed' parametrize mark")
+
+
 @pytest.mark.parametrize("seed", list(range(1000)))
 def test_i6_fuzz_no_silent_data_loss(seed: int) -> None:
     _run_sequence(seed)
 
 
 def test_i6_fuzz_runs_exactly_1000_seeds() -> None:
-    # Documents the required fuzz volume (1 000 random
-    # sequences); the parametrized test above IS the 1000 runs, this test
-    # just pins the count so a future edit can't quietly shrink coverage.
-    assert len(list(range(1000))) == 1000
+    # Documents the required fuzz volume (1 000 random sequences) by reading
+    # the parametrize mark on the test above, not by restating the literal.
+    assert _parametrized_seed_count(test_i6_fuzz_no_silent_data_loss) == 1000
 
 
 # -- Fuzz extension for the config-entry template-helper kind ---------------
@@ -300,7 +313,7 @@ def test_i6_fuzz_template_helper_no_silent_data_loss(seed: int) -> None:
 
 
 def test_i6_fuzz_template_helper_runs_exactly_1000_seeds() -> None:
-    assert len(list(range(1000))) == 1000
+    assert _parametrized_seed_count(test_i6_fuzz_template_helper_no_silent_data_loss) == 1000
 
 
 # -- Fuzz extension for the dashboard kind -----------------------------------
@@ -313,31 +326,14 @@ def test_i6_fuzz_template_helper_runs_exactly_1000_seeds() -> None:
 # changed" at dashboard granularity (§4.4: the sync unit is the WHOLE
 # dashboard, never a single card).
 #
-# `hassle.backend.fake.FakeBackend`'s real dashboard support (the hyphen rule,
-# `config_not_found` composition, partial-create rollback --
-# docs/internals/dashboards-design.md §4.1) is workstream DB5's scope and
-# hasn't landed on this branch yet: `FakeBackend.create()` has no identity-
-# derivation branch for the kind (it would raise "unknown object kind").
-# `_DashboardSeedableFakeBackend` is a TEST-LOCAL subclass (this file never
-# touches `hassle.backend.fake`) implementing JUST the §3.1 identity rule
-# (`meta.url_path` verbatim, else the `"default"` sentinel) -- enough for the
-# generic plan/pull/push engines under test here to exercise a dashboard
-# object exactly like every other kind. `update`/`delete`/`list_remote` are
-# already kind-generic in the real `FakeBackend` and need no shimming.
-# Superseded by DB5's real implementation once it lands.
-
-
-class _DashboardSeedableFakeBackend(FakeBackend):
-    def create(self, kind: str, config: dict[str, object]) -> str:
-        if kind != "dashboard":
-            return super().create(kind, config)
-        self._require_kind(kind)  # pyright: ignore[reportPrivateUsage]
-        meta = config.get("meta")
-        identity = meta.get("url_path") if isinstance(meta, dict) else None
-        identity = str(identity) if identity is not None else "default"
-        self._store[kind][identity] = dict(config)  # pyright: ignore[reportPrivateUsage]
-        self._writes += 1  # pyright: ignore[reportPrivateUsage]
-        return identity
+# `hassle.backend.fake.FakeBackend` has real dashboard support (DB5 landed:
+# the hyphen rule on create, identity derivation from `meta.url_path`/the
+# `"default"` sentinel) -- this run uses the real `FakeBackend` directly,
+# same as the `automation`/`template_number` extensions above, so the fuzzer
+# exercises production create/update/delete/list_remote for the kind, not a
+# stand-in. (An earlier version of this file used a test-local
+# `_DashboardSeedableFakeBackend` shim written before DB5 landed; deleted
+# once the real backend supported the kind.)
 
 
 def _dashboard_value(identity: str, label: str, counter: int) -> dict[str, object]:
@@ -361,9 +357,8 @@ def test_i6_fuzz_dashboard_no_silent_data_loss(seed: int) -> None:
         object_key="dashboard:fuzz-dash",
         identity="fuzz-dash",
         value_factory=_dashboard_value,
-        backend_factory=_DashboardSeedableFakeBackend,
     )
 
 
 def test_i6_fuzz_dashboard_runs_exactly_1000_seeds() -> None:
-    assert len(list(range(1000))) == 1000
+    assert _parametrized_seed_count(test_i6_fuzz_dashboard_no_silent_data_loss) == 1000
