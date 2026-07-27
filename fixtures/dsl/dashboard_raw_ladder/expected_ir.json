@@ -1,0 +1,54 @@
+{
+  "dashboard:raw-ladder": {
+    "meta": {
+      "url_path": "raw-ladder",
+      "title": "Raw ladder"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Cards",
+          "path": "cards",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "custom:bubble-card",
+                  "card_type": "button"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "sections",
+          "title": "Sections",
+          "path": "sections",
+          "sections": [
+            {
+              "type": "grid",
+              "column_span": 2,
+              "invented_section_key": [
+                "kept"
+              ],
+              "cards": [
+                {
+                  "type": "markdown",
+                  "content": "raw section"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "strategy": {
+            "type": "original-states"
+          },
+          "title": "Auto"
+        }
+      ]
+    }
+  }
+}

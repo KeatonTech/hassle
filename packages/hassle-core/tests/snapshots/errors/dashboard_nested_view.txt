@@ -1,0 +1,1 @@
+A view was recorded inside a `sections` view at test_dashboard_errors.py:<line>. Views are the top level of a dashboard's config and never nest inside each other, inside a section, or inside a card. Fix: close the enclosing block and open this `with view(...):` directly in the `@dashboard` function body.

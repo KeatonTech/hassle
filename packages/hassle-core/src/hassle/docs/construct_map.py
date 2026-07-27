@@ -185,6 +185,22 @@ NAME_TO_CASES: dict[str, list[str]] = {
     "raw_trigger": ["raw_passthrough"],
     "raw_condition": ["raw_passthrough"],
     "raw_action": ["raw_passthrough"],
+    # dashboards -- the eight STRUCTURAL names (card builders live in the
+    # `hassle.cards` namespace, not in `hassle.__all__`; see
+    # docs/internals/dashboards-design.md §5.1)
+    "dashboard": [
+        "dashboard_minimal_sections",
+        "dashboard_compile_time_loop",
+        "dashboard_default",
+        "dashboard_two_in_one_module",
+    ],
+    "raw_dashboard": ["dashboard_raw_dashboard"],
+    "view": ["dashboard_minimal_sections", "dashboard_masonry", "dashboard_panel"],
+    "section": ["dashboard_minimal_sections", "dashboard_visibility"],
+    "badge": ["dashboard_badges"],
+    "raw_card": ["dashboard_raw_ladder", "dashboard_compile_time_loop"],
+    "raw_section": ["dashboard_raw_ladder"],
+    "raw_view": ["dashboard_raw_ladder"],
 }
 
 

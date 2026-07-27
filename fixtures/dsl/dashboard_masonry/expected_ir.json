@@ -1,0 +1,38 @@
+{
+  "dashboard:legacy-masonry": {
+    "meta": {
+      "url_path": "legacy-masonry",
+      "title": "Legacy",
+      "icon": "mdi:view-dashboard"
+    },
+    "config": {
+      "views": [
+        {
+          "title": "Cards",
+          "path": "cards",
+          "cards": [
+            {
+              "type": "markdown",
+              "content": "one"
+            },
+            {
+              "type": "markdown",
+              "content": "two"
+            }
+          ]
+        },
+        {
+          "type": "masonry",
+          "title": "Modern",
+          "path": "modern",
+          "cards": [
+            {
+              "type": "markdown",
+              "content": "three"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

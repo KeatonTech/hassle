@@ -1,0 +1,4 @@
+{
+  "error_type": "NoDashboardContextError",
+  "contains": ["bad.py:5", "raw_card", "@dashboard"]
+}

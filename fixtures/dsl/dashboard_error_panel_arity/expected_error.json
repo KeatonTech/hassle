@@ -1,0 +1,4 @@
+{
+  "error_type": "PanelViewArityError",
+  "contains": ["bad.py:8", "panel", "exactly one"]
+}

@@ -59,6 +59,14 @@ _AUTOMATION_OPTIONS: frozenset[str] = frozenset(
 _SCRIPT_OPTIONS: frozenset[str] = frozenset(
     {"id", "alias", "description", "mode", "max", "max_exceeded", "icon", "fields", "variables"}
 )
+# Lovelace dashboards (docs/internals/dashboards-design.md §5.2/§6.1): the
+# identity kwargs plus HA's dashboard-REGISTRY fields (the registry item minus
+# `id`, HA-assigned, and minus `mode`, always "storage"). `@dashboard` declares
+# these as explicit keywords, so this allow-list is the same defence-in-depth
+# `_AUTOMATION_OPTIONS` is for a programmatic registration.
+_DASHBOARD_OPTIONS: frozenset[str] = frozenset(
+    {"url_path", "default", "title", "icon", "show_in_sidebar", "require_admin"}
+)
 
 
 @dataclass
@@ -139,6 +147,17 @@ def _active() -> Recorder | None:
     return stack[-1] if stack else None
 
 
+def active_recorder() -> Recorder | None:
+    """The innermost active automation/script recorder, or ``None``.
+
+    The read-only counterpart of
+    :func:`hassle.compiler.dashboards.recorder.active_dashboard`: the two
+    recorders are siblings, and each one's "wrong context" error consults the
+    other so the message can name the actual mix-up (dashboards-design §5.6).
+    """
+    return _active()
+
+
 def _require_active(call: str, *, span: SourceSpan | None = None) -> Recorder:
     """Return the active recorder, or raise :class:`NoRecordingContextError`.
 
@@ -150,10 +169,22 @@ def _require_active(call: str, *, span: SourceSpan | None = None) -> Recorder:
     instead of the user's ``with ...():`` line). Defaults to ``depth=1``
     (this function's immediate caller), correct for every plain-function
     recording verb (``when``/``only_if``/``record_action`` and friends).
+
+    A DASHBOARD body is the one place where "no recording context" has a
+    specific, teachable cause -- an automation action/trigger verb used where
+    only cards can be recorded -- so the message says so (the §5.6 mirror
+    trap). Imported lazily: `recording` is below `dashboards` in the module
+    graph and must not depend on it at import time.
     """
     rec = _active()
     if rec is None:
-        raise NoRecordingContextError(call, span or capture_span(depth=1))
+        from hassle.compiler.dashboards.recorder import active_dashboard
+
+        raise NoRecordingContextError(
+            call,
+            span or capture_span(depth=1),
+            in_dashboard=active_dashboard() is not None,
+        )
     return rec
 
 
@@ -343,8 +374,11 @@ def emit_actions(bodies: list[dict[str, Any]], *, span: SourceSpan | None = None
 
 
 def check_options(kind: str, options: dict[str, Any], span: SourceSpan | None) -> None:
-    """Reject any option not in HA's automation/script option set."""
-    allowed = _AUTOMATION_OPTIONS if kind == "automation" else _SCRIPT_OPTIONS
+    """Reject any option not in HA's automation/script/dashboard option set."""
+    allowed = {
+        "automation": _AUTOMATION_OPTIONS,
+        "dashboard": _DASHBOARD_OPTIONS,
+    }.get(kind, _SCRIPT_OPTIONS)
     for key in options:
         if key not in allowed:
             raise UnknownAutomationOptionError(key, sorted(allowed), span)

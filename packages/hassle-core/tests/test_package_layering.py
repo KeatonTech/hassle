@@ -32,6 +32,10 @@ ALLOWED: dict[str, set[str]] = {
     "testing": {"ir", "compiler"},
     "docs": {"ir", "compiler", "registry", "testing"},
     "services": {"ir", "compiler", "registry"},
+    # `hassle.cards` is the public card-builder namespace (dashboards-design
+    # §5.1) -- a thin re-export of `hassle.compiler.dashboards`, exactly the
+    # shape `hassle.services` has.
+    "cards": {"ir", "compiler", "registry"},
 }
 
 

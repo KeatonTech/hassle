@@ -1,0 +1,28 @@
+{
+  "dashboard:strategy-one": {
+    "meta": {
+      "url_path": "strategy-one",
+      "title": "Strategy",
+      "icon": "mdi:auto-fix",
+      "show_in_sidebar": true
+    },
+    "config": {
+      "strategy": {
+        "type": "original-states"
+      }
+    }
+  },
+  "dashboard:config-only": {
+    "meta": {
+      "url_path": "config-only"
+    },
+    "config": {
+      "views": [
+        {
+          "title": "Only a config",
+          "cards": []
+        }
+      ]
+    }
+  }
+}

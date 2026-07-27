@@ -1,0 +1,4 @@
+{
+  "error_type": "DashboardConditionTypeError",
+  "contains": ["bad.py:8", "cond."]
+}

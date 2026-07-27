@@ -1,0 +1,1 @@
+A badge was recorded in a section at test_dashboard_errors.py:<line>. HA stores badges on the view itself, in its own `badges` list -- sections and cards have no badge list at all. Fix: move the `badge(...)` call up so it sits directly inside the `with view(...):` block.

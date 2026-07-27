@@ -223,10 +223,28 @@ class NoRecordingContextError(CompileError):
 
     This happens when DSL recording calls are made at module scope instead of inside
     an ``@automation``/``@script`` body (which the compiler invokes inside a context).
+
+    ``in_dashboard=`` is the one case with a specific, teachable cause rather
+    than "you forgot the decorator": a ``@dashboard`` body IS being traced, but
+    it records cards, not automation triggers/conditions/actions (the §5.6
+    mirror of :class:`~hassle.compiler.dashboards.errors.NoDashboardContextError`).
     """
 
-    def __init__(self, call: str, span: SourceSpan | None) -> None:
+    def __init__(self, call: str, span: SourceSpan | None, *, in_dashboard: bool = False) -> None:
         where = f" at {span.file}:{span.line}" if span is not None else ""
+        if in_dashboard:
+            super().__init__(
+                f"`{call}` was called inside a `@dashboard` body{where}, which records cards "
+                f"-- not triggers, conditions or actions. A Home Assistant dashboard has no "
+                f"action list of its own: it describes what to DISPLAY, and anything it runs "
+                f"is an option ON a card (`tap_action`, `hold_action`, a button card's "
+                f"target). Fix: to make a card do something when tapped, set that option on "
+                f'the card itself (e.g. `raw_card({{..., "tap_action": {{"action": '
+                f'"perform-action", "perform_action": "light.turn_on"}}}})`); to '
+                f"automate something instead, move this call into an `@automation`/`@script` "
+                f"function body."
+            )
+            return
         super().__init__(
             f"`{call}` was called outside any recording context{where}. Trigger, condition "
             f"and action calls only make sense inside an `@automation`/`@script` function "
