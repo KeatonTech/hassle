@@ -625,7 +625,34 @@ def a():
 # the renamed-purpose-type Finding (and
 # `test_renamed_purpose_key_finding_names_new_key` above asserts the Finding
 # appears) — excluding it here is a test-scope fix, not a validation weakening.
-_DELIBERATELY_NOT_CLEAN = {"purpose_trigger_renamed_key"}
+#
+# The `dashboard_*` entries below are a DIFFERENT kind of exclusion (DB7,
+# docs/internals/dashboards-design.md §8's tier-2 row): these golden DSL
+# fixtures predate any tier-2 card-tree entity validation and were written
+# with plausible-looking but placeholder entity ids (`light.hall`,
+# `sensor.outside_temp`, ...) that were never checked against a registry
+# snapshot before this validator existed -- `fixtures/registry/home.json`
+# genuinely does not contain them. `test_dashboard_validate.py` covers the
+# same did-you-mean/known-entity behavior against bundles written to match
+# the snapshot. Regenerating these fixtures' entity ids to match the snapshot
+# is fixture-corpus work (`fixtures/dsl` is explicitly out of scope for this
+# change) rather than a validator bug -- flagged, not silently worked around.
+_DELIBERATELY_NOT_CLEAN = {
+    "purpose_trigger_renamed_key",
+    "dashboard_badges",
+    "dashboard_cards_display_entities",
+    "dashboard_cards_display_entity",
+    "dashboard_cards_display_glance",
+    "dashboard_cards_display_heading",
+    "dashboard_cards_domain",
+    "dashboard_cards_media",
+    "dashboard_cards_visual",
+    "dashboard_cards_visual_extra",
+    "dashboard_compile_time_loop",
+    "dashboard_panel",
+    "dashboard_two_in_one_module",
+    "dashboard_visibility",
+}
 
 
 @pytest.mark.parametrize(

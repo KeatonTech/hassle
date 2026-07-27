@@ -53,6 +53,7 @@ from hassle.compiler.spans import SourceSpan
 from hassle.ir import slugify
 from hassle.ir.keys import GROUP_DOMAINS, category_shaped_stem, humanize_slug
 from hassle.ir.models import HelperConfig
+from hassle.registry.dashboard_extract import extract_dashboard_references
 from hassle.registry.didyoumean import did_you_mean
 from hassle.registry.extract import as_dict_list, extract_references
 from hassle.registry.finding import Finding
@@ -674,6 +675,51 @@ def _validate_group_entities(result: CompileResult, snapshot: RegistrySnapshot) 
     return findings
 
 
+def _validate_dashboard_references(
+    result: CompileResult, snapshot: RegistrySnapshot
+) -> list[Finding]:
+    """Dashboard card-tree entity/area references (dashboards-design.md §8's
+    tier-2 row): the same did-you-mean ``unknown-entity``/``unknown-area``
+    Finding shape as automations, driven by
+    :func:`hassle.registry.dashboard_extract.extract_dashboard_references`
+    (table-driven off ``CARD_REGISTRY``, plus badges/conditions/the ``area``
+    card/the conservative raw-node scan).
+    """
+    findings: list[Finding] = []
+    declared_helpers = _bundle_declared_keys(result)
+    seen: set[tuple[str, str, str | None, int | None]] = set()
+    for ref in extract_dashboard_references(result):
+        file, line = _where(ref.span)
+        finding: Finding | None = None
+        dedupe_key: tuple[str, str, str | None, int | None] | None = None
+        if ref.entity_id is not None:
+            dedupe_key = ("entity", ref.entity_id, file, line)
+            if dedupe_key not in seen:
+                finding = _check_entity(
+                    ref.entity_id,
+                    snapshot=snapshot,
+                    declared_helpers=declared_helpers,
+                    file=file,
+                    line=line,
+                )
+        elif ref.area_id is not None:
+            dedupe_key = ("area", ref.area_id, file, line)
+            if dedupe_key not in seen:
+                finding = _check_id(
+                    ref.area_id,
+                    known=snapshot.area_ids(),
+                    kind="area",
+                    field_name="area_id",
+                    file=file,
+                    line=line,
+                )
+        if dedupe_key is not None:
+            seen.add(dedupe_key)
+        if finding is not None:
+            findings.append(finding)
+    return findings
+
+
 def _validate_category_globals(result: CompileResult) -> list[Finding]:
     """A bundle file's ``CATEGORY`` global must slugify to
     that file's own stem (the same anchor `bundle_ops._category_source_path`/
@@ -741,5 +787,6 @@ def validate_bundle(
     findings.extend(_validate_service_params(result, snapshot))
     findings.extend(_validate_helper_slugs(result, snapshot, adopted_helper_keys))
     findings.extend(_validate_group_entities(result, snapshot))
+    findings.extend(_validate_dashboard_references(result, snapshot))
     findings.extend(_validate_category_globals(result))
     return findings

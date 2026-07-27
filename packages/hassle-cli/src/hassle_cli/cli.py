@@ -1001,8 +1001,18 @@ def push(
     default=False,
     help="Emit findings as JSON (the VS Code extension's Problems-pane contract).",
 )
-def validate(as_json: bool) -> None:
-    """Compile + validate the bundle offline (DESIGN §9 tiers 1-3).
+@click.option(
+    "--live",
+    is_flag=True,
+    default=False,
+    help=(
+        "Also run HA's server-side validate_config for automations (DESIGN §9 tier 4); "
+        "notes that dashboards have no server-side validation tier."
+    ),
+)
+def validate(as_json: bool, live: bool) -> None:
+    """Compile + validate the bundle offline (DESIGN §9 tiers 1-3), or (--live)
+    also against real HA (tier 4).
 
     ``--json`` prints exactly one JSON object on stdout --
     ``{"findings": [{code, severity, file, line, message, fix}, ...]}`` --
@@ -1011,6 +1021,14 @@ def validate(as_json: bool) -> None:
     `hassle_cli.tests.test_cli_commands::test_validate_json_reports_findings_with_stable_schema`
     and the VS Code extension's `findingsSchema.ts` both snapshot-test --
     field-for-field, it mirrors `hassle.registry.finding.Finding`.
+
+    ``--live`` additionally connects to the bundle's configured HA instance and
+    runs HA's own `validate_config` against every automation (the one kind that
+    command actually validates, docs/internals/ha-api-notes.md §6). Dashboards
+    have no server-side validation tier at all (HA exposes no
+    `validate_config` analogue for Lovelace, docs/internals/dashboards-design.md
+    §8) -- rather than silently skipping them, `--live` prints one notice
+    saying so, once per run, never once per dashboard.
     """
     from hassle.compiler.bundle import compile_bundle
     from hassle.compiler.errors import CompileError
@@ -1046,6 +1064,24 @@ def validate(as_json: bool) -> None:
         )
         if not as_json:
             console.print(f"[yellow]{skip_notice}[/yellow]")
+
+    if live:
+        from hassle_cli import backend_factory
+        from hassle_cli.commands.validate_live_command import (
+            DASHBOARD_LIVE_TIER_NOTICE,
+            has_dashboard_objects,
+            live_validate_automations,
+        )
+
+        ha_url, token = _require_backend_config(root)
+        with backend_factory.connect(ha_url, token) as backend:
+            findings = findings + live_validate_automations(backend, result)
+        # Once per run, never once per dashboard (dashboards-design.md §8):
+        # HA has no server-side validation tier for Lovelace at all, so this
+        # is the ONE place that gets said explicitly rather than dashboards
+        # silently passing a check that never actually ran for them.
+        if not as_json and has_dashboard_objects(result):
+            console.print(f"[yellow]{DASHBOARD_LIVE_TIER_NOTICE}[/yellow]")
 
     if as_json:
         import json as _json

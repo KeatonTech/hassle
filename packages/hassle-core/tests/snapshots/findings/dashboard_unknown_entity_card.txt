@@ -1,0 +1,1 @@
+`light.hallwya` is not a known entity in the registry snapshot. at dash.py:8 Fix: Did you mean `light.hallway`?
