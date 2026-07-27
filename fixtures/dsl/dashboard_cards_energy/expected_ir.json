@@ -1,0 +1,68 @@
+{
+  "dashboard:cards-energy": {
+    "meta": {
+      "url_path": "cards-energy",
+      "title": "Energy"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "masonry",
+          "title": "Energy",
+          "cards": [
+            {
+              "type": "energy-date-selection",
+              "collection_key": "energy_secondary"
+            },
+            {
+              "type": "energy-usage-graph",
+              "collection_key": "energy_secondary"
+            },
+            {
+              "type": "energy-solar-graph",
+              "collection_key": "energy_secondary"
+            },
+            {
+              "type": "energy-gas-graph",
+              "collection_key": "energy_secondary"
+            },
+            {
+              "type": "energy-water-graph",
+              "collection_key": "energy_secondary"
+            },
+            {
+              "type": "energy-distribution",
+              "collection_key": "energy_secondary",
+              "link_dashboard": true
+            },
+            {
+              "type": "energy-sources-table",
+              "collection_key": "energy_secondary"
+            },
+            {
+              "type": "energy-grid-neutrality-gauge",
+              "collection_key": "energy_secondary"
+            },
+            {
+              "type": "energy-solar-consumed-gauge",
+              "collection_key": "energy_secondary"
+            },
+            {
+              "type": "energy-carbon-consumed-gauge",
+              "collection_key": "energy_secondary"
+            },
+            {
+              "type": "energy-self-sufficiency-gauge",
+              "collection_key": "energy_secondary"
+            },
+            {
+              "type": "energy-sankey",
+              "collection_key": "energy_secondary",
+              "title": "Flows"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

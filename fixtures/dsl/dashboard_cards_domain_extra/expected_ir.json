@@ -1,0 +1,26 @@
+{
+  "dashboard:cards-domain-extra": {
+    "meta": {
+      "url_path": "cards-domain-extra",
+      "title": "Domain extra="
+    },
+    "config": {
+      "views": [
+        {
+          "type": "masonry",
+          "title": "Extra",
+          "cards": [
+            {
+              "type": "light",
+              "entity": "light.living_room",
+              "name": "Living Room",
+              "card_mod": {
+                "style": "ha-card { --paper-item-icon-color: red; }"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
