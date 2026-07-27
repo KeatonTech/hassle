@@ -33,8 +33,6 @@ assembled). ``__all__`` is frozen under the same additive-only rule as
 
 from __future__ import annotations
 
-from hassle.compiler.dashboards.conditions import cond
-
 # ---------------------------------------------------------------------------
 # Builder registration point.
 #
@@ -53,7 +51,40 @@ from hassle.compiler.dashboards.conditions import cond
 # `hassle.compiler.dashboards.card_registry` (freeze F5), which is what the
 # decompiler and the entity-extraction validator read.
 # ---------------------------------------------------------------------------
+from hassle.compiler.dashboards.cards.media import (
+    iframe,
+    map,
+    picture,
+    picture_elements,
+    picture_glance,
+)
+from hassle.compiler.dashboards.cards.visual import (
+    calendar,
+    clock,
+    gauge,
+    history_graph,
+    logbook,
+    markdown,
+    sensor,
+    statistic,
+    statistics_graph,
+)
+from hassle.compiler.dashboards.conditions import cond
 
 __all__ = [
+    "calendar",
+    "clock",
     "cond",
+    "gauge",
+    "history_graph",
+    "iframe",
+    "logbook",
+    "map",
+    "markdown",
+    "picture",
+    "picture_elements",
+    "picture_glance",
+    "sensor",
+    "statistic",
+    "statistics_graph",
 ]

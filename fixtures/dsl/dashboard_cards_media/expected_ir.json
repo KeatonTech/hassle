@@ -1,0 +1,72 @@
+{
+  "dashboard:cards-media": {
+    "meta": {
+      "url_path": "cards-media",
+      "title": "Media"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "masonry",
+          "title": "Media",
+          "cards": [
+            {
+              "type": "iframe",
+              "url": "https://example.com/panel",
+              "title": "Panel",
+              "aspect_ratio": "75%"
+            },
+            {
+              "type": "picture",
+              "image": "/local/floorplan.png",
+              "tap_action": {
+                "action": "navigate",
+                "navigation_path": "/lovelace/floorplan"
+              }
+            },
+            {
+              "type": "picture-glance",
+              "entities": [
+                "light.hall",
+                "lock.front_door"
+              ],
+              "title": "Entry",
+              "image": "/local/entry.jpg",
+              "camera_image": "camera.front_door"
+            },
+            {
+              "type": "picture-elements",
+              "image": "/local/floorplan.png",
+              "elements": [
+                {
+                  "type": "state-icon",
+                  "entity": "light.hall",
+                  "style": {
+                    "top": "20%",
+                    "left": "30%"
+                  }
+                },
+                {
+                  "type": "state-label",
+                  "entity": "sensor.cpu_temp"
+                }
+              ],
+              "camera_image": "camera.front_door"
+            },
+            {
+              "type": "map",
+              "entities": [
+                "device_tracker.phone",
+                "person.alex"
+              ],
+              "geo_location_sources": [
+                "all"
+              ],
+              "hours_to_show": 6
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

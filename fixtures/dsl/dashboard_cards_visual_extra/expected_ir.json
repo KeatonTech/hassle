@@ -1,0 +1,26 @@
+{
+  "dashboard:cards-visual-extra": {
+    "meta": {
+      "url_path": "cards-visual-extra",
+      "title": "Visual extra="
+    },
+    "config": {
+      "views": [
+        {
+          "type": "masonry",
+          "title": "Extra",
+          "cards": [
+            {
+              "type": "gauge",
+              "entity": "sensor.cpu_temp",
+              "name": "CPU Temp",
+              "card_mod": {
+                "style": "ha-card { --gauge-color: red; }"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
