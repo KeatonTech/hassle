@@ -165,3 +165,79 @@ def test_migrate_manifest_empty_globs_is_unchanged() -> None:
     result = migrate_manifest_for_ignores(manifest, ignore_globs=[])
     assert result.manifest.objects == manifest.objects
     assert result.dropped_keys == []
+
+
+# -- dashboard kind (docs/internals/dashboards-design.md §4.3): `ignore =
+# ["dashboard:*"]` is the escape hatch from mass adoption on first pull after
+# upgrade -- same kind-agnostic `fnmatch`-on-object-key machinery as every
+# other kind above, pinned here in the same style.
+
+_DASHBOARD_CFG = {
+    "meta": {"url_path": "climate-control", "title": "Climate"},
+    "config": {"views": []},
+}
+
+
+def test_ignored_remote_only_dashboard_produces_no_entry() -> None:
+    remote = {"dashboard:climate-control": ("dashboard", _DASHBOARD_CFG)}
+    result = apply_ignore_globs(
+        local_objects={}, remote_objects=remote, ignore_globs=["dashboard:*"]
+    )
+    assert "dashboard:climate-control" not in result.remote_objects
+    assert result.findings == []
+
+
+def test_ignored_dashboard_never_reaches_compute_plan_as_delete() -> None:
+    from hassle.sync.plan import compute_plan
+
+    manifest = Manifest(
+        synced_at="2026-01-01T00:00:00Z",
+        ha_version="2026.7.0",
+        objects={
+            "dashboard:climate-control": ManifestEntry(
+                source="dashboards/climate_control.py", compiled_hash="sha256:deadbeef"
+            )
+        },
+    )
+    remote = {"dashboard:climate-control": ("dashboard", _DASHBOARD_CFG)}
+    ignore_globs = ["dashboard:*"]
+    migrated = migrate_manifest_for_ignores(manifest, ignore_globs=ignore_globs)
+    filtered = apply_ignore_globs(
+        local_objects={}, remote_objects=remote, ignore_globs=ignore_globs
+    )
+    plan = compute_plan(
+        manifest=migrated.manifest,
+        local_objects=filtered.local_objects,
+        remote_objects=filtered.remote_objects,
+    )
+    assert plan.entry_for("dashboard:climate-control") is None
+
+
+def test_locally_declared_ignored_dashboard_excluded_and_warned() -> None:
+    local = {"dashboard:climate-control": ("dashboard", _DASHBOARD_CFG)}
+    result = apply_ignore_globs(
+        local_objects=local, remote_objects={}, ignore_globs=["dashboard:*"]
+    )
+    assert "dashboard:climate-control" not in result.local_objects
+    assert len(result.findings) == 1
+    finding = result.findings[0]
+    assert finding.code == "declared-but-ignored"
+    assert "dashboard:climate-control" in finding.message
+
+
+def test_dashboard_ignore_glob_scoped_to_one_url_path_leaves_others_untouched() -> None:
+    # Per-dashboard globs opt out selectively (§4.3), unlike a blanket
+    # "dashboard:*" -- the SAME kind-agnostic fnmatch machinery, just a
+    # narrower pattern.
+    local = {
+        "dashboard:climate-control": ("dashboard", _DASHBOARD_CFG),
+        "dashboard:security-panel": (
+            "dashboard",
+            {"meta": {"url_path": "security-panel", "title": "Security"}, "config": {"views": []}},
+        ),
+    }
+    result = apply_ignore_globs(
+        local_objects=local, remote_objects={}, ignore_globs=["dashboard:climate-*"]
+    )
+    assert "dashboard:climate-control" not in result.local_objects
+    assert "dashboard:security-panel" in result.local_objects

@@ -19,6 +19,13 @@ depends on this Protocol. Three implementations:
 - `RecordingSourceWriter` — an in-memory test double that records every call
   without touching disk, used by the pull-engine unit tests.
 
+`adopt_write` (module-level function, below) is the ADOPT routing primitive
+`hassle.sync.pull.apply_pull` calls: never `write_whole_file` over a path that
+already has real content (docs/internals/dashboards-design.md §7) -- routes
+through `splice_object` instead, whose "stale manifest" append-under-marker
+fallback is exactly the safe behavior for landing a brand-new object inside
+an already-existing file.
+
 Conflict marker format (used by the pull engine when writing a CONFLICT entry,
 documented here since `SourceWriter` is the seam that receives it): a simple
 textual 3-way marker block, deliberately NOT git's real conflict-marker syntax
@@ -222,6 +229,37 @@ class SplicingSourceWriter(WholeFileSourceWriter):
             path.unlink()
         else:
             self.write_whole_file(path, remaining)
+
+
+def adopt_write(source_writer: SourceWriter, path: Path, object_key: str, content: str) -> None:
+    """The ADOPT write primitive: never clobber real content already sitting
+    at a brand-new object's default placement (docs/internals/
+    dashboards-design.md §7's dashboard-placement note, generalized to every
+    kind -- a per-dashboard default path is far more likely to collide with a
+    hand-authored file, or with a second identity that module-safens to the
+    same stem, than the shared `misc.py` ever was, but the hazard is the same
+    for any kind: no local or UI edit is ever silently lost).
+
+    When ``path`` already has real content, this routes through
+    ``splice_object`` instead of ``write_whole_file`` -- for
+    `SplicingSourceWriter`, splicing a key the file doesn't (yet) define
+    already falls back to its own "stale manifest" append-under-marker
+    behavior (its docstring), which is exactly the safe behavior an adopt
+    into an already-existing file needs: the new object lands in the file,
+    nothing already there is touched. The common case -- a brand-new
+    destination with nothing to preserve -- is unaffected: ``write_whole_file``
+    still creates it directly.
+
+    Used by :func:`hassle.sync.pull.apply_pull` (the placeholder-content
+    engine). `hassle.sync.pull_apply.apply_pull_with_decompiler` -- the real
+    decompiler-backed engine -- already has its own kind-generic equivalent
+    for its BATCHED adopt writes (`_merge_adopt_batch_into_existing`,
+    docs/internals/sync.md), so it does not go through this helper.
+    """
+    if path.exists():
+        source_writer.splice_object(path, object_key, content)
+    else:
+        source_writer.write_whole_file(path, content)
 
 
 class RecordingSourceWriter:

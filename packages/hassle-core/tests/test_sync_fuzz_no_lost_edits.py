@@ -151,11 +151,12 @@ def _run_sequence(
     *,
     kind: str = KIND,
     object_key: str = OBJECT_KEY,
+    identity: str = "fuzz",
     value_factory: Any = None,
+    backend_factory: Any = None,
 ) -> None:
     rng = random.Random(seed)
-    backend = FakeBackend()
-    identity = "fuzz"
+    backend = (backend_factory or FakeBackend)()
     state = _FuzzState(
         backend, identity, kind=kind, object_key=object_key, value_factory=value_factory
     )
@@ -299,4 +300,70 @@ def test_i6_fuzz_template_helper_no_silent_data_loss(seed: int) -> None:
 
 
 def test_i6_fuzz_template_helper_runs_exactly_1000_seeds() -> None:
+    assert len(list(range(1000))) == 1000
+
+
+# -- Fuzz extension for the dashboard kind -----------------------------------
+#
+# (docs/internals/dashboards-design.md §4.3/§9.2): a dashboard's compiled body
+# is a two-part envelope (`{"meta": ..., "config": ...}`) rather than one flat
+# dict -- `_dashboard_value` below rotates through meta-only, config-only, and
+# both-changed mutations so the 1000-seed run exercises all three envelope
+# shapes `compute_plan`/`apply_pull`/`apply_plan` must treat as "the object
+# changed" at dashboard granularity (§4.4: the sync unit is the WHOLE
+# dashboard, never a single card).
+#
+# `hassle.backend.fake.FakeBackend`'s real dashboard support (the hyphen rule,
+# `config_not_found` composition, partial-create rollback --
+# docs/internals/dashboards-design.md §4.1) is workstream DB5's scope and
+# hasn't landed on this branch yet: `FakeBackend.create()` has no identity-
+# derivation branch for the kind (it would raise "unknown object kind").
+# `_DashboardSeedableFakeBackend` is a TEST-LOCAL subclass (this file never
+# touches `hassle.backend.fake`) implementing JUST the §3.1 identity rule
+# (`meta.url_path` verbatim, else the `"default"` sentinel) -- enough for the
+# generic plan/pull/push engines under test here to exercise a dashboard
+# object exactly like every other kind. `update`/`delete`/`list_remote` are
+# already kind-generic in the real `FakeBackend` and need no shimming.
+# Superseded by DB5's real implementation once it lands.
+
+
+class _DashboardSeedableFakeBackend(FakeBackend):
+    def create(self, kind: str, config: dict[str, object]) -> str:
+        if kind != "dashboard":
+            return super().create(kind, config)
+        self._require_kind(kind)  # pyright: ignore[reportPrivateUsage]
+        meta = config.get("meta")
+        identity = meta.get("url_path") if isinstance(meta, dict) else None
+        identity = str(identity) if identity is not None else "default"
+        self._store[kind][identity] = dict(config)  # pyright: ignore[reportPrivateUsage]
+        self._writes += 1  # pyright: ignore[reportPrivateUsage]
+        return identity
+
+
+def _dashboard_value(identity: str, label: str, counter: int) -> dict[str, object]:
+    variant = counter % 3  # 0: meta-only, 1: config-only, 2: both
+    meta = {"url_path": identity, "title": f"{label}-{counter}", "icon": "mdi:test-tube"}
+    fixed_meta = {"url_path": identity, "title": "static-title", "icon": "mdi:test-tube"}
+    config = {"views": [{"title": f"view-{label}-{counter}", "cards": []}]}
+    fixed_config = {"views": [{"title": "static-view", "cards": []}]}
+    if variant == 0:
+        return {"meta": meta, "config": fixed_config}
+    if variant == 1:
+        return {"meta": fixed_meta, "config": config}
+    return {"meta": meta, "config": config}
+
+
+@pytest.mark.parametrize("seed", list(range(1000)))
+def test_i6_fuzz_dashboard_no_silent_data_loss(seed: int) -> None:
+    _run_sequence(
+        seed,
+        kind="dashboard",
+        object_key="dashboard:fuzz-dash",
+        identity="fuzz-dash",
+        value_factory=_dashboard_value,
+        backend_factory=_DashboardSeedableFakeBackend,
+    )
+
+
+def test_i6_fuzz_dashboard_runs_exactly_1000_seeds() -> None:
     assert len(list(range(1000))) == 1000
