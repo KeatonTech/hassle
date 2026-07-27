@@ -1,0 +1,930 @@
+# Dashboards (Lovelace storage-mode) — design
+
+Status: **proposed** (no implementation yet). This document is the design and
+implementation plan for DESIGN.md §13's "Dashboards" plugin — the last major
+piece of the G12 extensibility story. It follows the same conventions as the
+rest of `docs/internals/`: everything HA-behavioral is either cited from
+`docs/internals/ha-api-notes.md` or explicitly flagged as **source-informed,
+to be behaviorally verified** (workstream DB0 below, the analogue of M0.V).
+
+Companion documents: [DESIGN.md](../../DESIGN.md) (invariants I1–I6 all apply),
+[CONTRIBUTING.md](../../CONTRIBUTING.md) (R1–R8 all apply), and the three
+frozen contracts this design extends additively:
+[ir-format.md](ir-format.md), [backend-protocol.md](backend-protocol.md),
+[dsl-extensions.md](dsl-extensions.md).
+
+---
+
+## 0. Summary
+
+Hassle gains a new object kind, `dashboard`: Lovelace **storage-mode**
+dashboards pulled down as Python, edited and tested locally, pushed back up —
+while staying fully editable in the HA UI (I1). The DSL follows the shape of
+the rest of Hassle:
+
+- **Python is the metaprogramming layer** (DESIGN §5.5): compile-time `for`
+  loops and lists generate cards; a card per heat-pump head is a list
+  comprehension, not copy-paste.
+- **Containers are context managers** (`with view(...)`, `with section()`,
+  `with c.vertical_stack()`, `with c.conditional(...)`), exactly like
+  `if_then`/`repeat_count`.
+- **Leaf cards are typed function calls** (`c.tile(...)`, `c.entities(...)`),
+  one builder per built-in HA card type.
+- **Anything the DSL doesn't model round-trips as `raw_*`** (I3): third-party
+  cards (`custom:bubble-card`), strategy dashboards, unknown future card
+  options — never dropped, never guessed.
+
+```python
+from hassle import *
+from hassle import cards as c
+from hassle.cards import cond
+from hassle.registry import entities as e
+
+HEAT_PUMP_HEADS = [e.climate.living_room, e.climate.office, e.climate.bedroom]
+
+@dashboard(url_path="climate-control", title="Climate", icon="mdi:thermostat")
+def climate():
+    with view(title="Overview", path="overview"):          # sections view
+        with section():
+            c.heading(heading="Heat pumps")
+            for head in HEAT_PUMP_HEADS:                   # compile-time Python
+                c.thermostat(entity=head)
+        with section(column_span=2):
+            c.entities(*HEAT_PUMP_HEADS, title="All heads")
+            with c.conditional(cond.state(e.input_boolean.guest_mode, "on")):
+                c.markdown(content="Guest mode is on — hallway stays warm.")
+```
+
+Scope of this v1: **all built-in HA card types** get typed builders;
+third-party/custom cards are supported only through the raw escape hatch
+(they still round-trip losslessly). Lovelace **YAML mode** stays out of scope
+(DESIGN §1 non-goals — YAML-mode dashboards are files Hassle must never write,
+per I1). Dashboard **resources** (`lovelace/resources`, the custom-card JS
+registry) are out of scope in v1.
+
+---
+
+## 1. Goals and non-goals
+
+### Goals
+
+| # | Requirement | How |
+|---|---|---|
+| D-G1 | Pull every storage-mode dashboard into the bundle as Python | new kind `dashboard`, same pull/adopt machinery (§8.2/§8.3 of DESIGN) |
+| D-G2 | Author dashboards with compile-time Python (loops, lists, functions, macros) | traced `@dashboard` body, same recording model as `@automation` |
+| D-G3 | Context managers for nesting; function calls for cards | `view`/`section`/stack/conditional CMs; ~35 typed leaf builders |
+| D-G4 | Full built-in card coverage, typed | `hassle.cards` namespace, one builder per built-in type |
+| D-G5 | Lossless round-trip for ANY dashboard, incl. third-party cards | raw ladder: `raw_card` → `raw_section` → `raw_view` → `@raw_dashboard` (I3) |
+| D-G6 | Everything stays UI-editable | writes only via the Lovelace WS API the UI uses (I1) |
+| D-G7 | Entity references validated, tier 0–3 | pyright on `e.` refs; card-tree entity extraction lint |
+| D-G8 | Dashboards participate in plan/apply/conflict like every kind | kind-agnostic `compute_plan` needs zero changes |
+| D-G9 | Testable in the bundle's pytest suite | assertions over **compiled IR** (I5), via a query helper |
+
+### Non-goals (v1)
+
+- Lovelace **YAML-mode** dashboards (I1: no file writes).
+- `lovelace/resources` management (custom card JS).
+- Typed builders for third-party cards (raw round-trip only). The builder
+  vocabulary is deliberately the *built-in* set; a plugin seam for third-party
+  card builder packs is a designed-for follow-on (§10).
+- Typed **strategy** dashboards/views (`strategy:` configs round-trip raw).
+- Typed sub-vocabularies that are passthrough dicts in v1: card `features`,
+  picture-elements `elements`, view `header`, entities-card special rows.
+  Each is an additive follow-on that never breaks round-trip.
+- Card-level diff/merge. The sync unit is the whole dashboard (§4.4).
+
+---
+
+## 2. The HA substrate (source-informed — DB0 must verify)
+
+⚠️ **Nothing in this section is yet captured in ha-api-notes.md.** The repo's
+convention (ha-api-notes §0) is that every wire shape is behaviorally verified
+against a live HA before code relies on it. Workstream DB0 does that and
+writes the new ha-api-notes § — the statements below are from HA core/frontend
+source reading and are the *hypotheses to verify*, with the known-risk items
+called out.
+
+### 2.1 Storage model — two objects per dashboard
+
+| Store | Contents |
+|---|---|
+| `.storage/lovelace_dashboards` | the dashboard **registry**: one item per non-default dashboard — `{id, url_path, title, icon, show_in_sidebar, require_admin, mode: "storage"}` |
+| `.storage/lovelace` | the **default** dashboard's view config |
+| `.storage/lovelace.<url_path>` | each other dashboard's view config |
+
+The default dashboard has **no registry item** and `url_path = null` on the
+wire. A never-customized default dashboard has no config at all (HA
+auto-generates a strategy view; fetching returns a `config_not_found` error) —
+Hassle treats it as **absent from `list_remote`** until someone saves it.
+
+### 2.2 WS API (the same commands the UI uses — I1)
+
+| Command | Payload | Purpose |
+|---|---|---|
+| `lovelace/dashboards/list` | — | registry items |
+| `lovelace/dashboards/create` | `url_path, title, icon?, show_in_sidebar?, require_admin?, mode:"storage"` | new dashboard (registry only) |
+| `lovelace/dashboards/update` | `dashboard_id, <fields>` | registry metadata |
+| `lovelace/dashboards/delete` | `dashboard_id` | remove dashboard (+ its config) |
+| `lovelace/config` | `url_path \| null, force?` | fetch view config |
+| `lovelace/config/save` | `url_path \| null, config` | write view config |
+| `lovelace/config/delete` | `url_path \| null` | revert to auto-generated |
+
+Known-risk items DB0 must pin down (each gets a ha-api-notes subsection):
+
+1. **`url_path` constraint**: HA requires a created dashboard's `url_path` to
+   contain a hyphen (frontend + backend enforced). If confirmed, the sentinel
+   identity `default` (§3.1) is collision-free by construction, and tier-1
+   validation teaches the rule.
+2. **Config opacity**: the Lovelace store is believed to save the config body
+   **verbatim** — no server-side schema validation, no normalization (unlike
+   automations' plural-schema rewrite). If true, `normalize_ha` and
+   `storage_canonical` are both no-ops for this kind; if HA *does* materialize
+   any defaults on save, they go into `storage_canonical`'s per-kind table
+   (`ir/canonical.py`), comparison-side only.
+3. **Delete semantics**: does `dashboards/delete` also remove the
+   `lovelace.<url_path>` config store? (Believed yes.)
+4. **View `type` materialization**: does the UI store `type: sections` /
+   `type: masonry` explicitly, or omit the key for masonry (the legacy
+   default)? Both shapes exist in the wild; §5.2's `type=None` spelling
+   handles the absent-key form regardless.
+5. **Card action payload shape on current HA**: `tap_action` may carry the
+   modern `{action: "perform-action", perform_action: "..."}` or the legacy
+   `{action: "call-service", service: "..."}` — both must round-trip verbatim.
+   This is also why the `service:` → `action:` rewrite must never run on
+   dashboard bodies (§3.3).
+6. **Badges storage shape**: modern object badges
+   (`{type: "entity", entity: ...}`) vs. legacy bare entity strings.
+7. **Admin/auth requirements** per command, and behavior of `dashboards/list`
+   for a fresh instance (empty list vs. error).
+
+DB0 also captures raw request/response pairs into `docs/ha-api-captures/`
+exactly as M0.V did.
+
+### 2.3 Built-in card inventory (the D-G4 checklist)
+
+Container cards (context managers in the DSL): `vertical-stack`,
+`horizontal-stack`, `grid`, `conditional`, `entity-filter`.
+
+Leaf cards: `alarm-panel`, `area`, `button`, `calendar`, `clock`, `entities`,
+`entity`, `gauge`, `glance`, `heading`, `history-graph`, `humidifier`,
+`iframe`, `light`, `logbook`, `map`, `markdown`, `media-control`, `picture`,
+`picture-elements`, `picture-glance`, `plant-status`, `sensor`, `statistic`,
+`statistics-graph`, `thermostat`, `tile`, `todo-list` (plus its legacy alias
+`shopping-list`), `weather-forecast`.
+
+Energy family (leaf, mostly option-free): `energy-date-selection`,
+`energy-usage-graph`, `energy-solar-graph`, `energy-gas-graph`,
+`energy-water-graph`, `energy-distribution`, `energy-sources-table`,
+`energy-grid-neutrality-gauge`, `energy-solar-consumed-gauge`,
+`energy-carbon-consumed-gauge`, `energy-self-sufficiency-gauge`,
+`energy-sankey`.
+
+This inventory is pinned by DB0 against the target HA release and recorded in
+the new ha-api-notes §; the fixture corpus (§9.2) then covers every name. The
+vocabulary is a **closed, versioned set** — unlike the purpose-trigger
+vocabulary (DESIGN §5.4), it ships in HA frontend releases rather than being
+enumerable from the instance, so typed builders are code, and an
+unknown-to-us type is never an error: it decompiles to `raw_card` and shows
+up in the coverage metric (§6.4), which is exactly the tracked signal that a
+new HA release added a card.
+
+---
+
+## 3. Object model and IR
+
+### 3.1 Kind, identity, key
+
+- New kind string: `"dashboard"`, added as `DASHBOARD_KIND` in
+  `hassle/ir/keys.py` and folded into `OBJECT_KINDS` (re-exported through
+  `ir/__init__.py`, per the frozen-contract additive rule).
+- **Identity = `url_path`** for registry-listed dashboards; the identity
+  sentinel **`default`** for the default dashboard (safe: a real `url_path`
+  must contain a hyphen — §2.2 item 1 — so `default` can never collide).
+- Object key: `dashboard:<identity>` (e.g. `dashboard:climate-control`,
+  `dashboard:default`). Keys stay opaque downstream (ir-format.md's
+  first-colon rule holds; `url_path` is colon-free by HA's own slug rules,
+  but consumers must not rely on that).
+
+### 3.2 `DashboardConfig` — the two-store envelope
+
+A dashboard is **two HA-side objects** (registry item + config blob) but
+**one Hassle object** — one decorator declares both, one plan row diffs both,
+one conflict covers both. The IR body is therefore a Hassle-composed
+envelope, the one deliberate departure from "the body mirrors one HA store":
+
+```json
+{
+  "meta":   {"url_path": "climate-control", "title": "Climate",
+             "icon": "mdi:thermostat", "show_in_sidebar": true,
+             "require_admin": false},
+  "config": {"views": [ ... ]}
+}
+```
+
+- `meta` is the registry item **minus** `id` (HA-assigned, transport-only,
+  never in the body — same rule as config-entry `entry_id`) and minus
+  `mode` (always `"storage"`; a YAML-mode dashboard is filtered out of
+  `list_remote` entirely, it is not ours to manage — I1).
+- `meta` is `null` for the default dashboard (it has no registry item).
+- `config` is the view config **verbatim** — a native-JSON passthrough
+  (`Any`), exactly like `triggers`/`actions` in `AutomationConfig`. The typed
+  card layer lives in the compiler/decompiler, not the IR (ir-format.md's
+  "structural blocks pass through verbatim" rule).
+- `DashboardConfig(IRObject)` gets `extra="allow"` like every model; identity
+  is `meta.url_path` if `meta` is present, else `_key_id`, else `"default"`.
+- `parse(config, kind="dashboard", key_hint=...)` branch in
+  `ir/models.py`'s dispatch chain; `serialize(parse(x)) == x` holds because
+  both halves are passthrough.
+
+Rejected alternative: flattening `meta` into the config top level. The
+Lovelace config historically allows its own top-level `title` key, so
+flattening risks a silent collision between "sidebar title" and "config
+title"; the envelope keeps the two stores' keyspaces disjoint by
+construction, at the cost of one documented wrapper.
+
+`compiled_hash` is the canonical hash of the envelope, so a UI edit to
+*either* the sidebar metadata or the cards shows up as one drifted object —
+which is the sync behavior we want (refresh/conflict at dashboard
+granularity, §4.4).
+
+### 3.3 Normalization — a required kind guard
+
+`normalize_ha`'s generic branch (`ir/normalize.py`) recursively rewrites
+`service:` → `action:` keys. Dashboard card bodies legitimately contain
+`service:` keys inside `tap_action`/`hold_action`/`double_tap_action`
+payloads (§2.2 item 5). **`normalize_ha` must be an identity function for
+`kind == "dashboard"`**, and `FakeBackend`'s normalize-on-write must skip the
+kind. This gets its own regression test before implementation (R4 applies
+pre-emptively: it's a known bug class, we write the test first).
+
+`storage_canonical` starts as identity for the kind; DB0 findings populate
+its tables if HA materializes any defaults (§2.2 item 2). List order is
+semantically meaningful everywhere in a dashboard (views, sections, cards) —
+the existing canonical-JSON rules already preserve it.
+
+### 3.4 ir-format.md contract update
+
+Same PR as the IR change (R5): kind count 11 → 12, the `dashboard` key
+format, the envelope shape with its `meta`/`config` semantics, identity
+derivation, and the normalization exemption.
+
+---
+
+## 4. Backend and sync
+
+### 4.1 `Backend` Protocol — zero changes
+
+Same result as the config-entry addendum (backend-protocol.md §3.1): the four
+methods suffice. Per-kind mapping inside the two implementations:
+
+| Protocol call | `DirectBackend` (WS, via the generic `ws_command`) |
+|---|---|
+| `list_remote("dashboard")` | `dashboards/list` → for each item + the default: `lovelace/config` → compose envelopes. `config_not_found` ⇒ omit that dashboard. YAML-mode items (`mode != "storage"`) filtered out. |
+| `create` | non-default: `dashboards/create` (from `meta`) then `config/save`; default (`meta: null`): `config/save(url_path=null)` only |
+| `update` | diff internally: `dashboards/update` when `meta` changed (dashboard_id resolved via `dashboards/list` — see below), `config/save` when `config` changed |
+| `delete` | non-default: `dashboards/delete`; default: `config/delete` (reverts to auto-generated — enumerated loudly in the plan like every delete) |
+
+- **`dashboard_id` stays transport-internal.** `DirectBackend` re-resolves it
+  from `url_path` via `dashboards/list` (cached per connection). No
+  `ManifestEntry` change — unlike config-entry `entry_id` there is a stable
+  user-visible correlator (`url_path`), so the manifest doesn't need to carry
+  anything. Renaming a dashboard's `url_path` is an identity change and is
+  therefore modeled as delete+create, exactly like changing an automation
+  `id` (I2 — the tooling never mutates identity in place).
+- **Partial-create rollback**: `create` is two writes; if `config/save`
+  fails after `dashboards/create` succeeded, `DirectBackend` deletes the
+  just-created registry item before surfacing the error, so the apply
+  engine's snapshot/rollback model (DESIGN §8.2) keeps holding at the object
+  level. (Same single-call-owns-multi-step pattern as the config-entry flow
+  driving — the sync engine never sees the intermediate steps.)
+- `_CALLER_KEYED_KINDS` (`sync/apply.py`) gains `"dashboard"` (the caller
+  chooses `url_path`); `_create_body` needs no injection branch — identity
+  always travels inside the envelope (`meta.url_path`, or `meta: null` ⇒
+  `default`).
+- `FakeBackend`: `_store` picks the kind up automatically from
+  `OBJECT_KINDS`; it enforces the DB0-verified behaviors (hyphen rule on
+  create, `config_not_found` composition, delete-removes-config, **no**
+  normalize-on-write for this kind) so the sync engine is tested against the
+  same quirks the real backend has.
+
+### 4.2 Apply order
+
+`_KIND_ORDER` gains `"dashboard"` **last** (after `automation`): cards
+reference entities produced by helpers/scripts/automations, nothing
+references a dashboard. (Explicit tuple entry — the sort-last fallback would
+happen to be correct for this kind, but backend-protocol.md's rule stands:
+new kinds are added explicitly.)
+
+### 4.3 Plan semantics — unchanged table, two notes
+
+`compute_plan` is kind-agnostic; the DESIGN §8.2 table applies verbatim. Two
+kind-specific consequences to document and test:
+
+- **Adoption on first pull after upgrade**: an existing bundle's next
+  `hassle pull` adopts every storage-mode dashboard (the §8.2 "nothing is
+  ever unmanaged" rule). The release notes say so, and the escape hatch is
+  the existing ignore mechanism — `ignore = ["dashboard:*"]` in
+  `hassle.toml` opts a household out entirely, per-dashboard globs opt out
+  selectively. No new opt-in machinery: dashboards behave like every other
+  kind from day one.
+- **The default dashboard** is `create`-able (a local `@dashboard(default=True)`
+  where remote has none — i.e. never customized) and `delete`-able (reverts
+  to auto-generated). Both flow through the normal table; no special rows.
+
+### 4.4 Sync granularity (accepted trade-off)
+
+HA stores no stable per-card identity, so three-way merge below the
+dashboard level would be heuristic — exactly the kind of guessing I6
+forbids. The sync unit is the **whole dashboard**: a UI edit to one card +
+a local edit to another card of the same dashboard is a `conflict`, shown
+(like all conflicts) as a 3-way diff of the decompiled DSL — which is
+per-line and therefore usually trivially mergeable by the human in the
+editor. This mirrors how automations already behave (a UI edit to one
+action conflicts with a local edit to another) and is listed in §11 risks.
+
+### 4.5 backend-protocol.md contract update
+
+Same PR as the backend change: a §3.2 "Dashboards addendum" documenting the
+mapping table above, the envelope, the `dashboard_id` resolution rule, the
+partial-create rollback, and the `_KIND_ORDER`/`_CALLER_KEYED_KINDS`
+additions.
+
+---
+
+## 5. The DSL
+
+### 5.1 Namespaces — why cards don't live in `hassle.__all__`
+
+Card type names collide with the frozen surface (`area`, `calendar`,
+`button`, `light`, `sensor` are already DSL names; `map` is a Python
+builtin). Instead of renaming cards away from their HA names (`map_card`,
+`area_card`, … — 35 warts), card builders live in a dedicated namespace
+module, the same pattern as `hassle.services`/`hassle.registry` but with
+**real typed functions** (the card vocabulary is closed and known, so pyright
+gets full signatures — no `__getattr__` dynamism):
+
+```python
+from hassle import *                  # dashboard, view, section, badge, raw_* …
+from hassle import cards as c         # c.tile(...), with c.vertical_stack(): …
+from hassle.cards import cond         # cond.state(...), cond.screen(...)
+from hassle.registry import entities as e
+```
+
+- `hassle.cards` — one builder per built-in card type, named exactly the
+  snake_cased HA type (`c.tile`, `c.entity_filter`, `c.todo_list`,
+  `c.energy_usage_graph`, …). Attribute access means HA names never fight
+  Python names.
+- `hassle.cards.cond` — the Lovelace condition vocabulary (below).
+- `hassle.__all__` gains only the **structural** names (additive, F3-clean,
+  no collisions): `dashboard`, `raw_dashboard`, `view`, `section`, `badge`,
+  `raw_card`, `raw_section`, `raw_view`.
+- dsl-extensions.md documents `hassle.cards` as a third dedicated
+  non-star entry point (rationale: namespace hygiene, not
+  instance-dynamism) and freezes its `__all__` under the same
+  additive-only rule.
+
+Implementation layout: builders in `hassle/compiler/dashboards/` (recorder,
+structural verbs, card families); `hassle/cards.py` is the thin public
+re-export, mirroring how the frozen surface is assembled today. The
+package-layering test pins the dependency direction as usual.
+
+### 5.2 Structural constructs
+
+```python
+@dashboard(url_path="climate-control", title="Climate", icon="mdi:thermostat",
+           show_in_sidebar=True, require_admin=False)
+def climate(): ...
+
+@dashboard(default=True)          # THE default dashboard (no registry item)
+def home(): ...
+```
+
+- `@dashboard` requires **either** `url_path=` **or** `default=True` —
+  omitting both is a compile-time error that teaches both options (never a
+  silent "you accidentally targeted the default dashboard").
+  `default=True` **forbids** the registry-metadata kwargs
+  (`title`/`icon`/`show_in_sidebar`/`require_admin`) — the default dashboard
+  has no registry item to hold them; the error says where those live
+  (HA sidebar settings) and what to do instead.
+- `with view(title=, path=, icon=, type="sections", max_columns=, visible=,
+  subview=, theme=, background=, header=, extra=)`: one builder for all view
+  types. `type=` accepts `"sections"` (the authoring default, materialized
+  explicitly into the config), `"masonry"`, `"sidebar"`, `"panel"`, or
+  **`None`** — which emits *no* `type` key, the legacy-masonry storage shape
+  (§2.2 item 4). The decompiler emits exactly what is stored: absent key →
+  `type=None`, present value → that value; byte-stability holds in both
+  directions with one builder.
+- `with section(column_span=, extra=)`: a `type: grid` section inside a
+  sections view. Sections-view discipline is enforced with teaching errors:
+  a leaf card recorded directly under a sections view raises
+  (`SectionRequiredError` — "wrap it in `with section():`"), a `section()`
+  under a masonry/panel/sidebar view raises, and `panel` views require
+  exactly one card.
+- `badge(entity_or_dict, **options)` records into the enclosing view's
+  `badges` list (object-badge form; a plain dict passes through verbatim
+  for legacy/unknown badge shapes).
+- Container cards: `with c.vertical_stack(title=, extra=)`,
+  `c.horizontal_stack(...)`, `c.grid(columns=, square=, extra=)`,
+  `c.conditional(*conditions)` (exactly one child card — recording a second
+  raises with "nest a stack"), `c.entity_filter(entities=, state_filter=,
+  show_empty=, extra=)` (zero or one child: the presentation card).
+- Every card builder and structural builder accepts `visibility=[...]`
+  (list of `cond.*` conditions and/or verbatim dicts) — the per-card
+  visibility conditions the UI writes.
+
+### 5.3 Leaf card builders
+
+One typed function per built-in leaf type. Signature convention, uniform
+across the family:
+
+- Known options are typed keyword parameters mirroring the HA option name
+  (`c.tile(entity=..., features=..., color=..., vertical=...)`).
+  Entity-taking parameters accept `EntityRef | str` (and lists thereof) — so
+  `e.`-refs, helper handles, and plain strings all work, as everywhere else.
+- `entities`-shaped cards take rows as **positional varargs**
+  (`c.entities(e.light.a, {"type": "divider"}, e.light.b, title=...)`) —
+  rows are `EntityRef | str | dict` (dict = special row / per-row options,
+  passthrough in v1).
+- **`extra: dict | None = None`, keyword-only, on every builder**: verbatim
+  passthrough merged into the card body. This is the forward-compatibility
+  valve — when HA adds a card option Hassle doesn't know yet, the decompiler
+  emits the *typed builder call plus `extra={...}`* instead of collapsing the
+  whole card to `raw_card`, and an author can use new options the day HA
+  ships them. A typo'd kwarg is still a loud `TypeError` (builders have no
+  `**kwargs`), preserving tier-0/1 typo-catching. `extra` keys may not
+  shadow a declared kwarg (compile error) so there is exactly one spelling
+  of every option.
+- Passthrough-in-v1 sub-vocabularies (typed follow-ons welcome, additive):
+  `features=[...]` (tile/humidifier/etc. card features), `elements=[...]`
+  (picture-elements), `header=` (view header), dict rows (entities card).
+
+The full builder inventory matches §2.3 one-for-one; `c.shopping_list` exists
+as the legacy alias and decompiles from a stored `shopping-list` card
+verbatim (never silently upgraded to `todo-list` — byte-stability wins).
+
+### 5.4 Dashboard conditions — `cond`, deliberately not automation conditions
+
+Lovelace visibility/conditional conditions are a **different schema** from
+automation conditions (`entity`/`state`/`state_not` keys vs.
+`entity_id`/`condition` shapes; plus UI-only kinds `screen` and `user`).
+They get their own small vocabulary:
+
+```python
+cond.state(entity, "on")                  # {condition: state, entity, state}
+cond.state(entity, not_="on")             # {condition: state, entity, state_not}
+cond.numeric(entity, above=25, below=30)  # {condition: numeric_state, ...}
+cond.screen("(max-width: 600px)")         # {condition: screen, media_query}
+cond.user(user_id, ...)                   # {condition: user, users: [...]}
+cond.any(...) / cond.all(...) / cond.not_(...)
+```
+
+Cross-vocabulary confusion is trap-caught in both directions with teaching
+errors (the `CompileTimeBranchError` tradition): an automation
+`ConditionBuilder` passed to `c.conditional`/`visibility=` raises
+`DashboardConditionTypeError` naming the `cond.*` equivalent; a `cond.*`
+object passed to `only_if`/`if_then` raises the mirror error. A verbatim
+dict is accepted anywhere a condition is (unknown future condition kinds
+round-trip raw).
+
+### 5.5 The raw ladder (I3)
+
+Granular escape hatches at every level, mirroring
+`raw_trigger`/`raw_action`:
+
+```python
+raw_card({"type": "custom:bubble-card", ...})     # inside any container
+raw_section({...})                                 # inside a sections view
+raw_view({...})                                    # inside a @dashboard body
+@raw_dashboard(url_path="weird-one")               # decorator over a function
+def weird(): return {"meta": {...}, "config": {...}}
+```
+
+Design note: these take **dicts, not YAML strings**. The intake requirement
+("anything unmodeled can stay raw") is honored, but the currency is the same
+as every existing `raw_*` verb: Python dicts are what the IR, canonical
+hashing, and golden pairs already speak, a dict is syntax-checked by Python
+itself, and one raw currency beats two. (A YAML-string form was considered
+and rejected: it would need a parse step anyway to hash and round-trip, and
+would be the only YAML anywhere in a bundle.) The decompiler pretty-prints
+raw dicts exactly as it does for `raw_automation` today, so the diff
+experience is equivalent to YAML for a human reader.
+
+Fallback selection is bottom-up, matching the container-recursion-tolerance
+precedent (ha-api-notes §20.4): an unknown **card** type → `raw_card`; a
+known container with an unknown child stays a typed container around a
+`raw_card`; a section/view whose *own* keys are unmodeled → `raw_section`/
+`raw_view`; a config whose top level is unmodeled (e.g. `strategy:`) →
+`@raw_dashboard`. Never raw a parent merely because a child rawed (tested per
+level).
+
+### 5.6 Error surface (snapshot-tested, R6)
+
+New what/where/fix errors, each with a `hassle_dev.snapshots` test:
+`NoDashboardContextError` (card/view/section verb outside a `@dashboard`
+body — and the mirror: `service()`/`when()`/action verbs inside one),
+`SectionRequiredError`, `SectionOutsideSectionsViewError`,
+`PanelViewArityError`, `ConditionalCardArityError`,
+`DashboardConditionTypeError` (+ mirror), `DashboardUrlPathError` (missing
+hyphen / missing `url_path=`+`default=True` / both given),
+`DefaultDashboardMetadataError`, `ExtraShadowsKwargError`. Duplicate
+`url_path` reuses `DuplicateObjectError` via the normal registry path.
+
+### 5.7 dsl-extensions.md contract update
+
+Same PR as the surface lands: the eight structural `hassle.__all__`
+additions, the `hassle.cards`/`hassle.cards.cond` entry-point sections, the
+builder signature conventions (`extra=`, varargs rows, `visibility=`), the
+trap table, and the new non-public extension seams (§6.1's recorder).
+
+---
+
+## 6. Compiler and decompiler
+
+### 6.1 Recording — a sibling recorder, not a widened `Recorder`
+
+The automation `Recorder` (triggers/conditions/actions + an action stack) is
+the wrong shape for a card tree; widening it would couple every automation
+code path to dashboard concerns. Instead `hassle/compiler/dashboards/`
+gets its own small recorder, following the established conventions
+one-for-one:
+
+- `DashboardRecorder`: the assembled `config` dict under construction plus a
+  **container stack** (dashboard → view → section/stack/conditional →
+  cards); its own `ContextVar` stack (nested `@dashboard` tracing is
+  impossible, but the ContextVar convention buys the same isolation and
+  reentrancy the automation recorder has).
+- `record_card(body, *, span)` / `push_container(...)` — the non-public
+  extension seam card builders drive, mirroring
+  `record_action`/`push_actions` (documented in dsl-extensions.md's seam
+  list; every builder in `hassle.cards` is implemented on top of it, so
+  third-party builder packs get the same seam later).
+- Context managers are `@contextlib.contextmanager` generators using the
+  established `_CM_DEPTH = 2` span convention (`control_flow.py`'s
+  trampoline analysis applies unchanged; `test_span_depth_empirical`-style
+  test included).
+- Every recorded card/view/section carries a `SourceSpan` sidecar, so
+  tier-2 validation findings point at the author's `c.tile(...)` line
+  (`CompileResult.span_at` extended to index into dashboard bodies).
+
+Registration plumbing (all existing seams, one branch each):
+`@dashboard`/`@raw_dashboard` register a `RegisteredObject` with
+`kind="dashboard"` (options allow-list added beside
+`_AUTOMATION_OPTIONS`/`_SCRIPT_OPTIONS`); `compile_registered` gains a
+`_build_dashboard` branch beside `_build_automation`/`_build_script` that
+opens the dashboard recorder instead of `recording(...)`; `compile_bundle`'s
+reset list gains the module's state reset. Compilation stays deterministic
+and network-free (R8; sandbox unchanged).
+
+### 6.2 Decompiler
+
+- `decompile_object` dispatch gains a `DashboardConfig` branch →
+  `_dashboard_source`: emits the `@dashboard(...)` decorator from `meta`
+  (`default=True` when `meta` is null), then walks `config` emitting
+  `with view(...):` / `with section():` / container CMs / leaf builder
+  calls, choosing per §5.5's ladder. Known-type cards with unmodeled keys
+  emit `extra={...}` (§5.3) rather than falling to raw.
+- Ordering, naming, imports follow the existing rules: function name =
+  `slugify(title)` (falling back to `slugify(url_path)`, then
+  `dashboard_<n>`), deduped through the shared `_object_function_name`
+  pre-pass; the import header adds `from hassle import cards as c` /
+  `from hassle.cards import cond` only when used; ruff-formatted; byte-stable
+  (R8). Entity-position strings emit as `e.<domain>.<object_id>` via the
+  same registry-accessor rule automations use (DESIGN §7.3) — applied only
+  to *known* entity-bearing parameters of typed builders, never to freeform
+  strings inside `raw_card`/`markdown` content.
+- **Splice**: `_DEF_DECORATOR_KINDS` gains `dashboard`/`raw_dashboard` so
+  refresh targets resolve by declared identity, not name-fallback (fixing
+  the recognized gap rather than inheriting the template/group weakness).
+  A dashboard refresh splices the one decorated def like any drifted object.
+- **Coverage**: `decompile-coverage` counts `raw_card`/`raw_section`/
+  `raw_view`/`raw_dashboard` nodes with per-shape justification strings.
+  Dashboards get their own reported percentage; the corpus of *built-in-only*
+  dashboards must decompile 100% clean, while corpus entries containing
+  `custom:` cards assert the raw fallback exactly (they are the backstop
+  proof, not a coverage failure — same philosophy as DESIGN §5.8).
+
+### 6.3 Round-trip acceptance
+
+The I3 gate extends over the new corpus: for every dashboard fixture `x`,
+`serialize(parse(x)) == x` and `compile(decompile(x)) == x` (envelope
+equality; no HA-side normalization expected per §2.2 item 2, else modulo the
+DB0-captured `storage_canonical` rules). The whole-corpus pull→plan-noop
+invariant test (ha-api-notes §23.3) picks the kind up automatically once
+fixtures exist.
+
+---
+
+## 7. Placement, CLI, and bundle layout
+
+- **Default placement: root-level `dashboards.py`** for every adopted
+  dashboard (`default_source_path` returns it for the kind; dashboards have
+  no category-registry scope — `_SCOPE_FOR_KIND` deliberately has no entry,
+  and HA has no `lovelace` category scope to write back to). User-controlled
+  after first placement, like everything else; a dashboard moved into a
+  category-shaped file just lives there (no category writeback for this
+  kind).
+- **DESIGN §13 deviation, recorded**: DESIGN reserves a `dashboards/`
+  *directory* — written before the category-first flat layout (§6) retired
+  per-kind trees. This design supersedes that reservation with the
+  root-level `dashboards.py` default; DESIGN §13's bullet gets a pointer to
+  this document in the same PR. (Flagged per the CONTRIBUTING "if DESIGN and
+  reality disagree" rule.)
+- Pull/adopt/refresh/drop/conflict need no new engine code (`apply_pull`
+  dispatches on `PlanAction` only); the adopt batcher routes all dashboards
+  into one `decompile_bundle` call per file as usual. `hassle pull` output
+  flags dashboards that decompiled with raw nodes as DSL-coverage gaps,
+  same as automations.
+- CLI kind lists are `OBJECT_KINDS`-driven and pick the kind up; `hassle
+  explain` renders the compiled envelope (YAML view) generically. `hassle
+  plan`'s DSL-level 3-way conflict diff works via the decompiler as-is.
+- `hassle_dev/corpus.py`'s `_kind_for` learns the `dashboard_*` filename
+  prefix **before** the first fixture lands (it hard-crashes on unknown
+  prefixes today).
+
+---
+
+## 8. Validation
+
+| Tier | What dashboards add |
+|---|---|
+| 0 (pyright) | typo'd card kwargs are `TypeError`s at edit time (no `**kwargs` on builders); `e.`-refs check as today |
+| 1 (compile) | structure discipline (§5.2/§5.6 errors), duplicate `url_path`, hyphen rule, `extra` shadowing |
+| 2 (registry, offline) | **card-tree entity extraction**: typed builders declare their entity-bearing parameters (extraction is table-driven off the builder registry, not per-card ad-hoc code); raw/unknown nodes get the same conservative entity-shaped-string + Jinja scan `raw_action` bodies get today. Unknown entities produce the standard did-you-mean Finding pointing at the card's `file:line` span |
+| 3 (template lint) | markdown-card content and any `{{ … }}` string values run the existing Jinja lint |
+| 4 (server-side) | **absent by design** — HA has no `validate_config` analogue for Lovelace bodies (§2.2 item 2); the plan/apply path performs no server round-trip validation for this kind, and `hassle validate --live` says so rather than silently passing |
+
+The registry snapshot already contains everything tier 2 needs (entities,
+areas for the `area` card, users are *not* in it — `cond.user` ids are
+validated only for shape, documented).
+
+---
+
+## 9. Testing
+
+### 9.1 The bundle author's story (D-G9)
+
+Dashboards don't execute, so the simulator is not the vehicle; assertions run
+against **compiled IR** (I5's spirit: test the artifact). The existing `sim`
+fixture (which already auto-loads the compiled bundle) gains a query
+accessor, also available standalone for non-simulator tests:
+
+```python
+def test_every_head_gets_a_thermostat(sim):
+    dash = sim.dashboard("climate-control")        # DashboardQuery over compiled IR
+    tiles = dash.cards(type="thermostat")           # recursive: sections, stacks, …
+    assert [t["entity"] for t in tiles] == [str(h) for h in HEAT_PUMP_HEADS]
+
+def test_guest_banner_is_conditional(sim):
+    banner = sim.dashboard("climate-control").cards(type="markdown")[0]
+    assert banner.parent["type"] == "conditional"
+```
+
+`DashboardQuery` is a thin read-only wrapper: `.meta`, `.config`, `.views`,
+`.view(path_or_index)`, `.cards(type=, entity=)` (recursive walk through
+sections/stacks/conditional/entity-filter), each node exposing the plain
+dict plus `.parent`. No assertion DSL beyond that — plain dict asserts keep
+tests honest and future-proof.
+
+### 9.2 Hassle's own test contract (the workstream gates in §12 reference these)
+
+- **Fixture corpus** (`fixtures/configs/dashboard_*.json` + PROVENANCE):
+  ≥ 10 realistic dashboards — every built-in card type covered at least
+  once across the corpus, sections *and* masonry *and* panel views, badges
+  (both shapes), visibility conditions of every kind, nested stacks,
+  conditional, entity-filter, a `custom:` card, a strategy dashboard, a
+  default-dashboard config. `corpus-stats` gains `REQUIRED_CARD_TYPES`
+  (the §2.3 inventory) the way it tracks trigger types today.
+- **Golden pairs** (`fixtures/dsl/dashboard_*/`): the structural constructs,
+  each card family, `extra=` round-trip, the full raw ladder, error cases
+  (`expected_error.json`) for every §5.6 message. Picked up automatically by
+  `hassle-dev goldens` / `test_dsl_golden_pairs`.
+- **Round-trip**: corpus-wide `test_ir_roundtrip_corpus` +
+  `test_roundtrip_corpus` extension; decompile-coverage gate per §6.2.
+- **Sync**: plan-table rows exercised for the kind (create/update/refresh/
+  conflict/drop/adopt, default-dashboard create/delete), apply-order test,
+  FakeBackend behavior tests (hyphen rule, config_not_found, delete
+  semantics, **no-normalize regression test** from §3.3), partial-create
+  rollback test, pull placement (`dashboards.py`), splice-refresh test,
+  ignore-glob test, **I6 fuzz**: the lost-edits fuzzer's kind pool gains
+  `dashboard`.
+- **Error snapshots** for every new message (R6). **pyright strict** over
+  the new modules incl. the public builder signatures (R7).
+- **Integration** (`tests/integration/`, live HA): DB0's captures replayed
+  as assertions — the CRUD cycle, envelope composition, verbatim-storage
+  check, UI-edit-then-pull.
+
+---
+
+## 10. Docs and DX
+
+- `docs/DSL.md`: the eight structural names get `NAME_TO_CASES` entries
+  (CI's docs gate enforces this the moment they enter `hassle.__all__`);
+  the docs generator gains a **card reference** section produced from the
+  builder registry + golden pairs — every card builder with its DSL ↔
+  compiled-JSON pair, same pattern-matchable format agents and humans
+  already rely on.
+- `docs/COOKBOOK.md`: at least two recipes with passing tests ("a dashboard
+  from a Python list" — the heat-pump case; "conditional guest-mode
+  section"), which also satisfies the ≥ 20-recipe gate trivially.
+- `AGENTS.md` additions: the `cards as c`/`cond` import convention, "Python
+  `for` generates cards at compile time", the conditional-vs-automation
+  condition trap and its error, and "third-party cards stay `raw_card`".
+- Stubs: nothing to generate — card builders are static typed functions;
+  `e.`-completion already covers entity params. `.vscode` untouched.
+- Acceptance (M9-style): a fresh agent session, given only a pulled bundle,
+  must complete "add a card for each new device to the right section" from
+  the docs alone; `hassle-dev acceptance-tasks` gains one dashboard task.
+
+---
+
+## 11. Risks and mitigations
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| Lovelace WS shapes differ from §2 hypotheses | High (transport correctness) | DB0 verifies **before** backend code lands (the M0.V pattern); FakeBackend mirrors verified quirks; integration tests replay captures |
+| Card vocabulary drifts with HA frontend releases | Medium (coverage, not correctness) | unknown types/options never error: `extra=`/`raw_card` absorb them losslessly; coverage metric surfaces the gap; builder additions are additive and cheap |
+| `service:` keys inside `tap_action` corrupted by normalization | High (silent data change) | §3.3 kind guard, regression-tested first |
+| Whole-dashboard conflict granularity frustrates users | Medium | DSL-level 3-way diff makes manual merges line-sized; documented; card-level merge explicitly out of scope (I6 over heuristics) |
+| Mass adoption on first pull post-upgrade surprises users | Low | pull output lists adoptions loudly (existing behavior); `ignore = ["dashboard:*"]`; release note |
+| No server-side validation tier for dashboards | Medium | tiers 0–3 carry more weight (typed builders, entity lint); `--live` states the gap; a broken card degrades to an error card in the UI, never breaks HA itself |
+| Two-store create/delete is not atomic | Medium | backend-internal rollback (§4.1) + apply-engine snapshot/rollback; integration-tested |
+| Decompiled mega-dashboards produce long functions | Low | one `def` per dashboard mirrors the UI's own mental model; humans reorganize freely afterward (placement is user-controlled) |
+
+---
+
+## 12. Implementation plan — agent swarm
+
+This section is written to be executed by a swarm of Claude agents
+coordinated by one orchestrator session, following the project's existing
+subagent roles (`.claude/agents/`): **Opus** for contract-freezing and
+review work, **Sonnet** (`implementer`) for scoped test-first
+implementation, **Haiku** (`fixture-wrangler`) for corpus/mechanical work.
+The structure deliberately mirrors docs/history/milestones.md: freeze points
+make parallelism safe (R5), and every workstream's "write these tests first"
+list is its acceptance contract (R1).
+
+### 12.1 Workstreams
+
+**DB0 — Wire-shape capture (Opus implementer + Haiku)** — *no code deps*
+Stand up the Dockerized HA harness (exists from M6); drive every §2.2
+command; capture request/response pairs into `docs/ha-api-captures/`;
+resolve the seven known-risk items; write the new ha-api-notes § (next free
+number, following §26/§38's structure). Haiku harvests ≥ 10 real dashboard
+configs into `fixtures/configs/dashboard_*.json` + PROVENANCE (after DB6's
+tiny `_kind_for` patch, which the orchestrator can land directly — one
+guarded prefix). Opus judgment is required here: this workstream *decides
+facts* the whole design cites, and wrong captures poison everything
+downstream.
+*Tests first*: integration-marked tests asserting each captured behavior
+(they double as the permanent `tests/integration/` suite).
+
+**DB1 — IR + kind registration (Opus)** — *depends: nothing (reconciled
+against DB0 before freeze)*
+`ir/keys.py` kind + `object_key`; `DashboardConfig` + `parse()` branch;
+normalization kind guard (§3.3); `storage_canonical` entries per DB0;
+ir-format.md update in the same PR.
+*Tests first*: `test_ir_keys` extension, envelope parse/serialize round-trip,
+`test_ir_preserves_unknown_fields` for the kind, canonical-hash stability,
+the §3.3 `tap_action` regression test.
+**→ FREEZE F4**: envelope shape + key format + identity rules. DB2/DB5/DB6
+build against F4 independently.
+
+**DB2 — Recorder core + structural DSL (Opus design, then Sonnet)** —
+*depends: F4*
+`DashboardRecorder`, `record_card`/`push_container` seam, `@dashboard`/
+`@raw_dashboard` registration, `view`/`section`/`badge`/raw ladder,
+`cond` vocabulary, all §5.6 traps, `compile_bundle` wiring; dsl-extensions.md
+update. Opus writes the recorder module and the seam contract (the subtle
+span/ContextVar/trap work); Sonnet finishes the structural builders against
+it.
+*Tests first*: golden pairs for structure-only dashboards (empty view,
+sections vs. masonry vs. panel, badges, raw ladder), every error snapshot,
+span-depth empirical test, control-flow trap tests.
+**→ FREEZE F5**: the card-builder protocol (builder signature conventions,
+`record_card` seam, `extra=` semantics, decompiler emitter registration
+seam from DB4). F5 is what makes DB3's fan-out embarrassingly parallel.
+
+**DB3 — Card builder families (3 Sonnet implementers in parallel)** —
+*depends: F5*
+Each batch delivers, for its card set: typed builders + decompiler emitters
++ golden pairs (compile AND decompile proven by the same pair) + card-doc
+entries + corpus fixtures exercising the family. Batches are sized to be
+independent (no shared files beyond one registration line each, kept
+append-only to merge cleanly):
+- *DB3a — layout & display*: vertical/horizontal stack, grid, conditional,
+  entity-filter, entities, glance, tile, entity, button, heading.
+- *DB3b — visual & history*: gauge, history-graph, statistics-graph, sensor,
+  statistic, markdown, iframe, picture, picture-glance, picture-elements,
+  map, clock, calendar, logbook.
+- *DB3c — domain & energy*: alarm-panel, area, light, thermostat,
+  humidifier, media-control, plant-status, todo-list (+ shopping-list
+  alias), weather-forecast, the 12 energy cards.
+*Tests first (per batch)*: golden pair per card incl. an `extra=` case and
+an entity-lint case.
+
+**DB4 — Decompiler core + splice (Sonnet, Opus review emphasis)** —
+*depends: F5 (starts alongside DB3 with the structural emitters)*
+`_dashboard_source`, dispatch branch, the raw-ladder fallback logic
+(§5.5's bottom-up rules, the correctness-critical 20%), naming/imports,
+splice recognizer entries, coverage integration.
+*Tests first*: fallback-ladder table tests (each level raws itself and only
+itself), `test_decompile_stable` extension, splice-refresh test, decompile
+of every DB0-harvested real config.
+
+**DB5 — Backends (Sonnet)** — *depends: F4 + DB0*
+FakeBackend kind support (verified quirks encoded), DirectBackend WS calls +
+`dashboard_id` resolution + partial-create rollback, `_KIND_ORDER`,
+`_CALLER_KEYED_KINDS`; backend-protocol.md addendum in the same PR.
+*Tests first*: FakeBackend behavior suite (§9.2's sync list), backend-
+protocol conformance test, integration CRUD test (replaying DB0 captures).
+
+**DB6 — Sync, placement, CLI (Sonnet)** — *depends: F4 (uses DB5's
+FakeBackend when it lands; plan-table tests need only the kind + fixtures)*
+`default_source_path` → `dashboards.py`; plan-table rows for the kind;
+pull adopt/refresh/drop/conflict paths incl. the adopt batcher; ignore
+globs; I6 fuzzer kind-pool extension; `corpus.py` `_kind_for`; DESIGN §13
+pointer edit; release-note draft for the mass-adoption behavior.
+*Tests first*: `test_plan_table` extension, pull-placement tests,
+pull→plan-noop over dashboard fixtures, fuzz run green.
+
+**DB7 — Validation + testing API (Sonnet)** — *depends: F5*
+Table-driven entity extraction over the builder registry, raw-node
+conservative scan, tier-1 checks, Finding snapshots; `DashboardQuery` +
+`sim.dashboard()`; `--live` tier-4-absent messaging.
+*Tests first*: extraction unit tests per entity-bearing parameter class,
+did-you-mean snapshot, `DashboardQuery` API tests (they double as the
+documented examples).
+
+**DB8 — Docs, cookbook, acceptance (Sonnet + Haiku)** — *depends: DB3
+complete*
+Card-reference generator section, `NAME_TO_CASES` entries, two cookbook
+recipes with tests, AGENTS.md additions, acceptance task; `hassle-dev docs
+--update` with the diff in the PR (R3).
+*Tests first*: docs-gate tests (`test_docs_dsl_reference` extension),
+cookbook recipe tests.
+
+**DB9 — Integration & final gate (Opus reviewer)** — *depends: everything*
+Full-suite run (unit + integration vs. `stable` and `dev` HA images), all
+five CI gates green (goldens, corpus-stats incl. `REQUIRED_CARD_TYPES`,
+decompile-coverage incl. the dashboard percentage, docs, pyright/ruff),
+whole-corpus round-trip + pull→plan-noop, a real-instance end-to-end:
+pull → edit in UI → pull (refresh) → edit locally → push → verify in UI.
+
+### 12.2 Dependency graph and waves
+
+```
+wave 1:  DB0 ──────────────┐        DB1 ──► F4
+wave 2:  (F4) ──► DB2 ──► F5        (F4+DB0) ──► DB5        (F4) ──► DB6
+wave 3:  (F5) ──► DB3a ∥ DB3b ∥ DB3c        (F5) ──► DB4        (F5) ──► DB7
+wave 4:  (DB3) ──► DB8 ──────────────► DB9 (final gate)
+```
+
+Peak parallelism is wave 3: five Sonnet implementers (DB3a/b/c, DB4, DB7)
+plus DB5/DB6 finishing from wave 2 — seven concurrent worktrees. DB0 runs
+through waves 1–2 (live-HA work is wall-clock-bound, not agent-bound) and
+must complete before DB5 merges; DB1's freeze is deliberately allowed to
+front-run DB0's completion, with an explicit orchestrator checkpoint
+reconciling F4 against DB0's findings before any F4-dependent branch merges
+(if DB0 falsifies an envelope assumption, only DB1 reworks — that is the
+point of freezing the envelope first and the transport second).
+
+### 12.3 Orchestration mechanics
+
+- **One branch per workstream** (`feat/dashboards-db<N>-<topic>`), each an
+  `implementer` run in an isolated git worktree branched from local `main`
+  (the implementer agent definition already mandates both). No agent ever
+  commits to another's branch; the orchestrator owns merges to `main`.
+- **Merge gate**: every branch goes through the `reviewer` (Opus) agent —
+  diff vs. its workstream's test contract + the invariant checklist — before
+  the orchestrator merges. Reviewer findings go back to the same implementer
+  (fresh context, findings quoted verbatim in the prompt).
+- **Contested-file discipline**: the files every workstream wants to touch
+  (`ir/keys.py`, `hassle/__init__.py`'s `__all__`, `construct_map.py`,
+  `corpus.py`, `_KIND_ORDER`, splice maps) are edited **only** in DB1/DB2/
+  DB5/DB6 as designated above, or by the orchestrator in tiny serialized
+  integration commits. DB3 batches only add new modules plus one append-only
+  registration line each — rebase-trivial by construction.
+- **Freeze discipline (R5)**: F4/F5 changes after freeze require updating
+  this document in the same PR, exactly like F1–F3. Implementers are told
+  the freeze status in their prompt and instructed to *stop and report*
+  (not work around) if a frozen surface blocks them — the DB0-vs-F4
+  checkpoint above is the sanctioned path for post-freeze corrections.
+- **Prompt contract per implementer**: scope (this doc's § reference), the
+  tests-first list verbatim, the frozen surfaces it may not change, the
+  files it owns vs. must not touch, and the standing CONTRIBUTING gates
+  (`pytest` / `ruff` / `pyright` / relevant `hassle-dev` gates green before
+  reporting done).
+- **Progress ledger**: the orchestrator keeps a checklist (waves × 
+  workstreams × gate status) in the PR description of an umbrella tracking
+  issue, updated at every merge, so any session (human or agent) can pick
+  up mid-flight.
+
+### 12.4 Definition of done
+
+All of: every workstream's test contract green; all previously green tests
+still green; the five CI gates green with the new dashboard coverage
+included; `compile(decompile(x)) == x` over the full dashboard corpus;
+pull→plan-noop over the corpus; I6 fuzz including the kind; the three
+contract docs + DESIGN §13 pointer updated; DB9's live end-to-end verified
+on `stable` and `dev` HA images; docs acceptance task passing. Then the
+feature ships in the next release with the mass-adoption release note.
