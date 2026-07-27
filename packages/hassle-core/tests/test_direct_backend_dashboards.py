@@ -17,8 +17,17 @@ Mapping under test:
   `dashboards/create` succeeded, the just-created registry item is deleted
   before the original error is re-raised.
 - `update`: `lovelace/dashboards/update` (dashboard_id resolved from
-  `url_path` via `dashboards/list`, cached per connection) and/or
-  `lovelace/config/save`.
+  `url_path` via `dashboards/list`, cached per connection) sends the FULL
+  desired state of exactly `{title, icon, show_in_sidebar, require_admin}`
+  -- built from an explicit allowlist, NEVER from `meta`'s own keys, and
+  NEVER including `url_path` (HA's real update schema is PREVENT_EXTRA over
+  those four fields; `url_path` is deliberately excluded, since a url_path
+  change is delete+create, never an in-place rename, I2). Full-state (never
+  presence-based) because HA's storage collection MERGES
+  (`{**item, **update}`) rather than replacing the item outright, so a
+  field only clears when explicitly sent (e.g. `icon: None`) -- see the
+  2026-07-27 implementation-finding note in docs/internals/
+  dashboards-design.md §4.1. `lovelace/config/save` follows for `config`.
 - `delete`: non-default -> `lovelace/dashboards/delete`; default ->
   `lovelace/config/delete`.
 
@@ -36,7 +45,12 @@ from typing import Any
 import pytest
 
 from hassle.backend.direct import DirectBackend
-from hassle.backend.errors import HaApiError
+from hassle.backend.errors import HaApiError, HaConnectionError
+
+# The registry item's four mutable fields (docs/internals/dashboards-design.md
+# §2.2/§4.1) -- HA's real `lovelace/dashboards/update` schema is PREVENT_EXTRA
+# over exactly these; `url_path`/`id`/`mode` are never accepted.
+_DASHBOARD_UPDATE_FIELDS = frozenset({"title", "icon", "show_in_sidebar", "require_admin"})
 
 
 class _FakeClient:
@@ -98,10 +112,32 @@ class _FakeClient:
             return {"id": dashboard_id}
         if type == "lovelace/dashboards/update":
             dashboard_id = str(payload["dashboard_id"])
+            fields = {k: v for k, v in payload.items() if k != "dashboard_id"}
+            # PREVENT_EXTRA over exactly the four mutable registry fields --
+            # `url_path` (rename is delete+create, never in-place) and any
+            # other unknown key are real HA rejections (`invalid_format`),
+            # not silently accepted. This is the schema-fidelity fix for the
+            # BLOCKER finding: the old permissive fake accepted arbitrary
+            # keys (including `url_path`), which is why the buggy
+            # `_aupdate_dashboard` implementation (forwarding `meta`'s own
+            # keys wholesale) went undetected by 30 green tests.
+            if "url_path" in fields:
+                raise HaApiError(
+                    "extra keys not allowed @ data['url_path'] (url_path is not a "
+                    "mutable registry field on lovelace/dashboards/update -- a "
+                    "url_path change is delete+create, never an in-place rename)",
+                    code="invalid_format",
+                )
+            unknown = set(fields) - _DASHBOARD_UPDATE_FIELDS
+            if unknown:
+                raise HaApiError(
+                    f"extra keys not allowed: {sorted(unknown)}", code="invalid_format"
+                )
             item = self.dashboards[dashboard_id]
-            for k, v in payload.items():
-                if k != "dashboard_id":
-                    item[k] = v
+            # Real HA's storage collection MERGES ({**item, **update})
+            # rather than replacing the item outright -- a field only
+            # clears when explicitly sent (e.g. icon: None).
+            item.update(fields)
             return {}
         if type == "lovelace/dashboards/delete":
             dashboard_id = str(payload["dashboard_id"])
@@ -203,6 +239,65 @@ def test_list_remote_omits_default_when_never_saved() -> None:
     assert "default" not in result
 
 
+def test_list_remote_propagates_non_config_not_found_ha_api_error() -> None:
+    """Should-fix 2 regression: `_afetch_dashboard_config` must only ever
+    swallow `config_not_found` -- a WIDER `except HaApiError` (that also
+    catches, say, a transient server error) would silently turn it into
+    "dashboard missing from list_remote", which the planner reads as
+    remote-deleted -> an I6-shaped false drop/conflict. Pins the CURRENT
+    (correct) narrow catch against ever silently widening."""
+
+    class _FailingConfigClient(_FakeClient):
+        async def ws_command(self, type: str, **payload: Any) -> Any:
+            if type == "lovelace/config" and payload.get("url_path") == "climate-control":
+                raise HaApiError("transient failure", code="unknown_error")
+            return await super().ws_command(type, **payload)
+
+    client = _FailingConfigClient(
+        dashboards={
+            "dash_1": {
+                "id": "dash_1",
+                "url_path": "climate-control",
+                "title": "Climate",
+                "mode": "storage",
+            }
+        },
+        configs={},
+    )
+    backend = _make_backend(client)
+
+    with pytest.raises(HaApiError, match="transient failure"):
+        asyncio.run(backend._alist_dashboards())  # type: ignore[attr-defined]
+
+
+def test_list_remote_propagates_connection_error() -> None:
+    """Should-fix 2 regression: a connection-level failure (never HA-coded,
+    so never mistakable for `config_not_found`) must propagate out of
+    `list_remote` rather than being absorbed into "no dashboards"."""
+
+    class _ConnDropClient(_FakeClient):
+        async def ws_command(self, type: str, **payload: Any) -> Any:
+            if type == "lovelace/config":
+                raise HaConnectionError("socket dropped mid-fetch")
+            return await super().ws_command(type, **payload)
+
+    client = _ConnDropClient(
+        dashboards={
+            "dash_1": {
+                "id": "dash_1",
+                "url_path": "climate-control",
+                "title": "Climate",
+                "mode": "storage",
+            }
+        },
+        configs={},
+    )
+    backend = _make_backend(client)
+
+    with pytest.raises(HaConnectionError):
+        asyncio.run(backend._alist_dashboards())  # type: ignore[attr-defined]
+
+
 # -- create -------------------------------------------------------------------
 
 
@@ -276,7 +371,96 @@ def test_create_partial_failure_rolls_back_registry_item() -> None:
 # -- update ---------------------------------------------------------------------
 
 
-def test_update_resolves_dashboard_id_and_calls_update_and_save() -> None:
+def test_update_sends_full_allowlisted_registry_state_never_url_path() -> None:
+    """BLOCKER regression: the payload must be built from an explicit
+    allowlist of the four mutable registry fields, NEVER from `meta`'s own
+    keys -- `meta` always carries `url_path` too, and forwarding it verbatim
+    would 400 against real HA (`invalid_format`, since a url_path change is
+    delete+create, never an in-place rename). Also pins should-fix 1 (full
+    desired state, not presence-based): `icon` absent from the local `meta`
+    must still be sent explicitly as `None` (clearing it), and
+    `show_in_sidebar`/`require_admin` must be sent with their source-informed
+    defaults (True/False) rather than omitted."""
+    client = _FakeClient(
+        dashboards={
+            "dash_1": {
+                "id": "dash_1",
+                "url_path": "climate-control",
+                "title": "Climate",
+                "icon": "mdi:fire",
+                "show_in_sidebar": True,
+                "require_admin": False,
+                "mode": "storage",
+            }
+        },
+        configs={"climate-control": {"views": []}},
+    )
+    backend = _make_backend(client)
+
+    asyncio.run(
+        backend._aupdate_dashboard(  # type: ignore[attr-defined]
+            "climate-control",
+            {
+                # No icon/show_in_sidebar/require_admin -- the caller's
+                # local `meta` only ever carries what the DSL declared.
+                "meta": {"url_path": "climate-control", "title": "Climate V2"},
+                "config": {"views": [{"title": "New"}]},
+            },
+        )
+    )
+
+    update_payload = next(p for t, p in client.calls if t == "lovelace/dashboards/update")
+    assert update_payload["dashboard_id"] == "dash_1"
+    assert update_payload["title"] == "Climate V2"
+    # BLOCKER: url_path must never be forwarded (the fake client would raise
+    # HaApiError if it were, catching a regression at the schema level too).
+    assert "url_path" not in update_payload
+    assert set(update_payload) == {"dashboard_id", "title", "icon", "show_in_sidebar", "require_admin"}
+    # Should-fix 1: full desired state, not presence-based.
+    assert update_payload["icon"] is None
+    assert update_payload["show_in_sidebar"] is True
+    assert update_payload["require_admin"] is False
+
+    save_payload = next(p for t, p in client.calls if t == "lovelace/config/save")
+    assert save_payload["url_path"] == "climate-control"
+    assert save_payload["config"] == {"views": [{"title": "New"}]}
+
+
+def test_update_clears_icon_when_locally_deleted() -> None:
+    """Should-fix 1, end to end: an icon set remotely but absent from the
+    local edit must actually clear -- convergent full-state update, not a
+    silent no-op that would re-plan the same update forever."""
+    client = _FakeClient(
+        dashboards={
+            "dash_1": {
+                "id": "dash_1",
+                "url_path": "climate-control",
+                "title": "Climate",
+                "icon": "mdi:thermostat",
+                "show_in_sidebar": True,
+                "require_admin": False,
+                "mode": "storage",
+            }
+        },
+        configs={"climate-control": {"views": []}},
+    )
+    backend = _make_backend(client)
+
+    asyncio.run(
+        backend._aupdate_dashboard(  # type: ignore[attr-defined]
+            "climate-control",
+            {
+                "meta": {"url_path": "climate-control", "title": "Climate"},
+                "config": {"views": []},
+            },
+        )
+    )
+
+    result = asyncio.run(backend._alist_dashboards())  # type: ignore[attr-defined]
+    assert result["climate-control"]["meta"]["icon"] is None
+
+
+def test_update_rejects_meta_missing_title() -> None:
     client = _FakeClient(
         dashboards={
             "dash_1": {
@@ -290,22 +474,13 @@ def test_update_resolves_dashboard_id_and_calls_update_and_save() -> None:
     )
     backend = _make_backend(client)
 
-    asyncio.run(
-        backend._aupdate_dashboard(  # type: ignore[attr-defined]
-            "climate-control",
-            {
-                "meta": {"url_path": "climate-control", "title": "Climate V2"},
-                "config": {"views": [{"title": "New"}]},
-            },
+    with pytest.raises(ValueError, match="title"):
+        asyncio.run(
+            backend._aupdate_dashboard(  # type: ignore[attr-defined]
+                "climate-control",
+                {"meta": {"url_path": "climate-control"}, "config": {"views": []}},
+            )
         )
-    )
-
-    update_payload = next(p for t, p in client.calls if t == "lovelace/dashboards/update")
-    assert update_payload["dashboard_id"] == "dash_1"
-    assert update_payload["title"] == "Climate V2"
-    save_payload = next(p for t, p in client.calls if t == "lovelace/config/save")
-    assert save_payload["url_path"] == "climate-control"
-    assert save_payload["config"] == {"views": [{"title": "New"}]}
 
 
 def test_update_caches_dashboard_id_across_calls() -> None:
