@@ -1073,6 +1073,43 @@ The registry snapshot already contains everything tier 2 needs (entities,
 areas for the `area` card, users are *not* in it — `cond.user` ids are
 validated only for shape, documented).
 
+**DB7 implementation notes (2026-07-27):**
+
+1. **Two shapes table-driven `entity_params` cannot express, both handled**:
+   a card's own `badges` list (currently only `heading` — its badges are
+   entity refs, not a flat parameter) is walked the same both-shapes way as a
+   view's `badges`, gated on `"badges" in CardSpec.declared` rather than a
+   hardcoded type name; the `area` card's `area` key (an HA AREA id, not an
+   entity id — `entity_params` deliberately excludes it, DB3c's own note)
+   gets its did-you-mean `unknown-area` Finding via a small card-type -> key
+   table in `hassle.registry.dashboard_extract`, reusing the same
+   `_check_id`/area-list machinery purpose-trigger targets already use — no
+   new validation machinery was needed, so no TODO is left here.
+2. **Span-path grammar discrepancy, flagged not silently worked around.**
+   This section's `child_is_list=False` convention (bare `card` path) is not
+   yet reflected in the merged `c.conditional`/`c.entity_filter` builders
+   (`cards/layout.py`) — neither passes `child_is_list=False` to
+   `push_container`, so `CompileResult.node_span` still returns spans keyed
+   by the indexed `...cards[0].card[0]` spelling in practice, not the bare
+   `...cards[0].card` this section documents. DB7's extraction
+   (`hassle.registry.dashboard_extract._resolve_span`) tries both spellings,
+   falling back to the nearest ancestor span, so no Finding silently loses
+   its `file:line` either way — but the underlying inconsistency belongs to
+   whichever change lands `child_is_list=False` on those two builders (out of
+   DB7's read-only scope for `compiler/dashboards/`).
+3. **`hassle validate --live` did not exist before this change** — DESIGN
+   §9's tier table and this section both describe it as already running
+   "server-side checks per object kind," but `hassle validate` had no
+   `--live` flag at all, and `DirectBackend.validate_config` (which already
+   existed) was never called from anywhere. The minimal, honest version
+   built here: `--live` runs HA's real `validate_config` against every
+   automation (the one kind that command is actually shaped for — plural
+   `triggers`/`conditions`/`actions`, ha-api-notes.md §6), and prints this
+   section's dashboards-tier-4-absence notice exactly once per run. Scripts
+   and helpers get no live check of their own yet (`validate_config` doesn't
+   apply to them) — extending tier 4 to those kinds is unscoped future work,
+   not silently added here.
+
 ---
 
 ## 9. Testing

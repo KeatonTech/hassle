@@ -21,14 +21,30 @@ that never existed as DSL, :mod:`test_sim_runs_compiled_ir_only`) -- never DSL
 Python. :class:`Simulator` and :func:`simulate` accept only that IR-shaped
 input.
 
+Dashboards don't execute (DESIGN §10.1's simulator is action/trigger/template
+machinery), so the "sim" fixture also gains a query accessor over compiled
+dashboard IR (dashboards-design.md §9.1)::
+
+    def test_every_head_gets_a_thermostat(sim):
+        dash = sim.dashboard("climate-control")     # DashboardQuery over compiled IR
+        tiles = dash.cards(type="thermostat")        # recursive: sections, stacks, ...
+        assert [t["entity"] for t in tiles] == [str(h) for h in HEAT_PUMP_HEADS]
+
 Public surface (this module + :mod:`hassle.testing.plugin`):
 
 - :func:`simulate` / :class:`Simulator` -- construct a simulator from a
   compiled bundle.
 - :class:`ServiceCall` -- one recorded (never executed) service-call action.
 - :class:`UnsupportedTemplateError` -- an out-of-subset Jinja construct.
+- :class:`~hassle.testing.dashboard_query.DashboardQuery` /
+  :class:`~hassle.testing.dashboard_query.DashboardNode` -- the read-only
+  dashboard-IR query surface (dashboards-design.md §9.1); also reachable
+  without a full :class:`Simulator` via
+  ``DashboardQuery(compile_result.objects["dashboard:<url_path>"])``.
 - the ``sim`` pytest fixture (:mod:`hassle.testing.plugin`, registered as a
-  ``pytest11`` entry point on the ``hassle-core`` distribution).
+  ``pytest11`` entry point on the ``hassle-core`` distribution) -- its
+  :meth:`Simulator.dashboard` method is the ``sim.dashboard(url_path)`` shown
+  above.
 """
 
 from __future__ import annotations
@@ -39,15 +55,18 @@ from typing import Any
 
 from hassle.compiler import compile_bundle
 from hassle.compiler.bundle import CompileResult
-from hassle.ir.models import AutomationConfig
+from hassle.ir.models import AutomationConfig, DashboardConfig
 from hassle.testing.calls import ServiceCall
 from hassle.testing.clock import FakeClock, parse_datetime
+from hassle.testing.dashboard_query import DashboardNode, DashboardQuery
 from hassle.testing.engine import AutomationEngine
 from hassle.testing.errors import UnsupportedTemplateError
 from hassle.testing.state import StateStore
 from hassle.testing.templates import TemplateEngine
 
 __all__ = [
+    "DashboardNode",
+    "DashboardQuery",
     "ServiceCall",
     "Simulator",
     "UnsupportedTemplateError",
@@ -229,6 +248,31 @@ class Simulator:
         """Every automation object key (``"automation:<id>"``) known to this
         simulator -- the same keys :meth:`fire` accepts."""
         return list(self._engines_by_key)
+
+    # -- dashboards (dashboards-design.md §9.1) ---------------------------------
+
+    def dashboard(self, url_path: str) -> DashboardQuery:
+        """A :class:`~hassle.testing.dashboard_query.DashboardQuery` over the
+        compiled dashboard whose identity is ``url_path`` (``"default"`` for
+        the default dashboard -- dashboards-design.md §3.1's identity
+        sentinel).
+
+        Raises a clear ``KeyError`` listing every ``url_path`` this bundle
+        actually declares when there is no match, rather than a bare
+        ``KeyError`` on the raw object-key dict.
+        """
+        obj = self._compiled.objects.get(f"dashboard:{url_path}")
+        if not isinstance(obj, DashboardConfig):
+            known = sorted(
+                key.removeprefix("dashboard:")
+                for key in self._compiled.objects
+                if key.startswith("dashboard:")
+            )
+            raise KeyError(
+                f"no dashboard with url_path {url_path!r} in this bundle; known url_paths: "
+                f"{known if known else '(this bundle has no dashboards)'}."
+            )
+        return DashboardQuery(obj)
 
     # -- assertions --------------------------------------------------------------
 
