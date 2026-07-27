@@ -1,0 +1,44 @@
+{
+  "dashboard:layout-nested-stacks": {
+    "meta": {
+      "url_path": "layout-nested-stacks",
+      "title": "Nested stacks"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "vertical-stack",
+                  "cards": [
+                    {
+                      "type": "horizontal-stack",
+                      "cards": [
+                        {
+                          "type": "grid",
+                          "columns": 2,
+                          "square": true,
+                          "cards": [
+                            {
+                              "type": "markdown",
+                              "content": "deepest"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

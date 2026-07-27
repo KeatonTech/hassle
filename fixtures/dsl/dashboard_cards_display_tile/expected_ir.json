@@ -1,0 +1,40 @@
+{
+  "dashboard:display-tile": {
+    "meta": {
+      "url_path": "display-tile",
+      "title": "Tile"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "tile",
+                  "entity": "climate.living_room",
+                  "color": "blue",
+                  "vertical": true,
+                  "features": [
+                    {
+                      "type": "climate-hvac-modes"
+                    }
+                  ],
+                  "tap_action": {
+                    "action": "more-info"
+                  },
+                  "icon_tap_action": {
+                    "action": "toggle"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
