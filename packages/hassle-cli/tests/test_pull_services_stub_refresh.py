@@ -94,3 +94,28 @@ def test_pull_writes_hassle_reexport_stub(git_repo: Path, cli, fake_backend, tom
     stub_text = stub_path.read_text(encoding="utf-8")
     assert "automation as automation" in stub_text
     assert "service as service" in stub_text
+
+
+def _cards_reexport_stub_path(root: Path) -> Path:
+    return root / "typings" / "hassle" / "cards.pyi"
+
+
+def test_pull_writes_cards_reexport_stub(git_repo: Path, cli, fake_backend, toml_writer) -> None:
+    """`typings/hassle/cards.pyi` -- the same namespace/partial-stub-package
+    guard as `typings/hassle/__init__.pyi`, applied to `hassle.cards`
+    (dashboards-design.md §10's "nothing to generate" turned out to be one
+    stub short of true: see `hassle.registry.stubs.generate_cards_reexport_
+    stub`'s docstring). Written alongside the other three stubs, non-empty,
+    with real content."""
+    _backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    _commit_all(git_repo, "point at fake backend")
+
+    result = cli(["pull"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+
+    stub_path = _cards_reexport_stub_path(git_repo)
+    assert stub_path.is_file()
+    stub_text = stub_path.read_text(encoding="utf-8")
+    assert "tile as tile" in stub_text
+    assert "cond as cond" in stub_text

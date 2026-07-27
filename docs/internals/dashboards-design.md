@@ -1189,6 +1189,31 @@ tests honest and future-proof.
   must complete "add a card for each new device to the right section" from
   the docs alone; `hassle-dev acceptance-tasks` gains one dashboard task.
 
+**DB8 implementation note (2026-07-27):** the stubs bullet above ("nothing to
+generate") was incomplete, discovered once the acceptance sample bundle
+actually gained a dashboard and `packages/hassle-dev/tests/
+test_annotation_truth_pyright_gate.py`'s real pyright run over it broke:
+`hassle.cards` is indeed fully static/typed source needing no PER-INSTANCE
+generation, but `typings/hassle/__init__.pyi` already exists (generated
+alongside `services.pyi`/`registry/__init__.pyi` for the unrelated reason
+§10's own bullet above states — guarding `hassle.__all__`'s top-level
+surface against pyright's namespace/partial-stub-package fallback). Once ANY
+stub exists under `typings/hassle/`, pyright treats that whole dotted path as
+a COMPLETE stub package, so the real, un-stubbed `hassle.cards` submodule
+becomes an unresolvable "unknown import symbol" the moment a bundle does
+`from hassle import cards as c` — even though the real module needs no
+generated types at all. Fix (additive, same mechanism as the existing
+top-level re-export stub): `hassle stubs`/`hassle pull` also write
+`typings/hassle/cards.pyi`, re-exporting every `hassle.cards.__all__` name
+from its true defining module (`hassle_cli.cli._generate_cards_reexport_stub`,
+reusing `hassle.registry.stubs.generate_reexport_stub_lines` — a generic
+extraction of `generate_hassle_reexport_stub`'s own logic, since
+`hassle.registry` may not import `hassle.cards` itself per the internal
+package-layering rule). Nothing else in this section changes: `.vscode`
+stays untouched, and no PER-SNAPSHOT generation is needed for cards (the new
+stub is a pure function of `hassle.cards.__all__`, exactly like the
+top-level one is a pure function of `hassle.__all__`).
+
 ---
 
 ## 11. Risks and mitigations
