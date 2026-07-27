@@ -9,6 +9,7 @@ rule for NEW helpers), and pointers into docs/.
 
 from __future__ import annotations
 
+from hassle.compiler.dashboards.errors import DashboardConditionTypeError
 from hassle.compiler.errors import CompileTimeBranchError
 from hassle.docs.agents_md import generate_agents_md
 
@@ -81,6 +82,44 @@ def test_points_into_docs_dir() -> None:
     text = generate_agents_md(bundle_name="my-home")
     assert "docs/DSL.md" in text
     assert "docs/COOKBOOK.md" in text
+
+
+# -- dashboards (dashboards-design.md §10) -----------------------------------
+
+
+def test_contains_card_and_cond_import_convention() -> None:
+    text = generate_agents_md(bundle_name="my-home")
+    assert "from hassle import cards as c" in text
+    assert "from hassle.cards import cond" in text
+
+
+def test_contains_compile_time_loop_generates_cards_note() -> None:
+    text = generate_agents_md(bundle_name="my-home")
+    lowered = text.lower()
+    assert "for" in lowered and "compile time" in lowered
+    assert "card" in lowered
+
+
+def test_contains_dashboard_condition_trap_and_error_class() -> None:
+    """The automation-vs-dashboard condition trap must name the actual
+    exception class (so a session can grep the traceback for this doc) and
+    point at the `cond.*` fix."""
+    text = generate_agents_md(bundle_name="my-home")
+    assert DashboardConditionTypeError.__name__ in text
+    assert "cond." in text
+
+
+def test_contains_third_party_custom_card_rule() -> None:
+    text = generate_agents_md(bundle_name="my-home")
+    lowered = text.lower()
+    assert "raw_card" in text
+    assert "third-party" in lowered or "custom" in lowered
+
+
+def test_contains_dashboard_file_placement_rule() -> None:
+    text = generate_agents_md(bundle_name="my-home")
+    assert "dashboards/" in text
+    assert "one per file" in text.lower()
 
 
 def test_contains_toolchain_note() -> None:

@@ -12,7 +12,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import hassle
-from hassle.docs.construct_map import EXEMPT_NAMES, NAME_TO_CASES, missing_names
+from hassle.compiler.dashboards.card_registry import CARD_REGISTRY, ensure_builtin_families_loaded
+from hassle.docs.construct_map import (
+    CARD_TYPE_TO_CASES,
+    EXEMPT_NAMES,
+    NAME_TO_CASES,
+    missing_card_types,
+    missing_names,
+)
 from hassle.docs.dsl_reference import generate_dsl_reference
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -81,3 +88,44 @@ def test_generate_dsl_reference_is_deterministic() -> None:
     a = generate_dsl_reference(DSL_FIXTURES)
     b = generate_dsl_reference(DSL_FIXTURES)
     assert a == b
+
+
+# -- card reference section (dashboards-design.md §10) -----------------------
+
+
+def test_every_card_registry_type_is_covered_or_gate_fails() -> None:
+    """The card-reference docs coverage gate: every built-in card type DB3's
+    builders registered has a `CARD_TYPE_TO_CASES` entry (mirrors
+    `test_every_all_name_is_covered_or_exempt` for `hassle.__all__`)."""
+    ensure_builtin_families_loaded()
+    missing = missing_card_types(list(CARD_REGISTRY))
+    assert not missing, f"card types with no golden pair in docs/DSL.md: {sorted(missing)}"
+
+
+def test_card_type_to_cases_only_references_real_fixture_dirs() -> None:
+    for card_type, cases in CARD_TYPE_TO_CASES.items():
+        for case in cases:
+            bundle_dir = DSL_FIXTURES / case / "bundle"
+            assert bundle_dir.is_dir(), f"{card_type!r} maps to non-existent case {case!r}"
+
+
+def test_generate_dsl_reference_contains_a_section_for_every_card_builder() -> None:
+    ensure_builtin_families_loaded()
+    text = generate_dsl_reference(DSL_FIXTURES)
+    assert "## Card reference" in text
+    for card_type in CARD_REGISTRY:
+        builder_name = CARD_REGISTRY[card_type].builder
+        assert f"### `{builder_name}`" in text, (
+            f"docs/DSL.md is missing a card-reference section for {builder_name!r}"
+        )
+
+
+def test_generate_dsl_reference_shows_card_dsl_and_yaml_pair() -> None:
+    """Spot check: `c.tile`'s card-reference section shows both the Python
+    call and the compiled card body (same pattern-matchable pair as every
+    other construct)."""
+    text = generate_dsl_reference(DSL_FIXTURES)
+    idx = text.index("### `c.tile`")
+    section = text[idx : idx + 2000]
+    assert "```python" in section
+    assert '"type": "tile"' in section

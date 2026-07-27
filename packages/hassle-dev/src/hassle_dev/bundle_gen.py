@@ -1,18 +1,19 @@
 """`hassle-dev acceptance-bundle --out DIR`:
 generate the "sample house" bundle that `hassle_dev.acceptance.emit_tasks`'s
-10 task prompts are written against.
+11 task prompts are written against.
 
 ## Why this exists
 
 The agent-acceptance harness (see `hassle_dev.acceptance`) requires giving a
 fresh model session "the pulled sample
-bundle + AGENTS.md only" plus the 10 prompts from `hassle-dev acceptance-tasks`.
+bundle + AGENTS.md only" plus the 11 prompts from `hassle-dev acceptance-tasks`.
 Those prompts presuppose a specific, coherent "sample house" (a hallway motion
 automation controlling `light.hallway`, an `input_boolean.guest_mode` helper, a
-deliberately failing test, a deliberate validation-finding target, ...) -- see
-`hassle_dev.acceptance`'s module docstring for the full list. Before this
-module, no bundle satisfying those presuppositions existed anywhere in the
-repo (`fixtures/sim/hallway_bundle` is a bare `hallway.py`, with no
+deliberately failing test, a deliberate validation-finding target, a "Home"
+dashboard whose "Lights" section is missing cards for two just-added lights,
+...) -- see `hassle_dev.acceptance`'s module docstring for the full list.
+Before this module, no bundle satisfying those presuppositions existed anywhere
+in the repo (`fixtures/sim/hallway_bundle` is a bare `hallway.py`, with no
 `AGENTS.md`/`docs/`/`hassle.toml`/`tests/` -- not a bundle a real user, or a
 fresh model session, would ever be handed).
 
@@ -40,17 +41,17 @@ relies on, rather than reimplements).
 `hassle_dev.acceptance.score_task` calls `hassle validate && hassle test`
 against a session's resulting bundle and requires BOTH to exit 0. But
 `diagnose_failing_test`'s entire premise is "one of the tests in `tests/` is
-failing" -- so the bundle handed to every one of the 10 tasks (all 10 start
+failing" -- so the bundle handed to every one of the 11 tasks (all 11 start
 from independent copies of the SAME generated bundle, per
 `hassle_dev.acceptance`'s module docstring) necessarily contains that failing
 test too. If it were a plain failing `def test_...`, `hassle test` would
-never exit 0 for the other 9 tasks either, regardless of how well a session
-solved ITS task -- collapsing the whole harness to 0/10 by construction.
+never exit 0 for the other 10 tasks either, regardless of how well a session
+solved ITS task -- collapsing the whole harness to 0/11 by construction.
 
 The fix: the seeded bug's test is marked `@pytest.mark.xfail(strict=True)`
 (see `tests/test_seeded_bug.py` written by `_write_seed_tests`). Plain
 `pytest`/`hassle test` treats a non-strict-violating `xfail` as a PASS (exit
-0) -- so the other 9 tasks' `score_task` floor is genuinely "did this
+0) -- so the other 10 tasks' `score_task` floor is genuinely "did this
 session's own edit leave the bundle green", untouched by the pre-existing,
 out-of-scope bug. `diagnose_failing_test` itself requires the session to fix
 the underlying automation logic (not the test) so the test's assertion is
@@ -208,7 +209,7 @@ def _buggy_landing_light_automation() -> dict[str, Any]:
     (an inverted condition, the same seeded-bug shape as `fixtures/sim/
     hallway_bundle_buggy` -- an `is_`/`to` check backwards from the stated
     intent), independent of the hallway motion automation so fixing it can
-    never collide with the other 9 tasks' edits. Intent: "turn on the
+    never collide with the other 10 tasks' edits. Intent: "turn on the
     landing light when the landing motion sensor detects motion, unless
     holiday mode is on" (`input_boolean.holiday_mode`, `home.json`); the
     seeded bug fires it exactly backwards (only when holiday mode IS on).
@@ -242,6 +243,40 @@ def _guest_mode_helper() -> dict[str, Any]:
     return {"id": "guest_mode", "name": "Guest Mode", "icon": "mdi:account-group"}
 
 
+def _home_dashboard_envelope() -> dict[str, Any]:
+    """The `add_dashboard_card` acceptance-task target
+    (docs/internals/dashboards-design.md §10): a "Home" dashboard with a
+    sections view, a "Lights" section holding cards for two already-known
+    lights -- deliberately NOT covering `light.office_ceiling`/
+    `light.office_desk` (both real `home.json` entities), which is exactly
+    the "two new lights were just added" gap the task prompt asks a session
+    to close. The two-store envelope shape (`meta`/`config`) mirrors
+    `FakeBackend`'s dashboard-kind contract (`test_fake_backend_dashboard.py`);
+    `url_path` needs its hyphen for the same reason every other non-default
+    dashboard does (§2.2 item 1)."""
+    return {
+        "meta": {"url_path": "home-main", "title": "Home", "icon": "mdi:home"},
+        "config": {
+            "views": [
+                {
+                    "type": "sections",
+                    "title": "Lights",
+                    "path": "lights",
+                    "sections": [
+                        {
+                            "type": "grid",
+                            "cards": [
+                                {"type": "tile", "entity": "light.hallway"},
+                                {"type": "tile", "entity": "light.kitchen"},
+                            ],
+                        }
+                    ],
+                }
+            ]
+        },
+    }
+
+
 def _demo_script() -> dict[str, Any]:
     """At least one script, per the generator's seeding contract --
     otherwise unreferenced by any of the 10 prompts, so it's simple: toggle
@@ -268,6 +303,7 @@ def _seed_backend() -> Any:
     backend.create("automation", _buggy_landing_light_automation())
     backend.create("input_boolean", _guest_mode_helper())
     backend.create("script", _demo_script())
+    backend.create("dashboard", _home_dashboard_envelope())
     backend.reset_write_tracking()
     return backend
 
@@ -312,7 +348,7 @@ instead of being suppressed by it). This test encodes the INTENDED behavior --
 it currently fails for that reason, by design (see `hassle_dev.bundle_gen`'s
 module docstring, "Scoring nuance: diagnose_failing_test starts red by
 design"). `xfail(strict=True)`: a plain `hassle test` run still exits 0 (the
-other 9 acceptance tasks' scoring floor is untouched by this pre-existing,
+other 10 acceptance tasks' scoring floor is untouched by this pre-existing,
 out-of-scope bug), but this test FAILING TO FAIL (an XPASS) after a fix is
 applied without removing the marker is itself reported as a failure -- so the
 task genuinely requires both fixing the automation AND removing this marker,

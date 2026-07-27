@@ -10,6 +10,7 @@ Written to the bundle root by `hassle init`/`hassle pull` (mirrors the
 
 from __future__ import annotations
 
+from hassle.compiler.dashboards.errors import DashboardConditionTypeError
 from hassle.compiler.errors import CompileTimeBranchError
 
 
@@ -22,6 +23,7 @@ def generate_agents_md(*, bundle_name: str) -> str:
     template.
     """
     error_class = CompileTimeBranchError.__name__
+    dashboard_condition_error_class = DashboardConditionTypeError.__name__
     return f"""\
 # AGENTS.md — {bundle_name}
 
@@ -103,6 +105,46 @@ that uv project instead — no global install needed in that case.
   object that predates Hassle (inner `platform:`, scalar `delay:`, ...) — Hassle
   compiles the modern form and HA stores it that way from then on, so the plan is
   clean on the next run. It is not a sign that something is wrong.
+
+## Dashboards
+
+Lovelace storage-mode dashboards are Python too (`hassle pull` decompiles them
+the same as automations/scripts/helpers -- docs/internals/dashboards-design.md):
+
+- **Import convention:** `from hassle import *` (the eight structural names --
+  `dashboard`, `view`, `section`, `badge`, `raw_card`, `raw_section`, `raw_view`,
+  `raw_dashboard`) plus `from hassle import cards as c` for every built-in card
+  builder (`c.tile(...)`, `c.entities(...)`, `with c.vertical_stack(): ...`) and
+  `from hassle.cards import cond` for the Lovelace visibility/conditional
+  vocabulary (`cond.state(...)`, `cond.numeric(...)`, `cond.screen(...)`). Cards
+  live in their own namespace because HA card type names (`area`, `light`,
+  `button`, ...) collide with the top-level DSL surface.
+- **Python `for` generates cards at compile time**, exactly like it generates
+  automation actions: a card per device is a loop over a plain list
+  (`for head in HEAT_PUMP_HEADS: c.thermostat(entity=head)`), not copy-paste --
+  add a device to the list and the next compile picks it up everywhere the
+  list is used.
+- **Dashboard conditions are NOT automation conditions.** Lovelace
+  `visibility=`/`c.conditional(...)` conditions are a different schema
+  (`entity`/`state`/`state_not` keys, plus UI-only `screen`/`user` kinds) from
+  automation `only_if`/`if_then` conditions (`entity_id`/`condition` keys).
+  Passing an automation condition builder into a dashboard slot raises
+  `{dashboard_condition_error_class}`, which names the exact `cond.*` builder
+  to use instead (e.g. `cond.state(entity, "on")`) -- apply that fix, don't
+  try to reuse an automation-style condition object in a dashboard.
+- **Third-party/custom cards stay `raw_card`.** A card type Hassle has no
+  typed builder for (`custom:bubble-card`, a strategy dashboard, ...) round-
+  trips losslessly through `raw_card({{...}})`/`raw_section({{...}})`/
+  `raw_view({{...}})`/`@raw_dashboard(...)` -- never guessed, never dropped.
+  Every builder's `extra=` keyword absorbs individual unknown OPTIONS on an
+  otherwise-typed card the same way; only reach for `raw_card` when the whole
+  card type itself is unmodeled.
+- **File placement: `dashboards/<module_name>.py` by default, one per file --
+  but this is a default, not a rule.** `hassle pull` scaffolds a brand-new
+  dashboard there; after that first placement, file organization is entirely
+  yours -- merge dashboards into one file, split one across several, mix them
+  with other kinds, whatever you prefer. Hassle tracks each object's file in
+  the manifest, not by convention.
 
 ## Consuming validation programmatically
 

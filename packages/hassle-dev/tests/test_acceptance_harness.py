@@ -1,13 +1,14 @@
 """The agent-acceptance harness (build only -- running actual model sessions
 against these tasks happens elsewhere).
 
-`emit_tasks(bundle_dir)` returns the 10 representative task prompts a fresh
-model session would be given (bundle + AGENTS.md only); `score_task` runs
-the mechanical part of the rubric (`hassle validate && hassle test` against
-the modified bundle) and reports pass/fail -- the harness never itself
-judges whether the *diff* satisfies the task's intent, only whether the
-bundle is left in a valid, green state (the mechanically-checkable half of
-the acceptance bar).
+`emit_tasks(bundle_dir)` returns the 11 representative task prompts a fresh
+model session would be given (bundle + AGENTS.md only) -- the original 10
+automation-era tasks (DESIGN's M9) plus one dashboard task added for DB8
+(docs/internals/dashboards-design.md §10); `score_task` runs the mechanical
+part of the rubric (`hassle validate && hassle test` against the modified
+bundle) and reports pass/fail -- the harness never itself judges whether the
+*diff* satisfies the task's intent, only whether the bundle is left in a
+valid, green state (the mechanically-checkable half of the acceptance bar).
 """
 
 from __future__ import annotations
@@ -37,9 +38,9 @@ def _copy_as_real_bundle(src: Path, dest: Path) -> Path:
     return dest
 
 
-def test_emit_tasks_returns_exactly_ten() -> None:
+def test_emit_tasks_returns_exactly_eleven() -> None:
     tasks = emit_tasks(HALLWAY_BUNDLE)
-    assert len(tasks) == 10
+    assert len(tasks) == 11
 
 
 def test_every_task_has_a_unique_id_and_nonempty_prompt() -> None:
@@ -51,7 +52,7 @@ def test_every_task_has_a_unique_id_and_nonempty_prompt() -> None:
         assert task.category
 
 
-def test_task_categories_cover_the_ten_representative_kinds() -> None:
+def test_task_categories_cover_the_eleven_representative_kinds() -> None:
     tasks = emit_tasks(HALLWAY_BUNDLE)
     categories = {t.category for t in tasks}
     expected = {
@@ -65,6 +66,7 @@ def test_task_categories_cover_the_ten_representative_kinds() -> None:
         "ignore_glob_addition",
         "explain_plan_diff",
         "fix_validation_finding",
+        "add_dashboard_card",
     }
     assert categories == expected
 
@@ -157,6 +159,6 @@ def test_cli_json_output_is_stable_schema(tmp_path: Path) -> None:
     )
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout)
-    assert len(payload["tasks"]) == 10
+    assert len(payload["tasks"]) == 11
     for task in payload["tasks"]:
         assert set(task.keys()) == {"task_id", "category", "prompt"}
