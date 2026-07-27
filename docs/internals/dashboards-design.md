@@ -616,19 +616,39 @@ fixtures exist.
 
 ## 7. Placement, CLI, and bundle layout
 
-- **Default placement: root-level `dashboards.py`** for every adopted
-  dashboard (`default_source_path` returns it for the kind; dashboards have
-  no category-registry scope — `_SCOPE_FOR_KIND` deliberately has no entry,
-  and HA has no `lovelace` category scope to write back to). User-controlled
-  after first placement, like everything else; a dashboard moved into a
-  category-shaped file just lives there (no category writeback for this
-  kind).
-- **DESIGN §13 deviation, recorded**: DESIGN reserves a `dashboards/`
-  *directory* — written before the category-first flat layout (§6) retired
-  per-kind trees. This design supersedes that reservation with the
-  root-level `dashboards.py` default; DESIGN §13's bullet gets a pointer to
-  this document in the same PR. (Flagged per the CONTRIBUTING "if DESIGN and
-  reality disagree" rule.)
+- **Default placement: one file per dashboard, `dashboards/<module_name>.py`**
+  inside a root-level `dashboards/` directory. `<module_name>` is the
+  identity made module-safe: hyphens → underscores, a leading digit prefixed
+  with `_` (the stub generator's rule), e.g. `dashboard:climate-control` →
+  `dashboards/climate_control.py`, `dashboard:default` →
+  `dashboards/default.py`. `default_source_path` returns this for the kind.
+  The directory is a plain namespace dir (scaffolded on demand by pull,
+  **without** `__init__.py` — an `__init__.py` would make it a *category
+  package* named "dashboards", which is not the intent; `compile_bundle`
+  already recurses into subdirectories, M7.1). Dashboards have no
+  category-registry scope — `_SCOPE_FOR_KIND` deliberately has no entry, and
+  HA has no `lovelace` category scope to write back to.
+- **The per-file default is a default, not a rule.** The compiler imposes no
+  file discipline: any number of dashboards may share one file, dashboards
+  may mix with other kinds in any file, and placement is user-controlled
+  after first write, like every kind. Enforced by a golden pair compiling
+  two dashboards from one module.
+- **Adopt never clobbers an existing file.** Pull creates a file only for a
+  truly never-seen object; an object already defined anywhere in the bundle
+  routes to its recorded source (manifest `source`, standard §8.3 behavior —
+  refresh splices in place wherever the user keeps it). If a brand-new
+  adopted dashboard's default target path already exists on disk (a
+  hand-authored file, or two identities collapsing to one module-safe name),
+  the adopt lands **in** that file through the splice/append path
+  (`SplicingSourceWriter`'s append-under-marker behavior) — never a
+  `write_whole_file` onto an existing path. The adopt batcher already groups
+  by target file, so N new dashboards yield N files in the common case and
+  clean appends in the collision case.
+- **DESIGN §13 note**: this honors DESIGN's original `dashboards/`
+  directory reservation, refined from "a reserved directory" to "a
+  per-dashboard-file default inside it" — the pointer added to DESIGN §13
+  says so. (The category-first flat layout of §6 is unaffected: it governs
+  category-*scoped* kinds; dashboards have no category scope.)
 - Pull/adopt/refresh/drop/conflict need no new engine code (`apply_pull`
   dispatches on `PlanAction` only); the adopt batcher routes all dashboards
   into one `decompile_bundle` call per file as usual. `hassle pull` output
@@ -704,9 +724,10 @@ tests honest and future-proof.
   conflict/drop/adopt, default-dashboard create/delete), apply-order test,
   FakeBackend behavior tests (hyphen rule, config_not_found, delete
   semantics, **no-normalize regression test** from §3.3), partial-create
-  rollback test, pull placement (`dashboards.py`), splice-refresh test,
-  ignore-glob test, **I6 fuzz**: the lost-edits fuzzer's kind pool gains
-  `dashboard`.
+  rollback test, pull placement (per-dashboard `dashboards/<module_name>.py`
+  files, adopt-append into an existing file, multi-dashboard modules),
+  splice-refresh test, ignore-glob test, **I6 fuzz**: the lost-edits
+  fuzzer's kind pool gains `dashboard`.
 - **Error snapshots** for every new message (R6). **pyright strict** over
   the new modules incl. the public builder signatures (R7).
 - **Integration** (`tests/integration/`, live HA): DB0's captures replayed
@@ -840,12 +861,18 @@ protocol conformance test, integration CRUD test (replaying DB0 captures).
 
 **DB6 — Sync, placement, CLI (Sonnet)** — *depends: F4 (uses DB5's
 FakeBackend when it lands; plan-table tests need only the kind + fixtures)*
-`default_source_path` → `dashboards.py`; plan-table rows for the kind;
-pull adopt/refresh/drop/conflict paths incl. the adopt batcher; ignore
-globs; I6 fuzzer kind-pool extension; `corpus.py` `_kind_for`; DESIGN §13
-pointer edit; release-note draft for the mass-adoption behavior.
-*Tests first*: `test_plan_table` extension, pull-placement tests,
-pull→plan-noop over dashboard fixtures, fuzz run green.
+`default_source_path` → `dashboards/<module_name>.py` (§7's module-safe
+naming + scaffolding rules); plan-table rows for the kind; pull
+adopt/refresh/drop/conflict paths incl. the adopt batcher and the
+adopt-into-existing-file append path; ignore globs; I6 fuzzer kind-pool
+extension; `corpus.py` `_kind_for`; DESIGN §13 pointer edit; release-note
+draft for the mass-adoption behavior.
+*Tests first*: `test_plan_table` extension, pull-placement tests (N new
+dashboards → N files; adopt into an existing file appends, never
+overwrites; refresh splices wherever the user moved the object;
+`dashboards/` scaffolded without `__init__.py`), a
+two-dashboards-one-module golden pair, pull→plan-noop over dashboard
+fixtures, fuzz run green.
 
 **DB7 — Validation + testing API (Sonnet)** — *depends: F5*
 Table-driven entity extraction over the builder registry, raw-node
