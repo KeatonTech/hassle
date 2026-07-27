@@ -10,14 +10,15 @@ The public surface is exactly `hassle.__all__` (module
 `packages/hassle-core/src/hassle/__init__.py`). Bundle files write
 `from hassle import automation, when, ...`; nothing outside this list is public.
 
-Two dedicated entry points are deliberately *not* folded into `hassle.__all__`:
+Three dedicated entry points are deliberately *not* folded into `hassle.__all__`:
 `hassle.registry` (below; DESIGN §5.3 imports it under its own alias, `from
-hassle.registry import entities as e`) and `hassle.services` (its own section
-below) — both are domain/instance-dynamic (their real shape depends on the
-bundle's own registry snapshot), which is exactly why neither is part of the
-star surface: `hassle.__all__` is a fixed, frozen contract, but which
-domains/services exist is a property of a specific HA install, not the DSL
-itself.
+hassle.registry import entities as e`), `hassle.services` (its own section
+below), and `hassle.cards` (its own section below). The first two are
+domain/instance-dynamic (their real shape depends on the bundle's own registry
+snapshot), which is exactly why neither is part of the star surface:
+`hassle.__all__` is a fixed, frozen contract, but which domains/services exist
+is a property of a specific HA install, not the DSL itself. `hassle.cards` is
+separate for a different reason — namespace hygiene, see its section.
 
 ### Entity indexing form — `hassle.registry.entities` (DESIGN §5.2/§5.3)
 
@@ -94,6 +95,77 @@ no snapshot supplied at all, or a non-kwarg-safe data key) falls back to
 entity-method form is author-only sugar and is never emitted by the
 decompiler (one canonical output form, independent of how the DSL source
 happened to be written).
+
+### Card builders and Lovelace conditions — `hassle.cards`, `hassle.cards.cond`
+
+```python
+from hassle import *                  # dashboard, view, section, badge, raw_* …
+from hassle import cards as c         # c.tile(...), with c.vertical_stack(): …
+from hassle.cards import cond         # cond.state(...), cond.screen(...)
+from hassle.registry import entities as e
+```
+
+`hassle.cards` is a non-star module for a reason unlike the other two: **name
+collisions**, not instance-dynamism. Card type names collide head-on with the
+frozen DSL surface — `area`, `calendar`, `button`, `light`, `sensor` are
+already `hassle.__all__` names and `map` is a Python builtin — so folding ~35
+card builders into the star surface would mean renaming every one of them away
+from its own HA name (`map_card`, `area_card`, …). A dedicated namespace costs
+one import line and keeps every builder named exactly what HA calls it
+(docs/internals/dashboards-design.md §5.1).
+
+The card vocabulary is a **closed, versioned set** (it ships in HA frontend
+releases rather than being enumerable from an instance), so — unlike
+`hassle.services` — this module has **no** `__getattr__` dynamism: every
+builder is a real typed function and pyright checks every keyword. Its
+`__all__` is frozen under the same additive-only rule as `hassle.__all__`. A
+card type Hassle does not model is never an error: it round-trips through
+`raw_card` and surfaces in the decompile-coverage metric.
+
+- `hassle.cards.cond` — the **Lovelace** condition vocabulary (a different
+  schema from automation conditions, dashboards-design §5.4):
+  `cond.state(entity, value=None, *, not_=None)` →
+  `{condition: state, entity, state|state_not}`;
+  `cond.numeric(entity, above=, below=)` → `{condition: numeric_state, …}`;
+  `cond.screen(media_query)` and `cond.user(*user_ids)` (the two UI-only
+  kinds); `cond.any(...)` / `cond.all(...)` / `cond.not_(...)` →
+  `{condition: or|and|not, conditions: [...]}`. A verbatim `dict` is accepted
+  anywhere a condition is, so an unmodelled future condition kind round-trips
+  raw.
+
+### Dashboard builder conventions
+
+Every structural builder above and every `hassle.cards` builder shares two
+keyword conventions, implemented once
+(`hassle.compiler.dashboards.builders`) so they cannot drift apart:
+
+- **`extra: dict | None = None`, keyword-only, on every builder** — verbatim
+  passthrough merged into the built body. The forward-compatibility valve: when
+  HA adds an option Hassle doesn't model yet, the decompiler emits the *typed
+  builder call plus `extra={...}`* instead of collapsing the node to `raw_card`,
+  and an author can use a new option the day HA ships it. A typo'd kwarg is
+  still a loud `TypeError` (builders have no `**kwargs`). An `extra` key may not
+  shadow a **declared** kwarg of that builder — even one that was omitted —
+  so every option has exactly one spelling (`ExtraShadowsKwargError`).
+- **`visibility=`** — one condition or a list of them, each a `cond.*` object
+  or a verbatim dict; normalized to HA's stored list-of-conditions. An
+  automation condition builder here raises `DashboardConditionTypeError`.
+
+### Dashboard trap table (both directions)
+
+| You wrote | Where | What happens |
+|---|---|---|
+| `raw_card(...)`/`view(...)`/`section()`/`badge(...)` | outside a `@dashboard` body | `NoDashboardContextError` (message sharpens if an `@automation` body is active) |
+| `service(...)`/`when(...)`/any action verb | inside a `@dashboard` body | `NoRecordingContextError`, with dashboard-specific teaching text (put the call on the card's `tap_action`) |
+| a card | straight in the `@dashboard` body, or a `badge()` outside a view, or a nested `view()` | `DashboardNestingError` |
+| a card | directly under a `sections` view | `SectionRequiredError` |
+| `section()`/`raw_section()` | under a masonry/panel/sidebar view, or nested | `SectionOutsideSectionsViewError` |
+| 0 or ≥2 cards | in a `panel` view | `PanelViewArityError` |
+| no `url_path=`+no `default=True`, both, a hyphen-less `url_path`, a raw `meta` without `url_path`, or a `meta` `url_path` contradicting the decorator's | `@dashboard`/`@raw_dashboard` | `DashboardUrlPathError` |
+| `title=`/`icon=`/`show_in_sidebar=`/`require_admin=` | with `default=True` | `DefaultDashboardMetadataError` |
+| an automation `ConditionBuilder` | `visibility=` / a conditional card | `DashboardConditionTypeError` (names the `cond.*` equivalent) |
+| a `cond.*` object | `only_if`/`if_then`/`all_of`/… | `DashboardConditionInAutomationError` |
+| an `extra=` key that is a declared kwarg | any builder | `ExtraShadowsKwargError` |
 
 ## The frozen surface, grouped by role
 
@@ -486,6 +558,42 @@ records no deviation; every builder mirrors HA's Jinja math set 1:1).
   if_then(cond, alias="..."):` compiles the `alias` onto the assembled
   `if`-block body, not onto a child step. Omitted by default.
 
+### Dashboards — the eight structural names (dashboards-design §5.2/§5.5)
+
+Card builders live in `hassle.cards` (above); only these eight structural names
+are in `hassle.__all__`.
+
+- `dashboard` — `@dashboard(url_path=, default=, title=, icon=,
+  show_in_sidebar=, require_admin=)` registers a Lovelace storage-mode
+  dashboard. Exactly one of `url_path=` (HA requires the slug to contain a
+  hyphen) or `default=True` (THE default dashboard, which has no
+  dashboard-registry item and therefore forbids the four metadata keywords).
+  Compiles to the two-store envelope `{"meta": {...} | null, "config":
+  {"views": [...]}}` (ir-format.md).
+- `raw_dashboard` — `@raw_dashboard(url_path=|default=)` over a zero-argument
+  function returning either the whole envelope (a dict with a `config` key) or
+  just the Lovelace config. A returned `meta` dict MUST carry `url_path`
+  (`DashboardUrlPathError`), so a malformed dashboard can never silently key as
+  the default one.
+- `view` — `with view(title=, path=, icon=, type="sections", max_columns=,
+  subview=, visible=, theme=, background=, header=, visibility=, extra=):`.
+  One builder for every view type. `type=` takes `"sections"` (the authoring
+  default, materialized explicitly), `"masonry"`/`"sidebar"`/`"panel"`
+  (verbatim), or **`None`** — which emits *no* `type` key, the legacy-masonry
+  storage shape. A `sections` view holds `with section():` blocks; every other
+  type holds cards directly, and `panel` holds exactly one.
+- `section` — `with section(column_span=, visibility=, extra=):`, stored as
+  `{"type": "grid", "cards": [...]}` in the enclosing `sections` view's own
+  `sections` list.
+- `badge` — `badge(entity_or_dict, *, visibility=, extra=, **options)` records
+  into the enclosing view's `badges` list; an entity id builds the modern
+  object form, a plain dict passes through verbatim (legacy/unknown badges).
+- `raw_card(dict)` / `raw_section(dict)` / `raw_view(dict)` — the structural
+  raw ladder (I3): an unmodelled card inside any container, an unmodelled
+  section inside a `sections` view, an unmodelled view (e.g. a strategy view)
+  inside a `@dashboard` body. Dicts, not YAML strings — the same currency every
+  other `raw_*` verb speaks. Never raw a parent merely because a child rawed.
+
 ### Raw escape hatches (DESIGN §5.8)
 - `raw_trigger(dict)`, `raw_condition(dict)`, `raw_action(dict)` — verbatim
   passthrough of any HA block the DSL doesn't model (normalized by the compiler).
@@ -566,6 +674,37 @@ These are how new builder families are added; they are **not** in
   to render one expression nested inside another without reaching into the
   private `_as_operand`/`_prec`/`_compound` fields — same convention as
   subclassing `builders._NoBool` for the `__bool__` trap.
+- `hassle.compiler.dashboards.recorder` — `DashboardRecorder`,
+  `dashboard_recording(...)`, `active_dashboard()`, `RecordedNode`,
+  `ContainerFrame`, `DashboardRecorder.push`, `_require_active`, `_CM_DEPTH`,
+  and the two record seams **`record_card(body, *, span, what=)`** /
+  **`record_badge(body, *, span)`** plus the container seam
+  **`push_container(body, *, label, span, child_key="cards", assign=True)`**.
+  The dashboard sibling of `record_action`/`Recorder.push_actions`: every
+  `hassle.cards` builder is implemented on top of it, so a third-party builder
+  pack needs no recorder access of its own. `record_card` takes OWNERSHIP of
+  the dict it is given (container cards keep mutating it); the `raw_*` verbs
+  copy the author's dict before handing it over.
+- `hassle.compiler.dashboards.builders` — `merge_extra`,
+  `normalize_visibility`, `put`: the one implementation of the `extra=` merge +
+  shadow check and the `visibility=` normalizer every dashboard builder shares.
+- `hassle.compiler.dashboards.conditions` — `DashboardCondition` (the
+  `to_dashboard_condition()` Protocol, the dashboard sibling of
+  `ConditionBuilder`) and `normalize_condition`, the single entry point every
+  condition-accepting dashboard parameter uses.
+- `hassle.compiler.dashboards.card_registry` — `CardSpec` / `CARD_REGISTRY` /
+  `STRUCTURE_REGISTRY` / `register_card`: the frozen (F5) card-type table that
+  the card builders register into and that the decompiler's emitter selection
+  and the validator's card-tree entity extraction both read.
+- `hassle.compiler.registry.register_dashboard` — the dashboard registration
+  path (identity is the `url_path`/`default` sentinel, not the function name).
+- `hassle.compiler.bundle` — `CompileResult.node_spans_for(obj)` /
+  `CompileResult.node_span(obj, path)`, the span sidecar for tree-shaped
+  bodies. Path grammar: dot-joined `<key>[<index>]` segments relative to a
+  dashboard's `config`, e.g. `views[0].sections[0].cards[2]`.
+- `hassle.compiler.recording.active_recorder` — read-only "is an
+  automation/script recorder open?", used only so each recorder's
+  wrong-context error can name the actual mix-up.
 - `hassle.compiler.purpose.normalize_target` — normalizes a bare entity
   ref/`str`, a list of them, or an `area()`/`floor()`/`label()`/`device_id()`
   target helper object into HA's stored `target` dict shape. Every `target=`

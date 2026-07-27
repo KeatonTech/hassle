@@ -1,0 +1,31 @@
+{
+  "dashboard:home-main": {
+    "meta": {
+      "url_path": "home-main",
+      "title": "Home",
+      "icon": "mdi:home",
+      "show_in_sidebar": true,
+      "require_admin": false
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "path": "overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "markdown",
+                  "content": "Welcome home."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

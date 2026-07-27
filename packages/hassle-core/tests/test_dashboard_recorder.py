@@ -58,13 +58,12 @@ def test_record_card_outside_a_dashboard_raises_no_dashboard_context() -> None:
 
 
 def test_record_card_at_the_dashboard_level_raises_nesting_error() -> None:
-    with dashboard_recording(url_path="a-b"):
-        with pytest.raises(DashboardNestingError):
-            raw_card({"type": "markdown", "content": "hi"})
+    with dashboard_recording(url_path="a-b"), pytest.raises(DashboardNestingError):
+        raw_card({"type": "markdown", "content": "hi"})
 
 
 def test_record_card_directly_under_a_sections_view_raises() -> None:
-    with dashboard_recording(url_path="a-b"), view(title="V"):
+    with dashboard_recording(url_path="a-b"), view(title="V"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(SectionRequiredError):
             raw_card({"type": "markdown", "content": "hi"})
 
@@ -91,11 +90,10 @@ def test_push_container_places_the_container_and_collects_its_children() -> None
         with push_container(body, label="a `vertical-stack` card", span=span):
             yield
 
-    with dashboard_recording(url_path="a-b") as rec:
-        with view(title="V"), section():
-            with vertical_stack():
-                raw_card({"type": "markdown", "content": "one"})
-                raw_card({"type": "markdown", "content": "two"})
+    with dashboard_recording(url_path="a-b") as rec, view(title="V"), section():  # noqa: SIM117 - the block reads as the dashboard tree it builds
+        with vertical_stack():
+            raw_card({"type": "markdown", "content": "one"})
+            raw_card({"type": "markdown", "content": "two"})
 
     config = rec.build_config()
     stack = config["views"][0]["sections"][0]["cards"][0]
@@ -104,8 +102,8 @@ def test_push_container_places_the_container_and_collects_its_children() -> None
 
 
 def test_every_recorded_node_carries_a_span_reachable_by_path() -> None:
-    with dashboard_recording(url_path="a-b") as rec:
-        with view(title="V"):  # noqa: SIM117 - distinct lines are load-bearing
+    with dashboard_recording(url_path="a-b") as rec:  # noqa: SIM117 - lines stay distinct
+        with view(title="V"):
             with section():
                 raw_card({"type": "markdown", "content": "one"})
 
@@ -118,7 +116,8 @@ def test_every_recorded_node_carries_a_span_reachable_by_path() -> None:
     for path, span in spans.items():
         assert span is not None, path
         assert span.file.endswith("test_dashboard_recorder.py")
-    # The three nodes were opened on three consecutive source lines.
+    # The three nodes were opened on three consecutive source lines, so each
+    # one's span really is its OWN -- not the enclosing construct's.
     assert (
         spans["views[0]"].line
         < spans["views[0].sections[0]"].line

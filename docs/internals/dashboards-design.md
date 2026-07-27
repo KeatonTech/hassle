@@ -513,6 +513,17 @@ cond.user(user_id, ...)                   # {condition: user, users: [...]}
 cond.any(...) / cond.all(...) / cond.not_(...)
 ```
 
+**DB2 implementation note (2026-07-27), for DB0 to confirm:** the shapes above
+are what the builders emit. `state`/`numeric_state`/`screen`/`user` are read
+straight off the HA frontend's own condition schema; `cond.any`/`cond.all` emit
+`{condition: "or"|"and", conditions: [...]}`. `cond.not_` emits
+`{condition: "not", conditions: [...]}` by symmetry with those two, and is the
+**one shape in this vocabulary not corroborated by a second source** — DB0
+should pin whether current HA's Lovelace condition schema has a `not` kind at
+all, and with which key. Nothing is lost either way: a verbatim dict is
+accepted anywhere a condition is, so a corrected shape is a one-line builder
+change plus a golden regeneration.
+
 Cross-vocabulary confusion is trap-caught in both directions with teaching
 errors (the `CompileTimeBranchError` tradition): an automation
 `ConditionBuilder` passed to `c.conditional`/`visibility=` raises
@@ -564,6 +575,32 @@ hyphen / missing `url_path=`+`default=True` / both given),
 `DefaultDashboardMetadataError`, `ExtraShadowsKwargError`. Duplicate
 `url_path` reuses `DuplicateObjectError` via the normal registry path.
 
+**DB2 implementation note (2026-07-27)** — three refinements to this list, all
+additive, all snapshot-tested:
+
+1. **`DashboardNestingError` is new.** The list above covers a card under a
+   `sections` view and a section under the wrong view type, but not three other
+   real placement mistakes that must not be silently accepted: a card recorded
+   straight into the `@dashboard` body (no view open), a `badge()` that is not
+   directly inside a view, and a `view()`/`raw_view()` opened inside another
+   container. Folding them into `SectionRequiredError` would have made that
+   message lie about what is required, so they get their own message,
+   parameterized by (what / where you are / what is required).
+2. **The mirror trap reuses `NoRecordingContextError`.** §5.6 groups
+   "`service()`/`when()`/action verbs inside a `@dashboard` body" under
+   `NoDashboardContextError`, whose name describes the opposite direction. It
+   really is "no *recording* context" — the automation recorder genuinely is
+   absent — so the existing error gained an `in_dashboard=` flag that swaps in
+   dashboard-specific teaching text (put the call on the card's `tap_action`)
+   rather than a new class. `NoDashboardContextError` keeps the other
+   direction, and sharpens its own message when an `@automation` body is
+   active.
+3. **`DashboardUrlPathError` has five trigger shapes, not four:** the three
+   decorator ones, the §3.4 `meta`-without-`url_path` guard, and a `meta`
+   `url_path` that contradicts the decorator's `url_path=` — the same class
+   because it is the same question (what is this dashboard's identity?) and
+   there must be exactly one answer.
+
 ### 5.7 dsl-extensions.md contract update
 
 Same PR as the surface lands: the eight structural `hassle.__all__`
@@ -609,6 +646,162 @@ Registration plumbing (all existing seams, one branch each):
 opens the dashboard recorder instead of `recording(...)`; `compile_bundle`'s
 reset list gains the module's state reset. Compilation stays deterministic
 and network-free (R8; sandbox unchanged).
+
+### 6.1.1 F5 — the card-builder protocol (frozen)
+
+Written by DB2 when the recorder landed. **This subsection is FREEZE F5**:
+everything a DB3 card-family implementer, DB4's decompiler and DB7's validation
+build against. Changing it after this point requires updating this document in
+the same PR (§12.3's freeze discipline).
+
+**Module layout.** `hassle/compiler/dashboards/` holds the vocabulary;
+`hassle/cards.py` is the thin public re-export.
+
+| Module | Owns |
+|---|---|
+| `recorder.py` | `DashboardRecorder`, its `ContextVar` stack, the record/push seams, the span sidecar |
+| `builders.py` | `merge_extra` / `normalize_visibility` / `put` — the shared builder conventions |
+| `conditions.py` | the `cond` vocabulary + `normalize_condition` |
+| `structure.py` | `view` / `section` / `badge` / `raw_card` / `raw_section` / `raw_view` |
+| `decorators.py` | `@dashboard` / `@raw_dashboard` + envelope assembly |
+| `card_registry.py` | the card-type table below |
+| `errors.py` | the §5.6 error surface |
+| `cards/<family>.py` | **DB3 adds these** — one module per batch (`layout`, `visual`, `domain`) |
+
+A DB3 batch adds one module under `cards/` plus one append-only import + one
+`__all__` entry in `hassle/cards.py` (its "builder registration point" comment
+block) and one `register_card(...)` call. No other file is touched, which is
+what keeps the three batches rebase-trivial.
+
+**The `record_card` seam.**
+
+```python
+record_card(body: dict[str, Any], *, span: SourceSpan | None,
+            what: str = "A card builder") -> RecordedNode
+record_badge(body: dict[str, Any], *, span: SourceSpan | None) -> RecordedNode
+```
+
+`record_card` places `body` in the innermost open container and enforces §5.2's
+placement discipline (a card in the `@dashboard` body → `DashboardNestingError`;
+a card directly under a `sections` view → `SectionRequiredError`). It takes
+**ownership** of `body` — it is deliberately not copied, because a container
+card keeps mutating the same dict after its children are collected; a builder
+that receives an author-owned dict copies it first (as `raw_card` does).
+`what` is a noun phrase used only in the "no dashboard context" message; a
+builder passes its own spelling (`"`c.tile()`"`).
+
+**Leaf-builder pattern** (a plain function, span at `depth=0`):
+
+```python
+def tile(entity: EntityRef | str, *, color: Any = None,
+         visibility: VisibilityArg | None = None,
+         extra: Mapping[str, Any] | None = None) -> None:
+    span = capture_span(depth=0)
+    body: dict[str, Any] = {"type": "tile", "entity": str(entity)}
+    put(body, "color", color)                      # omits None -- never materialize a default
+    put(body, "visibility", normalize_visibility(visibility, span=span))
+    merge_extra(body, extra, builder="c.tile", declared=_TILE_DECLARED, span=span)
+    record_card(body, span=span, what="`c.tile()`")
+```
+
+**Container-card CM pattern** (a `@contextlib.contextmanager` generator, span at
+`_CM_DEPTH`):
+
+```python
+@contextlib.contextmanager
+def vertical_stack(*, title=None, visibility=None, extra=None) -> Generator[None]:
+    span = capture_span(depth=_CM_DEPTH)              # 2 -- see recorder.py's docstring
+    body: dict[str, Any] = {"type": "vertical-stack"}
+    put(body, "title", title)
+    put(body, "visibility", normalize_visibility(visibility, span=span))
+    merge_extra(body, extra, builder="c.vertical_stack", declared=..., span=span)
+    with push_container(body, label="a `vertical-stack` card", span=span):
+        yield
+```
+
+```python
+push_container(body, *, label: str, span: SourceSpan | None,
+               child_key: str = "cards", assign: bool = True)
+    -> Generator[RecordedNode]
+```
+
+places `body` through `record_card` (so it obeys the same discipline a leaf
+does), redirects subsequent `record_card` calls into it, and on clean exit sets
+`body[child_key]` to the children's bodies in order. `assign=False` when the
+builder places the children itself — a `conditional` card's single `card:` key,
+or an arity check first (`ConditionalCardArityError`); `child_key` still names
+the span-path segment, so pass the real stored key either way. `span` is a
+required keyword: `push_container` is itself a contextmanager generator, so a
+span captured inside it would point at the builder's line, not the author's.
+
+**Shared conventions** (`builders.py`, one implementation, no per-builder
+copies): `put(body, key, value)` (skip `None` — never materialize a default HA
+did not ask for), `merge_extra(body, extra, *, builder, declared, span)`
+(verbatim merge + `ExtraShadowsKwargError` against ALL declared kwargs, not just
+the passed ones), `normalize_visibility(visibility, *, span)` (one condition or
+an iterable; `cond.*` objects and verbatim dicts; automation builders trap).
+`normalize_condition(value, *, span)` is the same for `c.conditional(*conds)`.
+
+**Span sidecar.** Every recorded node carries a `SourceSpan`, addressable by
+PATH: dot-joined `<key>[<index>]` segments relative to the dashboard's
+`config` — `views[0]`, `views[0].badges[1]`,
+`views[0].sections[0].cards[2]`, `views[0].cards[0].cards[1]`. Reachable as
+`CompileResult.node_spans_for(obj)` / `CompileResult.node_span(obj, path)`.
+(DB2 deviation from §6.1's "`CompileResult.span_at` extended": `span_at`'s
+per-section positional index cannot address a card nested three containers
+deep, so the tree gets its own additive accessor rather than an overloaded one.
+`spans_for`/`span_at` are unchanged and simply return nothing for this kind.)
+
+**The card-type table** (`card_registry.py`) — one row per modelled type, the
+single source of truth for DB3 (registration), DB4 (emitter selection) and DB7
+(entity extraction, explicitly table-driven rather than per-card code, §8):
+
+```python
+@dataclass(frozen=True)
+class CardSpec:
+    type: str                      # the HA `type` string as stored
+    builder: str                   # the DSL name, as an author writes it ("c.tile")
+    entity_params: tuple[str, ...] = ()   # params whose value is an entity id (or list)
+    container: Literal["leaf", "cards", "card", "sections"] = "leaf"
+    context_manager: bool = False  # is the builder a `with` block?
+
+CARD_REGISTRY: dict[str, CardSpec]      # type string -> spec; append-only
+STRUCTURE_REGISTRY: dict[str, CardSpec] # the structural pieces (below)
+```
+
+- `container` says how children are stored: `"leaf"` (none), `"cards"` (list
+  under `cards`), `"card"` (exactly one under `card`), `"sections"` (a view's
+  section list). `context_manager` is stated rather than inferred.
+- `entity_params` is what DB4 rewrites to `e.<domain>.<object_id>` and what DB7
+  extracts for the unknown-entity lint. Freeform strings inside
+  `raw_card`/`markdown` content are never in it.
+- **A type absent from the table is never an error**: it decompiles to
+  `raw_card` and shows up in the coverage metric (§6.4) — the tracked signal
+  that a new HA release added a card.
+
+DB2 populates the structural rows. They are keyed `structure:*` and kept OUT of
+`CARD_REGISTRY` so a decompiler looking up a stored card's `type` can never
+match them:
+
+| Key | type | builder | entity_params | container | CM |
+|---|---|---|---|---|---|
+| `structure:view` | `structure:view` | `view` | — | `sections` (or `cards`, decided by the view's own `type`) | yes |
+| `structure:badge` | `structure:badge` | `badge` | `entity` | `leaf` | no |
+| `structure:section` | `grid` | `section` | — | `cards` | yes |
+
+The section row deliberately carries the type string `grid`, the SAME one
+DB3a's `c.grid(...)` card will use: **position disambiguates**. A `grid` in a
+view's `sections` list decompiles to `with section(...):`; a `grid` in a
+`cards` list decompiles to `with c.grid(...):`. A consumer walking a `sections`
+list looks the node up in `STRUCTURE_REGISTRY`; one walking a `cards` list uses
+`CARD_REGISTRY`.
+
+**Two coordination points DB4 must handle** (recorded here, not worked around):
+`view()` always materializes its child list (`sections: []` / `cards: []`), and
+a `sections` view never emits a sibling `cards` key. A stored view that carries
+both, or neither, is not expressible through `view()` and must fall to
+`raw_view` (§5.5's ladder already covers it, and DB0 should confirm which shape
+the UI actually writes — §2.2 item 4).
 
 ### 6.2 Decompiler
 

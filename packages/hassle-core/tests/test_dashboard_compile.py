@@ -111,8 +111,8 @@ def test_node_spans_are_reachable_from_the_compile_result() -> None:
 
 
 def test_registered_dashboards_use_the_shared_registry_path() -> None:
-    from hassle.compiler.registry import fresh
     from hassle.compiler.dashboards.decorators import dashboard
+    from hassle.compiler.registry import fresh
 
     reg = fresh()
 

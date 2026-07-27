@@ -85,14 +85,14 @@ def test_panel_view_takes_exactly_one_card() -> None:
 
 
 def test_panel_view_with_two_cards_raises() -> None:
-    with dashboard_recording(url_path="a-b"), pytest.raises(PanelViewArityError):
+    with dashboard_recording(url_path="a-b"), pytest.raises(PanelViewArityError):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with view(title="V", type="panel"):
             raw_card(CARD)
             raw_card(CARD)
 
 
 def test_panel_view_with_no_cards_raises() -> None:
-    with dashboard_recording(url_path="a-b"), pytest.raises(PanelViewArityError):
+    with dashboard_recording(url_path="a-b"), pytest.raises(PanelViewArityError):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with view(title="V", type="panel"):
             pass
 
@@ -143,28 +143,28 @@ def test_section_emits_a_grid_card_container() -> None:
 
 
 def test_section_under_a_masonry_view_raises() -> None:
-    with dashboard_recording(url_path="a-b"), view(title="V", type="masonry"):
+    with dashboard_recording(url_path="a-b"), view(title="V", type="masonry"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(SectionOutsideSectionsViewError):
             with section():
                 pass
 
 
 def test_section_under_a_legacy_masonry_view_raises() -> None:
-    with dashboard_recording(url_path="a-b"), view(title="V", type=None):
+    with dashboard_recording(url_path="a-b"), view(title="V", type=None):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(SectionOutsideSectionsViewError):
             with section():
                 pass
 
 
 def test_section_nested_in_a_section_raises() -> None:
-    with dashboard_recording(url_path="a-b"), view(title="V"), section():
+    with dashboard_recording(url_path="a-b"), view(title="V"), section():  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(SectionOutsideSectionsViewError):
             with section():
                 pass
 
 
 def test_leaf_card_directly_under_a_sections_view_raises() -> None:
-    with dashboard_recording(url_path="a-b"), view(title="V"):
+    with dashboard_recording(url_path="a-b"), view(title="V"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(SectionRequiredError):
             raw_card(CARD)
 
@@ -230,7 +230,7 @@ def test_raw_section_records_a_verbatim_section() -> None:
 
 
 def test_raw_section_under_a_masonry_view_raises() -> None:
-    with dashboard_recording(url_path="a-b"), view(title="V", type="masonry"):
+    with dashboard_recording(url_path="a-b"), view(title="V", type="masonry"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(SectionOutsideSectionsViewError):
             raw_section({"type": "grid"})
 
@@ -271,7 +271,7 @@ def test_extra_is_merged_verbatim_into_the_section_body() -> None:
 
 
 def test_extra_shadowing_a_declared_view_kwarg_raises() -> None:
-    with dashboard_recording(url_path="a-b"), pytest.raises(ExtraShadowsKwargError):
+    with dashboard_recording(url_path="a-b"), pytest.raises(ExtraShadowsKwargError):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with view(title="V", extra={"title": "other"}):
             pass
 
@@ -279,19 +279,19 @@ def test_extra_shadowing_a_declared_view_kwarg_raises() -> None:
 def test_extra_shadowing_an_omitted_declared_kwarg_still_raises() -> None:
     # Even though `path=` was never passed, `extra={"path": ...}` is rejected:
     # there is exactly ONE spelling of every modelled option.
-    with dashboard_recording(url_path="a-b"), pytest.raises(ExtraShadowsKwargError):
+    with dashboard_recording(url_path="a-b"), pytest.raises(ExtraShadowsKwargError):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with view(title="V", extra={"path": "v"}):
             pass
 
 
 def test_extra_shadowing_a_declared_section_kwarg_raises() -> None:
-    with dashboard_recording(url_path="a-b"), view(title="V"):
+    with dashboard_recording(url_path="a-b"), view(title="V"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(ExtraShadowsKwargError):
             with section(column_span=2, extra={"column_span": 3}):
                 pass
 
 
 def test_extra_shadowing_a_badge_option_raises() -> None:
-    with dashboard_recording(url_path="a-b"), view(title="V"):
+    with dashboard_recording(url_path="a-b"), view(title="V"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(ExtraShadowsKwargError):
             badge("sensor.a", name="A", extra={"name": "B"})

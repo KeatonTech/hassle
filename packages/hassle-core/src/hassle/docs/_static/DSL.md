@@ -10498,6 +10498,628 @@ Compiles to (canonical IR / stored HA shape):
 }
 ```
 
+### `dashboard`
+
+Golden case: `fixtures/dsl/dashboard_minimal_sections/`.
+
+```python
+"""Golden case: the smallest useful dashboard -- one sections view, one section.
+
+`type=` defaults to `"sections"` and is materialized EXPLICITLY into the stored
+config (docs/internals/dashboards-design.md §5.2).
+"""
+
+from hassle import dashboard, raw_card, section, view
+
+
+@dashboard(
+    url_path="home-main",
+    title="Home",
+    icon="mdi:home",
+    show_in_sidebar=True,
+    require_admin=False,
+)
+def home_main():
+    with view(title="Overview", path="overview"), section():
+        raw_card({"type": "markdown", "content": "Welcome home."})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:home-main": {
+    "config": {
+      "views": [
+        {
+          "path": "overview",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "Welcome home.",
+                  "type": "markdown"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "icon": "mdi:home",
+      "require_admin": false,
+      "show_in_sidebar": true,
+      "title": "Home",
+      "url_path": "home-main"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_compile_time_loop/`, `fixtures/dsl/dashboard_default/`, `fixtures/dsl/dashboard_two_in_one_module/`
+
+### `raw_dashboard`
+
+Golden case: `fixtures/dsl/dashboard_raw_dashboard/`.
+
+```python
+"""Golden case: `@raw_dashboard` -- the top rung of the raw ladder.
+
+The decorated function returns either the whole §3.2 envelope (`meta` +
+`config`) or just a config dict, in which case the decorator's own `url_path=`
+supplies the registry metadata. A returned `meta` dict MUST carry `url_path`
+(§3.4's identity-sentinel guard) -- otherwise the envelope would silently key
+as the DEFAULT dashboard.
+"""
+
+from hassle import raw_dashboard
+
+
+@raw_dashboard(url_path="strategy-one")
+def strategy_one():
+    return {
+        "meta": {
+            "url_path": "strategy-one",
+            "title": "Strategy",
+            "icon": "mdi:auto-fix",
+            "show_in_sidebar": True,
+        },
+        "config": {"strategy": {"type": "original-states"}},
+    }
+
+
+@raw_dashboard(url_path="config-only")
+def config_only():
+    return {"views": [{"title": "Only a config", "cards": []}]}
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:config-only": {
+    "config": {
+      "views": [
+        {
+          "cards": [],
+          "title": "Only a config"
+        }
+      ]
+    },
+    "meta": {
+      "url_path": "config-only"
+    }
+  },
+  "dashboard:strategy-one": {
+    "config": {
+      "strategy": {
+        "type": "original-states"
+      }
+    },
+    "meta": {
+      "icon": "mdi:auto-fix",
+      "show_in_sidebar": true,
+      "title": "Strategy",
+      "url_path": "strategy-one"
+    }
+  }
+}
+```
+
+### `view`
+
+Golden case: `fixtures/dsl/dashboard_minimal_sections/`.
+
+```python
+"""Golden case: the smallest useful dashboard -- one sections view, one section.
+
+`type=` defaults to `"sections"` and is materialized EXPLICITLY into the stored
+config (docs/internals/dashboards-design.md §5.2).
+"""
+
+from hassle import dashboard, raw_card, section, view
+
+
+@dashboard(
+    url_path="home-main",
+    title="Home",
+    icon="mdi:home",
+    show_in_sidebar=True,
+    require_admin=False,
+)
+def home_main():
+    with view(title="Overview", path="overview"), section():
+        raw_card({"type": "markdown", "content": "Welcome home."})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:home-main": {
+    "config": {
+      "views": [
+        {
+          "path": "overview",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "Welcome home.",
+                  "type": "markdown"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "icon": "mdi:home",
+      "require_admin": false,
+      "show_in_sidebar": true,
+      "title": "Home",
+      "url_path": "home-main"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_masonry/`, `fixtures/dsl/dashboard_panel/`
+
+### `section`
+
+Golden case: `fixtures/dsl/dashboard_minimal_sections/`.
+
+```python
+"""Golden case: the smallest useful dashboard -- one sections view, one section.
+
+`type=` defaults to `"sections"` and is materialized EXPLICITLY into the stored
+config (docs/internals/dashboards-design.md §5.2).
+"""
+
+from hassle import dashboard, raw_card, section, view
+
+
+@dashboard(
+    url_path="home-main",
+    title="Home",
+    icon="mdi:home",
+    show_in_sidebar=True,
+    require_admin=False,
+)
+def home_main():
+    with view(title="Overview", path="overview"), section():
+        raw_card({"type": "markdown", "content": "Welcome home."})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:home-main": {
+    "config": {
+      "views": [
+        {
+          "path": "overview",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "Welcome home.",
+                  "type": "markdown"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "icon": "mdi:home",
+      "require_admin": false,
+      "show_in_sidebar": true,
+      "title": "Home",
+      "url_path": "home-main"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_visibility/`
+
+### `badge`
+
+Golden case: `fixtures/dsl/dashboard_badges/`.
+
+```python
+"""Golden case: view badges, both shapes.
+
+`badge(entity_or_dict, **options)` records into the enclosing view's `badges`
+list: an entity id (or `e.`-ref) builds the modern object form, a plain dict
+passes through verbatim for legacy/unknown badge shapes
+(docs/internals/dashboards-design.md §5.2, §2.2 item 6).
+"""
+
+from hassle import badge, dashboard, raw_card, section, view
+
+
+@dashboard(url_path="badge-wall", title="Badges")
+def badge_wall():
+    with view(title="Overview", path="overview"):
+        badge("sensor.outside_temp", name="Outside")
+        badge("binary_sensor.front_door", extra={"show_state": False})
+        badge({"type": "custom:legacy-badge", "entity": "sensor.legacy"})
+        with section():
+            raw_card({"type": "markdown", "content": "Badges above."})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:badge-wall": {
+    "config": {
+      "views": [
+        {
+          "badges": [
+            {
+              "entity": "sensor.outside_temp",
+              "name": "Outside",
+              "type": "entity"
+            },
+            {
+              "entity": "binary_sensor.front_door",
+              "show_state": false,
+              "type": "entity"
+            },
+            {
+              "entity": "sensor.legacy",
+              "type": "custom:legacy-badge"
+            }
+          ],
+          "path": "overview",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "Badges above.",
+                  "type": "markdown"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Badges",
+      "url_path": "badge-wall"
+    }
+  }
+}
+```
+
+### `raw_card`
+
+Golden case: `fixtures/dsl/dashboard_raw_ladder/`.
+
+```python
+"""Golden case: the structural raw ladder (I3).
+
+Granular escape hatches at every level, mirroring `raw_trigger`/`raw_action`:
+an unknown CARD stays a `raw_card` inside a modelled section; a section whose
+own keys are unmodelled is a whole `raw_section`; a view Hassle does not model
+at all (a strategy view) is a whole `raw_view`. Never raw a parent merely
+because a child rawed (docs/internals/dashboards-design.md §5.5).
+"""
+
+from hassle import dashboard, raw_card, raw_section, raw_view, section, view
+
+
+@dashboard(url_path="raw-ladder", title="Raw ladder")
+def raw_ladder():
+    # Level 1: a third-party card, inside a fully modelled view + section.
+    with view(title="Cards", path="cards"), section():
+        raw_card({"type": "custom:bubble-card", "card_type": "button"})
+    # Level 2: a section whose own keys are unmodelled.
+    with view(title="Sections", path="sections"):
+        raw_section(
+            {
+                "type": "grid",
+                "column_span": 2,
+                "invented_section_key": ["kept"],
+                "cards": [{"type": "markdown", "content": "raw section"}],
+            }
+        )
+    # Level 3: a whole view Hassle does not model (a strategy view).
+    raw_view({"strategy": {"type": "original-states"}, "title": "Auto"})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:raw-ladder": {
+    "config": {
+      "views": [
+        {
+          "path": "cards",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "card_type": "button",
+                  "type": "custom:bubble-card"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Cards",
+          "type": "sections"
+        },
+        {
+          "path": "sections",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "raw section",
+                  "type": "markdown"
+                }
+              ],
+              "column_span": 2,
+              "invented_section_key": [
+                "kept"
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Sections",
+          "type": "sections"
+        },
+        {
+          "strategy": {
+            "type": "original-states"
+          },
+          "title": "Auto"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Raw ladder",
+      "url_path": "raw-ladder"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_compile_time_loop/`
+
+### `raw_section`
+
+Golden case: `fixtures/dsl/dashboard_raw_ladder/`.
+
+```python
+"""Golden case: the structural raw ladder (I3).
+
+Granular escape hatches at every level, mirroring `raw_trigger`/`raw_action`:
+an unknown CARD stays a `raw_card` inside a modelled section; a section whose
+own keys are unmodelled is a whole `raw_section`; a view Hassle does not model
+at all (a strategy view) is a whole `raw_view`. Never raw a parent merely
+because a child rawed (docs/internals/dashboards-design.md §5.5).
+"""
+
+from hassle import dashboard, raw_card, raw_section, raw_view, section, view
+
+
+@dashboard(url_path="raw-ladder", title="Raw ladder")
+def raw_ladder():
+    # Level 1: a third-party card, inside a fully modelled view + section.
+    with view(title="Cards", path="cards"), section():
+        raw_card({"type": "custom:bubble-card", "card_type": "button"})
+    # Level 2: a section whose own keys are unmodelled.
+    with view(title="Sections", path="sections"):
+        raw_section(
+            {
+                "type": "grid",
+                "column_span": 2,
+                "invented_section_key": ["kept"],
+                "cards": [{"type": "markdown", "content": "raw section"}],
+            }
+        )
+    # Level 3: a whole view Hassle does not model (a strategy view).
+    raw_view({"strategy": {"type": "original-states"}, "title": "Auto"})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:raw-ladder": {
+    "config": {
+      "views": [
+        {
+          "path": "cards",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "card_type": "button",
+                  "type": "custom:bubble-card"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Cards",
+          "type": "sections"
+        },
+        {
+          "path": "sections",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "raw section",
+                  "type": "markdown"
+                }
+              ],
+              "column_span": 2,
+              "invented_section_key": [
+                "kept"
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Sections",
+          "type": "sections"
+        },
+        {
+          "strategy": {
+            "type": "original-states"
+          },
+          "title": "Auto"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Raw ladder",
+      "url_path": "raw-ladder"
+    }
+  }
+}
+```
+
+### `raw_view`
+
+Golden case: `fixtures/dsl/dashboard_raw_ladder/`.
+
+```python
+"""Golden case: the structural raw ladder (I3).
+
+Granular escape hatches at every level, mirroring `raw_trigger`/`raw_action`:
+an unknown CARD stays a `raw_card` inside a modelled section; a section whose
+own keys are unmodelled is a whole `raw_section`; a view Hassle does not model
+at all (a strategy view) is a whole `raw_view`. Never raw a parent merely
+because a child rawed (docs/internals/dashboards-design.md §5.5).
+"""
+
+from hassle import dashboard, raw_card, raw_section, raw_view, section, view
+
+
+@dashboard(url_path="raw-ladder", title="Raw ladder")
+def raw_ladder():
+    # Level 1: a third-party card, inside a fully modelled view + section.
+    with view(title="Cards", path="cards"), section():
+        raw_card({"type": "custom:bubble-card", "card_type": "button"})
+    # Level 2: a section whose own keys are unmodelled.
+    with view(title="Sections", path="sections"):
+        raw_section(
+            {
+                "type": "grid",
+                "column_span": 2,
+                "invented_section_key": ["kept"],
+                "cards": [{"type": "markdown", "content": "raw section"}],
+            }
+        )
+    # Level 3: a whole view Hassle does not model (a strategy view).
+    raw_view({"strategy": {"type": "original-states"}, "title": "Auto"})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:raw-ladder": {
+    "config": {
+      "views": [
+        {
+          "path": "cards",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "card_type": "button",
+                  "type": "custom:bubble-card"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Cards",
+          "type": "sections"
+        },
+        {
+          "path": "sections",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "raw section",
+                  "type": "markdown"
+                }
+              ],
+              "column_span": 2,
+              "invented_section_key": [
+                "kept"
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Sections",
+          "type": "sections"
+        },
+        {
+          "strategy": {
+            "type": "original-states"
+          },
+          "title": "Auto"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Raw ladder",
+      "url_path": "raw-ladder"
+    }
+  }
+}
+```
+
 ### `CompileTimeBranchError`
 
 Raised when a Python `if`/`bool()` is used on a runtime state expression (DESIGN §5.5) -- Python control flow runs at *compile* time, so a native branch on a live entity state would be baked in wrong. Fix: use `with if_then(expr):` / `with else_then():` instead, which compile to HA's `if`/`choose` action.

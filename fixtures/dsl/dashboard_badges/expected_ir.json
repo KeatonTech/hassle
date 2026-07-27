@@ -1,0 +1,44 @@
+{
+  "dashboard:badge-wall": {
+    "meta": {
+      "url_path": "badge-wall",
+      "title": "Badges"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "path": "overview",
+          "badges": [
+            {
+              "type": "entity",
+              "entity": "sensor.outside_temp",
+              "name": "Outside"
+            },
+            {
+              "type": "entity",
+              "entity": "binary_sensor.front_door",
+              "show_state": false
+            },
+            {
+              "type": "custom:legacy-badge",
+              "entity": "sensor.legacy"
+            }
+          ],
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "markdown",
+                  "content": "Badges above."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "dashboard:upstairs-lights": {
+    "meta": {
+      "url_path": "upstairs-lights",
+      "title": "Upstairs"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Upstairs",
+          "path": "upstairs",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "light",
+                  "entity": "light.bedroom"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "dashboard:downstairs-lights": {
+    "meta": {
+      "url_path": "downstairs-lights",
+      "title": "Downstairs"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Downstairs",
+          "path": "downstairs",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "light",
+                  "entity": "light.hall"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

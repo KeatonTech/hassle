@@ -1,0 +1,26 @@
+{
+  "dashboard:big-map": {
+    "meta": {
+      "url_path": "big-map",
+      "title": "Map",
+      "icon": "mdi:map"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "panel",
+          "title": "Map",
+          "path": "map",
+          "cards": [
+            {
+              "type": "map",
+              "entities": [
+                "device_tracker.phone"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

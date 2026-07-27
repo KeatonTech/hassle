@@ -58,7 +58,7 @@ def test_no_dashboard_context_message() -> None:
 
 
 def test_no_dashboard_context_inside_an_automation_body_message() -> None:
-    with recording(kind="automation", id="x"):
+    with recording(kind="automation", id="x"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(NoDashboardContextError) as excinfo:
             raw_card(CARD)
     _check("dashboard_no_context_in_automation", str(excinfo.value))
@@ -67,28 +67,26 @@ def test_no_dashboard_context_inside_an_automation_body_message() -> None:
 def test_automation_action_verb_inside_a_dashboard_body_message() -> None:
     from hassle import service
 
-    with dashboard_recording(url_path="a-b"):
-        with pytest.raises(NoRecordingContextError) as excinfo:
-            service("light.turn_on")
+    with dashboard_recording(url_path="a-b"), pytest.raises(NoRecordingContextError) as excinfo:
+        service("light.turn_on")
     _check("dashboard_action_verb_in_dashboard", str(excinfo.value))
 
 
 def test_card_at_the_dashboard_level_message() -> None:
-    with dashboard_recording(url_path="a-b"):
-        with pytest.raises(DashboardNestingError) as excinfo:
-            raw_card(CARD)
+    with dashboard_recording(url_path="a-b"), pytest.raises(DashboardNestingError) as excinfo:
+        raw_card(CARD)
     _check("dashboard_card_needs_a_view", str(excinfo.value))
 
 
 def test_badge_outside_a_view_message() -> None:
-    with dashboard_recording(url_path="a-b"), view(title="V"), section():
+    with dashboard_recording(url_path="a-b"), view(title="V"), section():  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(DashboardNestingError) as excinfo:
             badge("sensor.a")
     _check("dashboard_badge_outside_view", str(excinfo.value))
 
 
 def test_nested_view_message() -> None:
-    with dashboard_recording(url_path="a-b"), view(title="V"):
+    with dashboard_recording(url_path="a-b"), view(title="V"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(DashboardNestingError) as excinfo:
             with view(title="W"):
                 pass
@@ -99,14 +97,14 @@ def test_nested_view_message() -> None:
 # structure discipline
 # ---------------------------------------------------------------------------
 def test_section_required_message() -> None:
-    with dashboard_recording(url_path="a-b"), view(title="V"):
+    with dashboard_recording(url_path="a-b"), view(title="V"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(SectionRequiredError) as excinfo:
             raw_card(CARD)
     _check("dashboard_section_required", str(excinfo.value))
 
 
 def test_section_outside_sections_view_message() -> None:
-    with dashboard_recording(url_path="a-b"), view(title="V", type="masonry"):
+    with dashboard_recording(url_path="a-b"), view(title="V", type="masonry"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(SectionOutsideSectionsViewError) as excinfo:
             with section():
                 pass
@@ -114,19 +112,17 @@ def test_section_outside_sections_view_message() -> None:
 
 
 def test_panel_view_arity_message() -> None:
-    with dashboard_recording(url_path="a-b"):
-        with pytest.raises(PanelViewArityError) as excinfo:
-            with view(title="V", type="panel"):
-                raw_card(CARD)
-                raw_card(CARD)
+    with dashboard_recording(url_path="a-b"), pytest.raises(PanelViewArityError) as excinfo:  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
+        with view(title="V", type="panel"):
+            raw_card(CARD)
+            raw_card(CARD)
     _check("dashboard_panel_view_arity", str(excinfo.value))
 
 
 def test_extra_shadows_kwarg_message() -> None:
-    with dashboard_recording(url_path="a-b"):
-        with pytest.raises(ExtraShadowsKwargError) as excinfo:
-            with view(title="V", extra={"title": "other"}):
-                pass
+    with dashboard_recording(url_path="a-b"), pytest.raises(ExtraShadowsKwargError) as excinfo:  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
+        with view(title="V", extra={"title": "other"}):
+            pass
     _check("dashboard_extra_shadows_kwarg", str(excinfo.value))
 
 
@@ -174,7 +170,7 @@ def test_default_dashboard_metadata_message() -> None:
 def test_dashboard_condition_type_message() -> None:
     from hassle import state
 
-    with dashboard_recording(url_path="a-b"):
+    with dashboard_recording(url_path="a-b"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(DashboardConditionTypeError) as excinfo:
             with view(title="V", visibility=[state("light.a").is_("on")]):
                 pass
@@ -184,7 +180,7 @@ def test_dashboard_condition_type_message() -> None:
 def test_dashboard_condition_in_automation_message() -> None:
     from hassle import only_if
 
-    with recording(kind="automation", id="x"):
+    with recording(kind="automation", id="x"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(DashboardConditionInAutomationError) as excinfo:
             only_if(cond.state("light.a", "on"))  # pyright: ignore[reportArgumentType]
     _check("dashboard_condition_in_automation", str(excinfo.value))

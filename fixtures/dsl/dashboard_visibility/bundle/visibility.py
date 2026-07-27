@@ -10,21 +10,26 @@ anywhere a condition is, so unknown future condition kinds round-trip raw.
 from hassle import dashboard, raw_card, section, view
 from hassle.cards import cond
 
+# Conditions are ordinary Python values, so they can be named and reused.
+HOT_OUTSIDE = [
+    cond.any(
+        cond.numeric("sensor.outside_temp", above=25),
+        cond.state("weather.home", not_="sunny"),
+    ),
+    cond.all(cond.not_(cond.state("light.hall", "off"))),
+    {"condition": "future_kind", "kept": True},  # verbatim: an unmodelled kind
+]
+
 
 @dashboard(url_path="conditional-views", title="Conditional")
 def conditional_views():
-    with view(title="Mobile", path="mobile", visibility=[cond.screen("(max-width: 600px)")]):
-        with section(visibility=cond.state("input_boolean.guest_mode", "on")):
-            raw_card({"type": "markdown", "content": "Guest mode is on."})
-    with view(title="Admins", path="admins", visibility=[cond.user("abc123", "def456")]):
-        with section(
-            visibility=[
-                cond.any(
-                    cond.numeric("sensor.outside_temp", above=25),
-                    cond.state("weather.home", not_="sunny"),
-                ),
-                cond.all(cond.not_(cond.state("light.hall", "off"))),
-                {"condition": "future_kind", "kept": True},
-            ]
-        ):
-            raw_card({"type": "markdown", "content": "Hot outside."})
+    with (
+        view(title="Mobile", path="mobile", visibility=[cond.screen("(max-width: 600px)")]),
+        section(visibility=cond.state("input_boolean.guest_mode", "on")),
+    ):
+        raw_card({"type": "markdown", "content": "Guest mode is on."})
+    with (
+        view(title="Admins", path="admins", visibility=[cond.user("abc123", "def456")]),
+        section(visibility=HOT_OUTSIDE),
+    ):
+        raw_card({"type": "markdown", "content": "Hot outside."})

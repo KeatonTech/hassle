@@ -1,0 +1,42 @@
+{
+  "dashboard:heat-pumps": {
+    "meta": {
+      "url_path": "heat-pumps",
+      "title": "Heat pumps",
+      "icon": "mdi:heat-pump"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "path": "overview",
+          "sections": [
+            {
+              "type": "grid",
+              "column_span": 2,
+              "cards": [
+                {
+                  "type": "heading",
+                  "heading": "Heat pumps"
+                },
+                {
+                  "type": "thermostat",
+                  "entity": "climate.living_room"
+                },
+                {
+                  "type": "thermostat",
+                  "entity": "climate.office"
+                },
+                {
+                  "type": "thermostat",
+                  "entity": "climate.bedroom"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

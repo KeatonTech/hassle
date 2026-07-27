@@ -48,8 +48,8 @@ from hassle.compiler.recording import RecordedNode, Recorder, record_trigger, re
 from hassle.compiler.registry import PrebuiltObject, RegisteredObject, fresh
 from hassle.compiler.spans import SourceSpan
 from hassle.ir import normalize_ha
-from hassle.ir.keys import category_shaped_stem
-from hassle.ir.models import AutomationConfig, IRObject, ScriptConfig
+from hassle.ir.keys import DASHBOARD_KIND, category_shaped_stem
+from hassle.ir.models import AutomationConfig, DashboardConfig, IRObject, ScriptConfig
 
 # object_key -> {"triggers"|"conditions"|"actions": [SourceSpan | None, ...]}
 _SectionSpans = dict[str, list["SourceSpan | None"]]
@@ -64,6 +64,15 @@ def _empty_spans() -> dict[str, _SectionSpans]:
 
 
 def _empty_decl_spans() -> dict[str, SourceSpan | None]:
+    return {}
+
+
+# object_key -> {node path -> span}, for kinds whose body is a TREE rather than
+# a set of flat block lists (dashboards; see `CompileResult.node_spans_for`).
+_NodeSpans = dict[str, "SourceSpan"]
+
+
+def _empty_node_spans() -> dict[str, _NodeSpans]:
     return {}
 
 
@@ -104,6 +113,10 @@ class CompileResult:
     # name. A sidecar exactly like `_category_globals` -- never part of the
     # frozen IR schema. Consumers pass it to `category_shaped_stem`.
     _category_packages: frozenset[str] = frozenset()
+    # object_key -> {node path -> span}. A sidecar exactly like `_spans`, for
+    # kinds whose body is a tree (dashboards): `_spans`' per-section positional
+    # lists cannot address a card nested three containers deep.
+    _node_spans: dict[str, _NodeSpans] = field(default_factory=_empty_node_spans)
 
     def add(
         self,
@@ -111,11 +124,13 @@ class CompileResult:
         spans: _SectionSpans,
         decl_span: SourceSpan | None,
         duplicate_of: SourceSpan | None,
+        node_spans: _NodeSpans | None = None,
     ) -> None:
         """Register a compiled object + its spans; reject a duplicate object key.
 
         Internal to the pipeline (used by :func:`compile_registered`); downstream
-        consumers read via :attr:`objects` and :meth:`spans_for`.
+        consumers read via :attr:`objects`, :meth:`spans_for` and (for
+        tree-shaped bodies) :meth:`node_spans_for`.
         """
         key = obj.object_key()
         if key in self.objects:
@@ -123,6 +138,8 @@ class CompileResult:
         self.objects[key] = obj
         self._spans[key] = spans
         self._decl_spans[key] = decl_span
+        if node_spans:
+            self._node_spans[key] = node_spans
 
     def spans_for(self, obj: IRObject, section: str) -> list[SourceSpan]:
         """Return the source spans for ``section`` (triggers/conditions/actions).
@@ -148,6 +165,22 @@ class CompileResult:
         if 0 <= index < len(spans):
             return spans[index]
         return None
+
+    def node_spans_for(self, obj: IRObject) -> _NodeSpans:
+        """Every recorded node's span for a TREE-shaped body, keyed by path.
+
+        The dashboard counterpart of :meth:`spans_for`: a dashboard's cards are
+        nested arbitrarily deep, so they are addressed by a path rather than by
+        a per-section index. Path grammar (frozen with F5): dot-joined
+        ``<key>[<index>]`` segments relative to the dashboard's ``config``, e.g.
+        ``views[0]``, ``views[0].badges[1]``, ``views[0].sections[0].cards[2]``.
+        Empty for every other kind.
+        """
+        return dict(self._node_spans.get(obj.object_key(), {}))
+
+    def node_span(self, obj: IRObject, path: str) -> SourceSpan | None:
+        """The span of one node of a tree-shaped body (see :meth:`node_spans_for`)."""
+        return self._node_spans.get(obj.object_key(), {}).get(path)
 
     def decl_span_for(self, object_key: str) -> SourceSpan | None:
         """The declaration-site span for ``object_key``.
@@ -237,6 +270,43 @@ def _build_script(reg: RegisteredObject, rec: Recorder) -> tuple[ScriptConfig, _
     return obj, spans
 
 
+def _build_dashboard(reg: RegisteredObject) -> tuple[DashboardConfig, _NodeSpans]:
+    """Compile one ``@dashboard``/``@raw_dashboard`` into the §3.2 envelope.
+
+    The dashboard sibling of :func:`_build_automation`: it opens a
+    :class:`~hassle.compiler.dashboards.recorder.DashboardRecorder` instead of
+    the automation ``recording(...)`` context (the two recorders are siblings,
+    dashboards-design §6.1), or -- for a ``@raw_dashboard`` -- simply calls the
+    function and normalizes whatever envelope/config dict it returned.
+
+    ``normalize_ha`` is deliberately NOT applied: it is an identity function for
+    this kind by contract (§3.3), because a card's `tap_action` legitimately
+    carries a legacy `service:` key that the generic rewrite would corrupt.
+    """
+    from hassle.compiler.dashboards.decorators import (
+        build_meta,
+        build_raw_envelope,
+        record_declared,
+    )
+    from hassle.compiler.dashboards.recorder import dashboard_recording
+
+    node_spans: _NodeSpans = {}
+    if reg.raw:
+        envelope = build_raw_envelope(reg.func(), reg.options, reg.span)
+    else:
+        with dashboard_recording(**reg.options) as rec:
+            reg.func()
+        envelope = {"meta": build_meta(reg.options), "config": rec.build_config()}
+        node_spans = rec.node_spans()
+    record_declared(envelope)
+    obj = DashboardConfig.model_validate(envelope)
+    # Extrinsic identity for the default dashboard (`meta: null` carries no
+    # `url_path`); harmlessly redundant for every other dashboard, whose
+    # identity comes from `meta.url_path` itself.
+    obj.attach_key(reg.declared_id)
+    return obj, node_spans
+
+
 def compile_registered(
     registry_objects: list[RegisteredObject],
     prebuilt_objects: list[PrebuiltObject] | None = None,
@@ -257,6 +327,17 @@ def compile_registered(
     for pre in prebuilt_objects or []:
         result.add(pre.obj, spans={}, decl_span=pre.span, duplicate_of=pre.span)
     for reg in registry_objects:
+        if reg.kind == DASHBOARD_KIND:
+            # Dashboards trace into their OWN recorder, not `recording(...)`.
+            dashboard, dashboard_spans = _build_dashboard(reg)
+            result.add(
+                dashboard,
+                spans={},
+                decl_span=reg.span,
+                duplicate_of=reg.span,
+                node_spans=dashboard_spans,
+            )
+            continue
         with recording(kind=reg.kind, **reg.options) as rec:
             # `@automation(triggers=[...])` (additive to the frozen DSL
             # surface, DESIGN §5.3/§5.5): the decorator's triggers were
@@ -305,6 +386,7 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
     # bundle import in the same process) never bleeds objects into this one.
     # These modules track declarations in module globals in addition to the
     # per-compile registry, so both must be cleared.
+    from hassle.compiler.dashboards.decorators import reset_declared_dashboards
     from hassle.compiler.group_helpers import reset_declared_group_helpers
     from hassle.compiler.helpers import reset_declared_helpers
     from hassle.compiler.raw_automation import reset_declared_raw_automations
@@ -314,6 +396,7 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
     reset_declared_template_helpers()
     reset_declared_group_helpers()
     reset_declared_raw_automations()
+    reset_declared_dashboards()
 
     category_packages = discover_category_packages(bundle_path)
 

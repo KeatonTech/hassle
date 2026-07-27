@@ -100,7 +100,7 @@ def test_combinators_accept_verbatim_dicts() -> None:
 # ---------------------------------------------------------------------------
 def test_visibility_accepts_a_list_of_conds_and_dicts() -> None:
     raw: dict[str, Any] = {"condition": "future_kind"}
-    with dashboard_recording(url_path="a-b") as rec:
+    with dashboard_recording(url_path="a-b") as rec:  # noqa: SIM117 - the block reads as the dashboard tree it builds
         with view(title="V", visibility=[cond.screen("(max-width: 600px)"), raw]):
             pass
     assert rec.build_config()["views"][0]["visibility"] == [
@@ -110,7 +110,7 @@ def test_visibility_accepts_a_list_of_conds_and_dicts() -> None:
 
 
 def test_visibility_accepts_a_single_condition() -> None:
-    with dashboard_recording(url_path="a-b") as rec:
+    with dashboard_recording(url_path="a-b") as rec:  # noqa: SIM117 - the block reads as the dashboard tree it builds
         with view(title="V"), section(visibility=cond.state("light.a", "on")):
             pass
     assert rec.build_config()["views"][0]["sections"][0]["visibility"] == [
@@ -122,26 +122,26 @@ def test_visibility_accepts_a_single_condition() -> None:
 # cross-vocabulary traps, both directions (§5.4)
 # ---------------------------------------------------------------------------
 def test_automation_condition_in_a_dashboard_slot_raises() -> None:
-    with dashboard_recording(url_path="a-b"), pytest.raises(DashboardConditionTypeError):
+    with dashboard_recording(url_path="a-b"), pytest.raises(DashboardConditionTypeError):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with view(title="V", visibility=[state("light.a").is_("on")]):
             pass
 
 
 def test_automation_condition_trap_names_the_cond_equivalent() -> None:
-    with dashboard_recording(url_path="a-b"), pytest.raises(DashboardConditionTypeError) as exc:
+    with dashboard_recording(url_path="a-b"), pytest.raises(DashboardConditionTypeError) as exc:  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with view(title="V", visibility=[numeric_state("sensor.t", above=5)]):
             pass
     assert "cond.numeric(" in str(exc.value)
 
 
 def test_a_dashboard_condition_in_only_if_raises_the_mirror() -> None:
-    with recording(kind="automation", id="x"):
+    with recording(kind="automation", id="x"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(DashboardConditionInAutomationError):
             only_if(cond.state("light.a", "on"))  # pyright: ignore[reportArgumentType]
 
 
 def test_a_dashboard_condition_in_if_then_raises_the_mirror() -> None:
-    with recording(kind="automation", id="x"):
+    with recording(kind="automation", id="x"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(DashboardConditionInAutomationError):
             with if_then(cond.state("light.a", "on")):  # pyright: ignore[reportArgumentType]
                 pass
@@ -149,12 +149,12 @@ def test_a_dashboard_condition_in_if_then_raises_the_mirror() -> None:
 
 @pytest.mark.parametrize("combinator", [all_of, any_of, not_])
 def test_a_dashboard_condition_in_a_combinator_raises_the_mirror(combinator: Any) -> None:
-    with recording(kind="automation", id="x"):
+    with recording(kind="automation", id="x"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(DashboardConditionInAutomationError):
             combinator(cond.state("light.a", "on")).to_condition()
 
 
 def test_a_plain_value_in_a_visibility_slot_raises() -> None:
-    with dashboard_recording(url_path="a-b"), pytest.raises(DashboardConditionTypeError):
+    with dashboard_recording(url_path="a-b"), pytest.raises(DashboardConditionTypeError):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with view(title="V", visibility=[42]):  # pyright: ignore[reportArgumentType]
             pass
