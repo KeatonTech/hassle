@@ -1,0 +1,77 @@
+{
+  "meta": {
+    "url_path": "actions-demo",
+    "title": "Card Actions",
+    "icon": "mdi:gesture-tap",
+    "show_in_sidebar": true,
+    "require_admin": false
+  },
+  "config": {
+    "views": [
+      {
+        "type": "sections",
+        "title": "Actions",
+        "path": "actions",
+        "sections": [
+          {
+            "type": "grid",
+            "cards": [
+              {
+                "type": "tile",
+                "entity": "light.bedroom",
+                "tap_action": {
+                  "action": "call-service",
+                  "service": "light.turn_on",
+                  "target": {
+                    "entity_id": "light.bedroom"
+                  }
+                },
+                "hold_action": {
+                  "action": "call-service",
+                  "service": "light.turn_off",
+                  "target": {
+                    "entity_id": "light.bedroom"
+                  }
+                }
+              },
+              {
+                "type": "button",
+                "entity": "switch.kitchen",
+                "tap_action": {
+                  "action": "perform-action",
+                  "perform_action": "switch.turn_on",
+                  "target": {
+                    "entity_id": "switch.kitchen"
+                  }
+                },
+                "double_tap_action": {
+                  "action": "perform-action",
+                  "perform_action": "switch.toggle",
+                  "target": {
+                    "entity_id": "switch.kitchen"
+                  }
+                }
+              },
+              {
+                "type": "glance",
+                "title": "Quick Actions",
+                "entities": [
+                  {
+                    "entity": "light.hallway",
+                    "tap_action": {
+                      "action": "call-service",
+                      "service": "light.toggle",
+                      "target": {
+                        "entity_id": "light.hallway"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

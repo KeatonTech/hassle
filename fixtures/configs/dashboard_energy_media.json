@@ -1,0 +1,116 @@
+{
+  "meta": {
+    "url_path": "energy-media",
+    "title": "Energy & Media",
+    "icon": "mdi:lightning-bolt",
+    "show_in_sidebar": true,
+    "require_admin": false
+  },
+  "config": {
+    "views": [
+      {
+        "type": "sections",
+        "title": "Energy",
+        "path": "energy",
+        "sections": [
+          {
+            "type": "grid",
+            "cards": [
+              {
+                "type": "energy-date-selection"
+              },
+              {
+                "type": "energy-usage-graph"
+              },
+              {
+                "type": "energy-distribution"
+              },
+              {
+                "type": "energy-sources-table"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "sections",
+        "title": "Climate & Media",
+        "path": "climate-media",
+        "sections": [
+          {
+            "type": "grid",
+            "cards": [
+              {
+                "type": "heading",
+                "heading": "Control"
+              },
+              {
+                "type": "thermostat",
+                "entity": "climate.living_room"
+              },
+              {
+                "type": "media-control",
+                "entity": "media_player.bedroom_speaker"
+              },
+              {
+                "type": "gauge",
+                "entity": "sensor.temperature",
+                "title": "Temperature",
+                "unit": "°C",
+                "min": 0,
+                "max": 50,
+                "severity": {
+                  "green": 18,
+                  "yellow": 25,
+                  "red": 35
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "sections",
+        "title": "History",
+        "path": "history",
+        "sections": [
+          {
+            "type": "grid",
+            "cards": [
+              {
+                "type": "history-graph",
+                "entities": [
+                  "sensor.temperature",
+                  "sensor.humidity"
+                ],
+                "hours_to_show": 24
+              },
+              {
+                "type": "picture-elements",
+                "image": "https://example.com/floorplan.png",
+                "elements": [
+                  {
+                    "type": "state-icon",
+                    "entity": "light.living_room",
+                    "style": {
+                      "left": "10%",
+                      "top": "20%"
+                    }
+                  },
+                  {
+                    "type": "state-label",
+                    "entity": "sensor.temperature",
+                    "style": {
+                      "left": "50%",
+                      "top": "50%"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

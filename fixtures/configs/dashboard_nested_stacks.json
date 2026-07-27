@@ -1,0 +1,62 @@
+{
+  "meta": {
+    "url_path": "nested-stacks",
+    "title": "Nested Stacks",
+    "icon": "mdi:stack-overflow",
+    "show_in_sidebar": true,
+    "require_admin": false
+  },
+  "config": {
+    "views": [
+      {
+        "type": "sections",
+        "title": "Layout",
+        "path": "layout",
+        "sections": [
+          {
+            "type": "grid",
+            "cards": [
+              {
+                "type": "vertical-stack",
+                "title": "Vertical Container",
+                "cards": [
+                  {
+                    "type": "heading",
+                    "heading": "Top Section"
+                  },
+                  {
+                    "type": "horizontal-stack",
+                    "cards": [
+                      {
+                        "type": "tile",
+                        "entity": "light.left"
+                      },
+                      {
+                        "type": "tile",
+                        "entity": "light.right"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "grid",
+                    "columns": 2,
+                    "cards": [
+                      {
+                        "type": "tile",
+                        "entity": "switch.kitchen"
+                      },
+                      {
+                        "type": "tile",
+                        "entity": "switch.bedroom"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

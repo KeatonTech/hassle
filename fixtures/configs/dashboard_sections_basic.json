@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "url_path": "sections-overview",
+    "title": "Sections Overview",
+    "icon": "mdi:view-dashboard",
+    "show_in_sidebar": true,
+    "require_admin": false
+  },
+  "config": {
+    "views": [
+      {
+        "type": "sections",
+        "title": "Living Room",
+        "path": "living-room",
+        "max_columns": 4,
+        "sections": [
+          {
+            "type": "grid",
+            "cards": [
+              {
+                "type": "heading",
+                "heading": "Lights"
+              },
+              {
+                "type": "tile",
+                "entity": "light.living_room"
+              },
+              {
+                "type": "tile",
+                "entity": "light.desk"
+              }
+            ]
+          },
+          {
+            "type": "grid",
+            "column_span": 2,
+            "cards": [
+              {
+                "type": "heading",
+                "heading": "Climate"
+              },
+              {
+                "type": "tile",
+                "entity": "climate.living_room"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

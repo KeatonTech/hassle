@@ -1,0 +1,27 @@
+{
+  "meta": null,
+  "config": {
+    "views": [
+      {
+        "type": "sections",
+        "title": "Home",
+        "path": "home",
+        "sections": [
+          {
+            "type": "grid",
+            "cards": [
+              {
+                "type": "heading",
+                "heading": "Welcome"
+              },
+              {
+                "type": "tile",
+                "entity": "light.living_room"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
