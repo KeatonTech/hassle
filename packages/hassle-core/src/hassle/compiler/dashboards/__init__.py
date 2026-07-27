@@ -58,6 +58,7 @@ from hassle.compiler.dashboards.errors import (
     ExtraShadowsKwargError,
     NoDashboardContextError,
     PanelViewArityError,
+    RawDashboardReturnTypeError,
     SectionOutsideSectionsViewError,
     SectionRequiredError,
 )
@@ -95,6 +96,7 @@ __all__ = [
     "ExtraShadowsKwargError",
     "NoDashboardContextError",
     "PanelViewArityError",
+    "RawDashboardReturnTypeError",
     "RecordedNode",
     "SectionOutsideSectionsViewError",
     "SectionRequiredError",

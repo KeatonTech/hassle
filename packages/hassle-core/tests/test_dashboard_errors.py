@@ -14,6 +14,7 @@ import pytest
 
 from hassle.cards import cond
 from hassle.compiler import compile_bundle
+from hassle.compiler.dashboards.decorators import build_raw_envelope
 from hassle.compiler.dashboards.errors import (
     DashboardConditionInAutomationError,
     DashboardConditionTypeError,
@@ -23,6 +24,7 @@ from hassle.compiler.dashboards.errors import (
     ExtraShadowsKwargError,
     NoDashboardContextError,
     PanelViewArityError,
+    RawDashboardReturnTypeError,
     SectionOutsideSectionsViewError,
     SectionRequiredError,
 )
@@ -162,6 +164,40 @@ def test_default_dashboard_metadata_message() -> None:
         "dashboard_default_metadata",
         _compile_error("dashboard_error_default_metadata", DefaultDashboardMetadataError),
     )
+
+
+def test_raw_dashboard_meta_mismatch_message() -> None:
+    # SF-2: shape 5 of `DashboardUrlPathError` -- a `meta` `url_path` that
+    # contradicts the decorator's.
+    _check(
+        "dashboard_url_path_meta_mismatch",
+        _compile_error("dashboard_error_raw_meta_mismatch", DashboardUrlPathError),
+    )
+
+
+def test_raw_default_dashboard_with_meta_message() -> None:
+    # SF-3: the raw branch must name `@raw_dashboard(default=True)` and the
+    # RETURNED DICT's `meta` key -- not `@dashboard(...)` keywords the author
+    # never wrote, nor a "remove `meta=`" fix that has no call site to apply to.
+    _check(
+        "dashboard_default_metadata_raw",
+        _compile_error("dashboard_error_raw_default_with_meta", DefaultDashboardMetadataError),
+    )
+
+
+def test_raw_dashboard_returns_none_message() -> None:
+    # BLOCK-1: a forgotten `return` previously produced `config: null`, which
+    # compiled clean and would have overwritten the real dashboard on push.
+    _check(
+        "dashboard_raw_return_type_none",
+        _compile_error("dashboard_error_raw_returns_none", RawDashboardReturnTypeError),
+    )
+
+
+def test_raw_dashboard_returns_a_string_message() -> None:
+    with pytest.raises(RawDashboardReturnTypeError) as excinfo:
+        build_raw_envelope("views:\n  - title: Home\n", {"url_path": "weird-one"}, None)
+    _check("dashboard_raw_return_type_str", str(excinfo.value))
 
 
 # ---------------------------------------------------------------------------

@@ -38,6 +38,10 @@ def _empty_params() -> tuple[str, ...]:
     return ()
 
 
+def _empty_declared() -> frozenset[str]:
+    return frozenset()
+
+
 @dataclass(frozen=True)
 class CardSpec:
     """One row of the registry: everything a consumer needs about a card type."""
@@ -48,9 +52,25 @@ class CardSpec:
     #: The DSL name that builds it, qualified as an author would write it
     #: (``"c.tile"``, ``"view"``, ``"section"``).
     builder: str
-    #: Parameter names whose value is an entity id (or a list of them). DB7's
-    #: extraction and DB4's ``e.``-accessor rewrite both walk exactly these.
+    #: **Stored config keys** whose value is an entity id (or a list of them) --
+    #: NOT Python parameter names. The two usually coincide (a builder's kwarg
+    #: mirrors the HA option name), but where they diverge it is the STORED key
+    #: that matters: DB7 walks these against the compiled card body to extract
+    #: entity references, and DB4 rewrites exactly these value positions to
+    #: ``e.<domain>.<object_id>``. Both operate on stored config, never on the
+    #: DSL call. Every one of them is therefore also in :attr:`declared`.
     entity_params: tuple[str, ...] = field(default_factory=_empty_params)
+    #: Every **stored config key** this builder writes from its own typed
+    #: keywords -- the set a generic decompiler emitter subtracts from a stored
+    #: card body to decide what must go into ``extra={...}`` (§5.3's
+    #: forward-compatibility valve). Include the ``type`` key and any structural
+    #: child key (``cards``/``card``) the builder writes itself.
+    #:
+    #: Defaulted so a row is one line to add, but **every real registration must
+    #: populate it** -- an empty set makes a generic emitter dump the entire card
+    #: into ``extra=``. ``tests/test_dashboard_card_registry.py`` enforces this
+    #: for every row in the table.
+    declared: frozenset[str] = field(default_factory=_empty_declared)
     #: How the card holds its children (see :data:`ContainerShape`).
     container: ContainerShape = "leaf"
     #: Whether the builder is a context manager (``with`` block) in the DSL.
@@ -81,6 +101,26 @@ STRUCTURE_REGISTRY: dict[str, CardSpec] = {
     "structure:view": CardSpec(
         type="structure:view",
         builder="view",
+        # Mirrors `structure._VIEW_DECLARED` -- the same set `extra=` may not
+        # shadow, which is exactly the set an emitter must NOT put in `extra=`.
+        declared=frozenset(
+            {
+                "type",
+                "title",
+                "path",
+                "icon",
+                "theme",
+                "background",
+                "max_columns",
+                "subview",
+                "visible",
+                "header",
+                "visibility",
+                "badges",
+                "cards",
+                "sections",
+            }
+        ),
         container="sections",  # or "cards" -- decided by the view's own `type`
         context_manager=True,
     ),
@@ -88,6 +128,10 @@ STRUCTURE_REGISTRY: dict[str, CardSpec] = {
         type="structure:badge",
         builder="badge",
         entity_params=("entity",),
+        # `badge(**options)` accepts arbitrary HA badge options, so an emitter
+        # keeps unknown keys as kwargs rather than `extra=`; these are the ones
+        # the builder itself always writes.
+        declared=frozenset({"type", "entity", "visibility"}),
         container="leaf",
     ),
     # A section is stored as `{"type": "grid", "cards": [...]}` -- the SAME type
@@ -99,6 +143,7 @@ STRUCTURE_REGISTRY: dict[str, CardSpec] = {
     "structure:section": CardSpec(
         type="grid",
         builder="section",
+        declared=frozenset({"type", "column_span", "visibility", "cards"}),
         container="cards",
         context_manager=True,
     ),

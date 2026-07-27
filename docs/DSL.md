@@ -10692,7 +10692,7 @@ Compiles to (canonical IR / stored HA shape):
 }
 ```
 
-See also: `fixtures/dsl/dashboard_masonry/`, `fixtures/dsl/dashboard_panel/`
+See also: `fixtures/dsl/dashboard_masonry/`, `fixtures/dsl/dashboard_panel/`, `fixtures/dsl/dashboard_sidebar/`
 
 ### `section`
 

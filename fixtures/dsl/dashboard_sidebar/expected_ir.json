@@ -1,0 +1,28 @@
+{
+  "dashboard:sidebar-layout": {
+    "meta": {
+      "url_path": "sidebar-layout",
+      "title": "Sidebar",
+      "icon": "mdi:dock-left"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sidebar",
+          "title": "Split",
+          "path": "split",
+          "cards": [
+            {
+              "type": "markdown",
+              "content": "main column"
+            },
+            {
+              "type": "markdown",
+              "content": "sidebar column"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

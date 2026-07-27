@@ -195,7 +195,12 @@ NAME_TO_CASES: dict[str, list[str]] = {
         "dashboard_two_in_one_module",
     ],
     "raw_dashboard": ["dashboard_raw_dashboard"],
-    "view": ["dashboard_minimal_sections", "dashboard_masonry", "dashboard_panel"],
+    "view": [
+        "dashboard_minimal_sections",
+        "dashboard_masonry",
+        "dashboard_panel",
+        "dashboard_sidebar",
+    ],
     "section": ["dashboard_minimal_sections", "dashboard_visibility"],
     "badge": ["dashboard_badges"],
     "raw_card": ["dashboard_raw_ladder", "dashboard_compile_time_loop"],

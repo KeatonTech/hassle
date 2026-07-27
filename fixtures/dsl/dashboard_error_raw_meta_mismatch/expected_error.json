@@ -1,0 +1,4 @@
+{
+  "error_type": "DashboardUrlPathError",
+  "contains": ["bad.py:10", "declared-one", "other-one"]
+}

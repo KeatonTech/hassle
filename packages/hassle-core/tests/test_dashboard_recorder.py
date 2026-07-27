@@ -132,3 +132,112 @@ def test_badge_nodes_get_their_own_span_path() -> None:
         badge("sensor.outside")
 
     assert "views[0].badges[0]" in rec.node_spans()
+
+
+# ---------------------------------------------------------------------------
+# Span-path grammar for SINGLE-child containers (reviewer finding SF-1).
+#
+# The F5 appendix blesses `push_container(..., child_key="card", assign=False)`
+# for a `conditional` card, whose child is stored as ONE dict under `card:`,
+# not a list. The path grammar must say so: `...card` addresses that child,
+# while `...card[0]` -- what an unfixed `_collect_spans` emits -- resolves to
+# nothing at all for DB4/DB7, since there is no list to index into.
+# ---------------------------------------------------------------------------
+@contextlib.contextmanager
+def _conditional(*conditions: dict[str, Any]) -> Generator[None]:
+    """Exactly the F5 appendix's conditional-card pattern (design §6.1.1)."""
+    span = capture_span(depth=_CM_DEPTH)
+    body: dict[str, Any] = {"type": "conditional", "conditions": list(conditions)}
+    with push_container(
+        body,
+        label="a `conditional` card",
+        span=span,
+        child_key="card",
+        child_is_list=False,
+        assign=False,
+    ) as node:
+        yield
+    body["card"] = node.children[0].body
+
+
+def test_single_child_container_span_path_has_no_list_index() -> None:
+    with dashboard_recording(url_path="a-b") as rec, view(title="V"), section():  # noqa: SIM117 - the block reads as the dashboard tree it builds
+        with _conditional({"condition": "state", "entity": "light.a", "state": "on"}):
+            raw_card({"type": "markdown", "content": "shown"})
+
+    spans = rec.node_spans()
+    base = "views[0].sections[0].cards[0]"
+    assert base in spans
+    assert f"{base}.card" in spans, sorted(spans)
+    assert f"{base}.card[0]" not in spans
+
+
+def test_single_child_container_path_addresses_the_stored_dict() -> None:
+    # The path must resolve against the COMPILED config by plain traversal --
+    # that is the whole contract DB7 reports findings against.
+    with dashboard_recording(url_path="a-b") as rec, view(title="V"), section():  # noqa: SIM117 - the block reads as the dashboard tree it builds
+        with _conditional({"condition": "screen", "media_query": "(max-width: 600px)"}):
+            raw_card({"type": "markdown", "content": "shown"})
+
+    config = rec.build_config()
+    card = config["views"][0]["sections"][0]["cards"][0]["card"]
+    assert card == {"type": "markdown", "content": "shown"}
+    assert "views[0].sections[0].cards[0].card" in rec.node_spans()
+
+
+def test_push_container_assigns_a_single_child_slot_itself() -> None:
+    # `assign=True` with `child_is_list=False` stores the ONE child directly
+    # under the key -- the convenience DB3's conditional/entity-filter builders
+    # use so they never hand-splice a child body.
+    @contextlib.contextmanager
+    def conditional_auto() -> Generator[None]:
+        span = capture_span(depth=_CM_DEPTH)
+        body: dict[str, Any] = {"type": "conditional", "conditions": []}
+        with push_container(
+            body, label="a `conditional` card", span=span, child_key="card", child_is_list=False
+        ):
+            yield
+
+    with dashboard_recording(url_path="a-b") as rec, view(title="V"), section():  # noqa: SIM117 - the block reads as the dashboard tree it builds
+        with conditional_auto():
+            raw_card({"type": "markdown", "content": "only"})
+
+    stack = rec.build_config()["views"][0]["sections"][0]["cards"][0]
+    assert stack["card"] == {"type": "markdown", "content": "only"}
+
+
+def test_single_child_slot_stays_absent_when_no_child_was_recorded() -> None:
+    # `c.entity_filter` takes ZERO or one presentation card; an absent child
+    # must leave the key absent rather than materialize a null.
+    @contextlib.contextmanager
+    def optional_child() -> Generator[None]:
+        span = capture_span(depth=_CM_DEPTH)
+        body: dict[str, Any] = {"type": "entity-filter"}
+        with push_container(
+            body, label="an `entity-filter` card", span=span, child_key="card", child_is_list=False
+        ):
+            yield
+
+    with dashboard_recording(url_path="a-b") as rec, view(title="V"), section():  # noqa: SIM117 - the block reads as the dashboard tree it builds
+        with optional_child():
+            pass
+
+    assert rec.build_config()["views"][0]["sections"][0]["cards"][0] == {"type": "entity-filter"}
+
+
+def test_single_child_slot_rejects_a_second_child_rather_than_dropping_it() -> None:
+    # A builder that forgot its own arity check must not silently lose cards.
+    @contextlib.contextmanager
+    def sloppy() -> Generator[None]:
+        span = capture_span(depth=_CM_DEPTH)
+        body: dict[str, Any] = {"type": "conditional"}
+        with push_container(
+            body, label="a `conditional` card", span=span, child_key="card", child_is_list=False
+        ):
+            yield
+
+    with dashboard_recording(url_path="a-b"), view(title="V"), section():  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
+        with pytest.raises(ValueError, match="child_is_list=False"):
+            with sloppy():
+                raw_card({"type": "markdown", "content": "one"})
+                raw_card({"type": "markdown", "content": "two"})

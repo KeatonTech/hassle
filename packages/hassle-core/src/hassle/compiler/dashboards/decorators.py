@@ -20,14 +20,22 @@ THE default dashboard, which has no registry item at all.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 from hassle.compiler.dashboards.errors import (
     DASHBOARD_METADATA_KWARGS,
     DashboardUrlPathError,
     DefaultDashboardMetadataError,
+    RawDashboardReturnTypeError,
 )
 from hassle.compiler.spans import SourceSpan, capture_span
+
+#: A `@raw_dashboard` body: zero arguments, returns the envelope or config dict.
+#: Bound exactly like `raw_automation.py`'s `F`, so pyright flags a body that
+#: returns anything else (a forgotten `return`, a YAML string) at EDIT time --
+#: the compile-time :class:`RawDashboardReturnTypeError` is the runtime backstop
+#: for an un-type-checked bundle file.
+F = TypeVar("F", bound=Callable[[], dict[str, Any]])
 
 #: The identity sentinel for THE default dashboard (§3.1). Collision-free by
 #: construction: a real `url_path` must contain a hyphen.
@@ -149,15 +157,20 @@ def dashboard(
     return decorate
 
 
-def raw_dashboard(
-    *, url_path: str | None = None, default: bool = False
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def raw_dashboard(*, url_path: str | None = None, default: bool = False) -> Callable[[F], F]:
     """The top rung of the raw ladder: a whole verbatim dashboard (§5.5).
 
     The decorated zero-argument function returns either the full §3.2 envelope
     (a dict with a ``config`` key, optionally a ``meta`` one) or just the
     Lovelace config itself (anything else — a ``views``/``strategy``/… dict), in
     which case the decorator's own ``url_path=`` supplies the registry metadata.
+
+    The body's return type is part of the contract, enforced twice: statically
+    (:data:`F` is bound to ``Callable[[], dict[str, Any]]``, so pyright rejects
+    a body that returns anything else) and at compile time
+    (:class:`RawDashboardReturnTypeError`, the backstop for an un-type-checked
+    bundle). A forgotten ``return`` is the case that matters — it would
+    otherwise store ``config: null`` and a push would blank the real dashboard.
 
     §3.4's identity-sentinel guard: a returned ``meta`` dict MUST carry
     ``url_path``. The IR keeps a permissive fallback to the ``default``
@@ -174,7 +187,7 @@ def raw_dashboard(
         span=span,
     )
 
-    def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
+    def decorate(func: F) -> F:
         _register_dashboard(
             func=func,
             identity=identity,
@@ -210,15 +223,22 @@ def build_meta(options: dict[str, Any]) -> dict[str, Any] | None:
 def build_raw_envelope(
     returned: Any, options: dict[str, Any], span: SourceSpan | None
 ) -> dict[str, Any]:
-    """Normalize a ``@raw_dashboard`` body's return value into the §3.2 envelope."""
-    body: dict[str, Any] = {}
-    if isinstance(returned, dict):
-        body = dict(cast("dict[str, Any]", returned))
+    """Normalize a ``@raw_dashboard`` body's return value into the §3.2 envelope.
+
+    A non-``dict`` return is rejected outright
+    (:class:`RawDashboardReturnTypeError`): it would otherwise be stored as the
+    dashboard's config verbatim, so a forgotten ``return`` would compile to
+    ``config: null`` and the next push would blank the real dashboard.
+    """
+    if not isinstance(returned, dict):
+        identity = str(options.get("url_path") or DEFAULT_IDENTITY)
+        raise RawDashboardReturnTypeError(identity, returned, span)
+    body: dict[str, Any] = dict(cast("dict[str, Any]", returned))
     # A dict with a `config` key is the whole envelope; anything else IS the
     # Lovelace config (a `views`/`strategy`/... dict), which never has a
     # top-level `config` key of its own.
     is_envelope = "config" in body
-    config: Any = body["config"] if is_envelope else cast("Any", returned)
+    config: Any = body["config"] if is_envelope else body
     declared_default = bool(options.get("default"))
 
     if is_envelope and "meta" in body:
@@ -231,7 +251,7 @@ def build_raw_envelope(
         elif isinstance(meta, dict):
             found: Any = cast("dict[str, Any]", meta).get("url_path")
             if declared_default:
-                raise DefaultDashboardMetadataError(["meta"], span)
+                raise DefaultDashboardMetadataError(["meta"], span, raw=True)
             if found is None:
                 raise DashboardUrlPathError(
                     "meta_without_url_path", span, decorator="@raw_dashboard"

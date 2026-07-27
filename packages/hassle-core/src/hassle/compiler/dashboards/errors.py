@@ -196,11 +196,65 @@ class DashboardUrlPathError(CompileError):
         raise AssertionError(f"unknown DashboardUrlPathError reason {reason!r}")
 
 
-class DefaultDashboardMetadataError(CompileError):
-    """``@dashboard(default=True)`` also passed registry-metadata keywords."""
+class RawDashboardReturnTypeError(CompileError):
+    """A ``@raw_dashboard`` body returned something other than a ``dict``.
 
-    def __init__(self, options: list[str], span: SourceSpan | None) -> None:
+    The destructive case this exists for: a forgotten ``return`` makes the body
+    return ``None``, which -- before this guard -- fell through the
+    envelope/config discrimination and became the stored config **verbatim**.
+    ``{"meta": ..., "config": null}`` validates, hashes, and compiles clean, and
+    the next ``hassle push`` would replace the user's real dashboard with an
+    empty one. A wrong-typed return is always an authoring bug, never a shape
+    to round-trip (I3's escape hatch is a dict, §5.5).
+    """
+
+    def __init__(self, identity: str, returned: object, span: SourceSpan | None) -> None:
+        self.identity = identity
+        type_name = type(returned).__name__
+        hint = (
+            " A body that ends in an expression rather than a `return` statement returns "
+            "`None` -- check for a missing `return`."
+            if returned is None
+            else ""
+        )
+        super().__init__(
+            f"The `@raw_dashboard` body for `{identity}`{_at(span)} returned a `{type_name}`, "
+            f"not a `dict`.{hint} A raw dashboard's body must return either the whole "
+            f'`{{"meta": ..., "config": ...}}` envelope or just the Lovelace config dict; '
+            f"anything else would be stored as the dashboard's config as-is, so a push would "
+            f"overwrite the real dashboard with it. Fix: `return` a dict from this function "
+            f'-- e.g. `return {{"views": [...]}}` for a config, or `return {{"meta": '
+            f'{{"url_path": "..."}}, "config": {{...}}}}` for the full envelope. Raw '
+            f"bodies take dicts, never YAML strings (§5.5)."
+        )
+
+
+class DefaultDashboardMetadataError(CompileError):
+    """The default dashboard was given registry metadata it cannot store.
+
+    Two shapes, because the two decorators fail differently:
+    ``@dashboard(default=True, title=...)`` passes metadata as KEYWORDS, while
+    ``@raw_dashboard(default=True)`` smuggles it in as a ``meta`` key of the
+    dict its body returns. Naming the wrong one leaves the author looking for a
+    call site they never wrote (reviewer finding SF-3).
+    """
+
+    def __init__(self, options: list[str], span: SourceSpan | None, *, raw: bool = False) -> None:
         self.options = options
+        self.raw = raw
+        if raw:
+            super().__init__(
+                f"The `@raw_dashboard(default=True)` body{_at(span)} returned a non-null "
+                f"`meta` key. THE default dashboard has no entry in Home Assistant's "
+                f"dashboard registry -- that registry is the only thing `meta` describes, "
+                f"and it is what stores a dashboard's title, icon, sidebar visibility and "
+                f"admin-only flag -- so there is nowhere for it to be written and a push "
+                f'would silently drop it. Fix: drop the `"meta"` key from the returned '
+                f'dict (return just the config, or `{{"meta": None, "config": {{...}}}}`), '
+                f'or replace `default=True` with `@raw_dashboard(url_path="...")` so this '
+                f"becomes a real registry-listed dashboard that can carry it."
+            )
+            return
         named = ", ".join(f"`{o}=`" for o in options)
         super().__init__(
             f"`@dashboard(default=True)`{_at(span)} also sets {named}. THE default dashboard "

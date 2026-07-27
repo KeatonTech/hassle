@@ -80,6 +80,11 @@ class RecordedNode:
     #: The key children are emitted under (``"views"``/``"sections"``/
     #: ``"cards"``/…), also the span-path segment for them. ``None`` for a leaf.
     child_key: str | None = None
+    #: Whether ``child_key`` names a LIST slot. ``False`` for a single-child
+    #: slot -- a `conditional` card's ``card:`` key holds ONE dict, not a list,
+    #: so its child's span path is a bare ``.card`` segment with no index (an
+    #: indexed ``card[0]`` would address nothing at all in the stored config).
+    child_is_list: bool = True
     children: list[RecordedNode] = field(default_factory=_empty_nodes)
     badges: list[RecordedNode] = field(default_factory=_empty_nodes)
 
@@ -154,11 +159,19 @@ class DashboardRecorder:
         """Every recorded node's span, keyed by its PATH inside ``config``.
 
         Path grammar (frozen with F5, consumed by DB7's validation findings and
-        by the decompiler): dot-joined ``<key>[<index>]`` segments relative to
-        the dashboard's ``config``, e.g. ``views[0]``, ``views[0].badges[1]``,
-        ``views[0].sections[0].cards[2]``, ``views[0].cards[0].cards[1]`` for a
-        card nested in a container card. Nodes whose span could not be captured
-        are omitted rather than mapped to ``None``.
+        by the decompiler). Dot-joined segments relative to the dashboard's
+        ``config``, each addressing exactly what a plain traversal of the stored
+        config would:
+
+        - ``<key>[<index>]`` for a LIST slot -- ``views[0]``,
+          ``views[0].badges[1]``, ``views[0].sections[0].cards[2]``,
+          ``views[0].cards[0].cards[1]`` for a card inside a container card;
+        - a bare ``<key>`` for a SINGLE-child slot -- ``…cards[0].card`` for the
+          one card a `conditional` stores under its ``card:`` key. An indexed
+          ``card[0]`` would resolve to nothing, since there is no list there.
+
+        Nodes whose span could not be captured are omitted rather than mapped
+        to ``None``.
         """
         out: dict[str, SourceSpan] = {}
         _collect_spans(self.root, prefix="", into=out)
@@ -173,8 +186,14 @@ def _collect_spans(node: RecordedNode, *, prefix: str, into: dict[str, SourceSpa
     key = node.child_key
     if key is None:
         return
+    # A single-child slot holds one dict, so its path carries no index. The
+    # `len == 1` guard keeps paths unique if a builder somehow recorded more
+    # than one child without raising its own arity error first (that case also
+    # fails loudly in `push_container`, but span collection must never produce
+    # colliding keys regardless).
+    single = not node.child_is_list and len(node.children) == 1
     for index, child in enumerate(node.children):
-        path = f"{prefix}{key}[{index}]"
+        path = f"{prefix}{key}" if single else f"{prefix}{key}[{index}]"
         if child.span is not None:
             into[path] = child.span
         _collect_spans(child, prefix=f"{path}.", into=into)
@@ -307,6 +326,7 @@ def push_container(
     label: str,
     span: SourceSpan | None,
     child_key: str = "cards",
+    child_is_list: bool = True,
     assign: bool = True,
 ) -> Generator[RecordedNode]:
     """Record ``body`` as a container CARD and collect its children into it.
@@ -318,13 +338,25 @@ def push_container(
     - ``body`` is placed in the current frame through :func:`record_card`, so
       it obeys exactly the same placement discipline a leaf card does;
     - subsequent ``record_card`` calls land inside it;
-    - on clean exit, ``body[child_key]`` is set to the children's bodies, in
-      order. Pass ``assign=False`` when the builder wants to place the children
-      itself (e.g. a `conditional` card's single ``card:`` key, or an arity
-      check first) -- the yielded node's ``children`` are final once the ``with``
-      block exits, and ``body`` may still be mutated afterwards because it was
-      recorded by reference. ``child_key`` still names the span-path segment
-      those children are addressed by, so pass the real stored key either way.
+    - on clean exit, ``body[child_key]`` is set from the children, in order.
+      Pass ``assign=False`` when the builder wants to place them itself (e.g.
+      after its own arity check) -- the yielded node's ``children`` are final
+      once the ``with`` block exits, and ``body`` may still be mutated
+      afterwards because it was recorded by reference. ``child_key`` still names
+      the span-path segment either way, so pass the real stored key regardless.
+
+    ``child_is_list`` describes the SHAPE of the stored child slot, and both the
+    assignment and the span-path grammar follow from it:
+
+    - ``True`` (default) -- a list (``cards``): ``body[child_key]`` becomes the
+      list of child bodies, and paths are ``<key>[<index>]``.
+    - ``False`` -- a single child (a `conditional` card's ``card:`` key): with
+      one child, ``body[child_key]`` becomes that child's body and its path is a
+      bare ``<key>``; with none, the key stays ABSENT (``c.entity_filter`` takes
+      zero or one presentation card, and a materialized ``null`` would break
+      round-tripping). Recording more than one child is a builder bug -- the
+      builder owes the author its own arity error first -- and raises
+      ``ValueError`` here rather than silently dropping cards.
 
     ``span`` is always supplied by the caller: this generator is itself
     ``@contextlib.contextmanager``-decorated, so a span captured here would
@@ -335,8 +367,20 @@ def push_container(
     rec = _require_active(what, span=span)
     node = record_card(body, span=span, what=what)
     node.child_key = child_key
+    node.child_is_list = child_is_list
     frame = ContainerFrame(role=CARD_ROLE, label=label, node=node)
     with rec.push(frame):
         yield node
-    if assign:
+    if not child_is_list and len(node.children) > 1:
+        raise ValueError(
+            f"{label} recorded {len(node.children)} cards into its single-child "
+            f"`{child_key}` slot (child_is_list=False). A single-child container must "
+            f"raise its own arity error before its block closes; dropping the extra "
+            f"cards here would lose them silently."
+        )
+    if not assign:
+        return
+    if child_is_list:
         body[child_key] = [child.body for child in node.children]
+    elif node.children:
+        body[child_key] = node.children[0].body

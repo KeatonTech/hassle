@@ -111,12 +111,27 @@ class DuplicateObjectError(CompileError):
         self.object_key = object_key
         loc_a = f"{first.file}:{first.line}" if first is not None else "<unknown>"
         loc_b = f"{second.file}:{second.line}" if second is not None else "<unknown>"
-        message = (
-            f"Duplicate object key `{object_key}`: two objects in this bundle claim the "
-            f"same id, first at {loc_a} and again at {loc_b}. An object's id is its HA "
-            f"identity and must be unique bundle-wide. Fix: give one of them a distinct "
-            f"`id=` (or rename the function, whose name is the default id)."
-        )
+        # A dashboard's identity is its `url_path` (or the `default` sentinel) --
+        # it has no `id=` keyword at all, and its function name is NOT its
+        # identity, so the generic fix sentence would send the author looking
+        # for a knob that does not exist (docs/internals/dashboards-design.md
+        # §3.1/§5.6). Every other kind keeps its message byte-for-byte.
+        if object_key.startswith("dashboard:"):
+            message = (
+                f"Duplicate object key `{object_key}`: two dashboards in this bundle claim "
+                f"the same identity, first at {loc_a} and again at {loc_b}. A dashboard's "
+                f"identity is its `url_path` (or `default=True` for THE default dashboard), "
+                f"and it must be unique bundle-wide. Fix: give one of them a different "
+                f"`url_path=` -- renaming the decorated function does not help, since a "
+                f"dashboard's identity comes from its decorator, not from the function name."
+            )
+        else:
+            message = (
+                f"Duplicate object key `{object_key}`: two objects in this bundle claim the "
+                f"same id, first at {loc_a} and again at {loc_b}. An object's id is its HA "
+                f"identity and must be unique bundle-wide. Fix: give one of them a distinct "
+                f"`id=` (or rename the function, whose name is the default id)."
+            )
         is_splice_reconcile = any(
             span is not None and _line_is_ui_splice_marker(span.file, span.line)
             for span in (first, second)
