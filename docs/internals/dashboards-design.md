@@ -654,6 +654,21 @@ additive, all snapshot-tested:
    `url_path` that contradicts the decorator's `url_path=` — the same class
    because it is the same question (what is this dashboard's identity?) and
    there must be exactly one answer.
+4. **`RawDashboardReturnTypeError` is new** (DB2 review round). A
+   `@raw_dashboard` body that returns a non-`dict` — a forgotten `return`, or a
+   YAML string — fell through the envelope/config discrimination and became the
+   stored config **verbatim**: `{"meta": ..., "config": null}` validates,
+   hashes and compiles clean, FakeBackend accepts it, and the next push would
+   replace the user's real dashboard with an empty one. That is a silently
+   destructive write (I1/I6), so it is rejected at compile time; the decorator's
+   `F` TypeVar is additionally bound to `Callable[[], dict[str, Any]]` (the
+   `raw_automation` convention) so pyright flags it at edit time too.
+5. **`DefaultDashboardMetadataError` branches on the raw case.** A
+   `@raw_dashboard(default=True)` whose body returns a non-null `meta` is the
+   same violation as `@dashboard(default=True, title=...)`, but the author
+   expressed it as a KEY of a returned dict, not as a keyword — so the message
+   names `@raw_dashboard(default=True)` and tells them to drop the `"meta"` key,
+   rather than pointing at a `meta=` keyword that has no call site.
 
 ### 5.7 dsl-extensions.md contract update
 
@@ -775,18 +790,37 @@ def vertical_stack(*, title=None, visibility=None, extra=None) -> Generator[None
 
 ```python
 push_container(body, *, label: str, span: SourceSpan | None,
-               child_key: str = "cards", assign: bool = True)
+               child_key: str = "cards", child_is_list: bool = True,
+               assign: bool = True)
     -> Generator[RecordedNode]
 ```
 
 places `body` through `record_card` (so it obeys the same discipline a leaf
-does), redirects subsequent `record_card` calls into it, and on clean exit sets
-`body[child_key]` to the children's bodies in order. `assign=False` when the
-builder places the children itself — a `conditional` card's single `card:` key,
-or an arity check first (`ConditionalCardArityError`); `child_key` still names
-the span-path segment, so pass the real stored key either way. `span` is a
-required keyword: `push_container` is itself a contextmanager generator, so a
-span captured inside it would point at the builder's line, not the author's.
+does), redirects subsequent `record_card` calls into it, and on clean exit fills
+`body[child_key]` from the children. `span` is a required keyword:
+`push_container` is itself a contextmanager generator, so a span captured inside
+it would point at the builder's line, not the author's.
+
+**`child_is_list` describes the SHAPE of the stored child slot**, and both the
+assignment and the span-path grammar follow from it:
+
+| | stored shape | `body[child_key]` becomes | span path |
+|---|---|---|---|
+| `child_is_list=True` (default) | a list (`cards`) | the list of child bodies | `<key>[<index>]` |
+| `child_is_list=False` | one dict (`card`) | that child's body; the key stays **absent** with no child | a bare `<key>` |
+
+The single-child case is not cosmetic: a `conditional` card stores its child as
+one dict under `card:`, so an indexed `…cards[0].card[0]` path addresses
+**nothing** in the stored config and is unresolvable for DB4/DB7. The absent-key
+rule is what lets `c.entity_filter` take zero or one presentation card without
+materializing a `null` that would break round-tripping. Recording more than one
+child into a single-child slot raises `ValueError` from the seam — a builder
+owes the author its own arity error (`ConditionalCardArityError`) first, and
+silently dropping the extra cards is not an option.
+
+`assign=False` when the builder wants to place the children itself (e.g. after
+its own arity check); `child_key`/`child_is_list` still govern the span-path
+segment, so pass the real stored shape either way.
 
 **Shared conventions** (`builders.py`, one implementation, no per-builder
 copies): `put(body, key, value)` (skip `None` — never materialize a default HA
@@ -797,10 +831,17 @@ an iterable; `cond.*` objects and verbatim dicts; automation builders trap).
 `normalize_condition(value, *, span)` is the same for `c.conditional(*conds)`.
 
 **Span sidecar.** Every recorded node carries a `SourceSpan`, addressable by
-PATH: dot-joined `<key>[<index>]` segments relative to the dashboard's
-`config` — `views[0]`, `views[0].badges[1]`,
-`views[0].sections[0].cards[2]`, `views[0].cards[0].cards[1]`. Reachable as
-`CompileResult.node_spans_for(obj)` / `CompileResult.node_span(obj, path)`.
+PATH — dot-joined segments relative to the dashboard's `config`, each addressing
+exactly what a plain traversal of the STORED config would:
+
+- `<key>[<index>]` for a list slot — `views[0]`, `views[0].badges[1]`,
+  `views[0].sections[0].cards[2]`, `views[0].cards[0].cards[1]`;
+- a bare `<key>` for a single-child slot — `views[0].sections[0].cards[0].card`
+  for the one card a `conditional` stores under `card:` (see `child_is_list`
+  above).
+
+Reachable as `CompileResult.node_spans_for(obj)` /
+`CompileResult.node_span(obj, path)`.
 (DB2 deviation from §6.1's "`CompileResult.span_at` extended": `span_at`'s
 per-section positional index cannot address a card nested three containers
 deep, so the tree gets its own additive accessor rather than an overloaded one.
@@ -815,7 +856,8 @@ single source of truth for DB3 (registration), DB4 (emitter selection) and DB7
 class CardSpec:
     type: str                      # the HA `type` string as stored
     builder: str                   # the DSL name, as an author writes it ("c.tile")
-    entity_params: tuple[str, ...] = ()   # params whose value is an entity id (or list)
+    entity_params: tuple[str, ...] = ()    # STORED KEYS holding an entity id (or list)
+    declared: frozenset[str] = frozenset() # every STORED KEY the builder writes
     container: Literal["leaf", "cards", "card", "sections"] = "leaf"
     context_manager: bool = False  # is the builder a `with` block?
 
@@ -826,9 +868,23 @@ STRUCTURE_REGISTRY: dict[str, CardSpec] # the structural pieces (below)
 - `container` says how children are stored: `"leaf"` (none), `"cards"` (list
   under `cards`), `"card"` (exactly one under `card`), `"sections"` (a view's
   section list). `context_manager` is stated rather than inferred.
+- **`entity_params` and `declared` name STORED CONFIG KEYS, not Python
+  parameter names.** The two usually coincide (a builder's kwarg mirrors the HA
+  option name), but where they diverge it is the stored key that matters: both
+  consumers operate on a compiled card body, never on the DSL call.
 - `entity_params` is what DB4 rewrites to `e.<domain>.<object_id>` and what DB7
   extracts for the unknown-entity lint. Freeform strings inside
-  `raw_card`/`markdown` content are never in it.
+  `raw_card`/`markdown` content are never in it. Every one of them is by
+  definition also in `declared`.
+- **`declared` is REQUIRED of every registration.** It is the set a generic
+  decompiler emitter subtracts from a stored card body to decide what must go
+  into `extra={...}` (§5.3's forward-compatibility valve) — an empty `declared`
+  makes the emitter dump the whole card into `extra=`. Include the `type` key
+  and any structural child key (`cards`/`card`) the builder writes itself. It is
+  defaulted on the dataclass only so a row stays one line to add;
+  `tests/test_dashboard_card_registry.py` fails any row that leaves it empty, so
+  a DB3 family cannot merge without it. (A follow-up pass backfills any family
+  that merged before this rule landed.)
 - **A type absent from the table is never an error**: it decompiles to
   `raw_card` and shows up in the coverage metric (§6.4) — the tracked signal
   that a new HA release added a card.
@@ -837,11 +893,19 @@ DB2 populates the structural rows. They are keyed `structure:*` and kept OUT of
 `CARD_REGISTRY` so a decompiler looking up a stored card's `type` can never
 match them:
 
-| Key | type | builder | entity_params | container | CM |
-|---|---|---|---|---|---|
-| `structure:view` | `structure:view` | `view` | — | `sections` (or `cards`, decided by the view's own `type`) | yes |
-| `structure:badge` | `structure:badge` | `badge` | `entity` | `leaf` | no |
-| `structure:section` | `grid` | `section` | — | `cards` | yes |
+| Key | type | builder | entity_params | declared | container | CM |
+|---|---|---|---|---|---|---|
+| `structure:view` | `structure:view` | `view` | — | `type`, `title`, `path`, `icon`, `theme`, `background`, `max_columns`, `subview`, `visible`, `header`, `visibility`, `badges`, `cards`, `sections` | `sections` (or `cards`, decided by the view's own `type`) | yes |
+| `structure:badge` | `structure:badge` | `badge` | `entity` | `type`, `entity`, `visibility` | `leaf` | no |
+| `structure:section` | `grid` | `section` | — | `type`, `column_span`, `visibility`, `cards` | `cards` | yes |
+
+The view row's `declared` set mirrors `structure._VIEW_DECLARED` exactly — the
+same set `extra=` may not shadow, which is by construction the same set an
+emitter must not put into `extra=`. It includes the STRUCTURAL keys
+`cards`/`sections`/`badges` that `view()` writes itself after its block closes:
+letting `extra=` spell those meant `extra={"cards": [...]}` was accepted and
+then overwritten, and `extra={"badges": [...]}` survived only while the block
+contained no `badge()` call — conditional silent data loss.
 
 The section row deliberately carries the type string `grid`, the SAME one
 DB3a's `c.grid(...)` card will use: **position disambiguates**. A `grid` in a

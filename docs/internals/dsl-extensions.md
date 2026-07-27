@@ -162,10 +162,12 @@ keyword conventions, implemented once
 | `section()`/`raw_section()` | under a masonry/panel/sidebar view, or nested | `SectionOutsideSectionsViewError` |
 | 0 or ≥2 cards | in a `panel` view | `PanelViewArityError` |
 | no `url_path=`+no `default=True`, both, a hyphen-less `url_path`, a raw `meta` without `url_path`, or a `meta` `url_path` contradicting the decorator's | `@dashboard`/`@raw_dashboard` | `DashboardUrlPathError` |
-| `title=`/`icon=`/`show_in_sidebar=`/`require_admin=` | with `default=True` | `DefaultDashboardMetadataError` |
+| `title=`/`icon=`/`show_in_sidebar=`/`require_admin=` with `default=True`, or a `@raw_dashboard(default=True)` body returning a non-null `meta` | `@dashboard`/`@raw_dashboard` | `DefaultDashboardMetadataError` (message branches on which one) |
+| a body returning anything but a `dict` (a forgotten `return`, a YAML string) | `@raw_dashboard` | `RawDashboardReturnTypeError` — also a pyright error, the TypeVar is bound to `Callable[[], dict[str, Any]]` |
+| two dashboards claiming one `url_path` | `@dashboard`/`@raw_dashboard` | `DuplicateObjectError`, whose fix sentence names `url_path=` for this kind (a dashboard has no `id=`, and its function name is not its identity) |
 | an automation `ConditionBuilder` | `visibility=` / a conditional card | `DashboardConditionTypeError` (names the `cond.*` equivalent) |
 | a `cond.*` object | `only_if`/`if_then`/`all_of`/… | `DashboardConditionInAutomationError` |
-| an `extra=` key that is a declared kwarg | any builder | `ExtraShadowsKwargError` |
+| an `extra=` key that is a declared kwarg, **or a structural key the builder writes itself** (`view`'s `cards`/`sections`/`badges`, `section`'s `cards`) | any builder | `ExtraShadowsKwargError` |
 
 ## The frozen surface, grouped by role
 
@@ -679,12 +681,19 @@ These are how new builder families are added; they are **not** in
   `ContainerFrame`, `DashboardRecorder.push`, `_require_active`, `_CM_DEPTH`,
   and the two record seams **`record_card(body, *, span, what=)`** /
   **`record_badge(body, *, span)`** plus the container seam
-  **`push_container(body, *, label, span, child_key="cards", assign=True)`**.
-  The dashboard sibling of `record_action`/`Recorder.push_actions`: every
-  `hassle.cards` builder is implemented on top of it, so a third-party builder
-  pack needs no recorder access of its own. `record_card` takes OWNERSHIP of
-  the dict it is given (container cards keep mutating it); the `raw_*` verbs
-  copy the author's dict before handing it over.
+  **`push_container(body, *, label, span, child_key="cards",
+  child_is_list=True, assign=True)`**. The dashboard sibling of
+  `record_action`/`Recorder.push_actions`: every `hassle.cards` builder is
+  implemented on top of it, so a third-party builder pack needs no recorder
+  access of its own. `record_card` takes OWNERSHIP of the dict it is given
+  (container cards keep mutating it); the `raw_*` verbs SHALLOW-copy the
+  author's dict before handing it over (rebinding a key on their own dict
+  afterwards is safe; mutating a nested list/dict in place is not).
+  `child_is_list=False` marks a single-child slot (a `conditional` card's
+  `card:` key): the child is stored as one dict rather than a list, its span
+  path is a bare `<key>` segment with no index, and the key stays absent when
+  no child was recorded. Recording two children into such a slot raises
+  `ValueError` rather than dropping one.
 - `hassle.compiler.dashboards.builders` — `merge_extra`,
   `normalize_visibility`, `put`: the one implementation of the `extra=` merge +
   shadow check and the `visibility=` normalizer every dashboard builder shares.

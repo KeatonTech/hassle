@@ -157,8 +157,8 @@ def test_raw_dashboard_returning_none_is_rejected() -> None:
 
 
 def test_raw_dashboard_returning_a_yaml_string_is_rejected() -> None:
-    from hassle.compiler.dashboards.errors import RawDashboardReturnTypeError
     from hassle.compiler.dashboards.decorators import build_raw_envelope
+    from hassle.compiler.dashboards.errors import RawDashboardReturnTypeError
 
     with pytest.raises(RawDashboardReturnTypeError) as excinfo:
         build_raw_envelope("views:\n  - title: Home\n", {"url_path": "a-b"}, None)

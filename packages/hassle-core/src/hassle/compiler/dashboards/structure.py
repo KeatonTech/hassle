@@ -51,7 +51,13 @@ from hassle.compiler.spans import SourceSpan, capture_span
 #
 # View option keywords, in the order they are written into the stored view body.
 # `type` leads because it is the discriminator that decides whether the view
-# stores `sections` or `cards`.
+# stores `sections` or `cards`, so it is handled separately below.
+#
+# THE single source of truth for both emission order and shadow protection: the
+# body-assembly loop iterates this tuple, and `_VIEW_DECLARED` is derived from
+# it. Keeping two hand-maintained lists let them drift, and a name present in
+# the emission list but absent from `_VIEW_DECLARED` silently loses its `extra=`
+# shadow protection (reviewer note).
 _VIEW_OPTION_ORDER: tuple[str, ...] = (
     "title",
     "path",
@@ -63,9 +69,17 @@ _VIEW_OPTION_ORDER: tuple[str, ...] = (
     "visible",
     "header",
 )
+#: Keys `view()` writes ITSELF, after its block closes. `extra=` may not spell
+#: them either: `extra={"cards": [...]}` would be accepted and then silently
+#: overwritten, and `extra={"badges": [...]}` survived only when the block
+#: happened to contain no `badge()` call -- conditional silent data loss that
+#: would bite the moment an author added one.
+_VIEW_STRUCTURAL_KEYS: frozenset[str] = frozenset({"cards", "sections", "badges"})
 #: Every declared `view()` keyword -- what `extra=` may not shadow (§5.3).
-_VIEW_DECLARED: frozenset[str] = frozenset({"type", "visibility", *_VIEW_OPTION_ORDER})
-#: Every declared `section()` keyword.
+_VIEW_DECLARED: frozenset[str] = (
+    frozenset({"type", "visibility", *_VIEW_OPTION_ORDER}) | _VIEW_STRUCTURAL_KEYS
+)
+#: Every declared `section()` keyword (`cards` is the structural key it writes).
 _SECTION_DECLARED: frozenset[str] = frozenset({"type", "column_span", "visibility", "cards"})
 #: Every declared `badge()` keyword (its `**options` are added per call).
 _BADGE_DECLARED: frozenset[str] = frozenset({"type", "entity", "visibility"})
@@ -126,18 +140,22 @@ def view(
 
     body: dict[str, Any] = {}
     put(body, "type", type)
-    for name, value in (
-        ("title", title),
-        ("path", path),
-        ("icon", icon),
-        ("theme", theme),
-        ("background", background),
-        ("max_columns", max_columns),
-        ("subview", subview),
-        ("visible", visible),
-        ("header", header),
-    ):
-        put(body, name, value)
+    # Emission order comes from `_VIEW_OPTION_ORDER` alone (see its comment):
+    # a name added there but not wired here raises `KeyError` loudly rather
+    # than silently dropping the option.
+    values: dict[str, Any] = {
+        "title": title,
+        "path": path,
+        "icon": icon,
+        "theme": theme,
+        "background": background,
+        "max_columns": max_columns,
+        "subview": subview,
+        "visible": visible,
+        "header": header,
+    }
+    for name in _VIEW_OPTION_ORDER:
+        put(body, name, values[name])
     put(body, "visibility", normalize_visibility(visibility, span=span))
     merge_extra(body, extra, builder="view", declared=_VIEW_DECLARED, span=span)
 
@@ -266,15 +284,21 @@ def raw_card(body: Mapping[str, Any]) -> None:
     """Record a verbatim card dict inside any container (§5.5).
 
     The bottom rung: a third-party card (``custom:bubble-card``), a built-in
-    card Hassle does not model yet, anything at all. The dict is copied, so the
-    caller may keep and mutate their own.
+    card Hassle does not model yet, anything at all. The dict is
+    **shallow-copied**, so rebinding a key on the caller's own dict afterwards
+    cannot change what was recorded — but nested lists/dicts inside it are
+    shared, so mutating one in place still would. Pass a fresh literal (or
+    ``copy.deepcopy``) if the caller keeps mutating nested values.
     """
     span = capture_span(depth=0)
     record_card(dict(body), span=span, what="`raw_card()`")
 
 
 def raw_section(body: Mapping[str, Any]) -> None:
-    """Record a verbatim section dict inside a ``sections`` view (§5.5)."""
+    """Record a verbatim section dict inside a ``sections`` view (§5.5).
+
+    **Shallow-copied**, same caveat as :func:`raw_card`.
+    """
     span = capture_span(depth=0)
     node = _open_section(span=span, body=dict(body), what="`raw_section()`")
     node.child_key = None  # its cards are inside the verbatim dict, not recorded
@@ -284,7 +308,8 @@ def raw_view(body: Mapping[str, Any]) -> None:
     """Record a verbatim view dict inside a ``@dashboard`` body (§5.5).
 
     The rung for a view whose own top level is unmodelled — a strategy view, a
-    view type a future HA release adds.
+    view type a future HA release adds. **Shallow-copied**, same caveat as
+    :func:`raw_card`.
     """
     span = capture_span(depth=0)
     rec = _require_active("`raw_view()`", span=span)
