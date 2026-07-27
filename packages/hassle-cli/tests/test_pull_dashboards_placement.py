@@ -41,8 +41,15 @@ from hassle.sync.category_writeback import (
     _SCOPE_FOR_KIND,  # pyright: ignore[reportPrivateUsage]
 )
 from hassle.sync.models import Plan, PlanAction, PlanEntry
-from hassle.sync.pull import _placeholder_dsl_source, apply_pull  # pyright: ignore[reportPrivateUsage]
-from hassle.sync.source_writer import RecordingSourceWriter, SplicingSourceWriter, WholeFileSourceWriter
+from hassle.sync.pull import (  # pyright: ignore[reportPrivateUsage]
+    _placeholder_dsl_source,
+    apply_pull,
+)
+from hassle.sync.source_writer import (
+    RecordingSourceWriter,
+    SplicingSourceWriter,
+    WholeFileSourceWriter,
+)
 from hassle_cli.bundle_ops import default_source_path
 
 # ---------------------------------------------------------------------------

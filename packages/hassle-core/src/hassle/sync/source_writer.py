@@ -19,12 +19,13 @@ depends on this Protocol. Three implementations:
 - `RecordingSourceWriter` — an in-memory test double that records every call
   without touching disk, used by the pull-engine unit tests.
 
-`adopt_write` (module-level function, below) is the ADOPT routing primitive
-`hassle.sync.pull.apply_pull` calls: never `write_whole_file` over a path that
-already has real content (docs/internals/dashboards-design.md §7) -- routes
-through `splice_object` instead, whose "stale manifest" append-under-marker
-fallback is exactly the safe behavior for landing a brand-new object inside
-an already-existing file.
+`adopt_write` (module-level function, below) is the ADOPT write primitive
+`hassle.sync.pull.apply_pull` calls: never silently overwrite a path that
+already has real content (docs/internals/dashboards-design.md §7). It
+preserves existing bytes BY CONSTRUCTION -- read + concatenate + one
+`write_whole_file` call -- rather than by relying on any writer's
+`splice_object` semantics (which do not, in general, preserve non-decompiler
+content; see the function's own docstring for the regression this fixes).
 
 Conflict marker format (used by the pull engine when writing a CONFLICT entry,
 documented here since `SourceWriter` is the seam that receives it): a simple
@@ -240,15 +241,23 @@ def adopt_write(source_writer: SourceWriter, path: Path, object_key: str, conten
     same stem, than the shared `misc.py` ever was, but the hazard is the same
     for any kind: no local or UI edit is ever silently lost).
 
-    When ``path`` already has real content, this routes through
-    ``splice_object`` instead of ``write_whole_file`` -- for
-    `SplicingSourceWriter`, splicing a key the file doesn't (yet) define
-    already falls back to its own "stale manifest" append-under-marker
-    behavior (its docstring), which is exactly the safe behavior an adopt
-    into an already-existing file needs: the new object lands in the file,
-    nothing already there is touched. The common case -- a brand-new
-    destination with nothing to preserve -- is unaffected: ``write_whole_file``
-    still creates it directly.
+    **Preserves existing bytes BY CONSTRUCTION, never by delegating to a
+    writer's own splice semantics** (fixed after reviewer BLOCK 1: routing to
+    `splice_object` does NOT deliver this guarantee for arbitrary content --
+    `WholeFileSourceWriter.splice_object` IS `write_whole_file` with zero
+    preservation, and `SplicingSourceWriter.splice_object` itself falls back
+    to a plain `write_whole_file` whenever the new content isn't one
+    spliceable statement plus imports, which the pull engine's placeholder
+    content (`hassle.sync.pull._placeholder_dsl_source`, comment-only) always
+    is -- so the previous version of this function silently destroyed
+    existing bytes with BOTH real writers). When ``path`` already exists,
+    this reads it directly and writes ``existing bytes + separator +
+    "# hassle:" marker + new content`` in ONE `write_whole_file` call --
+    never touching `splice_object` at all, so the guarantee holds regardless
+    of what `content` looks like or which `SourceWriter` implementation is in
+    play. The common case -- a brand-new destination with nothing to
+    preserve -- is unaffected: `write_whole_file` still creates it directly,
+    with no read first.
 
     Used by :func:`hassle.sync.pull.apply_pull` (the placeholder-content
     engine). `hassle.sync.pull_apply.apply_pull_with_decompiler` -- the real
@@ -257,7 +266,14 @@ def adopt_write(source_writer: SourceWriter, path: Path, object_key: str, conten
     docs/internals/sync.md), so it does not go through this helper.
     """
     if path.exists():
-        source_writer.splice_object(path, object_key, content)
+        existing = path.read_text(encoding="utf-8")
+        merged = (
+            existing.rstrip("\n")
+            + f"\n\n\n# hassle: adopted {object_key} below\n"
+            + content.strip("\n")
+            + "\n"
+        )
+        source_writer.write_whole_file(path, merged)
     else:
         source_writer.write_whole_file(path, content)
 

@@ -219,6 +219,60 @@ Three implementations:
   records every call for assertions; used throughout the pull-engine unit
   tests and the fuzz test for lost edits.
 
+### Adopt-into-existing-file safety (`adopt_write`)
+
+`hassle.sync.source_writer.adopt_write` is an ADDITIVE module-level function
+(not part of the `SourceWriter` Protocol itself) that `hassle.sync.pull.
+apply_pull`'s ADOPT branch calls instead of `source_writer.write_whole_file`
+directly. **Amendment to the `write_whole_file`/`WholeFileSourceWriter`
+bullets above:** those bullets describe the underlying Protocol methods;
+`apply_pull`'s ADOPT action no longer calls `write_whole_file` unconditionally
+— it routes through `adopt_write`, which decides between a direct
+`write_whole_file` and a byte-preserving merge depending on whether the
+target path already exists.
+
+This exists because a dashboard's per-object default placement
+(docs/internals/dashboards-design.md §7, one file per dashboard) makes
+"ADOPT's target path already has real content" a realistic case for the
+first time — a hand-authored file, or two identities that module-safen to
+the same stem — where every prior kind's shared `misc.py`/category-file
+default was populated only by ADOPT itself. The byte-preservation contract:
+
+```python
+def adopt_write(source_writer: SourceWriter, path: Path, object_key: str, content: str) -> None: ...
+```
+
+- If `path` does **not** already exist: `write_whole_file(path, content)`,
+  unchanged from before — the common case, nothing to preserve.
+- If `path` **already exists**: `adopt_write` reads it directly and calls
+  `write_whole_file(path, existing_bytes + separator + "# hassle: adopted
+  <object_key> below" marker + content)` — ONE `write_whole_file` call,
+  existing bytes first. It does **not** call `splice_object` for this case.
+
+That last point is deliberate, not an oversight: an earlier version of this
+function routed the existing-path case to `source_writer.splice_object`
+instead, reasoning that `SplicingSourceWriter`'s own "stale manifest" append
+fallback (§3 above) would handle it safely. That reasoning was wrong for any
+writer, not just `SplicingSourceWriter` — `WholeFileSourceWriter.
+splice_object` **is** `write_whole_file` (zero preservation by design, see
+its bullet above), and `SplicingSourceWriter.splice_object` itself falls back
+to a plain `write_whole_file` whenever the new content fails to parse as one
+spliceable statement plus imports, which `apply_pull`'s own placeholder
+content (`_placeholder_dsl_source`, comment-only — not valid Python) always
+does. Both real writers therefore destroyed the existing file's bytes when
+routed through `splice_object` with placeholder content. `adopt_write` now
+reads-and-concatenates itself so the guarantee holds unconditionally,
+regardless of `content`'s shape or which `SourceWriter` implementation is in
+play; it never depends on any writer's own splice/parse logic.
+
+`hassle.sync.pull_apply.apply_pull_with_decompiler` (the real
+decompiler-backed engine) does not call `adopt_write` — it already has its
+own, independently-correct kind-generic equivalent for its BATCHED adopt
+writes (`_merge_adopt_batch_into_existing`, which operates on real decompiled
+Python source and so can safely reuse LibCST-based import merging;
+docs/internals/sync.md), proven for `automation`/`input_boolean` in
+`test_pull_adopt_batching.py` and `test_pull_adopt_preserves_existing_file.py`.
+
 ### Conflict marker format
 
 When the pull engine writes a `conflict` plan entry, it hands `SourceWriter` a
