@@ -1,7 +1,7 @@
 """Shared builder conventions every dashboard builder is written against (§5.3).
 
-Two helpers, deliberately ONE implementation each, so the structural verbs here
-and DB3's ~35 card builders cannot drift apart:
+Four helpers, deliberately ONE implementation each, so the structural verbs
+here and DB3's 47 card builders cannot drift apart:
 
 - :func:`merge_extra` -- the ``extra: dict | None = None`` verbatim-passthrough
   valve plus its shadow check. Every builder takes ``extra=``: when HA adds a
@@ -14,18 +14,43 @@ and DB3's ~35 card builders cannot drift apart:
 - :func:`normalize_visibility` -- the ``visibility=`` normalizer, which accepts
   ``cond.*`` objects and verbatim dicts (and traps an automation condition
   builder, §5.4).
+- :func:`put_copy` -- like :func:`put`, but DEEP-COPIES a ``dict``/``list``
+  value first (the review-round copy-vs-alias fix, SF-3): a bundle is
+  re-compiled from scratch on every run, but WITHIN one compile an author-
+  supplied option dict/list must never alias into the compiled card body --
+  two builder calls sharing one Python dict/list (a common pattern: build the
+  options once, pass them to several cards) must stay independent, and
+  mutating the author's dict after the call must never reach back into
+  already-compiled IR. Every dict/list-valued typed keyword option across
+  ``cards/layout.py``/``display.py``/``visual.py``/``media.py`` uses this
+  instead of :func:`put` -- the uniform posture the review round asked for
+  (picking ONE rule rather than copying in some builders and aliasing in
+  others). ``extra=`` keeps its own separate, already-documented reference
+  semantics (:func:`merge_extra`) -- unaffected by this fix.
+- :func:`normalize_rows` -- the ``entities``-shaped-row convention (§5.3), the
+  ONE implementation shared by every row-taking builder (``c.entities``,
+  ``c.glance``, ``c.entity_filter``, ``c.heading``'s ``badges=``,
+  ``c.history_graph``/``c.statistics_graph``/``c.calendar``/``c.logbook``/
+  ``c.map``/``c.picture_glance``'s ``*entities`` varargs) instead of three
+  near-identical per-module copies. Also the SF-4 fix: a bare `str`/`EntityRef`
+  passed where a LIST of rows was expected, or a row that is not
+  `str`/`EntityRef`/`dict`, used to compile clean into garbage (a live bug,
+  not a hypothetical) -- both now raise
+  :class:`~hassle.compiler.dashboards.errors.EntityRowTypeError` (what/where/
+  fix, snapshot-tested).
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
-from typing import Any
+import copy
+from collections.abc import Callable, Iterable, Mapping
+from typing import Any, cast
 
 from hassle.compiler.dashboards.conditions import (
     DashboardConditionLike,
     normalize_condition,
 )
-from hassle.compiler.dashboards.errors import ExtraShadowsKwargError
+from hassle.compiler.dashboards.errors import EntityRowTypeError, ExtraShadowsKwargError
 from hassle.compiler.spans import SourceSpan
 
 #: What `visibility=` accepts: one condition or an iterable of them, where a
@@ -42,6 +67,75 @@ def put(body: dict[str, Any], key: str, value: Any) -> None:
     """
     if value is not None:
         body[key] = value
+
+
+def put_copy(body: dict[str, Any], key: str, value: Any) -> None:
+    """Like :func:`put`, but a ``dict``/``list`` value is deep-copied first.
+
+    Use this instead of :func:`put` for every option whose value CAN be a
+    ``dict``/``list`` (``severity=``, ``limits=``, ``period=``, ``features=``,
+    ``state_content=``, ``elements=``, ``state_filter=``, ``tap_action=``/
+    ``hold_action=``/``double_tap_action=``, …) -- a plain scalar (``str``/
+    ``int``/``bool``/``None``) passes through unchanged, so it is always safe
+    to reach for this over :func:`put` when in doubt.
+    """
+    if isinstance(value, dict):
+        value = copy.deepcopy(cast("dict[str, Any]", value))
+    elif isinstance(value, list):
+        value = copy.deepcopy(cast("list[Any]", value))
+    put(body, key, value)
+
+
+def normalize_rows(
+    rows: Any,
+    *,
+    builder: str,
+    param: str,
+    span: SourceSpan | None,
+    row_factory: Callable[[str], Any] | None = None,
+) -> list[Any]:
+    """Normalize an `entities`-shaped-row argument to HA's stored row list.
+
+    ``rows`` is either a varargs tuple (``c.entities(*rows)``) or a single
+    list/iterable value (``c.entity_filter(entities=[...])``,
+    ``c.heading(badges=[...])``); either way each item is a bare entity id
+    (``str``/``EntityRef``) or a ``dict`` (a per-row option object, or a
+    special row like ``{"type": "divider"}``, kept verbatim and deep-copied so
+    a caller-owned dict can never alias into the compiled card).
+
+    ``row_factory`` lets a bare-string row build something other than the row
+    string itself -- ``c.heading(badges=...)`` turns a bare entity id into the
+    object-badge form ``{"type": "entity", "entity": ...}``, mirroring
+    ``structure.badge()``'s own rule, while every other row-taking builder
+    leaves it ``None`` and keeps the string as-is.
+
+    Two failure modes, both real bugs that used to compile clean into garbage
+    (SF-4, a review-round finding) rather than raise
+    :class:`~hassle.compiler.dashboards.errors.EntityRowTypeError`:
+
+    - ``rows`` itself is a bare ``str``/``bytes`` (or anything non-iterable) --
+      Python happily iterates a string character by character, so
+      ``entity_filter(entities="light.hall")`` used to silently become ten
+      one-character rows;
+    - a row that is neither ``str``/``EntityRef`` nor ``dict`` (e.g. a `list`
+      passed as one row because the caller forgot to unpack) -- it used to
+      ``str()``-stringify into a single nonsense row instead of failing loudly.
+    """
+    if isinstance(rows, (str, bytes)):
+        raise EntityRowTypeError("bare_string", builder, param, rows, span)
+    try:
+        iterator = iter(rows)  # pyright: ignore[reportUnknownArgumentType]
+    except TypeError as exc:
+        raise EntityRowTypeError("bare_string", builder, param, rows, span) from exc
+    out: list[Any] = []
+    for row in iterator:
+        if isinstance(row, dict):
+            out.append(copy.deepcopy(cast("dict[str, Any]", row)))
+        elif isinstance(row, str):
+            out.append(row_factory(row) if row_factory is not None else str(row))
+        else:
+            raise EntityRowTypeError("bad_row", builder, param, row, span)
+    return out
 
 
 def merge_extra(

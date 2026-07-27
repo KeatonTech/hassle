@@ -133,6 +133,70 @@ card type Hassle does not model is never an error: it round-trips through
   anywhere a condition is, so an unmodelled future condition kind round-trips
   raw.
 
+#### Card-builder inventory (DB3, additive — 47 builders, one `CardSpec` row each)
+
+Every name below is a `hassle.cards` attribute (`c.<name>`); `cond` (above) is
+the vocabulary's other export. The registry (`hassle.compiler.dashboards.
+card_registry.CARD_REGISTRY`) is the single source of truth this list mirrors
+— `tests/test_dashboard_card_registry_conformance.py` pins every row's
+`visibility=`/`extra=`/shadow-check wiring generically, so this table is
+documentation, not the contract itself.
+
+- **Containers** (`with c.<name>(...):`, DB3a): `vertical_stack`,
+  `horizontal_stack`, `grid(columns=, square=)` — an ordinary `cards:` list,
+  any number of children; `conditional(*conditions)` — EXACTLY one child card
+  under a `card:` key; `entity_filter(entities=, state_filter=, show_empty=)`
+  — ZERO or ONE child card under a `card:` key. `conditional`/`entity_filter`
+  share `ConditionalCardArityError` for "how many cards in this `card:` slot"
+  (see the trap table).
+- **Display leaves** (DB3a): `entities`/`glance` — rows as positional varargs
+  (`EntityRef | str | dict`); `tile(entity=, features=, color=, vertical=, …)`,
+  `entity(entity=, attribute=, name=, icon=, …)`,
+  `button(entity=, tap_action=, name=, icon=, …)`,
+  `heading(heading=, heading_style=, icon=, badges=…)`.
+- **Visual/history** (DB3b): `gauge`, `history_graph`, `statistics_graph`,
+  `sensor`, `statistic`, `markdown`, `clock`, `calendar`, `logbook` — the
+  latter four's `*entities` (`history_graph`/`statistics_graph`) and
+  `calendar`/`logbook` share the same rows convention as `entities`/`glance`.
+- **Media** (DB3b): `iframe`, `picture(image=, image_entity=, …)` (either
+  supplies the background; `image_entity` is entity-bearing),
+  `picture_glance`, `picture_elements(elements=…)`, `map`.
+- **Domain** (DB3c): `alarm_panel`, `area(area=, …)` (an HA **area id**, not
+  an entity id — deliberately absent from `entity_params`), `light`,
+  `thermostat(features=)`, `humidifier(features=)`, `media_control`,
+  `plant_status`, `todo_list`, `shopping_list` (the legacy alias — its own
+  `"shopping-list"` type string, never upgraded to `todo-list`),
+  `weather_forecast`.
+- **Energy** (DB3c, "leaf, mostly option-free" per design §2.3 — every card
+  reads the dashboard's shared Energy collection rather than an entity of its
+  own): `energy_date_selection`, `energy_usage_graph`, `energy_solar_graph`,
+  `energy_gas_graph`, `energy_water_graph`,
+  `energy_distribution(link_dashboard=)`, `energy_sources_table`,
+  `energy_grid_neutrality_gauge`, `energy_solar_consumed_gauge`,
+  `energy_carbon_consumed_gauge`, `energy_self_sufficiency_gauge`,
+  `energy_sankey(title=)`.
+
+The `entities`-shaped-row convention (`entities`/`glance`/`entity_filter`/
+`heading`'s `badges=`/`history_graph`/`statistics_graph`/`calendar`/
+`logbook`/`map`/`picture_glance`) has ONE implementation
+(`hassle.compiler.dashboards.builders.normalize_rows`): a bare `str`/
+`EntityRef` row stores as HA's shorthand entity-id string, a `dict` row is
+deep-copied and kept verbatim (a per-row override, or a special row like
+`{"type": "divider"}`). A bare string passed where the LIST/varargs itself
+was expected, or a row that is neither `str`/`EntityRef` nor `dict`, raises
+`EntityRowTypeError` rather than compiling into character-by-character rows
+or a stringified nonsense row (see the trap table).
+
+Every dict/list-valued typed option across the four `cards/*.py` modules
+(`severity=`, `limits=`, `period=`, `features=`, `state_content=`,
+`elements=`, `state_filter=`, `tap_action=`/`hold_action=`/
+`double_tap_action=`, …) is deep-copied at record time
+(`hassle.compiler.dashboards.builders.put_copy`) — one uniform posture, never
+aliased, so two builder calls sharing one Python dict/list compile to
+independent cards and a later mutation on the author's side cannot corrupt
+already-compiled IR. `extra=`'s own reference semantics (above) are
+unaffected by this rule.
+
 ### Dashboard builder conventions
 
 Every structural builder above and every `hassle.cards` builder shares two
@@ -168,6 +232,8 @@ keyword conventions, implemented once
 | an automation `ConditionBuilder` | `visibility=` / a conditional card | `DashboardConditionTypeError` (names the `cond.*` equivalent) |
 | a `cond.*` object | `only_if`/`if_then`/`all_of`/… | `DashboardConditionInAutomationError` |
 | an `extra=` key that is a declared kwarg, **or a structural key the builder writes itself** (`view`'s `cards`/`sections`/`badges`, `section`'s `cards`) | any builder | `ExtraShadowsKwargError` |
+| 0 or ≥2 cards | `with c.conditional(...):` (exactly one required) or `with c.entity_filter(...):` (zero or one required, so only ≥2 triggers it) | `ConditionalCardArityError` — one class, "how many cards in this `card:` slot" phrased as `"exactly one"`/`"zero or one"` |
+| a bare `str`/`EntityRef` where a LIST of rows was expected (`entity_filter(entities=...)`, `heading(badges=...)`), or a row that is neither `str`/`EntityRef` nor `dict` (any `entities`-shaped-row builder) | `normalize_rows` (every row-taking builder) | `EntityRowTypeError` — used to compile clean into character-by-character rows or a stringified nonsense row instead |
 
 ## The frozen surface, grouped by role
 

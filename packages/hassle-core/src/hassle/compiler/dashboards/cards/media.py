@@ -4,10 +4,10 @@ docs/internals/dashboards-design.md §5.3/§6.1.1, same conventions as
 ``cards/visual.py`` (that module's docstring has the fuller rationale): every
 builder here is a plain leaf-card function, built on ``put``/``merge_extra``/
 ``normalize_visibility`` and the ``record_card`` seam, registered into
-``CARD_REGISTRY`` at import time. ``_entity_rows`` (the ``entities``-varargs
-row normalizer) is owned by ``cards/visual.py`` and imported here rather than
-duplicated -- both modules are this batch's own files, so sharing it costs
-nothing.
+``CARD_REGISTRY`` at import time. ``normalize_rows`` (the ``entities``-varargs
+row normalizer, ``hassle.compiler.dashboards.builders``) is the one shared
+implementation every row-taking builder in this batch calls -- no per-module
+copy.
 
 Two cards in this family carry entity-bearing parameters DB7's table-driven
 extraction must see beyond the obvious "one entity" case: ``picture_glance``
@@ -15,7 +15,16 @@ has both ``entities`` (its row list) *and* ``camera_image`` (a `camera.*`
 entity), and ``picture_elements`` has ``camera_image`` even though it has no
 flat ``entities`` list of its own (its ``elements=`` sub-vocabulary is
 free-form passthrough, out of ``entity_params`` scope, per §5.3's "elements=
-… passthrough-in-v1" note).
+… passthrough-in-v1" note). ``picture`` additionally accepts ``image_entity=``
+(an entity whose state is a dynamic image URL) alongside its now-OPTIONAL
+``image=`` -- HA requires one of the two, not enforced here (§9, left to HA
+like every other cross-field validation); ``image_entity`` is in
+``entity_params``/``declared`` since it IS entity-bearing.
+
+Every dict/list-valued typed option in this module (``tap_action=``/
+``hold_action=``, ``elements=``, ``geo_location_sources=``) is deep-copied at
+record time via ``put_copy`` rather than ``put`` (the review round's
+copy-vs-alias fix, SF-3).
 """
 
 from __future__ import annotations
@@ -26,14 +35,13 @@ from typing import Any
 from hassle.compiler.dashboards.builders import (
     VisibilityArg,
     merge_extra,
+    normalize_rows,
     normalize_visibility,
     put,
+    put_copy,
 )
 from hassle.compiler.dashboards.card_registry import CardSpec, register_card
-from hassle.compiler.dashboards.cards.visual import (
-    EntityArg,
-    _entity_rows,  # pyright: ignore[reportPrivateUsage]
-)
+from hassle.compiler.dashboards.cards.visual import EntityArg
 from hassle.compiler.dashboards.recorder import record_card
 from hassle.compiler.spans import capture_span
 
@@ -83,13 +91,14 @@ register_card(
 # picture
 # ---------------------------------------------------------------------------
 _PICTURE_DECLARED = frozenset(
-    {"type", "image", "tap_action", "hold_action", "alt_text", "visibility"}
+    {"type", "image", "image_entity", "tap_action", "hold_action", "alt_text", "visibility"}
 )
 
 
 def picture(
-    image: str,
+    image: str | None = None,
     *,
+    image_entity: EntityArg | None = None,
     tap_action: Any = None,
     hold_action: Any = None,
     alt_text: Any = None,
@@ -98,13 +107,20 @@ def picture(
 ) -> None:
     """``c.picture(image, ...)`` -- a static image, no entity of its own.
 
-    ``tap_action``/``hold_action`` are HA's action-config dicts, passed
-    through by reference (v1 passthrough, like ``view(header=...)``).
+    ``image=`` is OPTIONAL (review-round fix, #12): ``image_entity=`` (an
+    entity whose STATE is a dynamic image URL) can supply the picture instead
+    -- HA requires exactly one of the two, not enforced here (§9, left to HA
+    like every other cross-field validation this DSL leaves to the backend).
+    ``image_entity`` is entity-bearing, so unlike every other option in this
+    module it IS in ``entity_params``. ``tap_action``/``hold_action`` are
+    HA's action-config dicts, deep-copied at record time (``put_copy``).
     """
     span = capture_span(depth=0)
-    body: dict[str, Any] = {"type": "picture", "image": image}
-    put(body, "tap_action", tap_action)
-    put(body, "hold_action", hold_action)
+    body: dict[str, Any] = {"type": "picture"}
+    put(body, "image", image)
+    put(body, "image_entity", str(image_entity) if image_entity is not None else None)
+    put_copy(body, "tap_action", tap_action)
+    put_copy(body, "hold_action", hold_action)
     put(body, "alt_text", alt_text)
     put(body, "visibility", normalize_visibility(visibility, span=span))
     merge_extra(body, extra, builder="c.picture", declared=_PICTURE_DECLARED, span=span)
@@ -115,9 +131,18 @@ register_card(
     CardSpec(
         type="picture",
         declared=frozenset(
-            {"type", "image", "tap_action", "hold_action", "alt_text", "visibility"}
+            {
+                "type",
+                "image",
+                "image_entity",
+                "tap_action",
+                "hold_action",
+                "alt_text",
+                "visibility",
+            }
         ),
         builder="c.picture",
+        entity_params=("image_entity",),
     )
 )
 
@@ -162,14 +187,19 @@ def picture_glance(
     validation this DSL leaves to the backend, §9).
     """
     span = capture_span(depth=0)
-    body: dict[str, Any] = {"type": "picture-glance", "entities": _entity_rows(entities)}
+    body: dict[str, Any] = {
+        "type": "picture-glance",
+        "entities": normalize_rows(
+            entities, builder="c.picture_glance", param="entities", span=span
+        ),
+    }
     put(body, "title", title)
     put(body, "image", image)
     put(body, "camera_image", camera_image)
     put(body, "camera_view", camera_view)
-    put(body, "state_filter", state_filter)
-    put(body, "tap_action", tap_action)
-    put(body, "hold_action", hold_action)
+    put_copy(body, "state_filter", state_filter)
+    put_copy(body, "tap_action", tap_action)
+    put_copy(body, "hold_action", hold_action)
     put(body, "visibility", normalize_visibility(visibility, span=span))
     merge_extra(
         body, extra, builder="c.picture_glance", declared=_PICTURE_GLANCE_DECLARED, span=span
@@ -230,7 +260,7 @@ def picture_elements(
     span = capture_span(depth=0)
     body: dict[str, Any] = {"type": "picture-elements"}
     put(body, "image", image)
-    put(body, "elements", elements)
+    put_copy(body, "elements", elements)
     put(body, "camera_image", camera_image)
     put(body, "camera_view", camera_view)
     put(body, "visibility", normalize_visibility(visibility, span=span))
@@ -290,8 +320,11 @@ def map(
     which does not use the builtin.
     """
     span = capture_span(depth=0)
-    body: dict[str, Any] = {"type": "map", "entities": _entity_rows(entities)}
-    put(body, "geo_location_sources", geo_location_sources)
+    body: dict[str, Any] = {
+        "type": "map",
+        "entities": normalize_rows(entities, builder="c.map", param="entities", span=span),
+    }
+    put_copy(body, "geo_location_sources", geo_location_sources)
     put(body, "hours_to_show", hours_to_show)
     put(body, "default_zoom", default_zoom)
     put(body, "dark_mode", dark_mode)

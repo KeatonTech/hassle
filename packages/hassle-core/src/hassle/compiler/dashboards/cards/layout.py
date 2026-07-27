@@ -25,19 +25,22 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Generator, Iterable, Mapping
-from typing import Any, cast
+from typing import Any
 
 from hassle.compiler.dashboards.builders import (
     VisibilityArg,
     merge_extra,
+    normalize_rows,
     normalize_visibility,
     put,
+    put_copy,
 )
 from hassle.compiler.dashboards.card_registry import CardSpec, register_card
 from hassle.compiler.dashboards.conditions import DashboardConditionLike, normalize_condition
 from hassle.compiler.dashboards.errors import ConditionalCardArityError
 from hassle.compiler.dashboards.recorder import (
     _CM_DEPTH,  # pyright: ignore[reportPrivateUsage]
+    RecordedNode,
     push_container,
 )
 from hassle.compiler.spans import capture_span
@@ -54,19 +57,6 @@ _CONDITIONAL_DECLARED: frozenset[str] = frozenset({"type", "conditions", "visibi
 _ENTITY_FILTER_DECLARED: frozenset[str] = frozenset(
     {"type", "entities", "state_filter", "show_empty", "visibility", "card"}
 )
-
-
-def _normalize_row(row: Any) -> Any:
-    """One `entity_filter(entities=...)` row.
-
-    A `dict` (a per-entity override, e.g. `{"entity": ..., "state_filter": [...]}`)
-    passes through verbatim (copied, so the caller's own dict cannot be mutated
-    out from under them); an `EntityRef`/plain `str` is stored as HA's bare
-    entity-id shorthand — the same convention `hassle.cards.entities` rows use.
-    """
-    if isinstance(row, dict):
-        return dict(cast("dict[str, Any]", row))
-    return str(row)
 
 
 @contextlib.contextmanager
@@ -141,21 +131,33 @@ def conditional(
     conditional card has a single `card:` key, not a list — so recording zero
     or more than one raises `ConditionalCardArityError` (§5.6); nest a stack
     card (`with c.vertical_stack():`) to hold more than one.
+
+    ``child_is_list=False`` (review-round fix SF-2) is what gives the nested
+    card a bare `…cards[0].card` span path instead of an unresolvable
+    `…cards[0].card[0]`. `push_container` itself raises `ValueError` for more
+    than one child recorded into a single-child slot; the `try`/`except`
+    below turns that into this builder's own `ConditionalCardArityError` (the
+    "zero" case is checked directly afterwards, since `push_container` only
+    objects to MORE than one).
     """
     span = capture_span(depth=_CM_DEPTH)
     body: dict[str, Any] = {"type": "conditional"}
     body["conditions"] = [normalize_condition(c, span=span) for c in conditions]
     put(body, "visibility", normalize_visibility(visibility, span=span))
     merge_extra(body, extra, builder="c.conditional", declared=_CONDITIONAL_DECLARED, span=span)
-    with push_container(
-        body, label="a `conditional` card", span=span, child_key="card", assign=False
-    ) as node:
-        yield
+    node: RecordedNode | None = None
+    try:
+        with push_container(
+            body, label="a `conditional` card", span=span, child_key="card", child_is_list=False
+        ) as node:
+            yield
+    except ValueError:
+        count = len(node.children) if node is not None else 0
+        raise ConditionalCardArityError("c.conditional(...)", count, "exactly one", span) from None
     if len(node.children) != 1:
         raise ConditionalCardArityError(
             "c.conditional(...)", len(node.children), "exactly one", span
         )
-    body["card"] = node.children[0].body
 
 
 @contextlib.contextmanager
@@ -174,25 +176,34 @@ def entity_filter(
     same "how many cards in this `card:` slot" question `c.conditional` asks,
     just with `"zero or one"` instead of `"exactly one"`). HA falls back to a
     bare entity list when the `card:` key is entirely absent, which is exactly
-    what an empty block produces.
+    what an empty block produces -- `push_container`'s own `child_is_list=False`
+    handling now leaves the key absent for zero children and fills it in for
+    one, so this builder no longer assigns `body["card"]` itself.
     """
     span = capture_span(depth=_CM_DEPTH)
     body: dict[str, Any] = {"type": "entity-filter"}
-    body["entities"] = [_normalize_row(row) for row in entities]
-    put(body, "state_filter", state_filter)
+    body["entities"] = normalize_rows(
+        entities, builder="c.entity_filter", param="entities", span=span
+    )
+    put_copy(body, "state_filter", state_filter)
     put(body, "show_empty", show_empty)
     put(body, "visibility", normalize_visibility(visibility, span=span))
     merge_extra(body, extra, builder="c.entity_filter", declared=_ENTITY_FILTER_DECLARED, span=span)
-    with push_container(
-        body, label="an `entity-filter` card", span=span, child_key="card", assign=False
-    ) as node:
-        yield
-    if len(node.children) > 1:
+    node: RecordedNode | None = None
+    try:
+        with push_container(
+            body,
+            label="an `entity-filter` card",
+            span=span,
+            child_key="card",
+            child_is_list=False,
+        ) as node:
+            yield
+    except ValueError:
+        count = len(node.children) if node is not None else 0
         raise ConditionalCardArityError(
-            "c.entity_filter(...)", len(node.children), "zero or one", span
-        )
-    if node.children:
-        body["card"] = node.children[0].body
+            "c.entity_filter(...)", count, "zero or one", span
+        ) from None
 
 
 # ---------------------------------------------------------------------------

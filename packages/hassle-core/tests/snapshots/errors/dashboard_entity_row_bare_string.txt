@@ -1,0 +1,1 @@
+`c.entity_filter(entities='light.hall')` at test_dashboard_card_row_validation.py:<line> passed a bare string where a LIST of entity rows was expected. Python iterates a string one character at a time, so this would silently compile into one row PER CHARACTER instead of the single entity you meant. Fix: wrap it in a list, e.g. `entities=['light.hall']`.
