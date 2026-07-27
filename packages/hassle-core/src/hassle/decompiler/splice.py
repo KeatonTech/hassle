@@ -124,7 +124,18 @@ _DEF_DECORATOR_KINDS = {
     "raw_automation": "automation",
     "script": "script",
     "shared_script": "script",
+    "dashboard": "dashboard",
+    "raw_dashboard": "dashboard",
 }
+
+# Decorator kinds whose identity is NOT the `id=` kwarg convention (docs/internals/
+# dashboards-design.md §3.1: a dashboard's identity is `url_path=`/`default=True`,
+# never `id=`) -- resolved via `_dashboard_identity_kwarg` instead of
+# `_id_kwarg` in `_declared_object`, so a dashboard refresh/drop targets the
+# SINGLE decorated def whose declared identity matches, exactly like every
+# other kind (fixing the recognized name-fallback gap rather than inheriting
+# it, docs/internals/dashboards-design.md §6.2).
+_DASHBOARD_DECORATOR_KINDS = frozenset({"dashboard", "raw_dashboard"})
 # `<name> = <call>(...)` object forms whose call name is NOT already the kind
 # (helpers -- `guest_mode = input_boolean(id=...)` -- use the kind itself as
 # the call name, so they need no entry here).
@@ -156,6 +167,31 @@ def _id_kwarg(node: cst.BaseExpression) -> str | None:
     return None
 
 
+def _dashboard_identity_kwarg(node: cst.BaseExpression) -> str | None:
+    """A ``@dashboard``/``@raw_dashboard`` call's declared identity: the
+    ``url_path="..."`` string, or the ``"default"`` sentinel for
+    ``default=True`` (docs/internals/dashboards-design.md §3.1) -- the
+    dashboard analogue of :func:`_id_kwarg`, whose ``id=`` convention doesn't
+    apply here (a dashboard's identity is never an ``id=`` kwarg)."""
+    if not isinstance(node, cst.Call):
+        return None
+    url_path: str | None = None
+    is_default = False
+    for arg in node.args:
+        if arg.keyword is None:
+            continue
+        if arg.keyword.value == "url_path" and isinstance(arg.value, cst.SimpleString):
+            value = arg.value.evaluated_value
+            if isinstance(value, str):
+                url_path = value
+        elif arg.keyword.value == "default" and isinstance(arg.value, cst.Name):
+            if arg.value.value == "True":
+                is_default = True
+    if is_default:
+        return "default"
+    return url_path
+
+
 # Assignment-call kinds that ARE object declarations: every helper domain (the
 # frozen IR schema) plus `blueprint_automation`'s mapping above. Anything else
 # on an assignment's right-hand side (`state(...)`, an arbitrary local call)
@@ -181,9 +217,14 @@ def _declared_object(stmt: cst.CSTNode) -> tuple[str, str] | None:
         return None
     if isinstance(stmt, cst.FunctionDef):
         for decorator in stmt.decorators:
-            kind = _DEF_DECORATOR_KINDS.get(_call_name(decorator.decorator) or "")
+            decorator_name = _call_name(decorator.decorator) or ""
+            kind = _DEF_DECORATOR_KINDS.get(decorator_name)
             if kind is not None:
-                return kind, _id_kwarg(decorator.decorator) or name
+                if decorator_name in _DASHBOARD_DECORATOR_KINDS:
+                    identity = _dashboard_identity_kwarg(decorator.decorator)
+                else:
+                    identity = _id_kwarg(decorator.decorator)
+                return kind, identity or name
         return None
     if isinstance(stmt, cst.SimpleStatementLine):
         for small in stmt.body:

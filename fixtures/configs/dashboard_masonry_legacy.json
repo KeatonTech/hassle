@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "url_path": "legacy-masonry",
+    "title": "Legacy Masonry",
+    "icon": "mdi:view-dashboard-outline",
+    "show_in_sidebar": true,
+    "require_admin": false
+  },
+  "config": {
+    "views": [
+      {
+        "title": "Main",
+        "path": "main",
+        "cards": [
+          {
+            "type": "entities",
+            "title": "Switches",
+            "entities": [
+              "switch.kitchen",
+              {
+                "type": "divider"
+              },
+              "switch.bedroom",
+              {
+                "type": "section",
+                "label": "Lights Section"
+              },
+              "light.bedroom"
+            ]
+          },
+          {
+            "type": "glance",
+            "title": "Quick Status",
+            "entities": [
+              "sensor.temperature",
+              "sensor.humidity"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

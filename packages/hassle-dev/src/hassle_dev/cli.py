@@ -92,9 +92,24 @@ def _cmd_decompile_coverage(args: argparse.Namespace) -> int:
 
     out_file: Path = args.out
     exit_code, report = run_decompile_coverage(configs_dir, out_file)
-    print(f"decompile-coverage: {report['total_objects']} object(s) analyzed")
+    gate_excluded = report.get("gate_excluded_kinds", [])
+    gate_label = f" (excludes: {', '.join(gate_excluded)})" if gate_excluded else ""
+    print(f"decompile-coverage: {report['total_objects']} object(s) analyzed{gate_label}")
     print(f"  clean (zero raw_* nodes): {report['clean_objects']}/{report['total_objects']}")
     print(f"  clean fraction: {report['clean_fraction']:.1%} (gate: 90%)")
+    if "full_clean_fraction" in report:
+        print(
+            f"  full corpus (every kind): {report['full_clean_objects']}/"
+            f"{report['full_total_objects']} clean ({report['full_clean_fraction']:.1%})"
+        )
+    by_kind = report.get("by_kind", {})
+    if by_kind:
+        print("  by kind:")
+        for kind in sorted(by_kind):
+            k = by_kind[kind]
+            print(
+                f"    {kind}: {k['clean_objects']}/{k['total_objects']} ({k['clean_fraction']:.1%})"
+            )
     print(f"  report written to {out_file}")
     if report["exceptions"]:
         print("  exceptions:")

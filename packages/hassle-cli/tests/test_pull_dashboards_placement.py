@@ -6,26 +6,17 @@ on-demand `dashboards/` directory scaffold (no `__init__.py`), and the
 adopt-append safety net that keeps ADOPT from clobbering an existing file at
 a dashboard's default path.
 
-**Hard dependency boundary**: `decompile_object` support for
-:class:`~hassle.ir.models.DashboardConfig` is workstream DB4's scope and
-hasn't landed on this branch yet, so nothing here can drive
-`hassle.sync.pull_apply.apply_pull_with_decompiler` for a dashboard object --
-`decompile_bundle` has no dispatch branch for the kind yet. Every test below
-instead drives the STUB pull engine (`hassle.sync.pull.apply_pull` +
-`_placeholder_dsl_source`) with `RecordingSourceWriter`/real tmp-dir writers,
-which is enough to pin the PLACEMENT and ROUTING contract (which file,
-whole-file write vs. byte-preserving append) independent of decompiled
-content. DB4 should extend this file with real decompiler-backed
-adopt/refresh/splice cases once `decompile_object` supports `DashboardConfig`.
-
-**Explicit DB4 handoff item**: `hassle.backend.fake.FakeBackend` now has real
-dashboard CRUD support (DB5 landed), so a bundle CAN seed a live dashboard
-end-to-end -- but running a real `hassle pull` against a seeded dashboard
-still dies inside `hassle.decompiler.decompile_bundle` (no dispatch branch for
-`DashboardConfig` yet, DB4's scope). `test_cli_dashboard_kind_smoke.py`'s
-plan-level smoke test proves the PLAN side is fine; nothing here or there
-attempts an end-to-end `hassle pull` with a seeded dashboard -- DB4 owns that
-gap once the decompiler branch lands.
+The tests up to the scaffolding/adopt-append section below predate DB4 (the
+decompiler workstream) and deliberately drive the STUB pull engine
+(`hassle.sync.pull.apply_pull` + `_placeholder_dsl_source`) so the PLACEMENT
+and ROUTING contract is pinned independent of decompiled content. The final
+section ("real decompiler-backed cases", below) is DB4's promised extension:
+now that `decompile_object`/`decompile_bundle` support
+:class:`~hassle.ir.models.DashboardConfig` (docs/internals/dashboards-design.md
+§6.2), these drive the REAL batch engine
+(`hassle.sync.pull_apply.apply_pull_with_decompiler`) end to end -- adopt
+writes real `@dashboard(...)`/`with view():`/... source, refresh splices in
+place, and adopt-append preserves an existing file's bytes.
 """
 
 from __future__ import annotations
@@ -319,10 +310,15 @@ def test_splicing_writer_append_path_is_kind_agnostic_for_dashboards(tmp_path: P
     stub engine's placeholder), which is the case `splice_object` is actually
     designed for.
 
-    Uses hand-written, syntactically-valid DSL source standing in for what
-    DB4's decompiler will eventually produce -- this repo has no typed
-    dashboard DSL yet (workstreams DB2/DB3), so `@raw_dashboard` here is
-    never imported/compiled, only spliced as text.
+    Uses hand-written DSL source standing in for a real decompile (the real
+    decompiler-backed cases below exercise `decompile_bundle`'s actual
+    output) -- `_DEF_DECORATOR_KINDS` (docs/internals/dashboards-design.md
+    §6.2) DOES recognize `@raw_dashboard` as a `dashboard` declaration now,
+    but the existing file here never declares `dashboard:climate-control` at
+    all (it's unrelated hand-authored content), so
+    `find_object_statement_name` falls through to "not found here" for the
+    correct reason regardless -- exactly the determination a brand-new
+    adopt into a file that has never defined this object needs.
     """
     existing_source = "# hand-authored, keep me\nCONSTANT = 42\n"
     path = tmp_path / "dashboards" / "climate_control.py"
@@ -401,3 +397,228 @@ def test_refresh_splices_wherever_the_user_moved_the_dashboard() -> None:
     path, object_key, _content = writer.spliced_objects[0]
     assert path == Path(moved_path)
     assert object_key == "dashboard:climate-control"
+
+
+# ---------------------------------------------------------------------------
+# Real decompiler-backed cases (DB4's promised extension, module docstring):
+# `decompile_object`/`decompile_bundle` now support `DashboardConfig`
+# (docs/internals/dashboards-design.md §6.2), so these drive the REAL batch
+# engine (`apply_pull_with_decompiler`) end to end, not the placeholder.
+# ---------------------------------------------------------------------------
+
+_CLIMATE_REMOTE: dict[str, object] = {
+    "meta": {"url_path": "climate-control", "title": "Climate", "show_in_sidebar": True},
+    "config": {
+        "views": [
+            {
+                "type": "sections",
+                "title": "Overview",
+                "sections": [
+                    {"type": "grid", "cards": [{"type": "tile", "entity": "climate.living_room"}]}
+                ],
+            }
+        ]
+    },
+}
+
+_ENERGY_REMOTE: dict[str, object] = {
+    "meta": {"url_path": "energy-media", "title": "Energy"},
+    "config": {"views": [{"type": "sections", "sections": []}]},
+}
+
+
+def _real_adopt_entry(object_key: str, source_path: str, remote: dict[str, object]) -> PlanEntry:
+    return PlanEntry(
+        object_key=object_key,
+        kind=DASHBOARD_KIND,
+        action=PlanAction.ADOPT,
+        base=None,
+        local=None,
+        remote=remote,
+        remote_hash_at_plan=None,
+        source_path=source_path,
+        conflict=None,
+    )
+
+
+def _real_refresh_entry(object_key: str, source_path: str, remote: dict[str, object]) -> PlanEntry:
+    return PlanEntry(
+        object_key=object_key,
+        kind=DASHBOARD_KIND,
+        action=PlanAction.REFRESH,
+        base=None,
+        local=None,
+        remote=remote,
+        remote_hash_at_plan=None,
+        source_path=source_path,
+        conflict=None,
+    )
+
+
+def test_apply_pull_adopt_writes_real_decompiled_dashboard_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADOPT creates ``dashboards/<module>.py`` with REAL decompiled content
+    (a genuine ``@dashboard(...)``/``with view(...):``/... source, not the
+    stub placeholder), through the real batch engine."""
+    from hassle.compiler.bundle import compile_bundle
+    from hassle.sync.pull_apply import apply_pull_with_decompiler
+
+    monkeypatch.chdir(tmp_path)
+    plan = Plan(
+        entries=[
+            _real_adopt_entry(
+                "dashboard:climate-control", "dashboards/climate_control.py", _CLIMATE_REMOTE
+            )
+        ]
+    )
+    writer = SplicingSourceWriter(updated_on="2026-07-27")
+    apply_pull_with_decompiler(plan, writer)
+
+    written = (tmp_path / "dashboards" / "climate_control.py").read_text(encoding="utf-8")
+    assert "@dashboard(" in written
+    assert "url_path=" in written and "climate-control" in written
+    assert "with view(" in written
+    assert "with section():" in written
+    assert "raw_card(" in written  # `tile` is unmodeled on this base (CARD_REGISTRY empty)
+
+    compiled_keys = set(compile_bundle(tmp_path).objects)
+    assert compiled_keys == {"dashboard:climate-control"}
+
+
+def test_apply_pull_adopt_appends_into_existing_dashboards_file_preserves_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Adopt-append into an EXISTING file preserves its bytes exactly (no
+    local or UI edit is ever silently lost) -- mirrors
+    ``test_pull_adopt_preserves_existing_file.py::
+    test_apply_pull_adopt_splices_into_existing_file``'s automation case."""
+    from hassle.compiler.bundle import compile_bundle
+    from hassle.sync.pull_apply import apply_pull_with_decompiler
+
+    monkeypatch.chdir(tmp_path)
+    dashboards_dir = tmp_path / "dashboards"
+    dashboards_dir.mkdir()
+    existing_path = dashboards_dir / "climate_control.py"
+    existing_source = (
+        "from hassle import *\n\n\n"
+        "# hand-written note: keep this dashboard first\n\n\n"
+        '@dashboard(url_path="climate-control", title="Climate")\n'
+        "def climate_control():\n"
+        "    with view():\n"
+        "        pass\n"
+    )
+    existing_path.write_text(existing_source, encoding="utf-8")
+
+    plan = Plan(
+        entries=[
+            _real_adopt_entry(
+                "dashboard:energy-media", "dashboards/climate_control.py", _ENERGY_REMOTE
+            )
+        ]
+    )
+    writer = SplicingSourceWriter(updated_on="2026-07-27")
+    apply_pull_with_decompiler(plan, writer)
+
+    merged = existing_path.read_text(encoding="utf-8")
+    assert "hand-written note: keep this dashboard first" in merged
+    assert 'url_path="climate-control"' in merged
+    assert '@dashboard(url_path="energy-media", title="Energy")' in merged
+    # `dashboard_function_name` slugifies `meta.title` ("Energy" -> "energy"),
+    # not the url_path -- a real decompiled name, not a guessed one.
+    assert "def energy():" in merged
+
+    compiled_keys = set(compile_bundle(tmp_path).objects)
+    assert compiled_keys == {"dashboard:climate-control", "dashboard:energy-media"}
+
+
+def test_apply_pull_refresh_splices_dashboard_in_place(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """REFRESH splices the ONE drifted dashboard's def in place, leaving a
+    sibling dashboard in the same file byte-identical."""
+    from hassle.sync.pull_apply import apply_pull_with_decompiler
+
+    monkeypatch.chdir(tmp_path)
+    dashboards_dir = tmp_path / "dashboards"
+    dashboards_dir.mkdir()
+    path = dashboards_dir / "dashboards.py"
+    original_source = (
+        "from hassle import *\n\n\n"
+        '@dashboard(url_path="climate-control", title="Climate")\n'
+        "def climate_control():\n"
+        "    with view():\n"
+        "        pass\n\n\n"
+        "# sibling: never touched by a climate-control refresh\n"
+        '@dashboard(url_path="energy-media", title="Energy")\n'
+        "def energy_media():\n"
+        "    with view():\n"
+        "        pass\n"
+    )
+    path.write_text(original_source, encoding="utf-8")
+
+    updated_remote = {
+        **_CLIMATE_REMOTE,
+        "meta": {**_CLIMATE_REMOTE["meta"], "title": "Climate (UI edit)"},  # type: ignore[dict-item]
+    }
+    plan = Plan(
+        entries=[
+            _real_refresh_entry(
+                "dashboard:climate-control", "dashboards/dashboards.py", updated_remote
+            )
+        ]
+    )
+    writer = SplicingSourceWriter(updated_on="2026-07-27")
+    apply_pull_with_decompiler(plan, writer)
+
+    spliced = path.read_text(encoding="utf-8")
+    assert "Climate (UI edit)" in spliced
+    assert "# sibling: never touched by a climate-control refresh" in spliced
+    assert "def energy_media():" in spliced
+    assert (
+        '"energy-media"' not in spliced or "energy_media" in spliced
+    )  # sibling untouched, still present
+
+
+def test_apply_pull_adopts_two_new_dashboards_into_two_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two brand-new dashboards each land in their own
+    ``dashboards/<module>.py`` file (the per-dashboard-file default, §7),
+    driven by the real batch engine (one ``decompile_bundle`` call per
+    destination path, never a single shared write)."""
+    from hassle.compiler.bundle import compile_bundle
+    from hassle.sync.pull_apply import apply_pull_with_decompiler
+
+    monkeypatch.chdir(tmp_path)
+    plan = Plan(
+        entries=[
+            _real_adopt_entry(
+                "dashboard:climate-control", "dashboards/climate_control.py", _CLIMATE_REMOTE
+            ),
+            _real_adopt_entry(
+                "dashboard:energy-media", "dashboards/energy_media.py", _ENERGY_REMOTE
+            ),
+        ]
+    )
+    writer = RecordingSourceWriter()
+    apply_pull_with_decompiler(plan, writer)
+
+    assert set(writer.written_files) == {
+        Path("dashboards/climate_control.py"),
+        Path("dashboards/energy_media.py"),
+    }
+    # `dashboard_function_name` slugifies `meta.title`, not the file's own
+    # module name -- "Climate"/"Energy" -> `climate`/`energy` -- so these
+    # check the identity-bearing `url_path=` kwarg instead of guessing names.
+    assert (
+        'url_path="climate-control"' in writer.written_files[Path("dashboards/climate_control.py")]
+    )
+    assert 'url_path="energy-media"' in writer.written_files[Path("dashboards/energy_media.py")]
+
+    # And the real batch engine's writes compile cleanly out of the bundle
+    # (using a real writer this time, so there's a bundle root to compile).
+    writer2 = SplicingSourceWriter(updated_on="2026-07-27")
+    apply_pull_with_decompiler(plan, writer2)
+    compiled_keys = set(compile_bundle(tmp_path).objects)
+    assert compiled_keys == {"dashboard:climate-control", "dashboard:energy-media"}

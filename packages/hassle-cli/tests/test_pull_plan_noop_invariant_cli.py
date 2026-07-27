@@ -40,6 +40,10 @@ def _kind_for(name: str) -> tuple[str, str | None]:
         return "automation", None
     if name.startswith("script"):
         return "script", name
+    if name.startswith("dashboard"):
+        # Identity lives in `meta.url_path` (or the "default" sentinel) --
+        # never extrinsic, same as `_corpus.py`'s own dashboard branch.
+        return "dashboard", None
     if name.startswith("helper_"):
         rest = name[len("helper_") :]
         for dom in sorted(HELPER_DOMAINS, key=len, reverse=True):

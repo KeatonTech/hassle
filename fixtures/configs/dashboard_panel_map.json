@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "url_path": "map-view",
+    "title": "Map View",
+    "icon": "mdi:map",
+    "show_in_sidebar": true,
+    "require_admin": false
+  },
+  "config": {
+    "views": [
+      {
+        "type": "panel",
+        "title": "Location",
+        "path": "location",
+        "cards": [
+          {
+            "type": "map",
+            "title": "Home Devices",
+            "entities": [
+              "device_tracker.phone",
+              "device_tracker.car"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

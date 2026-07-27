@@ -13,6 +13,7 @@ IR always produces byte-identical source regardless of dict iteration order
 
 from __future__ import annotations
 
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,10 +28,12 @@ from hassle.decompiler.actions import (
     indent_lines,
     shared_script_field_context,
 )
+from hassle.decompiler.dashboards import dashboard_source
 from hassle.decompiler.exprs import decompile_condition, decompile_trigger, render_literal
 from hassle.ir.keys import GROUP_DOMAINS, HELPER_DOMAINS, TEMPLATE_DOMAINS, slugify
 from hassle.ir.models import (
     AutomationConfig,
+    DashboardConfig,
     GroupHelperConfig,
     HelperConfig,
     IRObject,
@@ -50,6 +53,20 @@ if TYPE_CHECKING:
 # its own dedicated, non-`__all__` entry point).
 _STAR_IMPORT_LINE = "from hassle import *\n"
 _ENTITIES_IMPORT_LINE = "from hassle.registry import entities as e\n"
+
+# `hassle.cards`/`hassle.cards.cond` are dedicated, non-star entry points
+# (§5.1: card type names collide with frozen DSL names, e.g. `area`/
+# `calendar`/`light`), so a dashboard's `c.tile(...)`/`with c.vertical_stack():`
+# / `cond.state(...)` calls need their own import lines -- emitted ONLY when
+# actually used, mirroring `TemplateExpr`'s own plain-substring-check
+# convention below (simpler and just as deterministic as threading a used-flag
+# out through `decompile_object`). `c`/`cond` are never emitted as any other
+# kind of identifier by this decompiler, so the regexes can't false-positive
+# against automation/script output.
+_CARDS_IMPORT_LINE = "from hassle import cards as c\n"
+_COND_IMPORT_LINE = "from hassle.cards import cond\n"
+_USES_CARDS_NAMESPACE_RE = re.compile(r"(?<![\w.])c\.\w")
+_USES_COND_NAMESPACE_RE = re.compile(r"(?<![\w.])cond\.\w")
 
 # `mode=`/`max_exceeded=` enums: a recognized value decompiles to
 # `Mode.RESTART`/`MaxExceeded.SILENT`; an unrecognized one (a future HA value
@@ -203,6 +220,28 @@ def script_function_name(obj: ScriptConfig, used_names: dict[str, int]) -> str:
         base = _slug_identifier(alias)
     else:
         base = f"script_{_sanitized_identity(obj.object_key())}"
+    return _dedupe_name(base, used_names)
+
+
+def dashboard_function_name(obj: DashboardConfig, used_names: dict[str, int]) -> str:
+    """The Python function name a dashboard decompiles to (docs/internals/
+    dashboards-design.md §6.2): ``slugify(meta.title)``, falling back to
+    ``slugify(url_path)``, falling back to ``dashboard_<n>`` -- the same
+    dedup-suffix convention as automations/scripts, and computed identically
+    regardless of whether the object ends up a typed ``@dashboard`` or the
+    whole-object ``@raw_dashboard`` fallback (naming and the raw-ladder
+    decision are orthogonal, exactly as for automations/blueprints)."""
+    meta = obj.meta
+    meta_dict = cast("dict[str, Any]", meta) if isinstance(meta, dict) else None
+    title = meta_dict.get("title") if meta_dict is not None else None
+    if isinstance(title, str) and title.strip():
+        base = _slug_identifier(title)
+    else:
+        url_path = meta_dict.get("url_path") if meta_dict is not None else None
+        if isinstance(url_path, str) and url_path.strip():
+            base = _slug_identifier(url_path)
+        else:
+            base = f"dashboard_{_sanitized_identity(obj.object_key())}"
     return _dedupe_name(base, used_names)
 
 
@@ -710,6 +749,8 @@ def _object_function_name(object_key: str, obj: IRObject, used_names: dict[str, 
         return _automation_name(obj, used_names)
     if isinstance(obj, ScriptConfig):
         return script_function_name(obj, used_names)
+    if isinstance(obj, DashboardConfig):
+        return dashboard_function_name(obj, used_names)
     return _identifier(object_key)
 
 
@@ -757,6 +798,8 @@ def decompile_object(
         return _template_helper_source(obj, ident)
     if isinstance(obj, GroupHelperConfig):
         return _group_helper_source(obj, ident)
+    if isinstance(obj, DashboardConfig):
+        return dashboard_source(obj, ident)
     raise TypeError(f"cannot decompile object of type {type(obj).__name__}")  # pragma: no cover
 
 
@@ -994,6 +1037,10 @@ def decompile_bundle(
     # back out of `_script_source` through `decompile_object`.
     if any(": TemplateExpr" in source for source in object_sources):
         parts.append("from hassle.compiler.templates import TemplateExpr\n")
+    if any(_USES_CARDS_NAMESPACE_RE.search(source) for source in object_sources):
+        parts.append(_CARDS_IMPORT_LINE)
+    if any(_USES_COND_NAMESPACE_RE.search(source) for source in object_sources):
+        parts.append(_COND_IMPORT_LINE)
     if resolver.used_service_domains:
         # Each entry renders as `domain` (the common case) or `domain as
         # svc_domain` when `service_domain_name` aliased it to avoid
