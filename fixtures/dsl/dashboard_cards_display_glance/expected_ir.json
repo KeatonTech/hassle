@@ -1,0 +1,33 @@
+{
+  "dashboard:display-glance": {
+    "meta": {
+      "url_path": "display-glance",
+      "title": "Glance"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "glance",
+                  "entities": [
+                    "sensor.outside_temp",
+                    "sensor.outside_humidity"
+                  ],
+                  "title": "Outside",
+                  "show_name": false,
+                  "columns": 2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

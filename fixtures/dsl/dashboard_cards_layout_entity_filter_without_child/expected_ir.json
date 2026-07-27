@@ -1,0 +1,31 @@
+{
+  "dashboard:layout-entity-filter-no-child": {
+    "meta": {
+      "url_path": "layout-entity-filter-no-child",
+      "title": "Entity filter (no card)"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "entity-filter",
+                  "entities": [
+                    "light.kitchen",
+                    "light.hallway"
+                  ],
+                  "show_empty": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

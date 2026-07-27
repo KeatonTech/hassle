@@ -261,3 +261,28 @@ class ExtraShadowsKwargError(CompileError):
             f"never be byte-stable. Fix: pass `{key}=` as an ordinary keyword argument and "
             f"remove it from `extra=`."
         )
+
+
+class ConditionalCardArityError(CompileError):
+    """A single-card container got the wrong number of nested cards (§5.6, DB3a).
+
+    ``with c.conditional(...):`` and ``with c.entity_filter(...):`` both store
+    their ONE nested card under a ``card:`` key — never a ``cards:`` list — so
+    they share the "how many cards did this `card:` slot get?" question and get
+    one error rather than a near-duplicate class per builder. ``c.conditional``
+    requires exactly one card; ``c.entity_filter`` allows zero or one (its
+    presentation card is optional — HA falls back to a bare entity list).
+    """
+
+    def __init__(self, builder: str, count: int, allowed: str, span: SourceSpan | None) -> None:
+        self.builder = builder
+        self.count = count
+        self.allowed = allowed
+        plural = "card" if count == 1 else "cards"
+        super().__init__(
+            f"`with {builder}:`{_at(span)} holds {count} {plural}. Its single `card:` key "
+            f"stores {allowed} nested card, never a list, so any other count cannot be stored "
+            f"faithfully — HA would either have nothing to render or silently keep only one "
+            f"card. Fix: keep {allowed} card directly inside the block (nest a stack card — "
+            f"`with c.vertical_stack():` — to group more than one card there first)."
+        )

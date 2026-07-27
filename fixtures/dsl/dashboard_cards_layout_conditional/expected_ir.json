@@ -1,0 +1,37 @@
+{
+  "dashboard:layout-conditional": {
+    "meta": {
+      "url_path": "layout-conditional",
+      "title": "Conditional"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "conditional",
+                  "conditions": [
+                    {
+                      "condition": "state",
+                      "entity": "input_boolean.guest_mode",
+                      "state": "on"
+                    }
+                  ],
+                  "card": {
+                    "type": "markdown",
+                    "content": "Guest mode is on."
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

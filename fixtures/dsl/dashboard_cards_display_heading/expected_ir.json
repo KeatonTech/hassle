@@ -1,0 +1,39 @@
+{
+  "dashboard:display-heading": {
+    "meta": {
+      "url_path": "display-heading",
+      "title": "Heading"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "heading",
+                  "heading": "Living room",
+                  "heading_style": "title",
+                  "icon": "mdi:sofa",
+                  "badges": [
+                    {
+                      "type": "entity",
+                      "entity": "sensor.outside_temp"
+                    },
+                    {
+                      "type": "state-label",
+                      "entity": "light.hall"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

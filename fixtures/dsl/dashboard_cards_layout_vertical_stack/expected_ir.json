@@ -1,0 +1,38 @@
+{
+  "dashboard:layout-vertical-stack": {
+    "meta": {
+      "url_path": "layout-vertical-stack",
+      "title": "Vertical stack"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "vertical-stack",
+                  "title": "Two cards",
+                  "unknown_option": 7,
+                  "cards": [
+                    {
+                      "type": "markdown",
+                      "content": "one"
+                    },
+                    {
+                      "type": "markdown",
+                      "content": "two"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

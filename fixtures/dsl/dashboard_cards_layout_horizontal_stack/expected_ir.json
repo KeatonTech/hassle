@@ -1,0 +1,36 @@
+{
+  "dashboard:layout-horizontal-stack": {
+    "meta": {
+      "url_path": "layout-horizontal-stack",
+      "title": "Horizontal stack"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "horizontal-stack",
+                  "cards": [
+                    {
+                      "type": "markdown",
+                      "content": "left"
+                    },
+                    {
+                      "type": "markdown",
+                      "content": "right"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

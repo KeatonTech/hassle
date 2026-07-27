@@ -1,0 +1,36 @@
+{
+  "dashboard:layout-entity-filter-with-child": {
+    "meta": {
+      "url_path": "layout-entity-filter-with-child",
+      "title": "Entity filter (with card)"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "entity-filter",
+                  "entities": [
+                    "light.kitchen",
+                    "light.living_room"
+                  ],
+                  "state_filter": [
+                    "on"
+                  ],
+                  "card": {
+                    "type": "glance"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

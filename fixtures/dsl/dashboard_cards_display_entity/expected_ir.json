@@ -1,0 +1,33 @@
+{
+  "dashboard:display-entity": {
+    "meta": {
+      "url_path": "display-entity",
+      "title": "Entity"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "entity",
+                  "entity": "sensor.outside_temp",
+                  "attribute": "battery_level",
+                  "name": "Battery",
+                  "icon": "mdi:battery",
+                  "hold_action": {
+                    "action": "more-info"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

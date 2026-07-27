@@ -51,6 +51,21 @@ from __future__ import annotations
 # `hassle.compiler.dashboards.card_registry` (freeze F5), which is what the
 # decompiler and the entity-extraction validator read.
 # ---------------------------------------------------------------------------
+from hassle.compiler.dashboards.cards.display import (
+    button,
+    entities,
+    entity,
+    glance,
+    heading,
+    tile,
+)
+from hassle.compiler.dashboards.cards.layout import (
+    conditional,
+    entity_filter,
+    grid,
+    horizontal_stack,
+    vertical_stack,
+)
 from hassle.compiler.dashboards.cards.media import (
     iframe,
     map,
@@ -72,11 +87,20 @@ from hassle.compiler.dashboards.cards.visual import (
 from hassle.compiler.dashboards.conditions import cond
 
 __all__ = [
+    "button",
     "calendar",
     "clock",
     "cond",
+    "conditional",
+    "entities",
+    "entity",
+    "entity_filter",
     "gauge",
+    "glance",
+    "grid",
+    "heading",
     "history_graph",
+    "horizontal_stack",
     "iframe",
     "logbook",
     "map",
@@ -87,4 +111,6 @@ __all__ = [
     "sensor",
     "statistic",
     "statistics_graph",
+    "tile",
+    "vertical_stack",
 ]
