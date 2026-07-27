@@ -257,6 +257,19 @@ payloads (§2.2 item 5). **`normalize_ha` must be an identity function for
 kind. This gets its own regression test before implementation (R4 applies
 pre-emptively: it's a known bug class, we write the test first).
 
+**DB1 implementation finding (2026-07-27):** the *live* corruption vector
+turned out to be `modernize_for_comparison` (`ir/modernize.py`), not
+`normalize_ha`. Both of modernize's rewrites walk every nested dict
+unconditionally, so an unguarded run rewrote a card's `{"delay":
+"00:00:30"}` option to HA's duration-dict form and a nested
+`wait_for_trigger`'s `platform:` key — which would have made a faithfully
+round-tripped dashboard compare as drifted forever. `normalize_ha`'s generic
+branch happened to be identity for envelopes already (it only recurses into
+top-level `actions`/`sequence` keys, which an envelope lacks), but the guard
+is kept as a kind-level *contract* rather than an artifact of recursion
+depth. Both functions are kind-guarded and regression-tested both ways
+(`test_ir_dashboard_normalize.py`).
+
 `storage_canonical` starts as identity for the kind; DB0 findings populate
 its tables if HA materializes any defaults (§2.2 item 2). List order is
 semantically meaningful everywhere in a dashboard (views, sections, cards) —
@@ -264,9 +277,21 @@ the existing canonical-JSON rules already preserve it.
 
 ### 3.4 ir-format.md contract update
 
-Same PR as the IR change (R5): kind count 11 → 12, the `dashboard` key
+Same PR as the IR change (R5): the kind-count update, the `dashboard` key
 format, the envelope shape with its `meta`/`config` semantics, identity
-derivation, and the normalization exemption.
+derivation, and the normalization exemption. (DB1 finding: ir-format.md's
+"11 kinds" enumeration was already stale — the 16 config-entry domains had
+landed without updating it. The real count was 27 before dashboards, 28
+after; DB1 corrected the enumeration rather than perpetuating the stale
+number.)
+
+**Identity-sentinel guard (DB1 review note, assigned to DB2):** at the IR
+layer, a `meta` dict *lacking* `url_path` falls through to the `default`
+sentinel, which would silently key a malformed dashboard as the default
+dashboard. The IR keeps the permissive fallback (parse must accept anything,
+I3), but the compile path must reject it loudly: `@raw_dashboard` bodies and
+the `@dashboard` decorator both validate that `meta`, when present, carries
+`url_path` — `DashboardUrlPathError` (§5.6) covers this case too.
 
 ---
 
