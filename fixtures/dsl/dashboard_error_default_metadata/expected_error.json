@@ -1,0 +1,4 @@
+{
+  "error_type": "DefaultDashboardMetadataError",
+  "contains": ["bad.py:10", "default=True", "icon"]
+}
