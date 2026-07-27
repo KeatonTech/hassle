@@ -16,9 +16,16 @@ compatibility valve for everything else (F5's "never ``**kwargs``" rule) and
 ``history_graph``/``statistics_graph``/``calendar``/``logbook`` share the
 ``entities``-varargs convention the F5 appendix documents for the
 ``entities`` card (§5.3): rows are ``EntityRef | str | dict`` (a dict is a
-per-row option passthrough, kept verbatim); :func:`_entity_rows` is the one
-implementation both this module and ``cards/media.py`` share (imported there,
-not duplicated).
+per-row option passthrough, kept verbatim); ``normalize_rows``
+(``hassle.compiler.dashboards.builders`` -- the review-round fix that
+collapsed this module's own ``_entity_rows`` and ``cards/layout.py``'s/
+``cards/display.py``'s near-identical copies into ONE implementation) is what
+both this module and ``cards/media.py`` call.
+
+Every dict/list-valued typed option in this module (``severity=``, ``limits=``,
+``period=``) is deep-copied at record time via ``put_copy`` rather than
+``put`` (the review round's copy-vs-alias fix, SF-3) -- an author-supplied
+option dict can never alias into the compiled card body.
 """
 
 from __future__ import annotations
@@ -29,8 +36,10 @@ from typing import Any
 from hassle.compiler.dashboards.builders import (
     VisibilityArg,
     merge_extra,
+    normalize_rows,
     normalize_visibility,
     put,
+    put_copy,
 )
 from hassle.compiler.dashboards.card_registry import CardSpec, register_card
 from hassle.compiler.dashboards.recorder import record_card
@@ -38,25 +47,6 @@ from hassle.compiler.helpers import EntityRef
 from hassle.compiler.spans import capture_span
 
 EntityArg = EntityRef | str
-
-
-def _entity_rows(entities: tuple[Any, ...]) -> list[Any]:
-    """Normalize ``*entities`` varargs to HA's stored row list.
-
-    Shared by every ``entities``-varargs builder in this family
-    (``hassle.compiler.dashboards.cards.media`` imports this rather than
-    duplicating it): a plain entity id (``EntityRef``/``str``) stores as the
-    entity-id string; a ``dict`` is a per-row option object, copied so a
-    caller-owned dict cannot be mutated out from under the recorded card
-    (the same convention ``structure.badge`` uses for its dict form).
-    """
-    rows: list[Any] = []
-    for item in entities:
-        if isinstance(item, dict):
-            rows.append(dict(item))  # pyright: ignore[reportUnknownArgumentType]
-        else:
-            rows.append(str(item))
-    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -83,8 +73,8 @@ def gauge(
     """``c.gauge(entity, ...)`` -- a single-entity radial/needle gauge.
 
     ``severity`` is HA's ``{"green": ..., "yellow": ..., "red": ...}`` mapping,
-    passed through by reference (not copied, matching ``view(header=...)``'s
-    convention for other pass-through option dicts).
+    deep-copied at record time (``put_copy``) so a caller-owned dict can never
+    alias into the compiled card.
     """
     span = capture_span(depth=0)
     body: dict[str, Any] = {"type": "gauge", "entity": str(entity)}
@@ -93,7 +83,7 @@ def gauge(
     put(body, "min", min)
     put(body, "max", max)
     put(body, "needle", needle)
-    put(body, "severity", severity)
+    put_copy(body, "severity", severity)
     put(body, "theme", theme)
     put(body, "visibility", normalize_visibility(visibility, span=span))
     merge_extra(body, extra, builder="c.gauge", declared=_GAUGE_DECLARED, span=span)
@@ -157,7 +147,12 @@ def history_graph(
     "name": ...}``), kept verbatim.
     """
     span = capture_span(depth=0)
-    body: dict[str, Any] = {"type": "history-graph", "entities": _entity_rows(entities)}
+    body: dict[str, Any] = {
+        "type": "history-graph",
+        "entities": normalize_rows(
+            entities, builder="c.history_graph", param="entities", span=span
+        ),
+    }
     put(body, "title", title)
     put(body, "hours_to_show", hours_to_show)
     put(body, "refresh_interval", refresh_interval)
@@ -227,7 +222,12 @@ def statistics_graph(
     ``"week"``/``"month"``.
     """
     span = capture_span(depth=0)
-    body: dict[str, Any] = {"type": "statistics-graph", "entities": _entity_rows(entities)}
+    body: dict[str, Any] = {
+        "type": "statistics-graph",
+        "entities": normalize_rows(
+            entities, builder="c.statistics_graph", param="entities", span=span
+        ),
+    }
     put(body, "title", title)
     put(body, "stat_types", stat_types)
     put(body, "chart_type", chart_type)
@@ -310,7 +310,7 @@ def sensor(
     put(body, "hours_to_show", hours_to_show)
     put(body, "unit", unit)
     put(body, "theme", theme)
-    put(body, "limits", limits)
+    put_copy(body, "limits", limits)
     put(body, "visibility", normalize_visibility(visibility, span=span))
     merge_extra(body, extra, builder="c.sensor", declared=_SENSOR_DECLARED, span=span)
     record_card(body, span=span, what="`c.sensor()`")
@@ -358,14 +358,15 @@ def statistic(
     """``c.statistic(entity, ...)`` -- a single long-term-statistics value.
 
     ``period`` is HA's calendar/fixed-period spec (a dict, e.g. ``{"calendar":
-    {"period": "month"}}``); passed through by reference, unmodelled further
-    (v1 passthrough, like ``view(header=...)``).
+    {"period": "month"}}``); deep-copied at record time (``put_copy``, unlike
+    ``view(header=...)``'s reference passthrough) so a caller-owned dict can
+    never alias into the compiled card.
     """
     span = capture_span(depth=0)
     body: dict[str, Any] = {"type": "statistic", "entity": str(entity)}
     put(body, "name", name)
     put(body, "stat_type", stat_type)
-    put(body, "period", period)
+    put_copy(body, "period", period)
     put(body, "visibility", normalize_visibility(visibility, span=span))
     merge_extra(body, extra, builder="c.statistic", declared=_STATISTIC_DECLARED, span=span)
     record_card(body, span=span, what="`c.statistic()`")
@@ -490,7 +491,10 @@ def calendar(
     ``"listWeek"``, …).
     """
     span = capture_span(depth=0)
-    body: dict[str, Any] = {"type": "calendar", "entities": _entity_rows(entities)}
+    body: dict[str, Any] = {
+        "type": "calendar",
+        "entities": normalize_rows(entities, builder="c.calendar", param="entities", span=span),
+    }
     put(body, "title", title)
     put(body, "initial_view", initial_view)
     put(body, "visibility", normalize_visibility(visibility, span=span))
@@ -524,7 +528,10 @@ def logbook(
     """``c.logbook(*entities, ...)`` -- the logbook feed filtered to
     ``entities`` (empty means "no filter", HA's own default)."""
     span = capture_span(depth=0)
-    body: dict[str, Any] = {"type": "logbook", "entities": _entity_rows(entities)}
+    body: dict[str, Any] = {
+        "type": "logbook",
+        "entities": normalize_rows(entities, builder="c.logbook", param="entities", span=span),
+    }
     put(body, "title", title)
     put(body, "hours_to_show", hours_to_show)
     put(body, "visibility", normalize_visibility(visibility, span=span))

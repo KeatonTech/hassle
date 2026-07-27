@@ -8,11 +8,13 @@ entity_params) matches what the builder actually does.
 
 from __future__ import annotations
 
+import pytest
+
 # Every HA type string DB3a's layout+display batch owns, and the DSL name that
 # builds it -- importing `hassle.cards` (transitively, via the modules
 # themselves) is what populates `CARD_REGISTRY` at import time.
 import hassle.cards as _c  # noqa: F401  (import triggers registration)
-from hassle.compiler.dashboards.card_registry import CARD_REGISTRY
+from hassle.compiler.dashboards.card_registry import CARD_REGISTRY, CardSpec, register_card
 
 _DB3A_TYPES = {
     "vertical-stack": "c.vertical_stack",
@@ -70,19 +72,12 @@ def test_entity_params_match_the_entity_taking_options() -> None:
     assert CARD_REGISTRY["heading"].entity_params == ()
 
 
-def test_no_type_is_registered_twice_in_the_process() -> None:
-    # `register_card` itself raises on re-registration (card_registry.py); this
-    # just re-imports the already-imported module to prove import is idempotent
-    # (module-level `register_card(...)` calls run exactly once).
-    import importlib
-
-    import hassle.compiler.dashboards.cards.layout as layout_mod
-
-    importlib.reload  # noqa: B018 - not actually reloading; see below.
-    # A real `importlib.reload` WOULD re-run the module body and hit
-    # `register_card`'s "already registered" ValueError -- which is exactly the
-    # append-only guarantee this test is protecting, so it is asserted
-    # directly rather than by reloading (reloading here would poison every
-    # other test in the process since `CARD_REGISTRY` is module-global state).
-    assert "grid" in CARD_REGISTRY
-    assert layout_mod.grid is not None
+def test_registering_a_db3a_type_twice_raises() -> None:
+    # SF-5 (review round): the previous version of this test could not fail
+    # for what its name claimed (it asserted `"grid" in CARD_REGISTRY`, true
+    # whether or not double-registration is actually rejected). This one
+    # exercises the real guarantee directly, against one of DB3a's OWN
+    # already-registered types: re-registering "grid" must raise, not
+    # silently replace the row DB4/DB7 already read.
+    with pytest.raises(ValueError, match="already registered"):
+        register_card(CardSpec(type="grid", builder="c.grid", declared=frozenset({"type"})))

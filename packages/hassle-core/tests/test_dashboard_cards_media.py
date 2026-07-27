@@ -102,6 +102,25 @@ def test_picture_typed_options() -> None:
     ]
 
 
+def test_picture_image_is_optional_when_image_entity_is_given() -> None:
+    # Review-round fix #12: `image=` is optional -- `image_entity=` (an entity
+    # whose STATE is a dynamic image URL) can supply the background instead.
+    from hassle.registry import entities as e
+
+    def build() -> None:
+        m.picture(image_entity=e.image.front_door_snapshot)
+
+    assert _cards(build) == [{"type": "picture", "image_entity": "image.front_door_snapshot"}]
+
+
+def test_picture_image_entity_is_an_entity_param() -> None:
+    # `image_entity` IS entity-bearing (unlike every other option on this
+    # card), so DB4's `e.<domain>.<object_id>` rewrite and DB7's unknown-
+    # entity lint must both see it.
+    assert "image_entity" in CARD_REGISTRY["picture"].entity_params
+    assert "image_entity" in CARD_REGISTRY["picture"].declared
+
+
 # ---------------------------------------------------------------------------
 # picture_glance -- entities varargs + camera_image
 # ---------------------------------------------------------------------------
@@ -228,7 +247,7 @@ def test_every_media_card_type_is_registered_exactly_once() -> None:
     ("card_type", "builder", "entity_params"),
     [
         ("iframe", "c.iframe", ()),
-        ("picture", "c.picture", ()),
+        ("picture", "c.picture", ("image_entity",)),
         ("picture-glance", "c.picture_glance", ("entities", "camera_image")),
         ("picture-elements", "c.picture_elements", ("camera_image",)),
         ("map", "c.map", ("entities",)),

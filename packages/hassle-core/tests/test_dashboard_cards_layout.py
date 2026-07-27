@@ -8,6 +8,7 @@ containers; `conditional` wraps EXACTLY one child card
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,27 @@ def _config(build: Any) -> dict[str, Any]:
 def _one_card(build: Any) -> dict[str, Any]:
     v = _config(build)["views"][0]
     return v["sections"][0]["cards"][0] if "sections" in v else v["cards"][0]
+
+
+# ---------------------------------------------------------------------------
+# span-path resolution (SF-2, review round): a path must address exactly what
+# a plain traversal of the STORED config would -- resolved here through the
+# REAL builders, not a hand-built `push_container` call.
+# ---------------------------------------------------------------------------
+_SEG_RE = re.compile(r"^(\w+)(?:\[(\d+)\])?$")
+
+
+def _resolve(node: Any, path: str) -> Any:
+    """Walk ``path`` (the F5 span-path grammar) into a compiled config tree."""
+    current = node
+    for segment in path.split("."):
+        m = _SEG_RE.match(segment)
+        assert m is not None, segment
+        key, index = m.group(1), m.group(2)
+        current = current[key]
+        if index is not None:
+            current = current[int(index)]
+    return current
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +194,40 @@ def test_conditional_card_arity_error_message_snapshot() -> None:
     )
 
 
+def test_conditional_card_nested_card_has_a_resolvable_bare_span_path() -> None:
+    # SF-2 (review round): `conditional`'s child lives under a SINGLE `card:`
+    # key, not a list, so its span path must be a bare `...card` segment --
+    # `...card[0]` would resolve to nothing (there is no list there).
+    with (
+        dashboard_recording(url_path="a-b") as rec,
+        view(title="V"),
+        section(),
+        conditional(cond.state("light.hall", "on")),
+    ):
+        raw_card(CARD)
+    config = rec.build_config()
+    spans = rec.node_spans()
+    path = "views[0].sections[0].cards[0].card"
+    assert path in spans
+    assert "views[0].sections[0].cards[0].card[0]" not in spans
+    assert _resolve(config, path) == CARD
+
+
+def test_entity_filter_presentation_card_has_a_resolvable_bare_span_path() -> None:
+    with (
+        dashboard_recording(url_path="a-b") as rec,
+        view(title="V"),
+        section(),
+        entity_filter(entities=["light.a"]),
+    ):
+        raw_card({"type": "glance"})
+    config = rec.build_config()
+    spans = rec.node_spans()
+    path = "views[0].sections[0].cards[0].card"
+    assert path in spans
+    assert _resolve(config, path) == {"type": "glance"}
+
+
 # ---------------------------------------------------------------------------
 # entity_filter — zero or one card
 # ---------------------------------------------------------------------------
@@ -229,3 +285,19 @@ def test_entity_filter_with_two_cards_raises_arity_error() -> None:
                 raw_card(CARD)
                 raw_card(CARD)
     assert excinfo.value.allowed == "zero or one"
+
+
+def test_entity_filter_card_arity_error_message_snapshot() -> None:
+    # Item 10 (review round): the "zero or one" phrasing is a DIFFERENT
+    # message from `conditional`'s "exactly one" snapshot above, so it gets
+    # its own pinned snapshot.
+    with dashboard_recording(url_path="a-b"), view(title="V"), section():  # noqa: SIM117
+        with pytest.raises(ConditionalCardArityError) as excinfo:
+            with entity_filter(entities=["light.a"]):
+                raw_card(CARD)
+                raw_card(CARD)
+    check_snapshot(
+        SNAP_DIR,
+        "dashboard_entity_filter_card_arity",
+        normalize_error(str(excinfo.value), mask_lines_for=Path(__file__).name),
+    )

@@ -31,13 +31,15 @@ to `dict`, and the `extra=` valve for an option Hassle has not modelled at all.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import Any, cast
+from typing import Any
 
 from hassle.compiler.dashboards.builders import (
     VisibilityArg,
     merge_extra,
+    normalize_rows,
     normalize_visibility,
     put,
+    put_copy,
 )
 from hassle.compiler.dashboards.card_registry import CardSpec, register_card
 from hassle.compiler.dashboards.recorder import record_card
@@ -126,20 +128,10 @@ _HEADING_DECLARED: frozenset[str] = frozenset(
 )
 
 
-def _normalize_row(row: Any) -> Any:
-    """One `entities`/`glance` row: `dict` passthrough (copied), else the bare
-    entity-id string HA's shorthand form accepts."""
-    if isinstance(row, dict):
-        return dict(cast("dict[str, Any]", row))
-    return str(row)
-
-
-def _normalize_badge(item: Any) -> Any:
-    """One `heading(badges=...)` item — mirrors `structure.badge()`'s own rule:
-    a bare entity id builds the object form, a `dict` passes through verbatim."""
-    if isinstance(item, dict):
-        return dict(cast("dict[str, Any]", item))
-    return {"type": "entity", "entity": str(item)}
+def _heading_badge(entity_id: str) -> dict[str, Any]:
+    """A bare `heading(badges=...)` entity id builds the object-badge form —
+    mirrors `structure.badge()`'s own rule (`normalize_rows`'s `row_factory`)."""
+    return {"type": "entity", "entity": entity_id}
 
 
 def entities(
@@ -160,7 +152,7 @@ def entities(
     """
     span = capture_span(depth=0)
     body: dict[str, Any] = {"type": "entities"}
-    body["entities"] = [_normalize_row(row) for row in rows]
+    body["entities"] = normalize_rows(rows, builder="c.entities", param="entities", span=span)
     put(body, "title", title)
     put(body, "show_header_toggle", show_header_toggle)
     put(body, "state_color", state_color)
@@ -186,7 +178,7 @@ def glance(
     """``c.glance(e.light.a, e.light.b, title=...)`` — the same rows convention as `c.entities`."""
     span = capture_span(depth=0)
     body: dict[str, Any] = {"type": "glance"}
-    body["entities"] = [_normalize_row(row) for row in rows]
+    body["entities"] = normalize_rows(rows, builder="c.glance", param="entities", span=span)
     put(body, "title", title)
     put(body, "show_name", show_name)
     put(body, "show_icon", show_icon)
@@ -231,16 +223,12 @@ def tile(
     put(body, "color", color)
     put(body, "show_entity_picture", show_entity_picture)
     put(body, "vertical", vertical)
-    put(body, "features", features)
+    put_copy(body, "features", features)
     put(body, "features_position", features_position)
-    put(body, "state_content", state_content)
-    put(body, "tap_action", dict(tap_action) if tap_action is not None else None)
-    put(body, "hold_action", dict(hold_action) if hold_action is not None else None)
-    put(
-        body,
-        "double_tap_action",
-        dict(double_tap_action) if double_tap_action is not None else None,
-    )
+    put_copy(body, "state_content", state_content)
+    put_copy(body, "tap_action", tap_action)
+    put_copy(body, "hold_action", hold_action)
+    put_copy(body, "double_tap_action", double_tap_action)
     put(body, "visibility", normalize_visibility(visibility, span=span))
     merge_extra(body, extra, builder="c.tile", declared=_TILE_DECLARED, span=span)
     record_card(body, span=span, what="`c.tile()`")
@@ -270,13 +258,9 @@ def entity(
     put(body, "unit", unit)
     put(body, "state_color", state_color)
     put(body, "format", format)
-    put(body, "tap_action", dict(tap_action) if tap_action is not None else None)
-    put(body, "hold_action", dict(hold_action) if hold_action is not None else None)
-    put(
-        body,
-        "double_tap_action",
-        dict(double_tap_action) if double_tap_action is not None else None,
-    )
+    put_copy(body, "tap_action", tap_action)
+    put_copy(body, "hold_action", hold_action)
+    put_copy(body, "double_tap_action", double_tap_action)
     put(body, "visibility", normalize_visibility(visibility, span=span))
     merge_extra(body, extra, builder="c.entity", declared=_ENTITY_DECLARED, span=span)
     record_card(body, span=span, what="`c.entity()`")
@@ -315,13 +299,9 @@ def button(
     put(body, "show_state", show_state)
     put(body, "state_color", state_color)
     put(body, "theme", theme)
-    put(body, "tap_action", dict(tap_action) if tap_action is not None else None)
-    put(body, "hold_action", dict(hold_action) if hold_action is not None else None)
-    put(
-        body,
-        "double_tap_action",
-        dict(double_tap_action) if double_tap_action is not None else None,
-    )
+    put_copy(body, "tap_action", tap_action)
+    put_copy(body, "hold_action", hold_action)
+    put_copy(body, "double_tap_action", double_tap_action)
     put(body, "visibility", normalize_visibility(visibility, span=span))
     merge_extra(body, extra, builder="c.button", declared=_BUTTON_DECLARED, span=span)
     record_card(body, span=span, what="`c.button()`")
@@ -343,8 +323,15 @@ def heading(
     put(body, "heading", heading)
     put(body, "heading_style", heading_style)
     put(body, "icon", icon)
-    put(body, "badges", [_normalize_badge(b) for b in badges] if badges is not None else None)
-    put(body, "tap_action", dict(tap_action) if tap_action is not None else None)
+    if badges is not None:
+        body["badges"] = normalize_rows(
+            badges,
+            builder="c.heading",
+            param="badges",
+            span=span,
+            row_factory=_heading_badge,
+        )
+    put_copy(body, "tap_action", tap_action)
     put(body, "visibility", normalize_visibility(visibility, span=span))
     merge_extra(body, extra, builder="c.heading", declared=_HEADING_DECLARED, span=span)
     record_card(body, span=span, what="`c.heading()`")

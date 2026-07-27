@@ -340,3 +340,42 @@ class ConditionalCardArityError(CompileError):
             f"card. Fix: keep {allowed} card directly inside the block (nest a stack card — "
             f"`with c.vertical_stack():` — to group more than one card there first)."
         )
+
+
+class EntityRowTypeError(CompileError):
+    """An `entities`-shaped-row parameter got a bare string, or a row that
+    isn't a `str`/`EntityRef`/`dict` (§5.3, SF-4 review finding).
+
+    Two distinct shapes, both real bugs that used to compile clean into
+    garbage rather than raise: a bare string passed where a LIST of rows was
+    expected (Python iterates a string character by character, so
+    ``c.entity_filter(entities="light.hall")`` silently became ten
+    one-character rows instead of raising), and any row that is neither a
+    plain entity id nor a `dict` (e.g. ``c.entities(["a", "b"])`` passing a
+    `list` as ONE row instead of unpacking it, which used to ``str()``-
+    stringify into a single nonsense row).
+    """
+
+    def __init__(
+        self, reason: str, builder: str, param: str, value: Any, span: SourceSpan | None
+    ) -> None:
+        self.reason = reason
+        self.builder = builder
+        self.param = param
+        self.value = value
+        if reason == "bare_string":
+            super().__init__(
+                f"`{builder}({param}={value!r})`{_at(span)} passed a bare string where a LIST "
+                f"of entity rows was expected. Python iterates a string one character at a "
+                f"time, so this would silently compile into one row PER CHARACTER instead of "
+                f"the single entity you meant. Fix: wrap it in a list, e.g. "
+                f"`{param}=[{value!r}]`."
+            )
+        else:
+            super().__init__(
+                f"`{builder}(...)`{_at(span)} was given {value!r} (a {type(value).__name__}) "
+                f"as one of its `{param}` rows. Every row must be an entity id (`str`/"
+                f"`EntityRef`) or a `dict` (a per-row option object) — anything else would "
+                f"either be silently stringified into a nonsense row or dropped. Fix: pass an "
+                f"entity id string or a dict, not a {type(value).__name__}."
+            )
