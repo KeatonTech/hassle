@@ -123,7 +123,7 @@ Hassle treats it as **absent from `list_remote`** until someone saves it.
 |---|---|---|
 | `lovelace/dashboards/list` | — | registry items |
 | `lovelace/dashboards/create` | `url_path, title, icon?, show_in_sidebar?, require_admin?, mode:"storage"` | new dashboard (registry only) |
-| `lovelace/dashboards/update` | `dashboard_id, <fields>` | registry metadata |
+| `lovelace/dashboards/update` | `dashboard_id, title, icon, show_in_sidebar, require_admin` (PREVENT_EXTRA over exactly these four — `url_path` excluded, DB5 2026-07-27 finding, §4.1) | registry metadata |
 | `lovelace/dashboards/delete` | `dashboard_id` | remove dashboard (+ its config) |
 | `lovelace/config` | `url_path \| null, force?` | fetch view config |
 | `lovelace/config/save` | `url_path \| null, config` | write view config |
@@ -156,6 +156,25 @@ Known-risk items DB0 must pin down (each gets a ha-api-notes subsection):
    (`{type: "entity", entity: ...}`) vs. legacy bare entity strings.
 7. **Admin/auth requirements** per command, and behavior of `dashboards/list`
    for a fresh instance (empty list vs. error).
+8. **Default dashboard mode filtering**: `DirectBackend._alist_dashboards`
+   filters out any registry item whose `mode != "storage"` (I1), but the
+   default dashboard has no registry item at all, so this filter never runs
+   against it — if a YAML-mode *default* dashboard install turns out to
+   have some other observable marker (a panel-mode probe, or a `lovelace`
+   integration config-entry check), Hassle would currently adopt an
+   unmanageable default dashboard and attempt to write over YAML behind
+   HA's back (an I1 violation). DB0 must verify whether this case exists on
+   a real instance and, if so, what marker distinguishes it.
+9. **Never-customized, UI-created dashboard gap**: a dashboard the UI
+   creates (a `lovelace_dashboards` registry item exists) but whose config
+   was never saved (`lovelace/config` still 404s `config_not_found`) is
+   *invisible* to `list_remote` (§2.1's rule, applied verbatim to a
+   non-default dashboard too) — but its registry item still exists. If a
+   bundle then declares a dashboard at that same `url_path`, `create`'s
+   duplicate-`url_path` check (§4.1) fires immediately and loudly on the
+   registry call, rather than silently double-creating — DB0 should capture
+   this exact request/response pair to confirm the error shape (and that it
+   really is loud, not a silent no-op).
 
 DB0 also captures raw request/response pairs into `docs/ha-api-captures/`
 exactly as M0.V did.
@@ -306,7 +325,7 @@ methods suffice. Per-kind mapping inside the two implementations:
 |---|---|
 | `list_remote("dashboard")` | `dashboards/list` → for each item + the default: `lovelace/config` → compose envelopes. `config_not_found` ⇒ omit that dashboard. YAML-mode items (`mode != "storage"`) filtered out. |
 | `create` | non-default: `dashboards/create` (from `meta`) then `config/save`; default (`meta: null`): `config/save(url_path=null)` only |
-| `update` | diff internally: `dashboards/update` when `meta` changed (dashboard_id resolved via `dashboards/list` — see below), `config/save` when `config` changed |
+| `update` | when `meta` is not null: `dashboards/update` with the FULL desired state of exactly `{title, icon, show_in_sidebar, require_admin}` (dashboard_id resolved via `dashboards/list` — see below); always `config/save` for `config` — see the 2026-07-27 implementation finding below |
 | `delete` | non-default: `dashboards/delete`; default: `config/delete` (reverts to auto-generated — enumerated loudly in the plan like every delete) |
 
 - **`dashboard_id` stays transport-internal.** `DirectBackend` re-resolves it
@@ -341,6 +360,41 @@ methods suffice. Per-kind mapping inside the two implementations:
   fallthrough explicit — `_alist_helpers` (and its write-side siblings)
   assert `kind in HELPER_DOMAINS`, the same "new kinds are added
   explicitly" rule `_KIND_ORDER` already follows.
+
+**DB5 implementation finding (2026-07-27, reviewer-blocked, fixed forward on
+`feat/dashboards-db5-fixes`):** the "diff internally" update semantics
+originally written above were wrong on two counts, caught by review before
+merge to `main`:
+
+1. **Payload shape.** `lovelace/dashboards/update`'s real schema is
+   PREVENT_EXTRA over exactly `{title, icon, show_in_sidebar,
+   require_admin}` — `url_path` is deliberately excluded (a url_path change
+   is delete+create, never an in-place rename, I2). The first implementation
+   built the payload by copying `meta`'s own keys (minus `id`/`mode`), which
+   still includes `url_path` (`meta` always carries it) — every non-default
+   dashboard UPDATE would 400 with `invalid_format` against real HA. The fix
+   (`DirectBackend._dashboard_registry_payload`) builds the payload from an
+   explicit allowlist of the four fields, never from `meta`'s keys.
+2. **Convergence.** HA's dashboard registry item is a storage collection
+   that MERGES an update (`{**item, **update}`) rather than replacing it
+   outright, so a field only clears when explicitly sent. A presence-based
+   payload (only sending fields `meta` happens to carry) can therefore never
+   converge a locally-deleted field (e.g. a removed `icon`) — the stale
+   remote value lingers, `_advance_manifest` records it as the new base
+   regardless, and every subsequent push silently re-plans the same
+   ineffective update forever. The fix sends the FULL desired state of the
+   allowlist on every update: `icon` explicitly `None` when absent from
+   `meta`, `show_in_sidebar`/`require_admin` with source-informed defaults
+   (`True`/`False`, DB0-pending verification) when absent.
+
+Both are unit-tested against a `_FakeClient` that now models the real
+PREVENT_EXTRA schema (rejecting `url_path` and any unknown key), so a future
+regression of either kind fails the unit suite, not just a live HA push.
+`FakeBackend` also gained a fidelity fix in the same pass: the create-time
+hyphen exemption is keyed off `meta is None` (the actual default-dashboard
+marker) rather than the derived identity string, and `update()` now raises
+for an unknown non-default `url_path` (mirroring `DirectBackend`'s
+`_aresolve_dashboard_id`), exempting only the true default dashboard.
 
 ### 4.2 Apply order
 
