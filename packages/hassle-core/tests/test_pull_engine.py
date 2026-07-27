@@ -8,6 +8,10 @@ during pull (asserted via FakeBackend.writes_since_reset()).
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
 from hassle.backend.fake import FakeBackend
 from hassle.sync import Conflict, ConflictKind, Plan, PlanAction, PlanEntry
 from hassle.sync.pull import apply_pull
@@ -53,6 +57,42 @@ def test_pull_adopt_calls_write_whole_file() -> None:
     assert list(writer.written_files.keys())
     written_path = next(iter(writer.written_files))
     assert str(written_path) == "automations/new1.py"
+
+
+def test_pull_adopt_routes_through_splice_when_target_path_already_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ADOPT never clobbers a file that already has real content at the new
+    # object's default placement (docs/internals/dashboards-design.md §7,
+    # generalized to every kind by `hassle.sync.source_writer.adopt_write`):
+    # when the target path already exists, ADOPT routes through
+    # `splice_object` instead of `write_whole_file`. Uses `automation` here
+    # to show the fix is kind-agnostic; see `test_pull_dashboards_placement.py`
+    # for the dashboard-specific scenario this generalizes from.
+    monkeypatch.chdir(tmp_path)
+    existing = tmp_path / "automations" / "new1.py"
+    existing.parent.mkdir()
+    existing.write_text("# hand-authored, keep me\n", encoding="utf-8")
+
+    remote_config = {"id": "new1", "alias": "UI Created"}
+    plan = Plan(
+        entries=[
+            PlanEntry(
+                object_key="automation:new1",
+                kind="automation",
+                action=PlanAction.ADOPT,
+                remote=remote_config,
+                source_path="automations/new1.py",
+            )
+        ]
+    )
+    writer = RecordingSourceWriter()
+    apply_pull(plan, writer)
+    assert writer.written_files == {}
+    assert len(writer.spliced_objects) == 1
+    path, object_key, _content = writer.spliced_objects[0]
+    assert path == Path("automations/new1.py")
+    assert object_key == "automation:new1"
 
 
 def test_pull_drop_calls_delete_object() -> None:

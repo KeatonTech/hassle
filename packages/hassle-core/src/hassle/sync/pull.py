@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 
 from hassle.sync.models import Conflict, Plan, PlanAction, PlanEntry
-from hassle.sync.source_writer import SourceWriter
+from hassle.sync.source_writer import SourceWriter, adopt_write
 
 
 class PullResult:
@@ -68,7 +68,10 @@ def _refresh(entry: PlanEntry, source_writer: SourceWriter) -> None:
 def _adopt(entry: PlanEntry, source_writer: SourceWriter) -> None:
     path = Path(entry.source_path or f"{entry.object_key.replace(':', '_')}.py")
     content = _placeholder_dsl_source(entry.object_key, entry.remote)
-    source_writer.write_whole_file(path, content)
+    # ADOPT never clobbers a file that already has real content at this
+    # object's default placement (docs/internals/dashboards-design.md §7,
+    # docs/internals/sync.md) -- kind-generic, `hassle.sync.source_writer.adopt_write`.
+    adopt_write(source_writer, path, entry.object_key, content)
 
 
 def _drop(entry: PlanEntry, source_writer: SourceWriter) -> None:
