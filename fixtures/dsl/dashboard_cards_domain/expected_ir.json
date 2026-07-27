@@ -1,0 +1,94 @@
+{
+  "dashboard:cards-domain": {
+    "meta": {
+      "url_path": "cards-domain",
+      "title": "Domain"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "masonry",
+          "title": "Domain",
+          "cards": [
+            {
+              "type": "alarm-panel",
+              "entity": "alarm_control_panel.home",
+              "name": "Home Alarm",
+              "states": [
+                "arm_home",
+                "arm_away"
+              ]
+            },
+            {
+              "type": "area",
+              "area": "living_room",
+              "navigation_path": "/lovelace/living-room",
+              "show_camera": true,
+              "display_type": "compact",
+              "alert_classes": [
+                "motion",
+                "smoke"
+              ],
+              "sensor_classes": [
+                "temperature",
+                "humidity"
+              ]
+            },
+            {
+              "type": "light",
+              "entity": "light.living_room",
+              "name": "Living Room",
+              "icon": "mdi:ceiling-light"
+            },
+            {
+              "type": "thermostat",
+              "entity": "climate.living_room",
+              "features": [
+                {
+                  "type": "climate-hvac-mode-select"
+                }
+              ]
+            },
+            {
+              "type": "humidifier",
+              "entity": "humidifier.living_room",
+              "features": [
+                {
+                  "type": "humidifier-toggle"
+                }
+              ]
+            },
+            {
+              "type": "media-control",
+              "entity": "media_player.living_room"
+            },
+            {
+              "type": "plant-status",
+              "entity": "plant.tomato",
+              "name": "Tomato"
+            },
+            {
+              "type": "todo-list",
+              "entity": "todo.groceries",
+              "title": "Groceries",
+              "display_order": "alphabetical"
+            },
+            {
+              "type": "shopping-list",
+              "title": "Shopping",
+              "display_order": "alphabetical"
+            },
+            {
+              "type": "weather-forecast",
+              "entity": "weather.home",
+              "show_current": true,
+              "show_forecast": true,
+              "forecast_type": "daily",
+              "name": "Weather"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
