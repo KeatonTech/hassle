@@ -78,7 +78,9 @@ def test_structure_rows_are_kept_out_of_card_registry() -> None:
     # structural pseudo-row.
     assert set(STRUCTURE_REGISTRY) & set(CARD_REGISTRY) == set()
     assert "structure:section" in STRUCTURE_REGISTRY
-    assert "grid" not in CARD_REGISTRY  # DB3a's `c.grid` claims this later
+    # DB3a's `c.grid` card legitimately owns the bare "grid" type string; the
+    # section pseudo-row stays namespaced so the two can never collide.
+    assert "grid" in CARD_REGISTRY
 
 
 def test_register_card_rejects_a_duplicate_type() -> None:

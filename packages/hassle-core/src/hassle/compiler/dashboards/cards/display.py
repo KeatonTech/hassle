@@ -353,9 +353,125 @@ def heading(
 # ---------------------------------------------------------------------------
 # F5 registration (card_registry.py) — one append-only row per builder.
 # ---------------------------------------------------------------------------
-register_card(CardSpec(type="entities", builder="c.entities", entity_params=("entities",)))
-register_card(CardSpec(type="glance", builder="c.glance", entity_params=("entities",)))
-register_card(CardSpec(type="tile", builder="c.tile", entity_params=("entity",)))
-register_card(CardSpec(type="entity", builder="c.entity", entity_params=("entity",)))
-register_card(CardSpec(type="button", builder="c.button", entity_params=("entity",)))
-register_card(CardSpec(type="heading", builder="c.heading"))
+register_card(
+    CardSpec(
+        type="entities",
+        declared=frozenset(
+            {
+                "type",
+                "entities",
+                "title",
+                "show_header_toggle",
+                "state_color",
+                "icon",
+                "theme",
+                "visibility",
+            }
+        ),
+        builder="c.entities",
+        entity_params=("entities",),
+    )
+)
+register_card(
+    CardSpec(
+        type="glance",
+        declared=frozenset(
+            {
+                "type",
+                "entities",
+                "title",
+                "show_name",
+                "show_icon",
+                "show_state",
+                "state_color",
+                "columns",
+                "theme",
+                "visibility",
+            }
+        ),
+        builder="c.glance",
+        entity_params=("entities",),
+    )
+)
+register_card(
+    CardSpec(
+        type="tile",
+        declared=frozenset(
+            {
+                "type",
+                "entity",
+                "name",
+                "icon",
+                "color",
+                "show_entity_picture",
+                "vertical",
+                "features",
+                "features_position",
+                "state_content",
+                "tap_action",
+                "hold_action",
+                "double_tap_action",
+                "visibility",
+            }
+        ),
+        builder="c.tile",
+        entity_params=("entity",),
+    )
+)
+register_card(
+    CardSpec(
+        type="entity",
+        declared=frozenset(
+            {
+                "type",
+                "entity",
+                "attribute",
+                "name",
+                "icon",
+                "unit",
+                "state_color",
+                "format",
+                "tap_action",
+                "hold_action",
+                "double_tap_action",
+                "visibility",
+            }
+        ),
+        builder="c.entity",
+        entity_params=("entity",),
+    )
+)
+register_card(
+    CardSpec(
+        type="button",
+        declared=frozenset(
+            {
+                "type",
+                "entity",
+                "name",
+                "icon",
+                "icon_height",
+                "show_name",
+                "show_icon",
+                "show_state",
+                "state_color",
+                "theme",
+                "tap_action",
+                "hold_action",
+                "double_tap_action",
+                "visibility",
+            }
+        ),
+        builder="c.button",
+        entity_params=("entity",),
+    )
+)
+register_card(
+    CardSpec(
+        type="heading",
+        declared=frozenset(
+            {"type", "heading", "heading_style", "icon", "badges", "tap_action", "visibility"}
+        ),
+        builder="c.heading",
+    )
+)

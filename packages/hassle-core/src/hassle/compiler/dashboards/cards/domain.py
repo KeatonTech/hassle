@@ -71,7 +71,14 @@ def alarm_panel(
     record_card(body, span=span, what="`c.alarm_panel()`")
 
 
-register_card(CardSpec(type="alarm-panel", builder="c.alarm_panel", entity_params=("entity",)))
+register_card(
+    CardSpec(
+        type="alarm-panel",
+        declared=frozenset({"type", "entity", "name", "states", "visibility"}),
+        builder="c.alarm_panel",
+        entity_params=("entity",),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +131,25 @@ def area(
     record_card(body, span=span, what="`c.area()`")
 
 
-register_card(CardSpec(type="area", builder="c.area", entity_params=()))
+register_card(
+    CardSpec(
+        type="area",
+        declared=frozenset(
+            {
+                "type",
+                "area",
+                "navigation_path",
+                "show_camera",
+                "display_type",
+                "alert_classes",
+                "sensor_classes",
+                "visibility",
+            }
+        ),
+        builder="c.area",
+        entity_params=(),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +176,14 @@ def light(
     record_card(body, span=span, what="`c.light()`")
 
 
-register_card(CardSpec(type="light", builder="c.light", entity_params=("entity",)))
+register_card(
+    CardSpec(
+        type="light",
+        declared=frozenset({"type", "entity", "name", "icon", "visibility"}),
+        builder="c.light",
+        entity_params=("entity",),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +213,14 @@ def thermostat(
     record_card(body, span=span, what="`c.thermostat()`")
 
 
-register_card(CardSpec(type="thermostat", builder="c.thermostat", entity_params=("entity",)))
+register_card(
+    CardSpec(
+        type="thermostat",
+        declared=frozenset({"type", "entity", "features", "visibility"}),
+        builder="c.thermostat",
+        entity_params=("entity",),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +249,14 @@ def humidifier(
     record_card(body, span=span, what="`c.humidifier()`")
 
 
-register_card(CardSpec(type="humidifier", builder="c.humidifier", entity_params=("entity",)))
+register_card(
+    CardSpec(
+        type="humidifier",
+        declared=frozenset({"type", "entity", "features", "visibility"}),
+        builder="c.humidifier",
+        entity_params=("entity",),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +279,14 @@ def media_control(
     record_card(body, span=span, what="`c.media_control()`")
 
 
-register_card(CardSpec(type="media-control", builder="c.media_control", entity_params=("entity",)))
+register_card(
+    CardSpec(
+        type="media-control",
+        declared=frozenset({"type", "entity", "visibility"}),
+        builder="c.media_control",
+        entity_params=("entity",),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +311,14 @@ def plant_status(
     record_card(body, span=span, what="`c.plant_status()`")
 
 
-register_card(CardSpec(type="plant-status", builder="c.plant_status", entity_params=("entity",)))
+register_card(
+    CardSpec(
+        type="plant-status",
+        declared=frozenset({"type", "entity", "name", "visibility"}),
+        builder="c.plant_status",
+        entity_params=("entity",),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +349,14 @@ def todo_list(
     record_card(body, span=span, what="`c.todo_list()`")
 
 
-register_card(CardSpec(type="todo-list", builder="c.todo_list", entity_params=("entity",)))
+register_card(
+    CardSpec(
+        type="todo-list",
+        declared=frozenset({"type", "entity", "title", "display_order", "visibility"}),
+        builder="c.todo_list",
+        entity_params=("entity",),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +389,14 @@ def shopping_list(
     record_card(body, span=span, what="`c.shopping_list()`")
 
 
-register_card(CardSpec(type="shopping-list", builder="c.shopping_list", entity_params=()))
+register_card(
+    CardSpec(
+        type="shopping-list",
+        declared=frozenset({"type", "title", "display_order", "visibility"}),
+        builder="c.shopping_list",
+        entity_params=(),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -369,5 +443,20 @@ def weather_forecast(
 
 
 register_card(
-    CardSpec(type="weather-forecast", builder="c.weather_forecast", entity_params=("entity",))
+    CardSpec(
+        type="weather-forecast",
+        declared=frozenset(
+            {
+                "type",
+                "entity",
+                "show_current",
+                "show_forecast",
+                "forecast_type",
+                "name",
+                "visibility",
+            }
+        ),
+        builder="c.weather_forecast",
+        entity_params=("entity",),
+    )
 )

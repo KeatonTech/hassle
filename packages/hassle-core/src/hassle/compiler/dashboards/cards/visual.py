@@ -100,7 +100,27 @@ def gauge(
     record_card(body, span=span, what="`c.gauge()`")
 
 
-register_card(CardSpec(type="gauge", builder="c.gauge", entity_params=("entity",)))
+register_card(
+    CardSpec(
+        type="gauge",
+        declared=frozenset(
+            {
+                "type",
+                "entity",
+                "name",
+                "unit",
+                "min",
+                "max",
+                "needle",
+                "severity",
+                "theme",
+                "visibility",
+            }
+        ),
+        builder="c.gauge",
+        entity_params=("entity",),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +169,23 @@ def history_graph(
 
 
 register_card(
-    CardSpec(type="history-graph", builder="c.history_graph", entity_params=("entities",))
+    CardSpec(
+        type="history-graph",
+        declared=frozenset(
+            {
+                "type",
+                "entities",
+                "title",
+                "hours_to_show",
+                "refresh_interval",
+                "show_names",
+                "logarithmic_scale",
+                "visibility",
+            }
+        ),
+        builder="c.history_graph",
+        entity_params=("entities",),
+    )
 )
 
 
@@ -207,7 +243,25 @@ def statistics_graph(
 
 
 register_card(
-    CardSpec(type="statistics-graph", builder="c.statistics_graph", entity_params=("entities",))
+    CardSpec(
+        type="statistics-graph",
+        declared=frozenset(
+            {
+                "type",
+                "entities",
+                "title",
+                "stat_types",
+                "chart_type",
+                "period",
+                "days_to_show",
+                "hide_legend",
+                "logarithmic_scale",
+                "visibility",
+            }
+        ),
+        builder="c.statistics_graph",
+        entity_params=("entities",),
+    )
 )
 
 
@@ -262,7 +316,28 @@ def sensor(
     record_card(body, span=span, what="`c.sensor()`")
 
 
-register_card(CardSpec(type="sensor", builder="c.sensor", entity_params=("entity",)))
+register_card(
+    CardSpec(
+        type="sensor",
+        declared=frozenset(
+            {
+                "type",
+                "entity",
+                "name",
+                "icon",
+                "graph",
+                "detail",
+                "hours_to_show",
+                "unit",
+                "theme",
+                "limits",
+                "visibility",
+            }
+        ),
+        builder="c.sensor",
+        entity_params=("entity",),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +371,14 @@ def statistic(
     record_card(body, span=span, what="`c.statistic()`")
 
 
-register_card(CardSpec(type="statistic", builder="c.statistic", entity_params=("entity",)))
+register_card(
+    CardSpec(
+        type="statistic",
+        declared=frozenset({"type", "entity", "name", "stat_type", "period", "visibility"}),
+        builder="c.statistic",
+        entity_params=("entity",),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +408,13 @@ def markdown(
     record_card(body, span=span, what="`c.markdown()`")
 
 
-register_card(CardSpec(type="markdown", builder="c.markdown"))
+register_card(
+    CardSpec(
+        type="markdown",
+        declared=frozenset({"type", "content", "title", "visibility"}),
+        builder="c.markdown",
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -364,7 +452,23 @@ def clock(
     record_card(body, span=span, what="`c.clock()`")
 
 
-register_card(CardSpec(type="clock", builder="c.clock"))
+register_card(
+    CardSpec(
+        type="clock",
+        declared=frozenset(
+            {
+                "type",
+                "title",
+                "clock_style",
+                "clock_size",
+                "show_seconds",
+                "time_format",
+                "visibility",
+            }
+        ),
+        builder="c.clock",
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -394,7 +498,14 @@ def calendar(
     record_card(body, span=span, what="`c.calendar()`")
 
 
-register_card(CardSpec(type="calendar", builder="c.calendar", entity_params=("entities",)))
+register_card(
+    CardSpec(
+        type="calendar",
+        declared=frozenset({"type", "entities", "title", "initial_view", "visibility"}),
+        builder="c.calendar",
+        entity_params=("entities",),
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -421,4 +532,11 @@ def logbook(
     record_card(body, span=span, what="`c.logbook()`")
 
 
-register_card(CardSpec(type="logbook", builder="c.logbook", entity_params=("entities",)))
+register_card(
+    CardSpec(
+        type="logbook",
+        declared=frozenset({"type", "entities", "title", "hours_to_show", "visibility"}),
+        builder="c.logbook",
+        entity_params=("entities",),
+    )
+)

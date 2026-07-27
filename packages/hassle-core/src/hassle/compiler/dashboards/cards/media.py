@@ -68,7 +68,15 @@ def iframe(
     record_card(body, span=span, what="`c.iframe()`")
 
 
-register_card(CardSpec(type="iframe", builder="c.iframe"))
+register_card(
+    CardSpec(
+        type="iframe",
+        declared=frozenset(
+            {"type", "url", "title", "aspect_ratio", "allow_open_top_navigation", "visibility"}
+        ),
+        builder="c.iframe",
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +111,15 @@ def picture(
     record_card(body, span=span, what="`c.picture()`")
 
 
-register_card(CardSpec(type="picture", builder="c.picture"))
+register_card(
+    CardSpec(
+        type="picture",
+        declared=frozenset(
+            {"type", "image", "tap_action", "hold_action", "alt_text", "visibility"}
+        ),
+        builder="c.picture",
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +180,20 @@ def picture_glance(
 register_card(
     CardSpec(
         type="picture-glance",
+        declared=frozenset(
+            {
+                "type",
+                "entities",
+                "title",
+                "image",
+                "camera_image",
+                "camera_view",
+                "state_filter",
+                "tap_action",
+                "hold_action",
+                "visibility",
+            }
+        ),
         builder="c.picture_glance",
         entity_params=("entities", "camera_image"),
     )
@@ -211,7 +241,14 @@ def picture_elements(
 
 
 register_card(
-    CardSpec(type="picture-elements", builder="c.picture_elements", entity_params=("camera_image",))
+    CardSpec(
+        type="picture-elements",
+        declared=frozenset(
+            {"type", "image", "elements", "camera_image", "camera_view", "visibility"}
+        ),
+        builder="c.picture_elements",
+        entity_params=("camera_image",),
+    )
 )
 
 
@@ -265,4 +302,23 @@ def map(
     record_card(body, span=span, what="`c.map()`")
 
 
-register_card(CardSpec(type="map", builder="c.map", entity_params=("entities",)))
+register_card(
+    CardSpec(
+        type="map",
+        declared=frozenset(
+            {
+                "type",
+                "entities",
+                "geo_location_sources",
+                "hours_to_show",
+                "default_zoom",
+                "dark_mode",
+                "auto_fit",
+                "theme_mode",
+                "visibility",
+            }
+        ),
+        builder="c.map",
+        entity_params=("entities",),
+    )
+)
