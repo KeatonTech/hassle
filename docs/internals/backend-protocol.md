@@ -360,6 +360,98 @@ Steps 1–2 are the only places that see genuinely new code per domain (an IR
 shape + a DSL builder); steps 3–6 are membership-set additions into machinery
 that already exists generically.
 
+## 3.2 Dashboards addendum (`Backend` unchanged)
+
+Lovelace storage-mode dashboards (`hassle.ir.keys.DASHBOARD_KIND`,
+docs/internals/dashboards-design.md) are the third `Backend`-unchanged
+plugin kind, alongside the config-entry addendum above: the same four
+methods, addressed the same `(kind, identity)` way. What differs is entirely
+internal to `FakeBackend`/`DirectBackend`.
+
+- **Two HA-side stores, one Hassle object.** A dashboard is a
+  `lovelace_dashboards` registry item (`{id, url_path, title, icon,
+  show_in_sidebar, require_admin, mode: "storage"}`) plus a
+  `lovelace[.<url_path>]` view-config blob. `list_remote`/`create`/`update`
+  compose/decompose these into one envelope, `{"meta": ..., "config": ...}`
+  (`meta` is the registry item minus `id`/`mode`, `null` for the default
+  dashboard; `config` is the view config verbatim) — see
+  docs/internals/dashboards-design.md §3.2 for the full IR shape. The
+  Protocol's caller (the sync engine) never sees the two-store seam, exactly
+  as it never sees the helper `{domain}_id` payload-key convention or the
+  config-entry flow steps.
+- **Identity: `meta.url_path`, verbatim, never re-slugified** — a real
+  `url_path` IS HA's own slug (unlike a config-entry helper's `name`-derived
+  identity, which genuinely is re-slugified). The sentinel `"default"` keys
+  the one dashboard with no registry item at all (`meta: null`); it is
+  collision-free because HA requires a created dashboard's `url_path` to
+  contain a hyphen (source-informed, DB0-pending verification,
+  docs/internals/dashboards-design.md §2.2 item 1). `dashboard` is in
+  `hassle.sync.apply._CALLER_KEYED_KINDS` (alongside `automation`): the
+  identity is always an intrinsic part of the envelope the caller sends,
+  never HA-assigned, so `create`'s `CreatedIdentityDivergedError` guard does
+  not apply to it.
+- **Mapping table** (`DirectBackend`, WS-only — no REST here, unlike the
+  config-entry flows):
+
+  | Protocol call | Wire commands |
+  |---|---|
+  | `list_remote("dashboard")` | `lovelace/dashboards/list` → for each registry item (mode `!= "storage"` filtered out, I1) plus the default: `lovelace/config` → compose the envelope. A `config_not_found` error (the never-customized-default case) omits that dashboard from the result entirely. |
+  | `create` | non-default: `lovelace/dashboards/create` (from `meta`, plus `mode: "storage"`) then `lovelace/config/save`; default (`meta: null`): `lovelace/config/save(url_path=null)` only — no registry call at all. |
+  | `update` | `lovelace/dashboards/update` when `meta` is not null (dashboard_id resolved from `url_path` via `lovelace/dashboards/list`, cached per connection) and always `lovelace/config/save` for `config`. |
+  | `delete` | non-default: `lovelace/dashboards/delete`; default: `lovelace/config/delete` (reverts to auto-generated, enumerated loudly in the plan like every delete). |
+
+- **`dashboard_id` stays transport-internal.** `DirectBackend` re-resolves it
+  from `url_path` via `lovelace/dashboards/list` (cached per connection,
+  `self._dashboard_ids`), the same pattern as the config-entry `entry_id`
+  cache above — no `ManifestEntry` change, since `url_path` is itself a
+  stable, user-visible correlator. Renaming a dashboard's `url_path` is an
+  identity change and is therefore modeled as delete+create, exactly like
+  changing an automation `id` (I2 — the tooling never mutates identity in
+  place).
+- **Partial-create rollback.** `create` for a non-default dashboard is two
+  writes; if `lovelace/config/save` fails after `lovelace/dashboards/create`
+  succeeded, `DirectBackend` deletes the just-created registry item
+  (best-effort — a failed cleanup never masks the original error) before
+  re-raising, so the apply engine's snapshot/rollback model (DESIGN §8.2)
+  keeps holding at the object level.
+- **No normalization for this kind.** `normalize_ha`/`modernize_for_comparison`
+  are exact identity functions for `kind == "dashboard"` (docs/internals/
+  dashboards-design.md §3.3) — a card's `tap_action`/`hold_action` legitimately
+  keeps a legacy `service:` key, which must never be rewritten to `action:`.
+  `FakeBackend` still routes dashboard bodies through `normalize_ha` on write
+  for consistency with every other kind's code path; the guard is what makes
+  that a no-op, not a kind-specific skip in `FakeBackend` itself.
+- **`FakeBackend`** stores the envelope verbatim, keyed by the identity rule
+  above; `create` rejects a hyphen-less `url_path` and a duplicate `url_path`
+  (mirroring the two HA-side registry rejections DB0 is expected to confirm);
+  `update` and `delete` need no dashboard-specific branch at all — the
+  generic tail (envelope replace / dict `.pop`) already does the right thing
+  once `create`'s identity derivation exists.
+- **`_KIND_ORDER`** (`hassle.sync.apply`) gains `"dashboard"` **last**, after
+  `"automation"`: a dashboard's cards reference entities produced by every
+  other kind, but nothing references a dashboard. Explicit tuple entry, per
+  this document's "new kinds are added explicitly" rule (§3.1.1 step 6) —
+  the sort-last fallback would happen to agree, but the rule stands
+  regardless.
+- **`_CALLER_KEYED_KINDS`** (`hassle.sync.apply`) gains `"dashboard"` (see
+  the identity bullet above); `_create_body` needs **no** injection branch
+  for it — the identity always travels inside the envelope
+  (`meta.url_path`, or `meta: null` ⇒ `"default"`), unlike a script's
+  extrinsic object_id.
+- **Kind registration and `DirectBackend` support are inseparable.** The
+  generic storage-collection fallthrough (`_alist_helpers`/`_acreate_helper`/
+  `_aupdate_helper`/`_adelete_helper`) now asserts `kind in HELPER_DOMAINS` —
+  a kind added to `OBJECT_KINDS` without an explicit dispatch branch in
+  `list_remote`/`create`/`update`/`delete` fails loudly here (an
+  `AssertionError` naming the kind) instead of silently sending a
+  nonexistent `<kind>/list`-style WS command against real HA. This is the
+  same "new kinds are added explicitly" discipline `_KIND_ORDER` already
+  follows, made structural rather than just documented.
+
+See docs/internals/dashboards-design.md §2 (the source-informed HA substrate
+this addendum is built against — DB0-pending) and §4 (the backend/sync
+design this section mirrors) for the full rationale.
+
 ## 4. Where things live
 
 - `hassle.backend` — `Backend` Protocol (`protocol.py`), `FakeBackend`

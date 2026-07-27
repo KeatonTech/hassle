@@ -96,10 +96,16 @@ before a push (the "category already exists" case).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from hassle.ir.canonical import sha256_hash
-from hassle.ir.keys import GROUP_DOMAINS, HELPER_DOMAINS, OBJECT_KINDS, TEMPLATE_DOMAINS
+from hassle.ir.keys import (
+    DASHBOARD_KIND,
+    GROUP_DOMAINS,
+    HELPER_DOMAINS,
+    OBJECT_KINDS,
+    TEMPLATE_DOMAINS,
+)
 from hassle.ir.keys import slugify as _slugify
 from hassle.ir.normalize import normalize_ha
 
@@ -282,6 +288,8 @@ class FakeBackend:
             return self._create_via_flow(kind, config)
         if kind in GROUP_DOMAINS:
             return self._create_group_via_flow(kind, config)
+        if kind == DASHBOARD_KIND:
+            return self._create_dashboard(config)
         # normalize_ha only special-cases kind == "automation" (outer-key
         # pluralization); every other kind gets the same service:->action:
         # recursive rewrite, so passing `kind` straight through is correct.
@@ -333,6 +341,46 @@ class FakeBackend:
         normalized = self._stored_body(kind, identity, normalized)
         self._store[kind][identity] = normalized
         self._writes += 1
+
+    # -- dashboards (Lovelace storage-mode, docs/internals/dashboards-design.md
+    # §4.1) ------------------------------------------------------------------
+    #
+    # `update`/`delete`/`list_remote` need NO dashboard-specific branch at
+    # all: `list_remote` is the plain generic copy (the default dashboard is
+    # simply absent from `self._store["dashboard"]` until `create` puts it
+    # there -- the `config_not_found` analogue, §2.1); `update` falls through
+    # to the generic tail (not TEMPLATE_DOMAINS/GROUP_DOMAINS/HELPER_DOMAINS)
+    # which already runs `normalize_ha` (an identity function for this kind,
+    # §3.3) and stores the envelope verbatim (`_stored_body`'s default
+    # passthrough branch) -- exactly "replaces meta and/or config"; `delete`'s
+    # generic `self._store[kind].pop(identity, None)` already removes the
+    # whole envelope. Only `create` needs a dedicated method: HA rejects a
+    # hyphen-less `url_path` and a duplicate one (§2.2 item 1), neither of
+    # which the generic create path checks for any other kind.
+
+    def _create_dashboard(self, config: dict[str, Any]) -> str:
+        # normalize_ha is an identity function for this kind (§3.3) -- called
+        # here for consistency with every other kind's write path, not
+        # because a dashboard body needs any rewriting (a card's `tap_action`
+        # legitimately keeps a legacy `service:` key, §2.2 item 5, and must
+        # never be touched).
+        normalized = normalize_ha(config, kind=DASHBOARD_KIND)
+        identity = self._derive_identity(DASHBOARD_KIND, normalized)
+        if identity != "default" and "-" not in identity:
+            raise ValueError(
+                f"lovelace/dashboards/create rejected: url_path {identity!r} must "
+                "contain a hyphen (mirrors HA's real create-flow validation -- "
+                "source-informed, docs/internals/dashboards-design.md §2.2 item 1, "
+                "DB0-pending verification)"
+            )
+        if identity in self._store[DASHBOARD_KIND]:
+            raise ValueError(
+                f"lovelace/dashboards/create rejected: a dashboard with url_path "
+                f"{identity!r} already exists"
+            )
+        self._store[DASHBOARD_KIND][identity] = normalized
+        self._writes += 1
+        return identity
 
     # -- config-entry template-helper flows ---------------------------------
     #
@@ -823,4 +871,18 @@ class FakeBackend:
             # which meant a duplicate-create bug (creating a second helper
             # with the same name but a different id) went uncaught in tests.
             return _slugify(str(normalized.get("name") or normalized.get("id") or kind))
+        if kind == DASHBOARD_KIND:
+            # Mirrors `DashboardConfig.identity` (docs/internals/
+            # dashboards-design.md §3.1/§3.2): `meta.url_path` verbatim
+            # (never re-slugified -- a real url_path IS HA's own slug), or
+            # the sentinel `"default"` when `meta` is null/absent. Unlike
+            # every other kind this is NOT HA-assigned -- it's the caller's
+            # own declared url_path, which is why `dashboard` is in
+            # `_CALLER_KEYED_KINDS` (`hassle.sync.apply`).
+            meta = normalized.get("meta")
+            if isinstance(meta, dict):
+                meta = cast("dict[str, Any]", meta)
+                if meta.get("url_path") is not None:
+                    return str(meta["url_path"])
+            return "default"
         raise ValueError(f"unknown object kind {kind!r}")
