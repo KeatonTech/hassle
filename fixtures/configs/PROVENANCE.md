@@ -203,3 +203,22 @@ recompile to the same value" (docs/internals/ha-api-notes.md).
 | Fixture | Source | Construct |
 |---------|--------|-----------|
 | automation_repeat_for_each_template_string.json | Bug observed on a real bundle, `scripts/misc.py` | `repeat` with `for_each` stored as a Jinja template string (not a list), proving the compiler passes it through verbatim and the decompiler emits `repeat_for_each("{{ ... }}")` |
+
+## Dashboard Fixtures
+
+| Fixture | Source | Construct |
+|---------|--------|-----------|
+| dashboard_sections_basic.json | HA dashboard docs, sections-view example | sections view with type: sections, heading card, tile cards, max_columns |
+| dashboard_masonry_legacy.json | HA dashboard docs, legacy masonry example | masonry view with no type key, cards directly at view level, entities card with divider and section special rows |
+| dashboard_panel_map.json | HA dashboard docs, panel view example | panel view type with single map card |
+| dashboard_badges.json | HA dashboard docs, badge examples | modern object-badge shape and legacy bare entity string badges in different views |
+| dashboard_nested_stacks.json | HA dashboard docs, layout example | vertical-stack containing horizontal-stack containing grid with leaf cards |
+| dashboard_conditional_visibility.json | HA dashboard docs, conditional and visibility examples | conditional card with conditions, per-card visibility using state/numeric_state/screen/user conditions |
+| dashboard_entity_filter.json | HA dashboard docs, entity-filter example | entity-filter card with state_filter and presentation card config |
+| dashboard_custom_card.json | HA dashboard docs, custom card note | custom:mushroom-entity-card and custom:bubble-card among built-in tiles |
+| dashboard_strategy.json | HA dashboard docs, strategy dashboard | config with strategy.type: original-states (no views) |
+| dashboard_default.json | HA dashboard docs, default dashboard | meta: null (the default dashboard), simple sections view config |
+| dashboard_actions.json | HA dashboard docs, card action examples | tap_action/hold_action in both legacy action:call-service and modern action:perform-action forms |
+| dashboard_energy_media.json | HA dashboard docs, energy and media cards | energy-date-selection, energy-usage-graph, energy-distribution, energy-sources-table, media-control, thermostat, gauge with severity, history-graph, picture-elements with elements |
+
+All dashboard fixtures are valid Lovelace storage-mode configs per HA docs. They are source-informed; pending DB0 behavioral verification (docs/internals/dashboards-design.md §2).

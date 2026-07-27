@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "url_path": "entity-filter-demo",
+    "title": "Entity Filter",
+    "icon": "mdi:filter-variant",
+    "show_in_sidebar": true,
+    "require_admin": false
+  },
+  "config": {
+    "views": [
+      {
+        "type": "sections",
+        "title": "Filtered Entities",
+        "path": "filtered",
+        "sections": [
+          {
+            "type": "grid",
+            "cards": [
+              {
+                "type": "entity-filter",
+                "entities": [
+                  "light.living_room",
+                  "light.bedroom",
+                  "light.kitchen",
+                  "switch.hallway"
+                ],
+                "state_filter": ["on"],
+                "card": {
+                  "type": "glance"
+                }
+              },
+              {
+                "type": "entity-filter",
+                "entities": [
+                  "climate.living_room",
+                  "climate.bedroom"
+                ],
+                "state_filter": ["off"],
+                "show_empty": false
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "meta": {
+    "url_path": "conditional-visibility",
+    "title": "Conditional & Visibility",
+    "icon": "mdi:eye",
+    "show_in_sidebar": true,
+    "require_admin": false
+  },
+  "config": {
+    "views": [
+      {
+        "type": "sections",
+        "title": "Dynamic Content",
+        "path": "dynamic",
+        "sections": [
+          {
+            "type": "grid",
+            "cards": [
+              {
+                "type": "conditional",
+                "conditions": [
+                  {
+                    "condition": "state",
+                    "entity": "binary_sensor.motion_detector",
+                    "state": "on"
+                  }
+                ],
+                "card": {
+                  "type": "markdown",
+                  "content": "Motion detected!"
+                }
+              },
+              {
+                "type": "tile",
+                "entity": "light.bedroom",
+                "visibility": [
+                  {
+                    "condition": "state",
+                    "entity": "input_boolean.night_mode",
+                    "state": "off"
+                  }
+                ]
+              },
+              {
+                "type": "tile",
+                "entity": "switch.kitchen",
+                "visibility": [
+                  {
+                    "condition": "numeric_state",
+                    "entity": "sensor.temperature",
+                    "above": 20
+                  },
+                  {
+                    "condition": "screen",
+                    "media_query": "(min-width: 1000px)"
+                  }
+                ]
+              },
+              {
+                "type": "entities",
+                "title": "User Conditional",
+                "entities": ["binary_sensor.door"],
+                "visibility": [
+                  {
+                    "condition": "user",
+                    "users": ["user_123"]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

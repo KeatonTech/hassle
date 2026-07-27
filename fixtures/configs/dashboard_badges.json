@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "url_path": "badges-showcase",
+    "title": "Badges",
+    "icon": "mdi:badge",
+    "show_in_sidebar": true,
+    "require_admin": false
+  },
+  "config": {
+    "views": [
+      {
+        "type": "sections",
+        "title": "Modern Badges",
+        "path": "modern",
+        "badges": [
+          {
+            "type": "entity",
+            "entity": "binary_sensor.motion_detector"
+          },
+          {
+            "type": "entity",
+            "entity": "binary_sensor.door_sensor"
+          }
+        ],
+        "sections": [
+          {
+            "type": "grid",
+            "cards": [
+              {
+                "type": "heading",
+                "heading": "Content"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "sections",
+        "title": "Legacy Badges",
+        "path": "legacy",
+        "badges": [
+          "light.hallway",
+          "climate.living_room"
+        ],
+        "sections": [
+          {
+            "type": "grid",
+            "cards": [
+              {
+                "type": "heading",
+                "heading": "Content"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
