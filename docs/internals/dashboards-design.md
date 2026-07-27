@@ -949,23 +949,50 @@ the UI actually writes — §2.2 item 4).
   `custom:` cards assert the raw fallback exactly (they are the backstop
   proof, not a coverage failure — same philosophy as DESIGN §5.8).
 
-**DB4 implementation note (2026-07-27):** on the base DB4 was built against,
-none of the card-builder workstreams (DB3) had merged, so `CARD_REGISTRY`
-(§6.1.1) is empty and every real dashboard fixture's actual leaf cards
-(`tile`, `heading`, `button`, ...) are unmodeled — 0/12 corpus dashboards
-decompile clean, dragging the corpus-wide fraction from ~95% to ~84% purely
-because of a dependency this workstream doesn't own (item 8 of DB4's brief
-anticipated exactly this). Rather than let that sink the established
-project-wide `>= 90%` gate (which has protected automation/script coverage
-since M0), `hassle_dev.decompile_coverage` computes the pass/fail gate over
-every kind EXCEPT `"dashboard"`, and reports dashboards' own (currently 0%,
-expected) fraction separately via new `by_kind`/`full_*` JSON fields — the
-literal "own reported percentage" this section already asks for, just also
-kept out of the blocking signal until a card family lands. Both
-`hassle_dev.decompile_coverage`'s and `hassle.decompiler.coverage`'s own test
-suites assert this split explicitly. The natural follow-up, once a card
-family's `CARD_REGISTRY` rows cover the built-in inventory: fold
-`"dashboard"` back into the gated kind set (or drop the exclusion outright).
+**DB4 implementation note (2026-07-27, superseded below):** on the base DB4
+was first built against, none of the card-builder workstreams (DB3) had
+merged, so `CARD_REGISTRY` (§6.1.1) was empty and every real dashboard
+fixture's actual leaf cards (`tile`, `heading`, `button`, ...) were unmodeled
+— 0/12 corpus dashboards decompiled clean, dragging the corpus-wide fraction
+from ~95% to ~84% purely because of a dependency this workstream didn't own
+yet (item 8 of DB4's brief anticipated exactly this). `hassle_dev.
+decompile_coverage` temporarily computed the pass/fail gate over every kind
+EXCEPT `"dashboard"` for this period, reporting dashboards' own (then 0%)
+fraction separately via `by_kind`/`full_*` JSON fields.
+
+**DB4 interop round (2026-07-27):** with all 47 built-in card builders now
+merged (DB3) and the registry-driven emitter extended to handle two shapes
+those builders introduced — varargs-rows cards (`entities`/`glance`/
+`history_graph`/`statistics_graph`/`calendar`/`logbook`/`map`/
+`picture_glance`: the stored `entities:`/`conditions:` list maps onto the
+builder's one `VAR_POSITIONAL` parameter, resolved via the parameter's own
+name or, when that differs from the stored key, the one `entity_params`
+entry that is itself list-valued) and single-dict-child containers
+(`conditional`/`entity_filter`, `container="card"`, DB3's
+`push_container(..., child_is_list=False)` fix: the child key is absent for
+zero children, a bare dict for exactly one) — the temporary exclusion above
+is **removed**: `hassle_dev.decompile_coverage`'s gate is once again the
+plain corpus-wide fraction, dashboards included, and it holds >= 90%
+(verified: 90/98 = 91.8% blended; automation/script/helper alone unchanged
+at 95.3%). The `by_kind` breakdown stays (still useful for spotting a
+future per-kind regression), but the `full_*`/`gate_excluded_kinds` fields
+are gone along with the exclusion they described.
+
+**Remaining, individually-justified exceptions (8/12 corpus dashboards now
+decompile 100% clean):** `dashboard:custom-cards` (two genuine `custom:`
+cards), `dashboard:auto-generated` (the strategy dashboard, no `views` key
+at all), `dashboard:badges-showcase` (a legacy bare-string badge entry,
+ha-api-notes.md §39), and `dashboard:entity-filter-demo` — ONE card,
+`{"type": "glance"}` with no `entities:` key at all, stored as an
+`entity_filter`'s presentation card. This is NOT a gap: `c.glance()`
+unconditionally writes `body["entities"] = normalize_rows(...)` even for
+zero rows (verified empirically: compiling `c.glance()` produces
+`{"type": "glance", "entities": []}`, never the bare dict), so using the
+typed builder here would materialize a key the original stored form never
+had — raw_card is the only byte-exact choice, the same always-materialized-
+key rule that already governs every varargs-rows family. (This is one more
+exception than a prior, unverified estimate of "exactly 3" assumed; verified
+against the literal fixture and a live compile before writing this note.)
 
 **DB4 implementation note (2026-07-27), badges:** `badge()`'s own docstring
 (§5.2) reads as if its "verbatim dict" passthrough branch also covers a

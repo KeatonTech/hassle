@@ -14,17 +14,42 @@ module's own docstring:
 - **Card emission never hardcodes a card type.** It looks a stored card's
   `type` up in `CARD_REGISTRY` (docs/internals/dashboards-design.md §6.1.1),
   resolves the row's `builder` name to the real callable, and drives the
-  call generically off `inspect.signature`. `CardSpec.declared` (an
-  optional, additive field a later registry-backfill workstream may
-  populate) is read via `getattr(spec, "declared", frozenset())` so this
-  module works unchanged whether or not that field exists yet — when it's
-  absent/empty, every REQUIRED (no-default) parameter is still resolved by
-  name (a call can't omit one) and every OPTIONAL leftover key routes
-  through `extra=` wholesale; when populated, `declared` is the
-  authoritative known-kwarg set instead. On the base this was written
-  against, `CARD_REGISTRY` is empty (no card-builder family has merged), so
-  every leaf/container card currently decompiles to `raw_card` — expected,
-  and the tracked coverage signal that a family is still pending, not a bug.
+  call generically off `inspect.signature`. `CardSpec.declared` is read via
+  `getattr(spec, "declared", frozenset())` so this module works unchanged
+  whether or not that field is populated for a given row — absent/empty,
+  every REQUIRED (no-default) parameter is still resolved by name (a call
+  can't omit one) and every OPTIONAL leftover key routes through `extra=`
+  wholesale; populated, `declared` is the authoritative known-kwarg set
+  instead.
+- **Varargs-rows cards** (`entities`/`glance`/`history_graph`/
+  `statistics_graph`/`calendar`/`logbook`/`map`/`picture_glance`, plus
+  `conditional`'s `conditions=`): the builder has exactly one
+  `VAR_POSITIONAL` parameter, whose OWN Python name doesn't always match the
+  stored key that feeds it (`entities`/`glance` name theirs `*rows` while
+  storing under `"entities"`). `_resolve_rows_key` tries the parameter's own
+  name against the stored body first, then falls back to the one
+  `entity_params` entry that is itself list-valued (disambiguates
+  `picture_glance`'s two `entity_params` entries — `entities`, the rows list,
+  vs. `camera_image`, a plain scalar kwarg). Each row renders through the
+  `cond` inverter first (covers `conditional`'s condition rows), falling
+  back to the entity-position renderer for a string / a verbatim literal for
+  a dict (a dict row is stored via `copy.deepcopy`, never rewritten, so a
+  literal is always byte-exact). Every one of these builders unconditionally
+  materializes its stored key even for zero rows, so a card missing the key
+  entirely stays `raw_card` — not a gap, the same always-materialized-key
+  rule as any other required-parameter gap (see `dashboard:entity-filter-demo`
+  in dashboards-design.md §6.2's coverage note for the concrete, verified
+  example).
+- **Single-dict-child containers** (`container="card"`, `conditional`/
+  `entity_filter`): the compiler's `push_container(..., child_is_list=False)`
+  convention (a DB3 review-round fix) leaves the child key entirely ABSENT
+  for zero children, a bare dict for exactly one — never a list. Treating
+  "absent" as zero children generically (rather than forcing `raw_card`) is
+  what makes `entity_filter`'s legitimate zero-children shape decompile
+  typed; it's harmless for `conditional` too (a real compiled conditional
+  card always has its `card:` key — an additional compile-time-only arity
+  guard this module has no static way to see per stored row, but also never
+  needs to, since the shape it would reject never reaches storage).
 - **`section()` and `view()` are deliberately asymmetric** in how they treat
   an unmodeled key: a view's stray key round-trips through its `extra=`
   valve, but ANY key `section()` doesn't itself model forces the whole

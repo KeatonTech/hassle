@@ -11,22 +11,18 @@ command) rather than duplicated, so the two never drift on the fixture-name
 convention (dashboards-design.md §7's ``dashboard_*`` prefix landed in both at
 once via that shared function).
 
-**Dashboard exclusion from the gate (temporary, tracked, docs/internals/dashboards-design.md
-§6.2):** ``CARD_REGISTRY`` (``hassle.compiler.dashboards.card_registry``) is
-populated by the card-builder workstreams (DB3); on a base where none of them
-have merged yet, every real dashboard fixture's actual cards (``tile``,
-``heading``, ``button``, ...) are unmodeled and fall back to ``raw_card`` --
-the corpus-wide ``>= 90%`` fraction would otherwise drop from ~95% to ~84%
-purely because of a dependency this workstream doesn't own, not because
-automation/script coverage regressed. The gate (``clean_fraction`` / exit
-code) is therefore computed over every kind EXCEPT ``"dashboard"``, keeping
-its established meaning (protect automation/script/helper coverage) intact;
-dashboards get their OWN reported percentage instead (``by_kind["dashboard"]``
-and the ``full_*`` fields), exactly as §6.2 asks for -- never silently
-hidden, just not blocking on a gap this workstream can't close by itself.
-Once a card family lands and ``CARD_REGISTRY`` covers the built-in inventory,
-folding ``"dashboard"`` back into ``_GATE_KINDS`` (or removing the exclusion
-entirely) is the natural follow-up.
+**Dashboards are folded into the gate (docs/internals/dashboards-design.md
+§6.2)**: with all 47 built-in card builders merged (workstream DB3) and the
+registry-driven decompiler emitter handling the varargs-rows and
+single-dict-child container conventions those builders use, the corpus-wide
+clean fraction holds >= 90% with dashboards included -- no exclusion needed.
+(An earlier, temporary revision of this module excluded ``"dashboard"`` from
+the gate while ``CARD_REGISTRY`` was still empty on a pre-DB3 base; see git
+history / the superseded note this replaced for that period's rationale.)
+Dashboards still get their own reported percentage via ``by_kind`` below,
+exactly as §6.2 asks for -- not because the gate needs the split anymore,
+but because a per-kind breakdown is useful for spotting a future regression
+in one specific kind even while the corpus-wide fraction holds.
 """
 
 from __future__ import annotations
@@ -40,10 +36,6 @@ from hassle.ir.models import IRObject, parse
 from hassle_dev.corpus import _kind_for
 
 GATE = 0.90
-
-#: Kinds excluded from the pass/fail gate (see module docstring). Reported in
-#: full regardless -- `by_kind` and the `full_*` fields never omit them.
-_GATE_EXCLUDED_KINDS = frozenset({"dashboard"})
 
 
 def load_configs_as_ir(configs_dir: Path) -> dict[str, IRObject]:
@@ -63,20 +55,16 @@ def load_configs_as_ir(configs_dir: Path) -> dict[str, IRObject]:
 def run_decompile_coverage(configs_dir: Path, out_file: Path) -> tuple[int, dict[str, Any]]:
     """Analyze ``configs_dir`` and write the JSON report to ``out_file``.
 
-    Returns ``(exit_code, report_dict)``: exit code 0 if the GATE-relevant
-    clean fraction (every kind except ``_GATE_EXCLUDED_KINDS``, see module
-    docstring) meets the >= 90% gate, else 1. The JSON report additionally
-    carries the full (every-kind) totals under `full_*` keys and a `by_kind`
-    breakdown -- every kind's own clean fraction, dashboards included.
+    Returns ``(exit_code, report_dict)``: exit code 0 if the corpus-wide
+    clean fraction (every kind, dashboards included) meets the >= 90% gate,
+    else 1. The JSON report additionally carries a `by_kind` breakdown --
+    every kind's own clean fraction -- so a future regression in one
+    specific kind is visible even while the blended fraction still holds.
     """
     objects = load_configs_as_ir(configs_dir)
     kind_of: dict[str, str] = {key: obj.kind() for key, obj in objects.items()}
 
-    full_report = analyze_coverage(objects)
-    gated_objects = {
-        key: obj for key, obj in objects.items() if kind_of[key] not in _GATE_EXCLUDED_KINDS
-    }
-    gate_report = analyze_coverage(gated_objects)
+    report = analyze_coverage(objects)
 
     kinds = sorted({kind_of[key] for key in objects})
     by_kind: dict[str, Any] = {}
@@ -84,14 +72,10 @@ def run_decompile_coverage(configs_dir: Path, out_file: Path) -> tuple[int, dict
         kind_objects = {key: obj for key, obj in objects.items() if kind_of[key] == kind}
         by_kind[kind] = analyze_coverage(kind_objects).to_json_dict()
 
-    report_dict = gate_report.to_json_dict()
-    report_dict["full_total_objects"] = full_report.total_objects
-    report_dict["full_clean_objects"] = full_report.clean_objects
-    report_dict["full_clean_fraction"] = full_report.clean_fraction
-    report_dict["gate_excluded_kinds"] = sorted(_GATE_EXCLUDED_KINDS)
+    report_dict = report.to_json_dict()
     report_dict["by_kind"] = by_kind
 
     out_file.parent.mkdir(parents=True, exist_ok=True)
     out_file.write_text(json.dumps(report_dict, indent=2) + "\n", encoding="utf-8")
-    exit_code = 0 if gate_report.clean_fraction >= GATE else 1
+    exit_code = 0 if report.clean_fraction >= GATE else 1
     return exit_code, report_dict
