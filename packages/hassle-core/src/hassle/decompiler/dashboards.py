@@ -60,7 +60,6 @@ from hassle.compiler.dashboards.card_registry import (
     CardSpec,
     ensure_builtin_families_loaded,
 )
-
 from hassle.compiler.dashboards.decorators import DEFAULT_IDENTITY
 from hassle.compiler.dashboards.structure import (
     _VIEW_OPTION_ORDER,  # pyright: ignore[reportPrivateUsage]
