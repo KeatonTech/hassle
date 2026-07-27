@@ -104,6 +104,7 @@ def test_manifest_lock_tracks_every_seeded_object(sample_bundle: Path) -> None:
         "automation:landing_light_on_motion",
         "input_boolean:guest_mode",
         "script:flash_porch_light",
+        "dashboard:home-main",
     }
 
 
@@ -139,7 +140,7 @@ def test_untouched_bundle_test_output_shows_the_seeded_xfail(sample_bundle: Path
     assert "xfail" in result.test_output.lower()
 
 
-# -- 4. emit_tasks' 10 prompts' presuppositions, pinned against this bundle --
+# -- 4. emit_tasks' 11 prompts' presuppositions, pinned against this bundle --
 
 
 def _misc_source(bundle: Path) -> str:
@@ -264,7 +265,24 @@ def test_presupposition_fix_validation_finding(sample_bundle: Path) -> None:
     assert result.validate_passed is True, result.validate_output
 
 
-def test_all_ten_categories_have_a_presupposition_test() -> None:
+def test_presupposition_add_dashboard_card(sample_bundle: Path) -> None:
+    """Task 11 (dashboards-design.md §10): the Home dashboard's 'Lights'
+    section already has cards for the existing lights, but NOT for either of
+    the two just-added lights the prompt names -- and the registry snapshot
+    has both new entities as real, validate-able ids for the session to add
+    cards for."""
+    src = (sample_bundle / "dashboards" / "home_main.py").read_text(encoding="utf-8")
+    assert "light.hallway" in src
+    assert "light.kitchen" in src
+    assert "light.office_ceiling" not in src
+    assert "light.office_desk" not in src
+    registry = json.loads((sample_bundle / ".hassle" / "registry.json").read_text(encoding="utf-8"))
+    entity_ids = {e["entity_id"] for e in registry["entities"]}
+    assert "light.office_ceiling" in entity_ids
+    assert "light.office_desk" in entity_ids
+
+
+def test_all_eleven_categories_have_a_presupposition_test() -> None:
     """Meta-check: every category `emit_tasks` returns has a same-named
     presupposition test above (keeps this file honest as the tasks evolve)."""
     tasks = emit_tasks(Path("irrelevant-for-this-check"))
