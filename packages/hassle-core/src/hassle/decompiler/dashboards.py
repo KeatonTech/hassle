@@ -55,15 +55,12 @@ import inspect
 from dataclasses import dataclass
 from typing import Any, cast
 
-# CARD_REGISTRY rows are registered as an import side effect of the card
-# family modules, which `hassle.cards` imports. The decompiler must force
-# that import itself: an emitter that only imported `card_registry` would
-# see an EMPTY registry (and raw-fall every card) whenever nothing else in
-# the process had imported `hassle.cards` first — exactly what happened to
-# `hassle-dev decompile-coverage` before this line existed. Regression:
-# test_decompile_dashboards.py::test_typed_emission_does_not_depend_on_import_order.
-import hassle.cards  # noqa: F401  (registry-population side effect)
-from hassle.compiler.dashboards.card_registry import CARD_REGISTRY, CardSpec
+from hassle.compiler.dashboards.card_registry import (
+    CARD_REGISTRY,
+    CardSpec,
+    ensure_builtin_families_loaded,
+)
+
 from hassle.compiler.dashboards.decorators import DEFAULT_IDENTITY
 from hassle.compiler.dashboards.structure import (
     _VIEW_OPTION_ORDER,  # pyright: ignore[reportPrivateUsage]
@@ -71,6 +68,15 @@ from hassle.compiler.dashboards.structure import (
 from hassle.decompiler.actions import INDENT, indent_lines
 from hassle.decompiler.exprs import render_entity_position, render_literal
 from hassle.ir.models import DashboardConfig
+
+# The registry rows are an import side effect of the family modules; a process
+# that never imported the public `hassle.cards` namespace would otherwise see
+# an EMPTY registry here and raw-fall every card (`hassle-dev
+# decompile-coverage` did exactly that). The loader lives in card_registry —
+# importing `hassle.cards` from the decompiler would be an upward import the
+# package-layering test rejects. Regression:
+# test_decompile_dashboards.py::test_typed_emission_does_not_depend_on_import_order.
+ensure_builtin_families_loaded()
 
 # The registry metadata kwargs, in the decorator's own emission order
 # (decorators.py's `DASHBOARD_OPTIONS`, duplicated here as a plain literal

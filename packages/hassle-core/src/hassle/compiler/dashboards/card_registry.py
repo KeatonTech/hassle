@@ -148,3 +148,24 @@ STRUCTURE_REGISTRY: dict[str, CardSpec] = {
         context_manager=True,
     ),
 }
+
+
+def ensure_builtin_families_loaded() -> None:
+    """Populate ``CARD_REGISTRY`` with every built-in card family.
+
+    Rows are registered as an import side effect of the family modules under
+    ``hassle.compiler.dashboards.cards``. ``hassle/cards.py`` (the public
+    namespace) imports them all anyway, but a consumer that never touches the
+    public surface — the decompiler's registry-driven emitter, tier-2
+    extraction — must not depend on someone else having imported it first
+    (``hassle-dev decompile-coverage`` raw-fell every card exactly that way),
+    and must not import ``hassle.cards`` itself either (an upward import the
+    package-layering test rightly rejects). Such consumers call this instead.
+    Function-local imports keep the family modules' own ``card_registry``
+    imports cycle-free. A NEW family module must be added here as well as to
+    ``hassle/cards.py`` (the registry conformance test cross-checks the two).
+    """
+    import importlib
+
+    for family in ("display", "domain", "energy", "layout", "media", "visual"):
+        importlib.import_module(f"hassle.compiler.dashboards.cards.{family}")
