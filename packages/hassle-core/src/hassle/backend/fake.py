@@ -337,11 +337,7 @@ class FakeBackend:
             # longer exists in the store -- an upserting fake would let that
             # mistake pass silently instead of raising like real HA.
             raise ValueError(f"WS command failed: Unable to find {kind}_id {identity}")
-        if (
-            kind == DASHBOARD_KIND
-            and identity != "default"
-            and identity not in self._store[kind]
-        ):
+        if kind == DASHBOARD_KIND and identity != "default" and identity not in self._store[kind]:
             # Fidelity with real HA (mirrors the HELPER_DOMAINS guard just
             # above, should-fix 3(b)): `DirectBackend._aresolve_dashboard_id`
             # raises when a non-default `url_path` has no known registry

@@ -415,7 +415,13 @@ def test_update_sends_full_allowlisted_registry_state_never_url_path() -> None:
     # BLOCKER: url_path must never be forwarded (the fake client would raise
     # HaApiError if it were, catching a regression at the schema level too).
     assert "url_path" not in update_payload
-    assert set(update_payload) == {"dashboard_id", "title", "icon", "show_in_sidebar", "require_admin"}
+    assert set(update_payload) == {
+        "dashboard_id",
+        "title",
+        "icon",
+        "show_in_sidebar",
+        "require_admin",
+    }
     # Should-fix 1: full desired state, not presence-based.
     assert update_payload["icon"] is None
     assert update_payload["show_in_sidebar"] is True

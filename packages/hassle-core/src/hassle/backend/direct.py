@@ -95,8 +95,7 @@ def _dashboard_registry_payload(meta: dict[str, Any]) -> dict[str, Any]:
     defaults rather than being omitted."""
     if not meta.get("title"):
         raise ValueError(
-            "dashboard config's meta has no 'title' (required for "
-            "lovelace/dashboards/update)"
+            "dashboard config's meta has no 'title' (required for lovelace/dashboards/update)"
         )
     payload: dict[str, Any] = {"title": meta["title"], "icon": meta.get("icon")}
     for field_name in ("show_in_sidebar", "require_admin"):
@@ -104,6 +103,7 @@ def _dashboard_registry_payload(meta: dict[str, Any]) -> dict[str, Any]:
     assert set(payload) == set(_DASHBOARD_REGISTRY_FIELDS)
     assert "url_path" not in payload
     return payload
+
 
 # The template integration's config-flow menu step_id per domain
 # (docs/internals/ha-api-notes.md §26.1); verified against a real HA instance by
