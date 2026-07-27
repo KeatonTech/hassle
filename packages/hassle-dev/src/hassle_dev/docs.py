@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import hassle
-from hassle.docs.construct_map import missing_names
+from hassle.docs.construct_map import missing_card_types, missing_names
 from hassle.docs.cookbook import generate_cookbook as _generate_cookbook
 from hassle.docs.cookbook import load_recipes
 from hassle.docs.dsl_reference import generate_dsl_reference as _generate_dsl_reference
@@ -36,6 +36,7 @@ def find_repo_root(start: Path | None = None) -> Path | None:
 @dataclass
 class DocsReport:
     missing_dsl_names: set[str] = field(default_factory=set)
+    missing_card_types: set[str] = field(default_factory=set)
     cookbook_recipe_count: int = 0
     cookbook_findings: list[str] = field(default_factory=list)
     cookbook_tests_passed: bool = True
@@ -49,6 +50,7 @@ class DocsReport:
     def ok(self) -> bool:
         return (
             not self.missing_dsl_names
+            and not self.missing_card_types
             and not self.cookbook_findings
             and self.cookbook_tests_passed
             and not self.dsl_drifted
@@ -106,6 +108,13 @@ def run_docs(repo_root: Path, *, update: bool) -> DocsReport:
 
     # -- test 1: DSL.md coverage -------------------------------------------
     report.missing_dsl_names = missing_names(list(hassle.__all__))
+    from hassle.compiler.dashboards.card_registry import (
+        CARD_REGISTRY,
+        ensure_builtin_families_loaded,
+    )
+
+    ensure_builtin_families_loaded()
+    report.missing_card_types = missing_card_types(list(CARD_REGISTRY))
     dsl_text = _generate_dsl_reference(dsl_fixtures)
     dsl_path = docs_dir / "DSL.md"
     if update:

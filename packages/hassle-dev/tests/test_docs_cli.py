@@ -28,6 +28,11 @@ def test_run_docs_against_real_repo_reports_no_missing_names() -> None:
     assert report.missing_dsl_names == set(), report.missing_dsl_names
 
 
+def test_run_docs_against_real_repo_reports_no_missing_card_types() -> None:
+    report = run_docs(REPO_ROOT, update=False)
+    assert report.missing_card_types == set(), report.missing_card_types
+
+
 def test_run_docs_against_real_repo_reports_no_cookbook_findings() -> None:
     report = run_docs(REPO_ROOT, update=False)
     assert report.cookbook_findings == [], report.cookbook_findings

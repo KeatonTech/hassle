@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from hassle.docs.construct_map import EXEMPT_NAMES, NAME_TO_CASES
+from hassle.docs.construct_map import CARD_TYPE_TO_CASES, EXEMPT_NAMES, NAME_TO_CASES
 
 _ERROR_DOCS: dict[str, str] = {
     "OnlyIfBlockCoverageError": (
@@ -138,8 +138,7 @@ def _load_case(fixtures_root: Path, case: str) -> tuple[str, dict[str, Any]]:
     return source, ir
 
 
-def _pair_section(name: str, fixtures_root: Path) -> str:
-    cases = NAME_TO_CASES[name]
+def _pair_section(name: str, cases: list[str], fixtures_root: Path) -> str:
     primary = cases[0]
     source, ir = _load_case(fixtures_root, primary)
     ir_text = json.dumps(ir, indent=2, ensure_ascii=False, sort_keys=True)
@@ -276,17 +275,51 @@ by bundles and tests. These don't compile to an HA YAML shape — the error text
 
 """
 
+_CARD_REFERENCE_HEADER = """\
+## Card reference (`hassle.cards`)
+
+Dashboard card builders live in the dedicated `hassle.cards` namespace, not in
+`hassle.__all__` (docs/internals/dashboards-design.md §5.1 — HA card type names
+like `area`/`calendar`/`button` collide with the frozen top-level surface). Every
+built-in card type Hassle models gets its own section below, sourced from the
+same `fixtures/dsl/dashboard_cards_*` golden fixtures `hassle-dev goldens`
+verifies — pattern-match on these exactly like the constructs above.
+
+"""
+
+
+def _card_reference_section(fixtures_root: Path) -> str:
+    """The card reference section: one `_pair_section` per registered card
+    type, keyed by its qualified builder name (``c.tile``, ``c.thermostat``,
+    …) -- sourced from :data:`hassle.docs.construct_map.CARD_TYPE_TO_CASES`,
+    which is itself keyed by `CARD_REGISTRY`'s own type strings so the
+    coverage gate (`missing_card_types`) can be checked against the same
+    registry DB3's builders/DB4's decompiler/DB7's validation all read."""
+    from hassle.compiler.dashboards.card_registry import (
+        CARD_REGISTRY,
+        ensure_builtin_families_loaded,
+    )
+
+    ensure_builtin_families_loaded()
+    parts = [_CARD_REFERENCE_HEADER]
+    for card_type, cases in CARD_TYPE_TO_CASES.items():
+        builder_name = CARD_REGISTRY[card_type].builder
+        parts.append(_pair_section(builder_name, cases, fixtures_root))
+    return "\n".join(parts)
+
 
 def generate_dsl_reference(fixtures_root: Path) -> str:
     """Generate the full contents of `docs/DSL.md`.
 
     ``fixtures_root`` is the `fixtures/dsl/` directory. Deterministic:
     iterates `NAME_TO_CASES` in its own definition order (a stable dict,
-    Python 3.7+) and `EXEMPT_NAMES` sorted.
+    Python 3.7+), `EXEMPT_NAMES` sorted, then `CARD_TYPE_TO_CASES` in its own
+    definition order (also a stable dict).
     """
     parts = [_HEADER]
     for name in NAME_TO_CASES:
-        parts.append(_pair_section(name, fixtures_root))
+        parts.append(_pair_section(name, NAME_TO_CASES[name], fixtures_root))
     for name in sorted(EXEMPT_NAMES):
         parts.append(f"### `{name}`\n\n{_ERROR_DOCS[name]}\n")
+    parts.append(_card_reference_section(fixtures_root))
     return "\n".join(parts)
