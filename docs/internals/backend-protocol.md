@@ -397,7 +397,7 @@ internal to `FakeBackend`/`DirectBackend`.
   |---|---|
   | `list_remote("dashboard")` | `lovelace/dashboards/list` → for each registry item (mode `!= "storage"` filtered out, I1) plus the default: `lovelace/config` → compose the envelope. A `config_not_found` error (the never-customized-default case) omits that dashboard from the result entirely. |
   | `create` | non-default: `lovelace/dashboards/create` (from `meta`, plus `mode: "storage"`) then `lovelace/config/save`; default (`meta: null`): `lovelace/config/save(url_path=null)` only — no registry call at all. |
-  | `update` | `lovelace/dashboards/update` when `meta` is not null (dashboard_id resolved from `url_path` via `lovelace/dashboards/list`, cached per connection) and always `lovelace/config/save` for `config`. |
+  | `update` | when `meta` is not null: `lovelace/dashboards/update` (dashboard_id resolved from `url_path` via `lovelace/dashboards/list`, cached per connection) with the FULL desired state of exactly `{title, icon, show_in_sidebar, require_admin}` — built from an explicit allowlist, never from `meta`'s own keys, and never `url_path` (PREVENT_EXTRA schema; see the payload/convergence bullet below). Always `lovelace/config/save` for `config`. |
   | `delete` | non-default: `lovelace/dashboards/delete`; default: `lovelace/config/delete` (reverts to auto-generated, enumerated loudly in the plan like every delete). |
 
 - **`dashboard_id` stays transport-internal.** `DirectBackend` re-resolves it
@@ -414,6 +414,25 @@ internal to `FakeBackend`/`DirectBackend`.
   (best-effort — a failed cleanup never masks the original error) before
   re-raising, so the apply engine's snapshot/rollback model (DESIGN §8.2)
   keeps holding at the object level.
+- **Update payload: explicit allowlist, full desired state** (DB5 2026-07-27
+  implementation finding, reviewer-blocked and fixed forward before merge to
+  `main` — see docs/internals/dashboards-design.md §4.1 for the full
+  writeup). HA's real `lovelace/dashboards/update` schema is PREVENT_EXTRA
+  over exactly `title`/`icon`/`show_in_sidebar`/`require_admin` —
+  `url_path` is deliberately excluded (a url_path change is delete+create,
+  never an in-place rename, I2). `DirectBackend._dashboard_registry_payload`
+  builds the payload from that explicit allowlist, **never** by copying
+  `meta`'s own keys (which always includes `url_path`, and would 400 with
+  `invalid_format` if forwarded). The payload also carries the kind's FULL
+  desired state on every update, never a presence-based subset: HA's
+  registry item is a storage collection that MERGES an update
+  (`{**item, **update}`) rather than replacing it outright, so `icon` is
+  sent explicitly as `None` when absent from `meta` (clearing it) and
+  `show_in_sidebar`/`require_admin` fall back to source-informed defaults
+  (`True`/`False`, DB0-pending) rather than being omitted — a
+  presence-based payload would leave a locally-deleted field's stale remote
+  value in place forever, silently re-planning the same ineffective update
+  on every subsequent push.
 - **No normalization for this kind.** `normalize_ha`/`modernize_for_comparison`
   are exact identity functions for `kind == "dashboard"` (docs/internals/
   dashboards-design.md §3.3) — a card's `tap_action`/`hold_action` legitimately
@@ -422,11 +441,17 @@ internal to `FakeBackend`/`DirectBackend`.
   for consistency with every other kind's code path; the guard is what makes
   that a no-op, not a kind-specific skip in `FakeBackend` itself.
 - **`FakeBackend`** stores the envelope verbatim, keyed by the identity rule
-  above; `create` rejects a hyphen-less `url_path` and a duplicate `url_path`
-  (mirroring the two HA-side registry rejections DB0 is expected to confirm);
-  `update` and `delete` need no dashboard-specific branch at all — the
-  generic tail (envelope replace / dict `.pop`) already does the right thing
-  once `create`'s identity derivation exists.
+  above; `create` rejects a hyphen-less `url_path` (keyed off `meta is None`
+  — the actual default-dashboard marker, never the derived identity string,
+  so a real dashboard whose `url_path` happens to be the literal string
+  `"default"` is still rejected) and a duplicate `url_path` (mirroring the
+  two HA-side registry rejections DB0 is expected to confirm); `update`
+  needs one small fidelity guard (an unknown non-default identity raises,
+  mirroring `DirectBackend._aresolve_dashboard_id` — the default dashboard
+  is exempt, since real HA's `config/save` genuinely upserts it) but
+  otherwise falls through to the generic tail; `delete` needs no
+  dashboard-specific branch at all (the generic dict `.pop` already does
+  the right thing).
 - **`_KIND_ORDER`** (`hassle.sync.apply`) gains `"dashboard"` **last**, after
   `"automation"`: a dashboard's cards reference entities produced by every
   other kind, but nothing references a dashboard. Explicit tuple entry, per

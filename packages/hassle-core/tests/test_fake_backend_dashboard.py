@@ -85,6 +85,20 @@ def test_create_rejects_duplicate_default() -> None:
         backend.create("dashboard", _envelope(None))
 
 
+def test_create_rejects_url_path_literally_named_default() -> None:
+    """Should-fix 3(a) regression: the hyphen exemption must be keyed off
+    ``meta is None`` (the actual default-dashboard marker), never off the
+    derived identity STRING -- a real, non-default dashboard whose declared
+    `url_path` happens to be the string "default" is not exempt from HA's
+    unconditional hyphen rule."""
+    backend = FakeBackend()
+    with pytest.raises(ValueError, match="hyphen"):
+        backend.create(
+            "dashboard",
+            {"meta": {"url_path": "default", "title": "Not The Default"}, "config": {"views": []}},
+        )
+
+
 def test_create_does_not_normalize_tap_action_service_key() -> None:
     # §3.3: normalize_ha's generic service:->action: rewrite must never touch
     # a dashboard body -- a card's tap_action legitimately uses the legacy
@@ -120,6 +134,31 @@ def test_update_replaces_meta_and_config() -> None:
     stored = backend.list_remote("dashboard")[identity]
     assert stored["meta"]["title"] == "Climate V2"
     assert stored["config"]["views"][0]["cards"] == [{"type": "markdown"}]
+
+
+def test_update_raises_for_unknown_non_default_dashboard() -> None:
+    """Should-fix 3(b) regression: `DirectBackend` raises when an UPDATE
+    targets a `url_path` with no known registry item (`_aresolve_dashboard_id`)
+    -- `FakeBackend` silently upserted instead, a fidelity gap that would let
+    a rollback-recreates-via-update mistake (the same bug class the
+    HELPER_DOMAINS guard above already exists to catch) pass unnoticed for
+    dashboards specifically."""
+    backend = FakeBackend()
+    with pytest.raises(ValueError, match="climate-control"):
+        backend.update(
+            "dashboard",
+            "climate-control",
+            _envelope("climate-control"),
+        )
+
+
+def test_update_upserts_default_dashboard_even_if_not_yet_created() -> None:
+    # The default dashboard is EXEMPT from the missing-identity guard: real
+    # HA's `lovelace/config/save(url_path=null)` genuinely upserts it (there
+    # is no registry item that could ever be "missing").
+    backend = FakeBackend()
+    backend.update("dashboard", "default", _envelope(None))
+    assert "default" in backend.list_remote("dashboard")
 
 
 def test_delete_removes_whole_envelope() -> None:

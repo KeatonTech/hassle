@@ -337,6 +337,18 @@ class FakeBackend:
             # longer exists in the store -- an upserting fake would let that
             # mistake pass silently instead of raising like real HA.
             raise ValueError(f"WS command failed: Unable to find {kind}_id {identity}")
+        if kind == DASHBOARD_KIND and identity != "default" and identity not in self._store[kind]:
+            # Fidelity with real HA (mirrors the HELPER_DOMAINS guard just
+            # above, should-fix 3(b)): `DirectBackend._aresolve_dashboard_id`
+            # raises when a non-default `url_path` has no known registry
+            # item -- an UPDATE never upserts a dashboard's registry item
+            # into existence. The DEFAULT dashboard is exempt: real HA's
+            # `lovelace/config/save(url_path=null)` genuinely upserts it,
+            # since there is no registry item that could ever be "missing".
+            raise ValueError(
+                f"lovelace: no dashboard registry item found for url_path {identity!r} "
+                "-- an UPDATE must target an existing dashboard, never a recreate"
+            )
         normalized = normalize_ha(config, kind=kind)
         normalized = self._stored_body(kind, identity, normalized)
         self._store[kind][identity] = normalized
@@ -345,18 +357,19 @@ class FakeBackend:
     # -- dashboards (Lovelace storage-mode, docs/internals/dashboards-design.md
     # §4.1) ------------------------------------------------------------------
     #
-    # `update`/`delete`/`list_remote` need NO dashboard-specific branch at
-    # all: `list_remote` is the plain generic copy (the default dashboard is
+    # `delete`/`list_remote` need NO dashboard-specific branch at all:
+    # `list_remote` is the plain generic copy (the default dashboard is
     # simply absent from `self._store["dashboard"]` until `create` puts it
-    # there -- the `config_not_found` analogue, §2.1); `update` falls through
-    # to the generic tail (not TEMPLATE_DOMAINS/GROUP_DOMAINS/HELPER_DOMAINS)
-    # which already runs `normalize_ha` (an identity function for this kind,
-    # §3.3) and stores the envelope verbatim (`_stored_body`'s default
-    # passthrough branch) -- exactly "replaces meta and/or config"; `delete`'s
-    # generic `self._store[kind].pop(identity, None)` already removes the
-    # whole envelope. Only `create` needs a dedicated method: HA rejects a
-    # hyphen-less `url_path` and a duplicate one (§2.2 item 1), neither of
-    # which the generic create path checks for any other kind.
+    # there -- the `config_not_found` analogue, §2.1); `delete`'s generic
+    # `self._store[kind].pop(identity, None)` already removes the whole
+    # envelope. `update` needs one small guard above (the missing-identity
+    # fidelity check, should-fix 3(b)) but otherwise falls through to the
+    # generic tail, which already runs `normalize_ha` (an identity function
+    # for this kind, §3.3) and stores the envelope verbatim (`_stored_body`'s
+    # default passthrough branch) -- exactly "replaces meta and/or config".
+    # Only `create` needs a dedicated method: HA rejects a hyphen-less
+    # `url_path` and a duplicate one (§2.2 item 1), neither of which the
+    # generic create path checks for any other kind.
 
     def _create_dashboard(self, config: dict[str, Any]) -> str:
         # normalize_ha is an identity function for this kind (§3.3) -- called
@@ -366,7 +379,13 @@ class FakeBackend:
         # never be touched).
         normalized = normalize_ha(config, kind=DASHBOARD_KIND)
         identity = self._derive_identity(DASHBOARD_KIND, normalized)
-        if identity != "default" and "-" not in identity:
+        # Should-fix 3(a): the hyphen exemption is keyed off `meta is None`
+        # (the ACTUAL default-dashboard marker), never off the derived
+        # identity STRING -- a real, non-default dashboard whose declared
+        # `url_path` happens to be the literal string "default" is NOT
+        # exempt from HA's unconditional hyphen rule.
+        is_default = normalized.get("meta") is None
+        if not is_default and "-" not in identity:
             raise ValueError(
                 f"lovelace/dashboards/create rejected: url_path {identity!r} must "
                 "contain a hyphen (mirrors HA's real create-flow validation -- "
