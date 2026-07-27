@@ -53,19 +53,15 @@ def test_decompile_coverage_writes_json_artifact(tmp_path: Path) -> None:
     assert "inline single-trigger form" in by_key["automation:automation_legacy_platform_naming"]
     assert "templated delay" in by_key["script:script_with_fields"]
 
-    # Dashboards get their own reported percentage (dashboards-design.md §6.2)
-    # rather than being folded into the gate: on a base where the card-builder
-    # workstreams (DB3) haven't merged, `CARD_REGISTRY` is empty and virtually
-    # every real dashboard fixture's cards fall back to `raw_card`, which would
-    # otherwise sink the corpus-wide gate purely on a dependency this
-    # workstream doesn't own. The `full_*`/`by_kind` fields report the true,
-    # unhidden picture; the top-level gate fields stay scoped to the kinds
-    # this workstream is actually responsible for.
-    assert report["gate_excluded_kinds"] == ["dashboard"]
+    # Dashboards are folded into the gate (dashboards-design.md §6.2): with
+    # DB3's 47 card builders merged, the corpus-wide fraction holds >= 90%
+    # with dashboards included (asserted above via the top-level
+    # `clean_fraction`). They still get their own reported percentage via
+    # `by_kind`, so a future regression in one specific kind is visible even
+    # while the blended fraction still holds.
     assert "dashboard" in report["by_kind"]
     assert report["by_kind"]["dashboard"]["total_objects"] >= 10
-    assert report["full_total_objects"] >= report["total_objects"]
-    assert report["full_clean_fraction"] <= report["clean_fraction"]
+    assert report["by_kind"]["dashboard"]["clean_objects"] >= 8
 
 
 def test_decompile_coverage_fails_gate_when_forced_low(tmp_path: Path) -> None:

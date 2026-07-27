@@ -8,9 +8,11 @@ every one of the 12 ``fixtures/configs/dashboard_*.json`` fixtures generically
 via ``tests/_corpus.py``'s new ``dashboard`` prefix. This module tests the
 things the corpus can't pin on its own: the raw ladder table-tested at every
 level (never rawing a parent merely because a child rawed), naming, the
-generic CARD_REGISTRY-driven emitter's container-recursion tolerance (using a
-locally-registered fake ``CardSpec`` -- no real card family has merged on this
-base), the ``cond`` vocabulary, and import-line hygiene.
+generic CARD_REGISTRY-driven emitter's container-recursion tolerance, the
+varargs-rows and single-dict-child container conventions (exercised against
+both the REAL DB3 card builders now merged and, for edge cases no real
+builder happens to exercise, a locally-registered fake ``CardSpec``), the
+``cond`` vocabulary, and import-line hygiene.
 """
 
 from __future__ import annotations
@@ -297,6 +299,279 @@ def test_registered_card_type_emits_the_typed_builder_not_raw() -> None:
     src = _source(_BASE_META, {"views": [view]})
     assert "c.tile(entity=e.light.x)" in src
     assert "raw_card" not in src
+
+
+# ---------------------------------------------------------------------------
+# Varargs-rows cards (entities/glance/history_graph/statistics_graph/
+# calendar/logbook/map/picture_glance) -- the stored `entities:` list maps
+# onto the builder's `*rows`/`*entities` VAR_POSITIONAL parameter. The
+# builder's OWN parameter name and the stored key sometimes coincide
+# (history_graph's `*entities` <-> stored `entities`) and sometimes don't
+# (entities/glance's `*rows` <-> stored `entities`) -- both are exercised
+# against the REAL DB3 builders now merged into CARD_REGISTRY.
+# ---------------------------------------------------------------------------
+
+
+def test_entities_card_rows_decompile_as_positional_args() -> None:
+    view = {
+        "type": "sections",
+        "sections": [
+            {
+                "type": "grid",
+                "cards": [
+                    {
+                        "type": "entities",
+                        "title": "Switches",
+                        "entities": [
+                            "switch.kitchen",
+                            {"type": "divider"},
+                            "switch.bedroom",
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card" not in src
+    assert (
+        "c.entities(e.switch.kitchen, {'type': 'divider'}, e.switch.bedroom, title='Switches')"
+        in src
+    )
+
+
+def test_glance_card_rows_decompile_as_positional_args() -> None:
+    view = {
+        "type": "sections",
+        "sections": [
+            {
+                "type": "grid",
+                "cards": [
+                    {"type": "glance", "entities": ["sensor.temperature", "sensor.humidity"]}
+                ],
+            }
+        ],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card" not in src
+    assert "c.glance(e.sensor.temperature, e.sensor.humidity)" in src
+
+
+def test_history_graph_rows_param_name_matches_stored_key() -> None:
+    # Unlike entities/glance's `*rows`, `history_graph`'s VAR_POSITIONAL
+    # parameter is itself named `entities` (matching the stored key
+    # directly) -- both spellings must resolve to the same rows mechanism.
+    view = {
+        "type": "sections",
+        "sections": [
+            {
+                "type": "grid",
+                "cards": [
+                    {
+                        "type": "history-graph",
+                        "entities": ["sensor.temperature", "sensor.humidity"],
+                        "hours_to_show": 24,
+                    }
+                ],
+            }
+        ],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card" not in src
+    assert "c.history_graph(e.sensor.temperature, e.sensor.humidity, hours_to_show=24)" in src
+
+
+def test_map_card_rows_decompile_as_positional_args() -> None:
+    view = {
+        "type": "sections",
+        "sections": [
+            {
+                "type": "grid",
+                "cards": [
+                    {
+                        "type": "map",
+                        # `c.map()` has no `title=` kwarg at all (HA's real
+                        # map card schema doesn't support one) -- it round-
+                        # trips through `extra=`, proving that path still
+                        # works alongside the new positional rows.
+                        "title": "Home Devices",
+                        "entities": ["device_tracker.phone", "device_tracker.car"],
+                    }
+                ],
+            }
+        ],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card" not in src
+    assert (
+        "c.map(e.device_tracker.phone, e.device_tracker.car, extra={'title': 'Home Devices'})"
+        in src
+    )
+
+
+def test_entities_shaped_card_missing_its_always_materialized_key_stays_raw() -> None:
+    """DB3-fix re-verification (task item 3): `entities`/`glance`/etc. ALWAYS
+    materialize their `entities:` key (even `[]`) -- a stored card lacking
+    the key entirely is unrepresentable and must stay `raw_card`."""
+    view = {
+        "type": "sections",
+        "sections": [{"type": "grid", "cards": [{"type": "glance"}]}],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card({'type': 'glance'})" in src
+
+
+def test_entities_shaped_card_with_empty_rows_list_decompiles_typed() -> None:
+    # The key IS present, just empty -- fully representable (`c.glance()`
+    # with zero rows still materializes `"entities": []`).
+    view = {
+        "type": "sections",
+        "sections": [{"type": "grid", "cards": [{"type": "glance", "entities": []}]}],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card" not in src
+    assert "c.glance()" in src
+
+
+def test_conditional_card_conditions_rows_and_dict_child_decompile_typed() -> None:
+    """The `conditional` card: `conditions=` via the varargs `*conditions`
+    parameter (rendered through the `cond` inverter, dict fallback for an
+    unmodeled condition shape) plus exactly one child under the single-dict
+    `card:` key -- a `with c.conditional(...):` block wrapping the child."""
+    view = {
+        "type": "sections",
+        "sections": [
+            {
+                "type": "grid",
+                "cards": [
+                    {
+                        "type": "conditional",
+                        "conditions": [
+                            {
+                                "condition": "state",
+                                "entity": "binary_sensor.motion_detector",
+                                "state": "on",
+                            }
+                        ],
+                        "card": {"type": "markdown", "content": "Motion detected!"},
+                    }
+                ],
+            }
+        ],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card" not in src
+    assert "raw_section" not in src
+    assert "with c.conditional(cond.state(e.binary_sensor.motion_detector, 'on')):" in src
+    assert "c.markdown(content='Motion detected!')" in src
+
+
+def test_conditional_card_unmodeled_condition_shape_falls_back_to_dict_literal() -> None:
+    view = {
+        "type": "sections",
+        "sections": [
+            {
+                "type": "grid",
+                "cards": [
+                    {
+                        "type": "conditional",
+                        "conditions": [{"condition": "future_kind", "x": 1}],
+                        "card": {"type": "markdown", "content": "hi"},
+                    }
+                ],
+            }
+        ],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card" not in src
+    assert "with c.conditional({'condition': 'future_kind', 'x': 1}):" in src
+
+
+def test_conditional_card_missing_always_materialized_conditions_key_stays_raw() -> None:
+    view = {
+        "type": "sections",
+        "sections": [
+            {"type": "grid", "cards": [{"type": "conditional", "card": {"type": "markdown"}}]}
+        ],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card({'type': 'conditional'" in src
+
+
+def test_entity_filter_with_child_card_decompiles_typed() -> None:
+    view = {
+        "type": "sections",
+        "sections": [
+            {
+                "type": "grid",
+                "cards": [
+                    {
+                        "type": "entity-filter",
+                        "entities": ["light.living_room", "light.bedroom"],
+                        "state_filter": ["on"],
+                        "card": {"type": "markdown", "content": "hi"},
+                    }
+                ],
+            }
+        ],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card" not in src
+    assert "with c.entity_filter(" in src
+    assert "c.markdown(content='hi')" in src
+
+
+def test_entity_filter_with_no_card_child_decompiles_as_zero_children() -> None:
+    """`entity_filter` (unlike `conditional`) legitimately holds ZERO
+    children -- HA's own `push_container(..., child_is_list=False)`
+    convention leaves the `card:` key entirely absent for zero, present for
+    one (DB3-fix SF-2). A missing `card:` key must decompile to an EMPTY
+    `with` block (`pass`), never force `raw_card`."""
+    view = {
+        "type": "sections",
+        "sections": [
+            {
+                "type": "grid",
+                "cards": [
+                    {
+                        "type": "entity-filter",
+                        "entities": ["climate.living_room", "climate.bedroom"],
+                        "state_filter": ["off"],
+                        "show_empty": False,
+                    }
+                ],
+            }
+        ],
+    }
+    src = _source(_BASE_META, {"views": [view]})
+    assert "raw_card" not in src
+    assert "with c.entity_filter(" in src
+    assert "pass" in src
+
+
+def test_entity_filter_dashboard_fixture_decompiles_both_containers_typed() -> None:
+    """The corpus fixture exercising both entity_filter shapes at once: BOTH
+    `with c.entity_filter(...):` containers decompile typed now (one wraps a
+    `glance` presentation card that itself stays `raw_card` -- it has no
+    `entities:` key at all, the always-materialized-key rule, not a
+    regression; the other has zero children). Container-recursion tolerance:
+    neither entity_filter is forced raw by its child/lack of one."""
+    import json
+    from pathlib import Path
+
+    fixture_path = (
+        Path(__file__).resolve().parents[3]
+        / "fixtures"
+        / "configs"
+        / "dashboard_entity_filter.json"
+    )
+    config = json.loads(fixture_path.read_text(encoding="utf-8"))
+    obj = parse(config, kind="dashboard")
+    assert isinstance(obj, DashboardConfig)
+    src = dashboard_source(obj, "entity_filter_demo")
+    assert src.count("with c.entity_filter(") == 2
+    assert src.count("raw_card(") == 1  # the entities-less `glance` presentation card only
+    assert "raw_card({'type': 'glance'})" in src
 
 
 def test_custom_card_fixture_asserts_raw_fallback_exactly() -> None:

@@ -21,8 +21,19 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from hassle.compiler.dashboards.card_registry import CARD_REGISTRY
 from hassle.decompiler.codegen import decompile_object
 from hassle.ir.models import IRObject
+
+# Extracts a raw_card's own `type:` value from its dict-literal argument
+# text (`{'type': 'glance', ...}` / `{"type": "glance", ...}`, whichever
+# quote style `render_literal`/ruff produced) -- used only to sharpen
+# `_justify`'s message: a type absent from `CARD_REGISTRY` entirely gets a
+# different, more actionable justification than a REGISTERED type whose own
+# stored shape just isn't safely representable (docs/internals/
+# dashboards-design.md §5.5/§6.1.1's "known container/type, unmodeled
+# instance" distinction).
+_CARD_TYPE_PATTERN = re.compile(r"""['"]type['"]:\s*['"]([^'"]+)['"]""")
 
 _RAW_NODE_PATTERN = re.compile(
     r"\b(raw_trigger|raw_condition|raw_action|raw_automation"
@@ -119,6 +130,14 @@ _JUSTIFICATION_UNKNOWN_CARD = (
     "release added it); falls back to raw_card so no data is dropped, the tracked signal "
     "that CARD_REGISTRY needs a new row (docs/internals/dashboards-design.md §5.5/§6.1.1)"
 )
+_JUSTIFICATION_REGISTERED_CARD_SHAPE_MISMATCH = (
+    "card type IS registered, but this stored instance's own shape can't be safely driven "
+    "through its typed builder (e.g. an always-materialized list key -- entities:, "
+    "conditions: -- is entirely absent, which the builder can never omit on recompile, or "
+    "an ambiguous/unsupported varargs mapping); falls back to raw_card so no data is "
+    "dropped rather than risk a byte-unstable recompile (docs/internals/"
+    "dashboards-design.md §5.5/§6.1.1)"
+)
 _JUSTIFICATION_UNMODELED_SECTION = (
     "section shape not expressible as a typed section() (a non-'grid' type, a missing/"
     "malformed cards list, or an own key the DSL doesn't model); falls back to raw_section "
@@ -150,6 +169,18 @@ _DEVICE_CONDITION_MARKERS = (
 )
 
 
+def _card_type_is_registered(argument_text: str) -> bool:
+    """True if the ``raw_card({...})`` dict literal's own ``type:`` value is
+    a real ``CARD_REGISTRY`` row -- i.e. this ``raw_card`` isn't from an
+    unknown/future card type at all, but from a registered type whose
+    particular stored INSTANCE couldn't be safely driven through the typed
+    builder (module docstring's shape-mismatch justification)."""
+    match = _CARD_TYPE_PATTERN.search(argument_text)
+    if match is None:
+        return False
+    return match.group(1) in CARD_REGISTRY
+
+
 def _justify(builder_name: str, argument_text: str) -> str:
     """Best-effort human-readable reason a raw_* node was needed, sourced from
     the documented findings in docs/internals/ha-api-notes.md §14-§18."""
@@ -169,6 +200,8 @@ def _justify(builder_name: str, argument_text: str) -> str:
     if builder_name == "raw_card":
         if "custom:" in argument_text:
             return _JUSTIFICATION_CUSTOM_CARD
+        if _card_type_is_registered(argument_text):
+            return _JUSTIFICATION_REGISTERED_CARD_SHAPE_MISMATCH
         return _JUSTIFICATION_UNKNOWN_CARD
     if builder_name == "raw_section":
         return _JUSTIFICATION_UNMODELED_SECTION

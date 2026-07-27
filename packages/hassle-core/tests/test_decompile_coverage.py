@@ -8,14 +8,16 @@ what actually ended up as ``raw_trigger``/``raw_condition``/``raw_action``/
 ``raw_view``/``raw_dashboard``, docs/internals/dashboards-design.md §5.5/§6.2)
 in the generated source, per object.
 
-**Dashboards are excluded from the 90% gate here too (temporary, tracked --
-see ``hassle_dev.decompile_coverage``'s module docstring for the full
-rationale):** on a base where none of the card-builder workstreams (DB3) have
-merged, ``CARD_REGISTRY`` is empty, so every real dashboard fixture's actual
-cards fall back to ``raw_card`` -- not an automation/script coverage
-regression, just a dependency this workstream doesn't own. Dashboards get
-their own tracked assertion (``test_dashboard_coverage_is_reported``) instead
-of silently disappearing from the picture.
+**Dashboards are folded into the 90% gate** (docs/internals/dashboards-design.md
+§6.2): with all 47 built-in card builders merged (DB3) and the registry-driven
+decompiler emitter handling the varargs-rows and single-dict-child container
+conventions those builders use, the corpus-wide fraction holds >= 90% with
+dashboards included -- see ``test_dashboard_coverage_is_reported`` for the
+per-kind breakdown and the exact, individually-justified exceptions that
+remain (backstop proofs, not bugs: a `custom:` card, the strategy dashboard,
+a legacy bare-string badge, and one card whose stored shape genuinely can't
+be reproduced through its typed builder without breaking byte-exact
+round-trip -- each documented at its own assertion below).
 """
 
 from __future__ import annotations
@@ -39,11 +41,6 @@ def _objects() -> dict[str, object]:
     return objects
 
 
-def _gated_objects() -> dict[str, object]:
-    """Every fixture except dashboards -- see module docstring."""
-    return {key: obj for key, obj in _objects().items() if not key.startswith("dashboard:")}
-
-
 def _dashboard_objects() -> dict[str, object]:
     return {key: obj for key, obj in _objects().items() if key.startswith("dashboard:")}
 
@@ -59,26 +56,50 @@ def test_coverage_report_structure() -> None:
 
 
 def test_coverage_meets_90_percent_gate() -> None:
-    report = analyze_coverage(_gated_objects())
+    report = analyze_coverage(_objects())
     assert report.clean_fraction >= 0.90, (
         f"DSL coverage {report.clean_fraction:.1%} is below the 90% gate; "
         f"raw_* exceptions: {[e.object_key for e in report.exceptions]}"
     )
 
 
-def test_dashboard_coverage_is_reported_not_hidden() -> None:
+def test_dashboard_coverage_is_reported() -> None:
     """Dashboards get their own reported percentage (docs/internals/
-    dashboards-design.md §6.2), never silently dropped from the corpus just
-    because they're excluded from the 90% gate above. On this base
-    (CARD_REGISTRY empty, no card-builder workstream merged) the fraction is
-    expected to be well below 90% -- every real dashboard fixture has at
-    least one built-in leaf card the DSL doesn't model yet -- but every
-    fixture must still be present and self-describing (a real
-    justification string, never a bare count)."""
+    dashboards-design.md §6.2). With DB3's 47 card builders merged, only 4
+    of the 12 corpus fixtures still carry a `raw_*` node -- each individually
+    justified (backstop proofs, not bugs):
+
+    - ``dashboard:custom-cards`` -- two genuine `custom:`-prefixed cards
+      (no stable schema Hassle could model generically);
+    - ``dashboard:auto-generated`` -- the strategy dashboard (no `views` at
+      all, `@raw_dashboard` is the only lossless shape);
+    - ``dashboard:badges-showcase`` -- a view with a legacy bare-string
+      badge entry (`badge()` has no shape that reproduces one, ha-api-notes
+      §39);
+    - ``dashboard:entity-filter-demo`` -- a presentation card stored as a
+      bare ``{"type": "glance"}`` with NO ``entities:`` key at all;
+      ``c.glance()`` ALWAYS materializes ``entities: []`` even for zero rows
+      (verified: compiling ``c.glance()`` produces
+      ``{"type": "glance", "entities": []}``, never the bare dict), so using
+      the typed builder here would silently ADD a key the original never
+      had -- raw_card is the only byte-exact choice, the same
+      always-materialized-key rule that already governs every varargs-rows
+      family.
+
+    Every exception is self-describing (a real justification string, never
+    a bare count).
+    """
     dashboards = _dashboard_objects()
     assert len(dashboards) >= 10
     report = analyze_coverage(dashboards)
     assert report.total_objects == len(dashboards)
+    exception_keys = {e.object_key for e in report.exceptions}
+    assert exception_keys == {
+        "dashboard:custom-cards",
+        "dashboard:auto-generated",
+        "dashboard:badges-showcase",
+        "dashboard:entity-filter-demo",
+    }
     for exc in report.exceptions:
         assert exc.justifications
         for justification in exc.justifications:

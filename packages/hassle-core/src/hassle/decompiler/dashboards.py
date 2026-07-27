@@ -34,19 +34,53 @@ child did):**
 frozen table): a stored card's ``type`` string is looked up, the row's
 ``builder`` name is resolved to the real callable and introspected
 (``inspect.signature``) for its declared keyword names -- no card type is
-ever hardcoded here. ``CardSpec.declared`` (an optional, additive field a
-registry-backfill workstream may populate later) is consulted WHEN PRESENT
-as the authoritative "known kwarg" set; a bare/older ``CardSpec`` row with no
-such field (this module's own base, and any row a family adds without
-opting in) falls back to resolving only the builder's REQUIRED parameters by
-name (Python cannot call a function while omitting one) and routing every
-remaining OPTIONAL key through ``extra=`` wholesale -- both shapes are always
-safe to call, and coverage sharpens automatically the day a family's
-``declared`` set lands, with zero changes here. On the base this module was
-written against, ``CARD_REGISTRY`` itself is EMPTY (no card family has
-merged yet) -- every leaf/container card therefore currently decompiles to
-``raw_card``, by construction and design (§6.1's coverage metric is the
-tracked signal a card family is still pending, not a bug).
+ever hardcoded here. ``CardSpec.declared`` is the authoritative "known
+kwarg" set when populated (every real DB3 registration populates it); a row
+with no such field falls back to resolving only the builder's REQUIRED
+parameters by name (Python cannot call a function while omitting one) and
+routing every remaining OPTIONAL key through ``extra=`` wholesale -- both
+shapes are always safe to call.
+
+**Varargs-rows cards** (``entities``/``glance``/``history_graph``/
+``statistics_graph``/``calendar``/``logbook``/``map``/``picture_glance``,
+plus ``conditional``'s ``conditions=``): the builder's signature has exactly
+one ``VAR_POSITIONAL`` parameter (``*rows``/``*entities``/``*conditions``),
+which does not necessarily share its OWN Python name with the stored key
+that feeds it (``entities``/``glance`` name theirs ``*rows`` while storing
+under ``"entities"``; ``history_graph`` et al. name theirs ``*entities``,
+matching the stored key directly; ``conditional`` names its ``*conditions``,
+also matching). :func:`_resolve_rows_key` tries the varargs parameter's OWN
+name against the stored body first (covers the name-matches-key cases),
+then falls back to the one ``entity_params`` entry that is itself a stored
+list (covers the name-differs-from-key cases, e.g. ``picture_glance`` whose
+OTHER ``entity_params`` entry, ``camera_image``, is a plain scalar kwarg,
+never the rows list). Each row renders through :func:`_render_row_item`,
+which tries the ``cond`` inverter first (covers ``conditional``'s condition
+rows) and falls back to the entity-position renderer for a string / a
+verbatim literal for a dict (covers the entity-row families; a dict row is
+stored by the compiler via ``copy.deepcopy`` verbatim, never rewritten, so
+literal-rendering it is always byte-exact regardless of what's inside).
+
+**Container cards with a single-dict child** (``container="card"``,
+``conditional``/``entity_filter``): the compiler's own
+``push_container(..., child_is_list=False)`` convention (a DB3 review-round
+fix) stores the child key ABSENT for zero children, present as a bare dict
+for one -- never a list. ``conditional`` additionally enforces "exactly
+one" at compile time (`ConditionalCardArityError`), but that is a
+compile-time-only guard this module has no static way to see per row;
+treating "absent -> zero children" uniformly for every ``container="card"``
+row is what makes ``entity_filter``'s legitimate zero-children shape
+decompile typed, and is harmless for ``conditional`` in practice (a
+real/compiled conditional card always has its ``card:`` key -- the arity
+guard prevented it from ever being saved without one).
+
+**Always-materialized keys**: every varargs-rows builder (and
+``conditional``'s ``conditions=``) unconditionally writes its stored key
+even for zero rows (``body["entities"] = normalize_rows(...)``, never
+``put()``'s skip-on-``None`` convention) -- a stored card missing that key
+entirely is therefore unrepresentable through the typed builder (recompiling
+would materialize a key the original never had) and falls back to
+``raw_card``, exactly like any other required-parameter gap.
 """
 
 from __future__ import annotations
@@ -275,6 +309,11 @@ def _try_emit_badges(badges_raw: Any) -> list[str] | None:
 class _BuilderSignature:
     names: frozenset[str]
     required: frozenset[str]
+    #: The one VAR_POSITIONAL parameter's own Python name (``"rows"``,
+    #: ``"entities"``, ``"conditions"``, ...), or ``None`` for a builder with
+    #: no varargs parameter at all. Never counted in `names`/`required` --
+    #: it is never itself a stored body key (see module docstring).
+    varargs_name: str | None = None
 
 
 def _resolve_builder_callable(builder: str) -> Any | None:
@@ -295,34 +334,76 @@ def _resolve_builder_callable(builder: str) -> Any | None:
 
 def _builder_signature(fn: Any) -> _BuilderSignature | None:
     """Introspect ``fn``'s declared keyword names, or ``None`` if its shape
-    can't be driven generically (``*args``/``**kwargs``/positional-only --
-    e.g. the entities-card row-varargs convention, §5.3): the caller falls
-    back to ``raw_card`` for that node, never guessing at a card-specific
-    call convention this table doesn't describe (item 8: no hardcoded card
-    type list)."""
+    can't be driven generically (``**kwargs``/positional-only/more than one
+    ``*args`` parameter): the caller falls back to ``raw_card`` for that
+    node, never guessing at a card-specific call convention this table
+    doesn't describe (item 8: no hardcoded card type list). Exactly one
+    ``VAR_POSITIONAL`` parameter IS supported (the varargs-rows convention,
+    §5.3/module docstring) -- its own name is reported separately via
+    ``varargs_name``, never folded into `names`/`required`."""
     try:
         sig = inspect.signature(fn)
     except (TypeError, ValueError):
         return None
     names: set[str] = set()
     required: set[str] = set()
+    varargs_name: str | None = None
     for name, param in sig.parameters.items():
-        if param.kind in (
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.VAR_KEYWORD,
-            inspect.Parameter.POSITIONAL_ONLY,
-        ):
+        if param.kind is inspect.Parameter.VAR_POSITIONAL:
+            if varargs_name is not None:
+                return None  # more than one *args -- not a shape this module models
+            varargs_name = name
+            continue
+        if param.kind in (inspect.Parameter.VAR_KEYWORD, inspect.Parameter.POSITIONAL_ONLY):
             return None
         names.add(name)
         if param.default is inspect.Parameter.empty:
             required.add(name)
-    return _BuilderSignature(names=frozenset(names), required=frozenset(required))
+    return _BuilderSignature(
+        names=frozenset(names), required=frozenset(required), varargs_name=varargs_name
+    )
 
 
 def _render_card_kwarg_value(key: str, value: Any, spec: CardSpec) -> str:
     if key in spec.entity_params:
         return render_entity_position(value)
     return render_literal(value)
+
+
+def _resolve_rows_key(varargs_name: str, spec: CardSpec, body: dict[str, Any]) -> str | None:
+    """Which stored key in ``body`` feeds a builder's ``*varargs_name``
+    parameter, or ``None`` if it can't be determined unambiguously.
+
+    Tries the varargs parameter's OWN name against the stored body first
+    (``conditional``'s ``*conditions`` -> stored ``"conditions"``: name
+    matches key directly), then falls back to the ONE ``entity_params``
+    entry that is itself list-valued in ``body`` (``entities``/``glance``'s
+    ``*rows`` -> stored ``"entities"``: name and key differ, but
+    ``entity_params`` names the real key; ``picture_glance``'s OTHER
+    ``entity_params`` entry, ``camera_image``, is a plain scalar kwarg, so it
+    never matches this list-valued filter)."""
+    if isinstance(body.get(varargs_name), list):
+        return varargs_name
+    candidates = [name for name in spec.entity_params if isinstance(body.get(name), list)]
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+def _render_row_item(item: Any) -> str:
+    """One varargs-row element -> its source expression. Tries the ``cond``
+    inverter first (covers ``conditional``'s condition rows -- a dict with a
+    ``condition`` key that ``_try_dashboard_condition`` recognizes), then the
+    entity-position renderer for a string (covers the entity-row families),
+    else a verbatim literal (a dict row is stored by ``normalize_rows`` via
+    ``copy.deepcopy`` -- never rewritten -- so rendering it as a literal is
+    always byte-exact regardless of its own contents)."""
+    cond_src = _try_dashboard_condition(item)
+    if cond_src is not None:
+        return cond_src
+    if isinstance(item, str):
+        return _entity_arg(item)
+    return render_literal(item)
 
 
 _CHILD_KEY_FOR_CONTAINER: dict[str, str] = {
@@ -338,15 +419,26 @@ def _try_emit_registry_card(card: dict[str, Any], spec: CardSpec) -> list[str] |
 
     child_key = _CHILD_KEY_FOR_CONTAINER.get(spec.container)
     children_raw: Any = None
+    has_single_child = False
     if child_key is not None:
-        if child_key not in body:
-            return None  # the compiler always materializes its own child key
-        children_raw = body.pop(child_key)
         if spec.container == "card":
-            if not isinstance(children_raw, dict):
+            # `push_container(..., child_is_list=False)` (a DB3 review-round
+            # fix) leaves this key entirely ABSENT for zero children, a bare
+            # dict for exactly one -- never a list. Absent is a legitimate,
+            # everyday shape (`entity_filter` with no presentation card), so
+            # unlike `cards`/`sections` below, a missing key here is NOT a
+            # reason to fall back to raw_card (module docstring).
+            if child_key in body:
+                children_raw = body.pop(child_key)
+                if not isinstance(children_raw, dict):
+                    return None
+                has_single_child = True
+        else:
+            if child_key not in body:
+                return None  # the compiler always materializes cards/sections, even empty
+            children_raw = body.pop(child_key)
+            if not isinstance(children_raw, list):
                 return None
-        elif not isinstance(children_raw, list):
-            return None
 
     visibility_raw = body.pop("visibility", None)
     visibility_src: str | None = None
@@ -361,6 +453,20 @@ def _try_emit_registry_card(card: dict[str, Any], spec: CardSpec) -> list[str] |
     sig = _builder_signature(fn)
     if sig is None:
         return None
+
+    # Varargs-rows cards (module docstring): the ONE VAR_POSITIONAL parameter
+    # maps onto some stored list key, rendered as positional arguments rather
+    # than a `key=[...]` kwarg. Resolved and popped BEFORE the known-kwargs
+    # loop below so it's never double-counted there.
+    positional_args_src: list[str] = []
+    if sig.varargs_name is not None:
+        rows_key = _resolve_rows_key(sig.varargs_name, spec, body)
+        if rows_key is None or rows_key not in body:
+            return None  # always-materialized key absent, or ambiguous -- unsafe to call
+        rows_value = body.pop(rows_key)
+        if not isinstance(rows_value, list):
+            return None
+        positional_args_src = [_render_row_item(row) for row in cast("list[Any]", rows_value)]
 
     # Forward-compat with an optional registry backfill: `CardSpec.declared`
     # (module docstring) is the authoritative known-kwarg set WHEN a family
@@ -397,20 +503,21 @@ def _try_emit_registry_card(card: dict[str, Any], spec: CardSpec) -> list[str] |
     if visibility_src is not None:
         kwargs_src.append(f"visibility={visibility_src}")
 
+    call_args_src = [*positional_args_src, *kwargs_src]
     call_name = spec.builder
     if not spec.context_manager:
-        return [f"{call_name}({', '.join(kwargs_src)})"]
+        return [f"{call_name}({', '.join(call_args_src)})"]
 
-    header = f"with {call_name}({', '.join(kwargs_src)}):"
+    header = f"with {call_name}({', '.join(call_args_src)}):"
     inner_lines: list[str]
     if spec.container == "card":
-        inner_lines = _emit_card(children_raw)
+        inner_lines = _emit_card(children_raw) if has_single_child else []
     else:
         inner_lines = []
         for child in cast("list[Any]", children_raw):
             inner_lines.extend(_emit_card(child))
-        if not inner_lines:
-            inner_lines = ["pass"]
+    if not inner_lines:
+        inner_lines = ["pass"]
     return [header, *indent_lines(inner_lines)]
 
 
