@@ -331,6 +331,16 @@ methods suffice. Per-kind mapping inside the two implementations:
   create, `config_not_found` composition, delete-removes-config, **no**
   normalize-on-write for this kind) so the sync engine is tested against the
   same quirks the real backend has.
+- **Kind registration and `DirectBackend` support are inseparable** (DB1
+  review finding, 2026-07-27): `DirectBackend.list_remote`'s else-branch
+  falls through to the storage-collection generic (`ws_command
+  ("<kind>/list")`), so a kind present in `OBJECT_KINDS` without explicit
+  DirectBackend branches sends a nonexistent `dashboard/list` command and
+  aborts `pull`/`plan`/`push` against live HA. Contained on this feature
+  branch (DB5 closes it before anything reaches main); DB5 also makes the
+  fallthrough explicit — `_alist_helpers` (and its write-side siblings)
+  assert `kind in HELPER_DOMAINS`, the same "new kinds are added
+  explicitly" rule `_KIND_ORDER` already follows.
 
 ### 4.2 Apply order
 
