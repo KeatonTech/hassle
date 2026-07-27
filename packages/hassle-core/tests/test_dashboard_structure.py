@@ -295,3 +295,41 @@ def test_extra_shadowing_a_badge_option_raises() -> None:
     with dashboard_recording(url_path="a-b"), view(title="V"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
         with pytest.raises(ExtraShadowsKwargError):
             badge("sensor.a", name="A", extra={"name": "B"})
+
+
+# ---------------------------------------------------------------------------
+# BLOCK-2: `view(extra=...)` must not be able to spell a STRUCTURAL key.
+#
+# `cards`/`sections`/`badges` are written by `view()`'s own assembly after the
+# block closes. Before this fix `extra={"cards": [...]}` was accepted and then
+# overwritten -- and `extra={"badges": [...]}` survived only when the block
+# happened to contain no `badge()` call, which is silent, conditional data loss:
+# adding one badge later would wipe the author's whole extra list.
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("key", ["cards", "sections", "badges"])
+def test_extra_cannot_spell_a_view_structural_key(key: str) -> None:
+    with dashboard_recording(url_path="a-b"), pytest.raises(ExtraShadowsKwargError):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
+        with view(title="V", extra={key: []}):
+            pass
+
+
+def test_extra_badges_are_rejected_even_with_no_badge_call_in_the_block() -> None:
+    # The conditional-loss case: with no `badge()` in the block, the old code
+    # let `extra={"badges": ...}` through, so the bundle compiled clean and
+    # then lost those badges the moment an author added a real `badge(...)`.
+    with dashboard_recording(url_path="a-b"), pytest.raises(ExtraShadowsKwargError):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
+        with view(title="V", extra={"badges": [{"type": "entity", "entity": "sensor.a"}]}):
+            pass
+
+
+def test_extra_badges_are_rejected_with_a_badge_call_in_the_block() -> None:
+    with dashboard_recording(url_path="a-b"), pytest.raises(ExtraShadowsKwargError):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
+        with view(title="V", extra={"badges": [{"type": "entity", "entity": "sensor.a"}]}):
+            badge("sensor.b")
+
+
+def test_extra_cannot_spell_a_section_structural_key() -> None:
+    with dashboard_recording(url_path="a-b"), view(title="V"):  # noqa: SIM117 - `pytest.raises` must wrap only the failing statement
+        with pytest.raises(ExtraShadowsKwargError):
+            with section(extra={"cards": []}):
+                pass

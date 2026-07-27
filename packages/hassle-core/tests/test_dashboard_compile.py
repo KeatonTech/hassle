@@ -8,6 +8,7 @@ compiler builds the §3.2 two-store envelope, and the compiled object is a real
 
 from __future__ import annotations
 
+import collections.abc
 from pathlib import Path
 from typing import Any
 
@@ -121,3 +122,87 @@ def test_registered_dashboards_use_the_shared_registry_path() -> None:
         pass
 
     assert [(o.kind, o.declared_id) for o in reg.objects] == [("dashboard", "test-one")]
+
+
+def test_two_dashboards_with_the_same_url_path_are_a_duplicate_object() -> None:
+    # Duplicate identity rides the normal registry path (§5.6): the object key
+    # is `dashboard:<url_path>`, so two dashboards claiming one `url_path=`
+    # collide exactly like two automations claiming one `id=`.
+    from hassle.compiler.errors import DuplicateObjectError
+
+    with pytest.raises(DuplicateObjectError) as excinfo:
+        compile_bundle(FIXTURES / "dashboard_error_duplicate_url_path" / "bundle")
+    message = str(excinfo.value)
+    assert "dashboard:twice-claimed" in message
+    # The fix sentence must name the DASHBOARD identity rule -- a dashboard has
+    # no `id=` kwarg and its function name is not its identity, so the generic
+    # "give one of them a distinct `id=`" text would send the author nowhere.
+    assert "url_path" in message
+    assert "`id=`" not in message
+
+
+# ---------------------------------------------------------------------------
+# BLOCK-1: a `@raw_dashboard` body that does not return a dict.
+#
+# A forgotten `return`, or a YAML string, previously fell straight through the
+# isinstance guard and became the config VERBATIM -- `config: null` compiled
+# clean, FakeBackend accepted it, and a push would have overwritten the user's
+# real dashboard with an empty config. I1/I6: never silently destructive.
+# ---------------------------------------------------------------------------
+def test_raw_dashboard_returning_none_is_rejected() -> None:
+    from hassle.compiler.dashboards.errors import RawDashboardReturnTypeError
+
+    with pytest.raises(RawDashboardReturnTypeError):
+        compile_bundle(FIXTURES / "dashboard_error_raw_returns_none" / "bundle")
+
+
+def test_raw_dashboard_returning_a_yaml_string_is_rejected() -> None:
+    from hassle.compiler.dashboards.errors import RawDashboardReturnTypeError
+    from hassle.compiler.dashboards.decorators import build_raw_envelope
+
+    with pytest.raises(RawDashboardReturnTypeError) as excinfo:
+        build_raw_envelope("views:\n  - title: Home\n", {"url_path": "a-b"}, None)
+    assert "str" in str(excinfo.value)
+
+
+def test_raw_dashboard_return_type_is_declared_for_pyright() -> None:
+    # raw_automation.py:41's convention: the decorator's TypeVar is bound to
+    # `Callable[[], dict[str, Any]]`, so a non-dict-returning body is ALSO a
+    # static error, not only a compile-time one.
+    import typing
+
+    from hassle.compiler.dashboards import decorators
+
+    bound = decorators.F.__bound__
+    assert bound is not None
+    assert typing.get_origin(bound) is collections.abc.Callable
+
+
+# ---------------------------------------------------------------------------
+# SF-2: DashboardUrlPathError shape 5 -- a `meta` url_path contradicting the
+# decorator's. A dashboard has exactly ONE identity; two disagreeing spellings
+# would register the object under one and push it to the other.
+# ---------------------------------------------------------------------------
+def test_raw_dashboard_meta_url_path_must_match_the_decorator() -> None:
+    with pytest.raises(DashboardUrlPathError) as excinfo:
+        compile_bundle(FIXTURES / "dashboard_error_raw_meta_mismatch" / "bundle")
+    message = str(excinfo.value)
+    assert "declared-one" in message
+    assert "other-one" in message
+
+
+# ---------------------------------------------------------------------------
+# SF-3: `@raw_dashboard(default=True)` whose body returns a non-null `meta`.
+# The error must talk about the RETURNED DICT's `meta` key, not about
+# `@dashboard(...)` keywords the author never wrote.
+# ---------------------------------------------------------------------------
+def test_raw_default_dashboard_with_meta_names_the_raw_decorator() -> None:
+    from hassle.compiler.dashboards.errors import DefaultDashboardMetadataError
+
+    with pytest.raises(DefaultDashboardMetadataError) as excinfo:
+        compile_bundle(FIXTURES / "dashboard_error_raw_default_with_meta" / "bundle")
+    message = str(excinfo.value)
+    assert "@raw_dashboard(default=True)" in message
+    assert "returned" in message
+    # The `@dashboard`-kwarg framing must NOT leak into the raw case.
+    assert "`meta=`" not in message
