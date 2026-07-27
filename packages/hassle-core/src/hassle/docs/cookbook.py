@@ -2,10 +2,14 @@
 = automation + passing test, compiled in CI).
 
 Sources every recipe directly from `fixtures/cookbook/bundle/automations/*.py`
-(each file's module docstring supplies the title/description; its own source
-is shown verbatim) so the doc can never show a recipe that doesn't actually
-compile/simulate -- the CI gate (`hassle-dev docs`) compiles the same bundle
-these recipes live in and runs its test suite.
+and `fixtures/cookbook/bundle/dashboards/*.py` (each file's module docstring
+supplies the title/description; its own source is shown verbatim) so the doc
+can never show a recipe that doesn't actually compile/validate/simulate -- the
+CI gate (`hassle-dev docs`) compiles the same bundle these recipes live in and
+runs its test suite. Dashboards don't execute (dashboards-design.md §9.1), so
+a dashboard recipe's "passing test" instead asserts against the compiled
+`DashboardQuery` (`sim.dashboard(...)`) rather than a simulated automation run
+-- still a real, CI-checked assertion, just over a different artifact.
 """
 
 from __future__ import annotations
@@ -14,15 +18,23 @@ import ast
 from dataclasses import dataclass
 from pathlib import Path
 
+#: Subdirectories of a cookbook bundle scanned for recipes, in the order they
+#: appear in the generated doc. Adding a new recipe KIND (e.g. `scripts/`)
+#: means adding its directory name here -- nothing else in this module is
+#: kind-specific.
+_RECIPE_DIRS: tuple[str, ...] = ("automations", "dashboards")
+
 
 @dataclass(frozen=True)
 class CookbookRecipe:
-    """One recipe: a title (from the file's module docstring), the filename
-    it lives in, and its full source (shown verbatim in the generated doc)."""
+    """One recipe: a title (from the file's module docstring), the directory
+    and filename it lives in (relative to the bundle root), and its full
+    source (shown verbatim in the generated doc)."""
 
     title: str
     filename: str
     source: str
+    directory: str = "automations"
 
 
 def _title_from_docstring(docstring: str | None, fallback: str) -> str:
@@ -35,15 +47,23 @@ def _title_from_docstring(docstring: str | None, fallback: str) -> str:
 
 
 def load_recipes(bundle_dir: Path) -> list[CookbookRecipe]:
-    """Load every recipe under ``bundle_dir/automations/*.py``, sorted by
-    filename for deterministic output."""
-    automations_dir = bundle_dir / "automations"
+    """Load every recipe under ``bundle_dir/<dir>/*.py`` for each directory in
+    :data:`_RECIPE_DIRS` (in that order), sorted by filename within each
+    directory, for deterministic output. A bundle without one of the
+    directories (e.g. no `dashboards/` yet) simply contributes no recipes from
+    it -- not an error."""
     recipes: list[CookbookRecipe] = []
-    for path in sorted(automations_dir.glob("*.py")):
-        source = path.read_text(encoding="utf-8")
-        docstring = ast.get_docstring(ast.parse(source))
-        title = _title_from_docstring(docstring, fallback=path.stem.replace("_", " "))
-        recipes.append(CookbookRecipe(title=title, filename=path.name, source=source))
+    for directory in _RECIPE_DIRS:
+        recipe_dir = bundle_dir / directory
+        if not recipe_dir.is_dir():
+            continue
+        for path in sorted(recipe_dir.glob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            docstring = ast.get_docstring(ast.parse(source))
+            title = _title_from_docstring(docstring, fallback=path.stem.replace("_", " "))
+            recipes.append(
+                CookbookRecipe(title=title, filename=path.name, source=source, directory=directory)
+            )
     return recipes
 
 
@@ -70,6 +90,6 @@ def generate_cookbook(recipes: list[CookbookRecipe]) -> str:
     parts = [_HEADER]
     for i, recipe in enumerate(recipes, start=1):
         parts.append(f"## {i}. {recipe.title}\n")
-        parts.append(f"`fixtures/cookbook/bundle/automations/{recipe.filename}`\n")
+        parts.append(f"`fixtures/cookbook/bundle/{recipe.directory}/{recipe.filename}`\n")
         parts.append(f"```python\n{recipe.source.strip()}\n```\n")
     return "\n".join(parts)

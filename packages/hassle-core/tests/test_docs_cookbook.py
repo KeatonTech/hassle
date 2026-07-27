@@ -56,3 +56,21 @@ def test_recipe_is_a_frozen_shape() -> None:
     assert recipe.title == "x"
     assert recipe.filename == "x.py"
     assert "automation" in recipe.source
+    assert recipe.directory == "automations"
+
+
+# -- dashboard recipes (dashboards-design.md §10) -----------------------------
+
+
+def test_load_recipes_includes_dashboard_recipes() -> None:
+    recipes = load_recipes(COOKBOOK_BUNDLE)
+    dashboard_recipes = [r for r in recipes if r.directory == "dashboards"]
+    assert len(dashboard_recipes) >= 2
+
+
+def test_generate_cookbook_shows_dashboard_recipe_path() -> None:
+    recipes = load_recipes(COOKBOOK_BUNDLE)
+    text = generate_cookbook(recipes)
+    for recipe in recipes:
+        if recipe.directory == "dashboards":
+            assert f"fixtures/cookbook/bundle/dashboards/{recipe.filename}" in text
