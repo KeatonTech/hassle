@@ -42,9 +42,20 @@ from typing import Any, cast
 from hassle.backend.client import HaClient
 from hassle.backend.errors import HaApiError
 from hassle.backend.version import version_warning
-from hassle.ir.keys import GROUP_DOMAINS, HELPER_DOMAINS, OBJECT_KINDS, TEMPLATE_DOMAINS
+from hassle.ir.keys import (
+    DASHBOARD_KIND,
+    GROUP_DOMAINS,
+    HELPER_DOMAINS,
+    OBJECT_KINDS,
+    TEMPLATE_DOMAINS,
+)
 from hassle.ir.keys import slugify as _slugify
 from hassle.registry.snapshot import PurposeVocabulary, RegistrySnapshot
+
+# Sentinel distinguishing "HA returned config_not_found" (never-saved
+# dashboard, docs/internals/dashboards-design.md §2.1) from a legitimately
+# empty/falsy config body -- `None`/`{}` are both valid stored configs.
+_CONFIG_NOT_FOUND = object()
 
 # The template integration's config-flow menu step_id per domain
 # (docs/internals/ha-api-notes.md §26.1); verified against a real HA instance by
@@ -126,6 +137,13 @@ class DirectBackend:
         # folded into `_template_entry_ids`), mirroring FakeBackend's split
         # (`hassle.backend.fake`'s own `_group_entry_ids` docstring).
         self._group_entry_ids: dict[tuple[str, str], str] = {}
+        # (url_path, or the sentinel "default") -> HA-assigned dashboard_id,
+        # discovered via list_remote/create and consumed by update/delete
+        # (docs/internals/dashboards-design.md §4.1: `dashboard_id` stays
+        # transport-internal -- there is a stable user-visible correlator,
+        # `url_path`, so this is a process-local cache, never a manifest
+        # field, mirroring `_template_entry_ids`/`_group_entry_ids` above).
+        self._dashboard_ids: dict[str, str] = {}
 
     # -- lifecycle / bridge ------------------------------------------------
 
@@ -185,6 +203,8 @@ class DirectBackend:
             return self._run(self._alist_template_helpers(kind))
         if kind in GROUP_DOMAINS:
             return self._run(self._alist_group_helpers(kind))
+        if kind == DASHBOARD_KIND:
+            return self._run(self._alist_dashboards())
         return self._run(self._alist_helpers(kind))
 
     def create(self, kind: str, config: dict[str, Any]) -> str:
@@ -197,6 +217,8 @@ class DirectBackend:
             return self._run(self._acreate_template_helper(kind, config))
         if kind in GROUP_DOMAINS:
             return self._run(self._acreate_group_helper(kind, config))
+        if kind == DASHBOARD_KIND:
+            return self._run(self._acreate_dashboard(config))
         return self._run(self._acreate_helper(kind, config))
 
     def update(self, kind: str, identity: str, config: dict[str, Any]) -> None:
@@ -209,6 +231,8 @@ class DirectBackend:
             self._run(self._aupdate_template_helper(kind, identity, config))
         elif kind in GROUP_DOMAINS:
             self._run(self._aupdate_group_helper(kind, identity, config))
+        elif kind == DASHBOARD_KIND:
+            self._run(self._aupdate_dashboard(identity, config))
         else:
             self._run(self._aupdate_helper(kind, identity, config))
 
@@ -222,8 +246,10 @@ class DirectBackend:
             self._run(self._adelete_template_helper(kind, identity))
         elif kind in GROUP_DOMAINS:
             self._run(self._adelete_group_helper(kind, identity))
+        elif kind == DASHBOARD_KIND:
+            self._run(self._adelete_dashboard(identity))
         else:
-            self._run(self._client.ws_command(f"{kind}/delete", **{f"{kind}_id": identity}))
+            self._run(self._adelete_helper(kind, identity))
 
     def entry_id_for(self, kind: str, identity: str) -> str | None:
         """Additive, non-`Backend`-Protocol lookup (docs/internals/backend-protocol.md §3.1):
@@ -318,20 +344,54 @@ class DirectBackend:
         return object_id
 
     # -- helpers (WebSocket storage collections) --------------------------
+    #
+    # These four are the GENERIC storage-collection fallthrough every other
+    # branch in list_remote/create/update/delete falls past. Each asserts
+    # `kind in HELPER_DOMAINS` (docs/internals/dashboards-design.md §4.1's
+    # last bullet, a DB1 review finding): a kind added to `OBJECT_KINDS`
+    # without an explicit dispatch branch above must fail loudly HERE, at the
+    # dispatch layer -- an `AssertionError` naming the offending kind --
+    # rather than silently sending a nonexistent `<kind>/list`-style WS
+    # command against real HA and aborting pull/plan/push with a confusing
+    # "Unknown command" error far from the actual bug (adding the kind
+    # without wiring its backend support).
 
     async def _alist_helpers(self, kind: str) -> dict[str, dict[str, Any]]:
+        assert kind in HELPER_DOMAINS, (
+            f"_alist_helpers called for non-helper kind {kind!r} -- a kind must have an "
+            "explicit DirectBackend dispatch branch, never fall through to the generic "
+            "storage-collection commands"
+        )
         items = await self._client.ws_command(f"{kind}/list")
         return {str(item["id"]): item for item in items}
 
     async def _acreate_helper(self, kind: str, config: dict[str, Any]) -> str:
+        assert kind in HELPER_DOMAINS, (
+            f"_acreate_helper called for non-helper kind {kind!r} -- a kind must have an "
+            "explicit DirectBackend dispatch branch, never fall through to the generic "
+            "storage-collection commands"
+        )
         # HA assigns the id from the name slug; it rejects a caller-supplied id.
         payload = {k: v for k, v in config.items() if k != "id"}
         result = await self._client.ws_command(f"{kind}/create", **payload)
         return str(result["id"])
 
     async def _aupdate_helper(self, kind: str, identity: str, config: dict[str, Any]) -> None:
+        assert kind in HELPER_DOMAINS, (
+            f"_aupdate_helper called for non-helper kind {kind!r} -- a kind must have an "
+            "explicit DirectBackend dispatch branch, never fall through to the generic "
+            "storage-collection commands"
+        )
         payload = {k: v for k, v in config.items() if k != "id"}
         await self._client.ws_command(f"{kind}/update", **{f"{kind}_id": identity}, **payload)
+
+    async def _adelete_helper(self, kind: str, identity: str) -> None:
+        assert kind in HELPER_DOMAINS, (
+            f"_adelete_helper called for non-helper kind {kind!r} -- a kind must have an "
+            "explicit DirectBackend dispatch branch, never fall through to the generic "
+            "storage-collection commands"
+        )
+        await self._client.ws_command(f"{kind}/delete", **{f"{kind}_id": identity})
 
     # -- config-entry template helpers (docs/internals/ha-api-notes.md §26) ----------
     #
@@ -675,6 +735,160 @@ class DirectBackend:
             return  # already gone / never existed -- delete is idempotent
         await self._client.rest_delete(f"/api/config/config_entries/entry/{entry_id}")
         self._group_entry_ids.pop((kind, identity), None)
+
+    # -- dashboards (Lovelace storage-mode, docs/internals/dashboards-design.md
+    # §4.1) ------------------------------------------------------------------
+    #
+    # Unlike template/group helpers, every dashboard command is WebSocket
+    # (§2.2's table) -- there is no REST flow here. `list_remote` composes
+    # each dashboard's two HA-side stores (the `lovelace_dashboards` registry
+    # item + its `lovelace[.<url_path>]` config blob) into the one
+    # `{"meta": ..., "config": ...}` envelope `DashboardConfig` expects
+    # (docs/internals/dashboards-design.md §3.2); `create`/`update`/`delete`
+    # drive the two stores' WS commands to completion inside the single
+    # synchronous `Backend` method call, exactly like the config-entry flows
+    # above -- the sync engine never sees the two-store seam.
+
+    async def _afetch_dashboard_config(self, url_path: str | None) -> Any:
+        """`lovelace/config` for `url_path` (`None` == the default
+        dashboard). Returns the sentinel `_CONFIG_NOT_FOUND` for a dashboard
+        that has never been saved (§2.1: a never-customized default has no
+        config at all; HA raises `config_not_found` -- Hassle treats this as
+        absent from `list_remote` rather than an empty/default body)."""
+        try:
+            return await self._client.ws_command("lovelace/config", url_path=url_path)
+        except HaApiError as exc:
+            if exc.code == "config_not_found":
+                return _CONFIG_NOT_FOUND
+            raise
+
+    async def _alist_dashboards(self) -> dict[str, dict[str, Any]]:
+        items = await self._client.ws_command("lovelace/dashboards/list")
+        out: dict[str, dict[str, Any]] = {}
+        for item in items:
+            if item.get("mode") != "storage":
+                continue  # YAML-mode dashboard: not ours to manage (I1)
+            dashboard_id = str(item["id"])
+            url_path = item.get("url_path")
+            identity = str(url_path) if url_path is not None else "default"
+            self._dashboard_ids[identity] = dashboard_id
+            # `meta` is the registry item minus `id` (HA-assigned,
+            # transport-only) and minus `mode` (always "storage" here, §3.2).
+            meta = {k: v for k, v in item.items() if k not in ("id", "mode")}
+            config = await self._afetch_dashboard_config(url_path)
+            if config is _CONFIG_NOT_FOUND:
+                continue
+            out[identity] = {"meta": meta, "config": config}
+        # The default dashboard has NO registry item at all (§2.1) -- it
+        # never appears in `lovelace/dashboards/list`, so it's always probed
+        # separately.
+        default_config = await self._afetch_dashboard_config(None)
+        if default_config is not _CONFIG_NOT_FOUND:
+            out["default"] = {"meta": None, "config": default_config}
+        return out
+
+    async def _acreate_dashboard(self, config: dict[str, Any]) -> str:
+        meta = config.get("meta")
+        view_config = config.get("config")
+        if meta is None:
+            # The default dashboard has no registry item -- config/save only
+            # (§4.1's mapping table).
+            await self._client.ws_command("lovelace/config/save", url_path=None, config=view_config)
+            return "default"
+        if not isinstance(meta, dict):
+            raise ValueError(
+                "dashboard config's meta must be a dict or null (required to "
+                "create a dashboard's registry item)"
+            )
+        meta = cast("dict[str, Any]", meta)
+        if not meta.get("url_path"):
+            raise ValueError(
+                "dashboard config's meta has no 'url_path' (required to create a "
+                "non-default dashboard's registry item, docs/internals/"
+                "dashboards-design.md §5.2's @dashboard(url_path=...) contract)"
+            )
+        identity = str(meta["url_path"])
+        payload = {k: v for k, v in meta.items() if k != "id"}
+        payload["mode"] = "storage"
+        result = await self._client.ws_command("lovelace/dashboards/create", **payload)
+        dashboard_id = str(result["id"])
+        self._dashboard_ids[identity] = dashboard_id
+        try:
+            await self._client.ws_command(
+                "lovelace/config/save", url_path=identity, config=view_config
+            )
+        except BaseException:
+            # Partial-create rollback (§4.1): the registry item was created
+            # but the config write failed -- delete it before surfacing the
+            # error, so the apply engine's snapshot/rollback model (DESIGN
+            # §8.2) still holds at the object level (never a half-created
+            # dashboard left dangling in HA). Best-effort: if the rollback
+            # delete itself fails, the ORIGINAL error is still what
+            # propagates, not the cleanup failure.
+            with contextlib.suppress(Exception):
+                await self._client.ws_command(
+                    "lovelace/dashboards/delete", dashboard_id=dashboard_id
+                )
+            self._dashboard_ids.pop(identity, None)
+            raise
+        return identity
+
+    async def _aresolve_dashboard_id(self, identity: str) -> str:
+        """`dashboard_id` stays transport-internal (§4.1): resolved from
+        `url_path` via `lovelace/dashboards/list`, cached per connection
+        (`self._dashboard_ids`) -- no manifest field needed, unlike a
+        config-entry's `entry_id`, since `url_path` is itself a stable,
+        user-visible correlator."""
+        cached = self._dashboard_ids.get(identity)
+        if cached is not None:
+            return cached
+        await self._alist_dashboards_ids_only()
+        dashboard_id = self._dashboard_ids.get(identity)
+        if dashboard_id is None:
+            raise ValueError(
+                f"no dashboard registry item found for url_path {identity!r} -- an "
+                "UPDATE/DELETE must target an existing dashboard, never a recreate "
+                "(a url_path rename is modeled as delete+create, docs/internals/"
+                "dashboards-design.md §4.1 -- an existing object's HA id is never "
+                "changed in place)"
+            )
+        return dashboard_id
+
+    async def _alist_dashboards_ids_only(self) -> None:
+        """Refresh `self._dashboard_ids` from `lovelace/dashboards/list`
+        without paying for a `lovelace/config` fetch per dashboard (unlike
+        `_alist_dashboards`, which composes full envelopes for
+        `Backend.list_remote`) -- used only to resolve a `dashboard_id` for
+        `update`/`delete`."""
+        items = await self._client.ws_command("lovelace/dashboards/list")
+        for item in items:
+            if item.get("mode") != "storage":
+                continue
+            url_path = item.get("url_path")
+            identity = str(url_path) if url_path is not None else "default"
+            self._dashboard_ids[identity] = str(item["id"])
+
+    async def _aupdate_dashboard(self, identity: str, config: dict[str, Any]) -> None:
+        meta = config.get("meta")
+        view_config = config.get("config")
+        if meta is not None:
+            dashboard_id = await self._aresolve_dashboard_id(identity)
+            payload = {k: v for k, v in meta.items() if k not in ("id", "mode")}
+            await self._client.ws_command(
+                "lovelace/dashboards/update", dashboard_id=dashboard_id, **payload
+            )
+        url_path = None if identity == "default" else identity
+        await self._client.ws_command("lovelace/config/save", url_path=url_path, config=view_config)
+
+    async def _adelete_dashboard(self, identity: str) -> None:
+        if identity == "default":
+            # Reverts to auto-generated (§4.1) -- there is no registry item
+            # to remove for the default dashboard.
+            await self._client.ws_command("lovelace/config/delete", url_path=None)
+            return
+        dashboard_id = await self._aresolve_dashboard_id(identity)
+        await self._client.ws_command("lovelace/dashboards/delete", dashboard_id=dashboard_id)
+        self._dashboard_ids.pop(identity, None)
 
     # -- registry snapshot (DESIGN §9.2) ----------------------------------
 
