@@ -93,7 +93,7 @@ def energy_date_selection(
 register_card(
     CardSpec(
         type="energy-date-selection",
-        declared=frozenset({"type", "collection_key", "visibility"}),
+        declared=_ENERGY_DATE_SELECTION_DECLARED,
         builder="c.energy_date_selection",
     )
 )
@@ -125,7 +125,7 @@ def energy_usage_graph(
 register_card(
     CardSpec(
         type="energy-usage-graph",
-        declared=frozenset({"type", "collection_key", "visibility"}),
+        declared=_ENERGY_USAGE_GRAPH_DECLARED,
         builder="c.energy_usage_graph",
     )
 )
@@ -157,7 +157,7 @@ def energy_solar_graph(
 register_card(
     CardSpec(
         type="energy-solar-graph",
-        declared=frozenset({"type", "collection_key", "visibility"}),
+        declared=_ENERGY_SOLAR_GRAPH_DECLARED,
         builder="c.energy_solar_graph",
     )
 )
@@ -189,7 +189,7 @@ def energy_gas_graph(
 register_card(
     CardSpec(
         type="energy-gas-graph",
-        declared=frozenset({"type", "collection_key", "visibility"}),
+        declared=_ENERGY_GAS_GRAPH_DECLARED,
         builder="c.energy_gas_graph",
     )
 )
@@ -221,7 +221,7 @@ def energy_water_graph(
 register_card(
     CardSpec(
         type="energy-water-graph",
-        declared=frozenset({"type", "collection_key", "visibility"}),
+        declared=_ENERGY_WATER_GRAPH_DECLARED,
         builder="c.energy_water_graph",
     )
 )
@@ -265,7 +265,7 @@ def energy_distribution(
 register_card(
     CardSpec(
         type="energy-distribution",
-        declared=frozenset({"type", "collection_key", "link_dashboard", "visibility"}),
+        declared=_ENERGY_DISTRIBUTION_DECLARED,
         builder="c.energy_distribution",
     )
 )
@@ -297,7 +297,7 @@ def energy_sources_table(
 register_card(
     CardSpec(
         type="energy-sources-table",
-        declared=frozenset({"type", "collection_key", "visibility"}),
+        declared=_ENERGY_SOURCES_TABLE_DECLARED,
         builder="c.energy_sources_table",
     )
 )
@@ -329,7 +329,7 @@ def energy_grid_neutrality_gauge(
 register_card(
     CardSpec(
         type="energy-grid-neutrality-gauge",
-        declared=frozenset({"type", "collection_key", "visibility"}),
+        declared=_ENERGY_GRID_NEUTRALITY_GAUGE_DECLARED,
         builder="c.energy_grid_neutrality_gauge",
     )
 )
@@ -361,7 +361,7 @@ def energy_solar_consumed_gauge(
 register_card(
     CardSpec(
         type="energy-solar-consumed-gauge",
-        declared=frozenset({"type", "collection_key", "visibility"}),
+        declared=_ENERGY_SOLAR_CONSUMED_GAUGE_DECLARED,
         builder="c.energy_solar_consumed_gauge",
     )
 )
@@ -393,7 +393,7 @@ def energy_carbon_consumed_gauge(
 register_card(
     CardSpec(
         type="energy-carbon-consumed-gauge",
-        declared=frozenset({"type", "collection_key", "visibility"}),
+        declared=_ENERGY_CARBON_CONSUMED_GAUGE_DECLARED,
         builder="c.energy_carbon_consumed_gauge",
     )
 )
@@ -425,7 +425,7 @@ def energy_self_sufficiency_gauge(
 register_card(
     CardSpec(
         type="energy-self-sufficiency-gauge",
-        declared=frozenset({"type", "collection_key", "visibility"}),
+        declared=_ENERGY_SELF_SUFFICIENCY_GAUGE_DECLARED,
         builder="c.energy_self_sufficiency_gauge",
     )
 )
@@ -461,7 +461,7 @@ def energy_sankey(
 register_card(
     CardSpec(
         type="energy-sankey",
-        declared=frozenset({"type", "collection_key", "title", "visibility"}),
+        declared=_ENERGY_SANKEY_DECLARED,
         builder="c.energy_sankey",
     )
 )

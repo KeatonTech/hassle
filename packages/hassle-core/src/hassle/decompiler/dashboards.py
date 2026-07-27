@@ -117,6 +117,22 @@ ensure_builtin_families_loaded()
 # something this small; `url_path` first always, since it's the identity).
 _META_KEY_ORDER: tuple[str, ...] = ("url_path", "title", "icon", "show_in_sidebar", "require_admin")
 
+# Sentinel distinguishing "key entirely absent" from "key present with value
+# `None`" when popping an optional modeled key out of a stored dict --
+# `dict.pop(key, None)` conflates the two, and every card/section/view/meta
+# builder's own `put()` (or `put()`-equivalent, `build_meta`'s `is not None`
+# filter) convention treats an explicitly-passed `None` kwarg IDENTICALLY to
+# omitting it: neither one ever reaches the stored body. A key PRESENT with
+# an explicit JSON `null` is therefore a DIFFERENT stored shape than the key
+# being absent (the two dicts have a different key set), but no typed-
+# builder call can reproduce the "present as null" shape -- there is no
+# kwarg spelling for it. Silently treating them the same up-converts a
+# present-null key into a dropped one on recompile, an I3 violation (BLOCK-1,
+# a review-round finding). Every site below therefore pops with `_MISSING`
+# and explicitly rejects (escalates the whole node to its raw form) whenever
+# the popped value `is None` -- never just "falsy" or "absent".
+_MISSING: Any = object()
+
 _SECTIONS_VIEW_TYPE = "sections"
 
 
@@ -440,9 +456,14 @@ def _try_emit_registry_card(card: dict[str, Any], spec: CardSpec) -> list[str] |
             if not isinstance(children_raw, list):
                 return None
 
-    visibility_raw = body.pop("visibility", None)
+    visibility_raw = body.pop("visibility", _MISSING)
     visibility_src: str | None = None
-    if visibility_raw is not None:
+    if visibility_raw is not _MISSING:
+        # BLOCK-1: called even when `visibility_raw` is an explicit `None`
+        # (present-but-null) -- `_try_visibility_kwarg` already returns
+        # `None` for any non-list value, `None` included, so this correctly
+        # escalates instead of silently treating "present as null" the same
+        # as "absent" (the sentinel-vs-`None` distinction is what fixes it).
         visibility_src = _try_visibility_kwarg(visibility_raw)
         if visibility_src is None:
             return None
@@ -565,19 +586,28 @@ def _try_emit_section(section: Any) -> list[str] | None:
     if not isinstance(cards_raw, list):
         return None
 
-    visibility_raw = body.pop("visibility", None)
+    visibility_raw = body.pop("visibility", _MISSING)
     visibility_src: str | None = None
-    if visibility_raw is not None:
+    if visibility_raw is not _MISSING:
+        # BLOCK-1: called even when `visibility_raw` is an explicit `None`
+        # (present-but-null) -- `_try_visibility_kwarg` already returns
+        # `None` for any non-list value, `None` included, so this correctly
+        # escalates instead of silently treating "present as null" the same
+        # as "absent" (the sentinel-vs-`None` distinction is what fixes it).
         visibility_src = _try_visibility_kwarg(visibility_raw)
         if visibility_src is None:
             return None
 
-    column_span = body.pop("column_span", None)
+    column_span = body.pop("column_span", _MISSING)
+    if column_span is None:
+        # BLOCK-1: present-but-null -- put()'s skip-on-None convention can
+        # never reproduce this through the typed builder.
+        return None
     if body:
         return None  # any leftover unmodeled key -> raw_section
 
     kwargs: list[str] = []
-    if column_span is not None:
+    if column_span is not _MISSING:
         kwargs.append(f"column_span={render_literal(column_span)}")
     if visibility_src is not None:
         kwargs.append(f"visibility={visibility_src}")
@@ -608,9 +638,17 @@ def _try_emit_view(view: Any) -> list[str] | None:
         return None
     body = dict(cast("dict[str, Any]", view))
 
-    view_type = body.pop("type", None)
-    if view_type is not None and not isinstance(view_type, str):
+    raw_type = body.pop("type", _MISSING)
+    if raw_type is None:
+        # BLOCK-1: present-but-null. `view()`'s `type=None` sentinel means
+        # "the `type` key is entirely ABSENT" (the legacy masonry shape,
+        # its own default is `"sections"`, never `None`) -- there is no
+        # call shape that reproduces `type` PRESENT with an explicit null,
+        # a different stored dict than one missing the key outright.
         return None
+    if raw_type is not _MISSING and not isinstance(raw_type, str):
+        return None
+    view_type: str | None = None if raw_type is _MISSING else cast("str", raw_type)
     is_sections = view_type == _SECTIONS_VIEW_TYPE
     child_key = "sections" if is_sections else "cards"
     other_key = "cards" if is_sections else "sections"
@@ -625,17 +663,26 @@ def _try_emit_view(view: Any) -> list[str] | None:
     if view_type == "panel" and len(children_raw) != 1:
         return None  # PanelViewArityError would fire at recompile
 
-    badges_raw = body.pop("badges", None)
+    badges_raw = body.pop("badges", _MISSING)
     badge_stmts: list[str] = []
-    if badges_raw is not None:
+    if badges_raw is not _MISSING:
+        # BLOCK-1: called even for an explicit `None` -- `_try_emit_badges`
+        # already rejects any non-list value (`None` included), so this
+        # correctly escalates a present-but-null `badges` key instead of
+        # silently treating it as "zero badges recorded" (absent).
         result = _try_emit_badges(badges_raw)
         if result is None:
             return None
         badge_stmts = result
 
-    visibility_raw = body.pop("visibility", None)
+    visibility_raw = body.pop("visibility", _MISSING)
     visibility_src: str | None = None
-    if visibility_raw is not None:
+    if visibility_raw is not _MISSING:
+        # BLOCK-1: called even when `visibility_raw` is an explicit `None`
+        # (present-but-null) -- `_try_visibility_kwarg` already returns
+        # `None` for any non-list value, `None` included, so this correctly
+        # escalates instead of silently treating "present as null" the same
+        # as "absent" (the sentinel-vs-`None` distinction is what fixes it).
         visibility_src = _try_visibility_kwarg(visibility_raw)
         if visibility_src is None:
             return None
@@ -645,7 +692,15 @@ def _try_emit_view(view: Any) -> list[str] | None:
         kwargs.append(f"type={view_type!r}" if view_type is not None else "type=None")
     for key in _VIEW_OPTION_ORDER:
         if key in body:
-            kwargs.append(f"{key}={render_literal(body.pop(key))}")
+            value = body.pop(key)
+            if value is None:
+                # BLOCK-1: present-but-null. `put()`'s skip-on-None
+                # convention means `view(title=None, ...)` is IDENTICAL, at
+                # compile time, to omitting `title=` entirely -- there is no
+                # call shape that reproduces `title` PRESENT with an
+                # explicit null.
+                return None
+            kwargs.append(f"{key}={render_literal(value)}")
     if visibility_src is not None:
         kwargs.append(f"visibility={visibility_src}")
     if body:
@@ -691,10 +746,22 @@ def _try_typed_decorator_kwargs(meta: Any) -> list[str] | None:
     if set(meta_dict) - set(_META_KEY_ORDER):
         return None  # an envelope-`meta` key `@dashboard` has no kwarg for
     if not isinstance(meta_dict.get("url_path"), str):
-        return None
-    return [
-        f"{key}={render_literal(meta_dict[key])}" for key in _META_KEY_ORDER if key in meta_dict
-    ]
+        return None  # covers url_path present-but-null too (fails isinstance(str))
+    kwargs: list[str] = []
+    for key in _META_KEY_ORDER:
+        if key in meta_dict:
+            value = meta_dict[key]
+            if value is None:
+                # BLOCK-1: present-but-null. `build_meta`'s own `is not
+                # None` filter (decorators.py) means `@dashboard(icon=None,
+                # ...)` is IDENTICAL, at compile time, to omitting `icon=`
+                # entirely -- no call shape reproduces `icon` PRESENT with
+                # an explicit null. Realistic trigger: `DirectBackend.
+                # _dashboard_registry_payload` sends `icon: None` on every
+                # update.
+                return None
+            kwargs.append(f"{key}={render_literal(value)}")
+    return kwargs
 
 
 def _raw_dashboard_source(obj: DashboardConfig, ident: str) -> str:

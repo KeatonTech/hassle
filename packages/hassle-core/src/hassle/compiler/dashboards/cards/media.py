@@ -79,9 +79,7 @@ def iframe(
 register_card(
     CardSpec(
         type="iframe",
-        declared=frozenset(
-            {"type", "url", "title", "aspect_ratio", "allow_open_top_navigation", "visibility"}
-        ),
+        declared=_IFRAME_DECLARED,
         builder="c.iframe",
     )
 )
@@ -130,17 +128,7 @@ def picture(
 register_card(
     CardSpec(
         type="picture",
-        declared=frozenset(
-            {
-                "type",
-                "image",
-                "image_entity",
-                "tap_action",
-                "hold_action",
-                "alt_text",
-                "visibility",
-            }
-        ),
+        declared=_PICTURE_DECLARED,
         builder="c.picture",
         entity_params=("image_entity",),
     )
@@ -210,20 +198,7 @@ def picture_glance(
 register_card(
     CardSpec(
         type="picture-glance",
-        declared=frozenset(
-            {
-                "type",
-                "entities",
-                "title",
-                "image",
-                "camera_image",
-                "camera_view",
-                "state_filter",
-                "tap_action",
-                "hold_action",
-                "visibility",
-            }
-        ),
+        declared=_PICTURE_GLANCE_DECLARED,
         builder="c.picture_glance",
         entity_params=("entities", "camera_image"),
     )
@@ -273,9 +248,7 @@ def picture_elements(
 register_card(
     CardSpec(
         type="picture-elements",
-        declared=frozenset(
-            {"type", "image", "elements", "camera_image", "camera_view", "visibility"}
-        ),
+        declared=_PICTURE_ELEMENTS_DECLARED,
         builder="c.picture_elements",
         entity_params=("camera_image",),
     )
@@ -338,19 +311,7 @@ def map(
 register_card(
     CardSpec(
         type="map",
-        declared=frozenset(
-            {
-                "type",
-                "entities",
-                "geo_location_sources",
-                "hours_to_show",
-                "default_zoom",
-                "dark_mode",
-                "auto_fit",
-                "theme_mode",
-                "visibility",
-            }
-        ),
+        declared=_MAP_DECLARED,
         builder="c.map",
         entity_params=("entities",),
     )

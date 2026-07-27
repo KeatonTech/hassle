@@ -93,20 +93,7 @@ def gauge(
 register_card(
     CardSpec(
         type="gauge",
-        declared=frozenset(
-            {
-                "type",
-                "entity",
-                "name",
-                "unit",
-                "min",
-                "max",
-                "needle",
-                "severity",
-                "theme",
-                "visibility",
-            }
-        ),
+        declared=_GAUGE_DECLARED,
         builder="c.gauge",
         entity_params=("entity",),
     )
@@ -166,18 +153,7 @@ def history_graph(
 register_card(
     CardSpec(
         type="history-graph",
-        declared=frozenset(
-            {
-                "type",
-                "entities",
-                "title",
-                "hours_to_show",
-                "refresh_interval",
-                "show_names",
-                "logarithmic_scale",
-                "visibility",
-            }
-        ),
+        declared=_HISTORY_GRAPH_DECLARED,
         builder="c.history_graph",
         entity_params=("entities",),
     )
@@ -245,20 +221,7 @@ def statistics_graph(
 register_card(
     CardSpec(
         type="statistics-graph",
-        declared=frozenset(
-            {
-                "type",
-                "entities",
-                "title",
-                "stat_types",
-                "chart_type",
-                "period",
-                "days_to_show",
-                "hide_legend",
-                "logarithmic_scale",
-                "visibility",
-            }
-        ),
+        declared=_STATISTICS_GRAPH_DECLARED,
         builder="c.statistics_graph",
         entity_params=("entities",),
     )
@@ -319,21 +282,7 @@ def sensor(
 register_card(
     CardSpec(
         type="sensor",
-        declared=frozenset(
-            {
-                "type",
-                "entity",
-                "name",
-                "icon",
-                "graph",
-                "detail",
-                "hours_to_show",
-                "unit",
-                "theme",
-                "limits",
-                "visibility",
-            }
-        ),
+        declared=_SENSOR_DECLARED,
         builder="c.sensor",
         entity_params=("entity",),
     )
@@ -375,7 +324,7 @@ def statistic(
 register_card(
     CardSpec(
         type="statistic",
-        declared=frozenset({"type", "entity", "name", "stat_type", "period", "visibility"}),
+        declared=_STATISTIC_DECLARED,
         builder="c.statistic",
         entity_params=("entity",),
     )
@@ -412,7 +361,7 @@ def markdown(
 register_card(
     CardSpec(
         type="markdown",
-        declared=frozenset({"type", "content", "title", "visibility"}),
+        declared=_MARKDOWN_DECLARED,
         builder="c.markdown",
     )
 )
@@ -456,17 +405,7 @@ def clock(
 register_card(
     CardSpec(
         type="clock",
-        declared=frozenset(
-            {
-                "type",
-                "title",
-                "clock_style",
-                "clock_size",
-                "show_seconds",
-                "time_format",
-                "visibility",
-            }
-        ),
+        declared=_CLOCK_DECLARED,
         builder="c.clock",
     )
 )
@@ -505,7 +444,7 @@ def calendar(
 register_card(
     CardSpec(
         type="calendar",
-        declared=frozenset({"type", "entities", "title", "initial_view", "visibility"}),
+        declared=_CALENDAR_DECLARED,
         builder="c.calendar",
         entity_params=("entities",),
     )
@@ -542,7 +481,7 @@ def logbook(
 register_card(
     CardSpec(
         type="logbook",
-        declared=frozenset({"type", "entities", "title", "hours_to_show", "visibility"}),
+        declared=_LOGBOOK_DECLARED,
         builder="c.logbook",
         entity_params=("entities",),
     )

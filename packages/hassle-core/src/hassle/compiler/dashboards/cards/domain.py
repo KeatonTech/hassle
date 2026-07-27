@@ -74,7 +74,7 @@ def alarm_panel(
 register_card(
     CardSpec(
         type="alarm-panel",
-        declared=frozenset({"type", "entity", "name", "states", "visibility"}),
+        declared=_ALARM_PANEL_DECLARED,
         builder="c.alarm_panel",
         entity_params=("entity",),
     )
@@ -134,18 +134,7 @@ def area(
 register_card(
     CardSpec(
         type="area",
-        declared=frozenset(
-            {
-                "type",
-                "area",
-                "navigation_path",
-                "show_camera",
-                "display_type",
-                "alert_classes",
-                "sensor_classes",
-                "visibility",
-            }
-        ),
+        declared=_AREA_DECLARED,
         builder="c.area",
         entity_params=(),
     )
@@ -179,7 +168,7 @@ def light(
 register_card(
     CardSpec(
         type="light",
-        declared=frozenset({"type", "entity", "name", "icon", "visibility"}),
+        declared=_LIGHT_DECLARED,
         builder="c.light",
         entity_params=("entity",),
     )
@@ -216,7 +205,7 @@ def thermostat(
 register_card(
     CardSpec(
         type="thermostat",
-        declared=frozenset({"type", "entity", "features", "visibility"}),
+        declared=_THERMOSTAT_DECLARED,
         builder="c.thermostat",
         entity_params=("entity",),
     )
@@ -252,7 +241,7 @@ def humidifier(
 register_card(
     CardSpec(
         type="humidifier",
-        declared=frozenset({"type", "entity", "features", "visibility"}),
+        declared=_HUMIDIFIER_DECLARED,
         builder="c.humidifier",
         entity_params=("entity",),
     )
@@ -282,7 +271,7 @@ def media_control(
 register_card(
     CardSpec(
         type="media-control",
-        declared=frozenset({"type", "entity", "visibility"}),
+        declared=_MEDIA_CONTROL_DECLARED,
         builder="c.media_control",
         entity_params=("entity",),
     )
@@ -314,7 +303,7 @@ def plant_status(
 register_card(
     CardSpec(
         type="plant-status",
-        declared=frozenset({"type", "entity", "name", "visibility"}),
+        declared=_PLANT_STATUS_DECLARED,
         builder="c.plant_status",
         entity_params=("entity",),
     )
@@ -352,7 +341,7 @@ def todo_list(
 register_card(
     CardSpec(
         type="todo-list",
-        declared=frozenset({"type", "entity", "title", "display_order", "visibility"}),
+        declared=_TODO_LIST_DECLARED,
         builder="c.todo_list",
         entity_params=("entity",),
     )
@@ -392,7 +381,7 @@ def shopping_list(
 register_card(
     CardSpec(
         type="shopping-list",
-        declared=frozenset({"type", "title", "display_order", "visibility"}),
+        declared=_SHOPPING_LIST_DECLARED,
         builder="c.shopping_list",
         entity_params=(),
     )
@@ -445,17 +434,7 @@ def weather_forecast(
 register_card(
     CardSpec(
         type="weather-forecast",
-        declared=frozenset(
-            {
-                "type",
-                "entity",
-                "show_current",
-                "show_forecast",
-                "forecast_type",
-                "name",
-                "visibility",
-            }
-        ),
+        declared=_WEATHER_FORECAST_DECLARED,
         builder="c.weather_forecast",
         entity_params=("entity",),
     )

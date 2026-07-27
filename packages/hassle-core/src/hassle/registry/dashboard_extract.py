@@ -41,17 +41,17 @@ template).
 **Spans**: every node's span is looked up by PATH against
 `CompileResult.node_span` (F5's dot-joined `<key>[<index>]` grammar), falling
 back to the nearest ANCESTOR's span when a path does not resolve --
-`_resolve_span` also transparently tries the bare-key spelling of a
-single-child `card` slot (`"...cards[0].card"`) alongside the indexed one
-(`"...cards[0].card[0]"`): the frozen F5 subsection (dashboards-design.md
-§6.1.1) now documents the bare-key path as correct for a `child_is_list=False`
-container, but as merged, `c.conditional`/`c.entity_filter` do not yet pass
-that flag, so the recorder still emits the indexed spelling in practice (see
-this module's own report for the flagged discrepancy) -- trying both keeps
-extraction correct under either the current or the documented-future
-behavior, per dashboards-design.md §8's "note it and use the nearest ancestor
-span rather than blocking" guidance, instead of hard-coding one convention and
-silently losing spans if the recorder changes out from under this code.
+`_resolve_span` also transparently tries the OTHER spelling of a single-child
+`card` slot (`"...cards[0].card"` <-> `"...cards[0].card[0]"`) as a second
+attempt before falling back to the ancestor span. `c.conditional`/
+`c.entity_filter` both pass `child_is_list=False` (DB3-fixes landed it, per
+dashboards-design.md §6.1.1), so the recorder emits the BARE spelling in
+practice and `_walk_card` uses that as its primary path; the indexed spelling
+is kept only as `_resolve_span`'s fallback, for robustness against a future
+container that does not set the flag, per dashboards-design.md §8's "note it
+and use the nearest ancestor span rather than blocking" guidance, instead of
+hard-coding one convention and silently losing spans if the recorder changes
+out from under this code.
 """
 
 from __future__ import annotations
@@ -238,16 +238,17 @@ def _conservative_scan(
 def _resolve_span(
     result: CompileResult, obj: DashboardConfig, path: str, ancestor_span: SourceSpan | None
 ) -> SourceSpan | None:
-    """`CompileResult.node_span(obj, path)`, falling back to the bare-key
-    spelling of a single-child slot (`"...card[0]"` <-> `"...card"`) and then
-    to `ancestor_span` -- see the module docstring's span-grammar note."""
+    """`CompileResult.node_span(obj, path)`, falling back to the OTHER
+    spelling of a single-child slot (`"...card"` <-> `"...card[0]"`, tried in
+    whichever direction `path` did not already use) and then to
+    `ancestor_span` -- see the module docstring's span-grammar note."""
     span = result.node_span(obj, path)
     if span is not None:
         return span
-    if path.endswith("[0]"):
-        span = result.node_span(obj, path[: -len("[0]")])
-        if span is not None:
-            return span
+    alt_path = path[: -len("[0]")] if path.endswith("[0]") else f"{path}[0]"
+    span = result.node_span(obj, alt_path)
+    if span is not None:
+        return span
     return ancestor_span
 
 
@@ -304,7 +305,12 @@ def _walk_card(
         if isinstance(child, dict):
             _walk_card(
                 child,
-                path=f"{path}.card[0]",
+                # Bare spelling is primary: `child_is_list=False` containers
+                # (`c.conditional`/`c.entity_filter`) now emit the bare
+                # `"...card"` path, not the indexed `"...card[0]"` one
+                # (DB3-fixes landed the flag) -- `_resolve_span` still tries
+                # the indexed spelling as a fallback for robustness.
+                path=f"{path}.card",
                 object_key=object_key,
                 obj=obj,
                 result=result,
