@@ -190,6 +190,26 @@ With discovery no longer cwd-sensitive, `hassle test` runs pytest with cwd at th
 **bundle root** for every invocation shape: relative `pytest_args` resolve against the
 bundle root, and a bare run collects the whole bundle rather than only `tests/`.
 
+That cwd comes with one consequence worth its own guard: `python -m pytest` prepends its
+working directory to `sys.path`, and a bundle's root-level sources are named after the
+user's HA **categories** (`bundle_ops.py`, `<slug(category name)>.py`) with **no
+reserved-word guard**. A category called "Calendar" produces a `calendar.py` at the
+bundle root, which then shadows the stdlib `calendar` for every import after it —
+including pytest's own startup chain (pydantic → `importlib.metadata` → `email` →
+`calendar`), which dies with a circular-import `AttributeError` mentioning neither Hassle
+nor the user's file, before collection begins. `hassle test` therefore runs the
+subprocess with `PYTHONSAFEPATH=1`, which suppresses exactly that cwd entry; pytest
+inserts each test file's own directory itself, so collection is unaffected. This is also
+why `hassle test tests/test_x.py` (which always ran from the bundle root) used to crash
+in such a bundle.
+
+**Known adjacent bug, not fixed here:** with the crash out of the way, a bundle root
+file whose module name collides with an already-imported stdlib module still compiles to
+*nothing* — `compile_bundle` imports it under its bare slug, `sys.modules` already holds
+the stdlib module, and the file's objects are silently dropped (`hassle validate` reports
+no findings). That is a "no edit is ever silently lost" (DESIGN §2) problem on the
+compile side and needs its own regression test and fix.
+
 ## The agent-acceptance harness (`hassle-dev`)
 
 `hassle_dev.acceptance` builds a small harness for evaluating how well an AI coding agent
