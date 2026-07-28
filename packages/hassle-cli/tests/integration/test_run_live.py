@@ -10,22 +10,59 @@ actually RAN, not just that the service call was accepted), shadow deleted
 -- also on failure (inject a trace-stream error; assert cleanup).
 
 `test_run_live_creates_shadow_triggers_and_cleans_up` is two-phase (docs/
-ha-api-notes.md §29 addendum): condition unsatisfied (HA's default
-`input_boolean` state) -> `failed_conditions` in the trace + counter
-unchanged, proving `skip_condition: false` actually gates the run; then
-condition satisfied -> `action/0` + counter incremented, proving the action
-executes. One test now pins the entire §10.4 semantic surface.
+ha-api-notes.md §29 addendum): condition unsatisfied -> `failed_conditions`
+in the trace + counter unchanged, proving `skip_condition: false` actually
+gates the run; then condition satisfied -> `action/0` + counter incremented,
+proving the action executes. One test now pins the entire §10.4 semantic
+surface.
+
+Every entity either phase depends on is created AND driven to the state that
+phase needs by `live_helpers.arrange_*` -- never left at a state the test
+did not set. Relying on HA's fresh-instance default made this suite pass
+against a pristine instance and fail when re-run against the same one
+(§29 addendum, round 4).
 """
 
 from __future__ import annotations
 
+import importlib.util
 import os
-import time
+import sys
 from pathlib import Path
 
 import pytest
 
 from hassle.backend import DirectBackend
+
+
+def _load_live_helpers():
+    """Load the sibling helper module by path.
+
+    NOT `from live_helpers import ...`: `tests/integration/` is deliberately
+    not a package (`packages/hassle-core/tests/integration/` shares the
+    directory name), so a bare import would depend on pytest's default
+    `prepend` import mode putting this directory on `sys.path` first, and on
+    the top-level name `live_helpers` staying unclaimed by the other
+    integration directory. Both hold today and neither is guaranteed --
+    `--import-mode=importlib` breaks the bare import outright, and it breaks
+    the UNIT job, not just this one (marker deselection happens after
+    collection has already imported this module). `test_run_live_isolation.py`
+    loads the same file the same way.
+    """
+    path = Path(__file__).resolve().parent / "live_helpers.py"
+    spec = importlib.util.spec_from_file_location("hassle_cli_live_helpers", path)
+    assert spec is not None and spec.loader is not None, path
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_live = _load_live_helpers()
+arrange_counter = _live.arrange_counter
+arrange_input_boolean = _live.arrange_input_boolean
+await_state = _live.await_state
+counter_value = _live.counter_value
 
 
 def test_cli_runner_invoke_rejects_cwd_kwarg_regression(tmp_path: Path) -> None:
@@ -115,51 +152,46 @@ def live_test_automation():
 
 
 def _owned_entities(ha: DirectBackend) -> tuple[str, str]:
-    """Create the flag entities this test's bundle references (a previous
-    version left the gate entity seeded NOWHERE -- an eternally-false
-    condition and a silently no-op'd turn_on; every CI container is fresh,
-    so a test may assume nothing exists that it did not create)."""
-    trigger_id = ha.create("input_boolean", {"name": "Hassle Live Trigger Flag"})
-    gate_id = ha.create("input_boolean", {"name": "Hassle Live Gate Flag"})
-    return f"input_boolean.{trigger_id}", f"input_boolean.{gate_id}"
+    """Create the flag entities this test's bundle references, each driven to
+    a known state (a previous version left the gate entity seeded NOWHERE --
+    an eternally-false condition and a silently no-op'd turn_on; a later one
+    seeded it only by creating it, which HA's `RestoreEntity` semantics quietly
+    undo when the suite is re-run against an instance that has seen the same
+    `entity_id` before -- docs/internals/ha-api-notes.md §29 addendum, round 4).
 
-
-def _counter_value(ha: DirectBackend, entity_id: str) -> int:
-    for state in ha.states():  # type: ignore[attr-defined]
-        if state.get("entity_id") == entity_id:
-            return int(state["state"])
-    raise AssertionError(f"{entity_id} not found in /api/states")
+    The gate starts `"off"`: that IS phase 1's precondition, arranged here
+    rather than inherited.
+    """
+    trigger_id = arrange_input_boolean(ha, name="Hassle Live Trigger Flag", state="off")
+    gate_id = arrange_input_boolean(ha, name="Hassle Live Gate Flag", state="off")
+    return trigger_id, gate_id
 
 
 @pytest.mark.integration
 def test_run_live_creates_shadow_triggers_and_cleans_up(
     ha: DirectBackend, ha_url_token: tuple[str, str], tmp_path: Path
 ) -> None:
-    """Two-phase: the test's own condition-gating entity
-    (`input_boolean.hassle_flag_2`, `only_if`'d in `_write_bundle`) is owned
-    by the test instead of left at HA's own default, so the condition branch
-    exercised is never an accident of a fixture that happens to leave the
-    gating entity off. This test exercises BOTH branches on purpose, pinning
-    the entire DESIGN §10.4 semantic surface in one place:
+    """Two-phase: the test's own condition-gating entity (`only_if`'d in
+    `_write_bundle`) is created AND set to `"off"` by the test, so the
+    condition branch exercised is never an accident of what an earlier run
+    or an earlier test left behind. This test exercises BOTH branches on
+    purpose, pinning the entire DESIGN §10.4 semantic surface in one place:
 
-    Phase 1 (condition unsatisfied -- HA's own default for a freshly created
-    `input_boolean` is `"off"`, docs/internals/ha-api-notes.md §4): trigger, assert the
-    trace shows `failed_conditions` and the counter did NOT change --
-    positive proof conditions are evaluated by default (skip_condition:
-    false), not just "the run completed".
+    Phase 1 (condition unsatisfied -- the gate entity was arranged `"off"`
+    and observed there): trigger, assert the trace shows `failed_conditions`
+    and the counter did NOT change -- positive proof conditions are
+    evaluated by default (skip_condition: false), not just "the run
+    completed".
 
     Phase 2 (condition satisfied -- turn the gating entity on): trigger
     again, assert `action/0` in the rendered timeline and the counter DID
-    increment -- the "service call accepted" vs "automation ran" distinction,
-    exercised on the branch where the action actually executes.
+    increment -- the "service call accepted" vs "automation ran"
+    distinction, exercised on the branch where the action actually executes.
     """
     from hassle_cli.cli import main
 
     url, token = ha_url_token
-    ha.create("input_boolean", {"name": "Hassle Flag", "icon": "mdi:flag"})
-    ha.create("input_boolean", {"name": "Hassle Flag 2", "icon": "mdi:flag"})
-    counter_id = ha.create("counter", {"name": "Hassle Live Run Counter"})
-    counter_entity_id = f"counter.{counter_id}"
+    counter_entity_id = arrange_counter(ha, name="Hassle Live Run Counter")
     trigger_entity_id, gate_entity_id = _owned_entities(ha)
 
     bundle = _write_bundle(
@@ -171,9 +203,10 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     run_args = ["run", "a.py::live_test_automation", "--live", "--yes"]
     run_env = {"NO_COLOR": "1", "HASSLE_HA_URL": url, "HASSLE_TOKEN": token}
 
-    # -- Phase 1: condition unsatisfied (input_boolean.hassle_flag_2 is "off",
-    # HA's own default -- no service call needed to arrange this). --
-    before_phase1 = _counter_value(ha, counter_entity_id)
+    # -- Phase 1: condition unsatisfied. The gate was set to "off" and
+    # observed there by `_owned_entities`; nothing here rests on a default. --
+    assert await_state(ha, gate_entity_id, "off") == "off"
+    before_phase1 = counter_value(ha, counter_entity_id)
     result = _invoke_in_dir(main, run_args, cwd=bundle, env=run_env)
     assert result.exit_code == 0, result.output
     assert "failed_conditions" in result.output.lower()
@@ -182,7 +215,7 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     # The action never ran -- the counter must NOT have moved. This is the
     # positive proof that Hassle's skip_condition: false default actually
     # gates the run rather than the condition being vacuously satisfied.
-    assert _counter_value(ha, counter_entity_id) == before_phase1
+    assert counter_value(ha, counter_entity_id) == before_phase1
     assert _shadow_ids(ha) == []  # cleaned up regardless of branch taken
 
     # -- Phase 2: satisfy the condition, trigger again. --
@@ -192,18 +225,8 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     # Settle-proof: the gate must be OBSERVABLY "on" before triggering, so a
     # phase-2 failure can never be ambiguous between "condition semantics
     # broken" and "toggle never landed".
-    gate_state = None
-    deadline = time.monotonic() + 5.0
-    while time.monotonic() < deadline:
-        gate_state = next(
-            (st["state"] for st in ha.states() if st.get("entity_id") == gate_entity_id),  # type: ignore[attr-defined]
-            None,
-        )
-        if gate_state == "on":
-            break
-        time.sleep(0.25)
-    assert gate_state == "on", f"gate {gate_entity_id} never reached 'on' (last: {gate_state!r})"
-    before_phase2 = _counter_value(ha, counter_entity_id)
+    assert await_state(ha, gate_entity_id, "on") == "on"
+    before_phase2 = counter_value(ha, counter_entity_id)
     result = _invoke_in_dir(main, run_args, cwd=bundle, env=run_env)
     assert result.exit_code == 0, result.output
     # Structural assertion (docs/internals/ha-api-notes.md §29): the word "trace"
@@ -219,9 +242,19 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     # call accepted" vs "automation ran" -- is exactly what let the
     # entity_id-mismatch bug hide) -- an independently observable side
     # effect closes that gap.
-    assert _counter_value(ha, counter_entity_id) == before_phase2 + 1
+    assert counter_value(ha, counter_entity_id) == before_phase2 + 1
     # Shadow cleaned up on success.
     assert _shadow_ids(ha) == []
+    # Courtesy, not a guarantee: leave the gate as this test found it so the
+    # instance is tidy for whatever reads it next. It is deliberately NOT the
+    # thing that makes the suite re-runnable -- this line is skipped whenever
+    # a phase-2 assertion above fails, and correctness rests entirely on the
+    # NEXT run arranging its own gate (`_owned_entities`) rather than on this
+    # one cleaning up after itself.
+    ha.call_service(  # type: ignore[attr-defined]
+        "input_boolean", "turn_off", entity_id=gate_entity_id
+    )
+    await_state(ha, gate_entity_id, "off")
 
 
 @pytest.mark.integration
@@ -235,9 +268,7 @@ def test_run_live_cleans_up_shadow_on_trace_stream_failure(
     from hassle_cli.cli import main
 
     url, token = ha_url_token
-    ha.create("input_boolean", {"name": "Hassle Flag", "icon": "mdi:flag"})
-    ha.create("input_boolean", {"name": "Hassle Flag 2", "icon": "mdi:flag"})
-    counter_id = ha.create("counter", {"name": "Hassle Live Run Counter"})
+    counter_entity_id = arrange_counter(ha, name="Hassle Live Run Counter")
 
     def _boom(*args: object, **kwargs: object) -> None:
         raise RuntimeError("injected trace-stream failure")
@@ -247,7 +278,7 @@ def test_run_live_cleans_up_shadow_on_trace_stream_failure(
     trigger_entity_id, gate_entity_id = _owned_entities(ha)
     bundle = _write_bundle(
         tmp_path,
-        counter_entity_id=f"counter.{counter_id}",
+        counter_entity_id=counter_entity_id,
         trigger_entity_id=trigger_entity_id,
         gate_entity_id=gate_entity_id,
     )
