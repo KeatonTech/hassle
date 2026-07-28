@@ -220,3 +220,35 @@ def test_dashboard_condition_in_automation_message() -> None:
         with pytest.raises(DashboardConditionInAutomationError) as excinfo:
             only_if(cond.state("light.a", "on"))  # pyright: ignore[reportArgumentType]
     _check("dashboard_condition_in_automation", str(excinfo.value))
+
+
+def test_ha_own_default_dashboard_url_path_is_exempt_from_the_hyphen_rule() -> None:
+    """DB0 review finding (ha-api-notes §39.2): HA 2026.x migrates the default
+    dashboard into a registry item at `url_path: "lovelace"` -- created with
+    `allow_single_word: True`, so it has NO hyphen. After the §39.2 fix that
+    item is the ONLY representation of the default dashboard, and the
+    decompiler emits `@dashboard(url_path="lovelace")` for it. If the hyphen
+    rule rejected that spelling, every migrated instance would pull a bundle
+    that cannot compile -- the dashboard would be unrepresentable.
+
+    The rule stays for every other hyphen-less `url_path`: HA enforces it on
+    everything a user can create through the UI.
+    """
+    from hassle.compiler.dashboards.decorators import _check_identity
+
+    assert _check_identity(
+        url_path="lovelace",
+        default=False,
+        metadata={},
+        span=None,
+        decorator="@dashboard",
+    ) == "lovelace"
+
+    with pytest.raises(DashboardUrlPathError):
+        _check_identity(
+            url_path="climate",
+            default=False,
+            metadata={},
+            span=None,
+            decorator="@dashboard",
+        )

@@ -744,3 +744,34 @@ def test_list_remote_rejects_a_registry_item_colliding_with_the_default_sentinel
 
     with pytest.raises(ValueError, match="default"):
         asyncio.run(backend._alist_dashboards())  # type: ignore[attr-defined]
+
+
+def test_create_default_refuses_for_a_yaml_mode_lovelace_item_too() -> None:
+    """DB0 review finding S2: the create guard must use the SAME all-items
+    scan `_alist_dashboards` uses. `_alist_dashboards_ids_only` filters
+    `mode != "storage"` first, so a YAML-mode `lovelace` item never reaches
+    `_dashboard_ids` -- and a bundle still spelling `@dashboard(default=True)`
+    would fall through to `config/save(url_path=null)`, which real HA refuses
+    with an opaque `Not supported` (ha-api-notes §39.2's
+    `yaml_mode_default_save_rejected`) on every single push.
+    """
+    client = _FakeClient(
+        dashboards={
+            "__yaml__": {
+                "url_path": "lovelace",
+                "title": "Overview",
+                "mode": "yaml",
+                "filename": "ui-lovelace.yaml",
+            }
+        },
+        configs={"lovelace": {"views": []}},
+    )
+    backend = _make_backend(client)
+
+    with pytest.raises(ValueError, match="url_path='lovelace'"):
+        asyncio.run(
+            backend._acreate_dashboard(  # type: ignore[attr-defined]
+                {"meta": None, "config": {"views": [{"title": "Home"}]}}
+            )
+        )
+    assert not any(t == "lovelace/config/save" for t, _ in client.calls)

@@ -241,3 +241,52 @@ def test_update_converges_no_perpetual_replan_after_clearing_an_icon() -> None:
     remote = backend.list_remote("dashboard")[identity]
     assert remote["meta"] == desired["meta"]
     assert remote["config"] == desired["config"]
+
+
+def test_create_materializes_the_registry_defaults_like_real_ha() -> None:
+    """DB0 review finding S3 (ha-api-notes §39.1's captures): HA's
+    `dashboards/create` schema materializes `show_in_sidebar: true` and
+    `require_admin: false` when they are omitted -- every
+    `create_*` capture in `dashboards-db0.json` comes back carrying both.
+    A fake that stores the envelope verbatim reports a `meta` real HA cannot
+    return, so a hand-authored `@dashboard` that omits those two kwargs shows
+    phantom UI drift on the first plan after its own push.
+    """
+    backend = FakeBackend()
+    identity = backend.create(
+        "dashboard",
+        {
+            "meta": {"url_path": "climate-control", "title": "Climate"},
+            "config": {"views": []},
+        },
+    )
+    meta = backend.list_remote("dashboard")[identity]["meta"]
+    assert meta["show_in_sidebar"] is True
+    assert meta["require_admin"] is False
+
+
+def test_create_keeps_explicit_registry_field_values() -> None:
+    backend = FakeBackend()
+    identity = backend.create(
+        "dashboard",
+        {
+            "meta": {
+                "url_path": "climate-control",
+                "title": "Climate",
+                "show_in_sidebar": False,
+                "require_admin": True,
+            },
+            "config": {"views": []},
+        },
+    )
+    meta = backend.list_remote("dashboard")[identity]["meta"]
+    assert meta["show_in_sidebar"] is False
+    assert meta["require_admin"] is True
+
+
+def test_default_dashboard_meta_stays_null_no_registry_defaults() -> None:
+    """The default dashboard has no registry item at all, so there is nothing
+    for the create-time defaults to materialize onto."""
+    backend = FakeBackend()
+    backend.create("dashboard", {"meta": None, "config": {"views": []}})
+    assert backend.list_remote("dashboard")["default"]["meta"] is None
