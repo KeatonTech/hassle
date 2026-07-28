@@ -83,6 +83,16 @@ class _FakeClient:
         self.fail_config_save = False
 
     def _config_key(self, url_path: str | None) -> str:
+        # Fidelity with real HA (docs/internals/ha-api-notes.md §39.2, DB0
+        # capture `config_null_after_restart`): `lovelace/config`'s handler is
+        # `dashboards.get("lovelace") or dashboards[None]` -- when a registry
+        # item with url_path "lovelace" exists, `url_path=null` is an ALIAS
+        # for THAT dashboard, not a separate store. Modelling this is what
+        # makes the double-adoption bug visible to a unit test.
+        if url_path is None and any(
+            item.get("url_path") == "lovelace" for item in self.dashboards.values()
+        ):
+            return "lovelace"
         return "__default__" if url_path is None else url_path
 
     async def ws_command(self, type: str, **payload: Any) -> Any:
@@ -581,3 +591,151 @@ def test_alist_helpers_asserts_kind_is_a_helper_domain() -> None:
     with pytest.raises(AssertionError):
         asyncio.run(backend._alist_helpers("dashboard"))  # type: ignore[attr-defined]
     assert client.calls == []
+
+
+# -- DB0 live findings (docs/internals/ha-api-notes.md §39.2/§39.3) -----------
+#
+# Both regressions below were found by running the DB0 runbook against a live
+# HA 2026.7.4 and are recorded, with captures, in ha-api-notes.md §39.
+
+
+def test_list_remote_does_not_double_adopt_the_migrated_default_dashboard() -> None:
+    """§39.2 (BLOCKER): HA 2026.x migrates the legacy default dashboard
+    (`.storage/lovelace`) into a REAL registry item with `url_path:
+    "lovelace"`, and `lovelace/config(url_path=null)` keeps serving that same
+    dashboard. `_alist_dashboards` must therefore NOT also emit its synthetic
+    `"default"` entry: one HA dashboard would become two Hassle objects that
+    silently overwrite each other's config on every push.
+    """
+    client = _FakeClient(
+        dashboards={
+            "lovelace": {
+                "id": "lovelace",
+                "url_path": "lovelace",
+                "title": "Overview",
+                "icon": "mdi:view-dashboard",
+                "show_in_sidebar": True,
+                "require_admin": False,
+                "mode": "storage",
+            }
+        },
+        configs={"lovelace": {"views": [{"title": "Legacy Default"}]}},
+    )
+    backend = _make_backend(client)
+
+    result = asyncio.run(backend._alist_dashboards())  # type: ignore[attr-defined]
+
+    assert set(result) == {"lovelace"}
+    assert "default" not in result
+    assert result["lovelace"]["config"] == {"views": [{"title": "Legacy Default"}]}
+
+
+def test_list_remote_skips_default_probe_for_a_yaml_mode_lovelace_item() -> None:
+    """§39.2 (invariant I1): with `lovelace: mode: yaml`, the default
+    dashboard appears in `dashboards/list` as a `mode: "yaml"` item at
+    `url_path: "lovelace"` AND `lovelace/config(url_path=null)` serves
+    ui-lovelace.yaml's content. The mode filter alone does not save us -- the
+    separate default probe would adopt a YAML-mode dashboard Hassle must never
+    manage.
+    """
+    client = _FakeClient(
+        dashboards={
+            "__yaml__": {
+                "url_path": "lovelace",
+                "title": "Overview",
+                "icon": "mdi:view-dashboard",
+                "show_in_sidebar": True,
+                "require_admin": False,
+                "mode": "yaml",
+                "filename": "ui-lovelace.yaml",
+            }
+        },
+        configs={"lovelace": {"title": "YAML Home", "views": [{"title": "YAML View"}]}},
+    )
+    backend = _make_backend(client)
+
+    result = asyncio.run(backend._alist_dashboards())  # type: ignore[attr-defined]
+
+    assert result == {}
+
+
+def test_list_remote_still_probes_the_default_when_no_lovelace_item_exists() -> None:
+    """The pre-migration shape stays supported: no `lovelace` registry item
+    means `url_path=null` really is its own store (§2.1's original reading).
+    """
+    client = _FakeClient(
+        dashboards={
+            "dash_1": {
+                "id": "dash_1",
+                "url_path": "climate-control",
+                "title": "Climate",
+                "mode": "storage",
+            }
+        },
+        configs={
+            "climate-control": {"views": []},
+            "__default__": {"views": [{"title": "Home"}]},
+        },
+    )
+    backend = _make_backend(client)
+
+    result = asyncio.run(backend._alist_dashboards())  # type: ignore[attr-defined]
+
+    assert set(result) == {"climate-control", "default"}
+    assert result["default"]["meta"] is None
+
+
+def test_create_default_dashboard_refuses_when_a_lovelace_item_exists() -> None:
+    """§39.2, second order: on a migrated instance a bundle still spelling
+    `@dashboard(default=True)` would `config/save(url_path=null)` -- silently
+    overwriting the `lovelace` dashboard, and re-planning the same create
+    forever (list_remote never reports "default" there). It must fail loudly
+    with a fix instruction instead.
+    """
+    client = _FakeClient(
+        dashboards={
+            "lovelace": {
+                "id": "lovelace",
+                "url_path": "lovelace",
+                "title": "Overview",
+                "mode": "storage",
+            }
+        },
+        configs={"lovelace": {"views": []}},
+    )
+    backend = _make_backend(client)
+
+    with pytest.raises(ValueError, match="url_path='lovelace'"):
+        asyncio.run(
+            backend._acreate_dashboard(  # type: ignore[attr-defined]
+                {"meta": None, "config": {"views": [{"title": "Home"}]}}
+            )
+        )
+    assert not any(t == "lovelace/config/save" for t, _ in client.calls)
+
+
+def test_list_remote_rejects_a_registry_item_colliding_with_the_default_sentinel() -> None:
+    """§39.3: `lovelace/dashboards/create` accepts `allow_single_word: true`,
+    which bypasses the hyphen rule -- so a real dashboard at the literal
+    `url_path: "default"` IS creatable, and dashboards-design.md §3.1's
+    "collision-free by construction" does not hold. Two different dashboards
+    must never quietly share the identity `"default"`.
+    """
+    client = _FakeClient(
+        dashboards={
+            "default": {
+                "id": "default",
+                "url_path": "default",
+                "title": "Literally Default",
+                "mode": "storage",
+            }
+        },
+        configs={
+            "default": {"views": [{"title": "Not the default dashboard"}]},
+            "__default__": {"views": [{"title": "The real default dashboard"}]},
+        },
+    )
+    backend = _make_backend(client)
+
+    with pytest.raises(ValueError, match="default"):
+        asyncio.run(backend._alist_dashboards())  # type: ignore[attr-defined]

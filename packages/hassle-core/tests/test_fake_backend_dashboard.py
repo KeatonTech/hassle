@@ -184,3 +184,60 @@ def test_writes_tracked_for_dashboard_create_update_delete() -> None:
     assert backend.writes_since_reset() == 2
     backend.delete("dashboard", identity)
     assert backend.writes_since_reset() == 3
+
+
+# -- DB0 live finding (docs/internals/ha-api-notes.md §39.1) ------------------
+
+
+def test_update_omitting_icon_removes_the_key_like_real_ha() -> None:
+    """§39.1: `lovelace/dashboards/update` with `icon: null` REMOVES the key
+    from the stored registry item (reading (a) of the two the design weighed)
+    -- HA never persists a literal JSON `null` there. `DirectBackend` sends
+    `icon: None` on every update precisely to clear a deleted icon, so the
+    fake must model the removal rather than storing the envelope verbatim;
+    otherwise pull-side comparison sees an `icon: None` key real HA would
+    never return, and the fakes drift from the thing they stand in for.
+    """
+    backend = FakeBackend()
+    identity = backend.create("dashboard", _envelope("climate-control"))
+    assert backend.list_remote("dashboard")[identity]["meta"]["icon"] == "mdi:thermostat"
+
+    without_icon = _envelope("climate-control")
+    del without_icon["meta"]["icon"]  # type: ignore[index]
+    backend.update("dashboard", identity, without_icon)
+
+    stored_meta = backend.list_remote("dashboard")[identity]["meta"]
+    assert "icon" not in stored_meta
+
+
+def test_update_with_explicit_null_icon_removes_the_key_too() -> None:
+    """The same finding from the other spelling: a `meta` that carries
+    `icon: None` explicitly (what `_dashboard_registry_payload` puts on the
+    wire) must land as an ABSENT key, never as a stored null.
+    """
+    backend = FakeBackend()
+    identity = backend.create("dashboard", _envelope("climate-control"))
+
+    envelope = _envelope("climate-control")
+    envelope["meta"]["icon"] = None  # type: ignore[index]
+    backend.update("dashboard", identity, envelope)
+
+    assert "icon" not in backend.list_remote("dashboard")[identity]["meta"]
+
+
+def test_update_converges_no_perpetual_replan_after_clearing_an_icon() -> None:
+    """§39.1, the reason it matters (runbook item 11): clear an icon locally,
+    push, and the remote must then EQUAL the local desired state -- otherwise
+    `_advance_manifest` records an unchanged remote and every subsequent push
+    re-plans the same no-op update forever.
+    """
+    backend = FakeBackend()
+    identity = backend.create("dashboard", _envelope("climate-control"))
+
+    desired = _envelope("climate-control")
+    del desired["meta"]["icon"]  # type: ignore[index]
+    backend.update("dashboard", identity, desired)
+
+    remote = backend.list_remote("dashboard")[identity]
+    assert remote["meta"] == desired["meta"]
+    assert remote["config"] == desired["config"]
