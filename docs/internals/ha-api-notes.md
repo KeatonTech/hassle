@@ -221,6 +221,12 @@ GET /api/states/input_boolean.hassle_flag
 DESIGN §4's "storage items are `editable: true`; YAML-defined helpers coexist as `editable:false`"
 is confirmed (the flag lives on the entity state, not the collection list item).
 
+⚠️ **That `"state":"off"` is the fresh-`entity_id` case, not a guarantee** (§29 addendum, round 4):
+a storage helper restores its own last state when it is re-created under an `entity_id` the
+instance has used before, and the create schema has no field to override it. A test that needs a
+helper in a particular state must call the service and observe the result — never inherit "the
+default".
+
 `{domain}/subscribe` was not exercised (not needed by the sync engine; `list` is sufficient).
 
 ---
@@ -2397,6 +2403,95 @@ No product code changed in this round — `render_trace_timeline`/`resolve_shado
 re-verified against live HA in this PR (no Docker/HA access here) — the orchestrator's CI run is
 the actual green signal, and is expected to be the first fully-green run of this test across all
 three rounds.
+
+### 29 addendum, round 4 (`fix/run-live-self-isolation`): a helper's "HA default" state is not a precondition a test may inherit
+
+> Numbering note: the two headings above are addenda to **this** section (§29); their "27" is a
+> typo kept for link stability. Code and tests cite all of them as "§29 addendum".
+
+**Field report (HA 2026.7.4, live).** `uv run pytest -m integration -q` against a **fresh** HA:
+46 passed, 2 skipped. The identical command re-run against the **same** instance:
+`test_run_live_creates_shadow_triggers_and_cleans_up` fails at its first phase-1 assertion,
+`assert "failed_conditions" in result.output.lower()` — the rendered trace shows the condition
+**passing**, i.e. the gating `input_boolean` was `"on"` when phase 1 triggered. A
+`GET /api/states/input_boolean.hassle_flag_2` in the same failing run answered `Entity not found`.
+
+**Root cause (test, not product): the precondition was inherited rather than arranged.** Round 3
+(above) resolved phase 1's gate state by *not* touching it — "trigger with the gate still at HA's
+default `"off"`" — and the test said so in a comment: *"HA's own default — no service call needed
+to arrange this."* That reading of §4 is too strong. §4's `"state":"off"` capture is what a helper
+comes up in on an instance that has **never seen that `entity_id`**; it is not a guarantee about
+an `entity_id` the instance has seen before. A storage-collection `input_boolean` is a
+`RestoreEntity` — on being added it restores its own last state when the create payload carries no
+initial state, and the create schema (`{name, icon}`, §4) has no way to supply one. The `ha`
+fixture's wipe deletes the *collection item*; it cannot delete the instance's restore-state
+history. So on run 2, the gate helper is re-created under the `entity_id` run 1 used and comes
+back up `"on"` — the state **phase 2 of run 1 left it in** — and phase 1's whole premise is gone.
+The two observations fit that one mechanism: a passing condition (a restored `"on"`), and a state
+lookup for a helper this test no longer creates at all (`hassle_flag_2` was vestigial arrangement
+left over from round 3's shape, referenced by nothing).
+
+**Live-verified in this PR** (HA **2026.2.3**, `pip`-installed and run directly — no Docker daemon
+in this environment; the field report is 2026.7.4, and the mechanism is not version-specific).
+Reproduction of the report, then of the mechanism in isolation:
+
+```
+# run 1 against a fresh instance
+$ uv run pytest -m integration packages/hassle-cli/tests/integration -q   →  4 passed
+# run 2, same instance, same command
+$ uv run pytest -m integration packages/hassle-cli/tests/integration -q   →  1 failed, 3 passed
+    test_run_live.py:179: assert "failed_conditions" in result.output.lower()
+    output was: trace: run f6512c2d… (finished) / trigger / condition/0 /
+                condition/0/entity_id/0 / action/0 / action/1
+    #                                    ^ condition PASSED, action RAN
+```
+
+The isolated capture — after the `ha` fixture's wipe has left **zero** `input_boolean` collection
+items, create one whose `entity_id` the instance used earlier, and read `/api/states`:
+
+```jsonc
+ha.list_remote("input_boolean")                   → {}          // nothing left over
+ha.create("input_boolean", {"name":"Hassle Live Gate Flag"})
+                                                  → "hassle_live_gate_flag"
+                                                  // ^ clean slug, no `_2` suffix: this is a
+                                                  //   genuinely new collection item
+GET /api/states
+→ { "entity_id":"input_boolean.hassle_live_gate_flag", "state":"on",   // ← NOT "off"
+    "attributes":{"friendly_name":"Hassle Live Gate Flag", …} }
+```
+
+`"on"` is what the previous run's phase 2 set. Nothing in the new run turned it on; the collection
+item it belongs to was created seconds earlier. That is the restore, direct.
+
+**Fix (test-only; no product code touched).**
+- New `packages/hassle-cli/tests/integration/live_helpers.py`: `arrange_input_boolean(ha,
+  name=…, state=…)` creates the helper, waits for its entity to exist in `/api/states`
+  (`await_entity` — a service call at an entity that does not exist yet is silently no-op'd by
+  HA, which is how the round-2 bug hid), **calls `input_boolean.turn_on|turn_off` explicitly**,
+  and waits until that state is observable (`await_state`). Both waits fail loudly, naming the
+  entity, rather than letting a downstream assertion fail for an unrelated-looking reason.
+  `arrange_counter`/`counter_value` do the presence half for the counter helper.
+- `test_run_live.py` phase 1 now arranges its gate `"off"` through that helper instead of
+  inheriting it, re-asserts it immediately before triggering, and restores it to `"off"` after
+  phase 2 so nothing downstream inherits phase 2's `"on"` either. The two vestigial
+  `Hassle Flag`/`Hassle Flag 2` creations (referenced by nothing since round 3) are gone, and the
+  hand-rolled phase-2 settle loop is now `await_state`.
+- Regression test, network-free (R2/R4): `packages/hassle-cli/tests/test_run_live_isolation.py`
+  loads `live_helpers.py` by path and drives it against stub backends that model both live
+  failure modes — a helper that comes up in a restored `"on"`, and one whose entity never appears
+  in `/api/states` — plus the two timeout paths. This is the part CI's unit job can actually
+  enforce; the live proof is the integration job, run twice against one instance.
+
+**Verified after the fix** (same instance, same HA process that produced the failure above): the
+CLI integration file passes three consecutive times, and the FULL integration suite
+(`uv run pytest -m integration`, core + CLI) passes twice back-to-back — 42 passed, 2 skipped
+each time, the two skips being this HA version's own gates (§38.3 group-flavor schema, and the
+2026.7-only purpose vocabulary).
+
+**Standing rule this generalizes to** (the suite's other live tests already follow it; this one
+had one gap): *a live test may assume nothing about the instance it runs against except what it
+arranges itself* — which is stricter than "every CI container is fresh", because the same
+instance is legitimately re-used across runs.
 
 ## 30. Category write-back on push-create — WS shapes now live-verified by CI (`m11/category-writeback`)
 
