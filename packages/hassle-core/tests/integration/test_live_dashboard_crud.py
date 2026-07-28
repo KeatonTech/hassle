@@ -168,26 +168,33 @@ def test_update_converges_against_real_ha_registry_merge(ha: DirectBackend) -> N
         ha.delete("dashboard", identity)
 
 
-def test_default_dashboard_is_not_adopted_twice(ha: DirectBackend) -> None:
-    """DB0 / ha-api-notes §39.2 (BLOCKER), guarded against real HA.
+def test_lovelace_url_path_cannot_be_created_and_says_why(ha: DirectBackend) -> None:
+    """DB0 / ha-api-notes §39.11, against real HA.
 
-    Whatever this instance's default dashboard looks like -- migrated to a
-    `url_path: "lovelace"` registry item (HA 2026.x) or still reachable only
-    as `url_path=null` -- `list_remote` must report it exactly ONCE. Adopting
-    it under both identities means one HA dashboard becomes two Hassle
-    objects that silently overwrite each other on every push.
+    The migrated shape §39.2 fixes -- a registry item at
+    `url_path: "lovelace"` -- CANNOT be constructed through the public API,
+    on this instance or any other: `DashboardsCollection._process_create_data`
+    rejects any `url_path` whose panel already exists, and
+    `_async_ensure_default_panel` guarantees a `lovelace` panel always does.
+    Only HA's own startup migration creates it. That is exactly why the
+    double-adoption regression lives at the unit level
+    (`test_direct_backend_dashboards.py`, against a `_FakeClient` that models
+    HA's `dashboards.get("lovelace") or dashboards[None]` aliasing) and was
+    additionally verified by hand against a migrated instance -- see §39.2.
+
+    What IS assertable live is that Hassle refuses the create itself, with an
+    explanation, instead of surfacing HA's confusing "URL already in use" for
+    a dashboard `list_remote` just reported absent.
     """
-    ha.create(
-        "dashboard",
-        {"meta": None, "config": {"views": [{"title": "Home", "cards": []}]}},
-    )
-    remote = ha.list_remote("dashboard")
-    try:
-        assert not ("default" in remote and "lovelace" in remote), (
-            f"the default dashboard was adopted under BOTH identities: {sorted(remote)}"
+    import pytest
+
+    assert "lovelace" not in ha.list_remote("dashboard")
+    with pytest.raises(ValueError, match="reserves that URL"):
+        ha.create(
+            "dashboard",
+            {
+                "meta": {"url_path": "lovelace", "title": "Overview"},
+                "config": {"views": [{"title": "Home", "cards": []}]},
+            },
         )
-        assert "default" in remote or "lovelace" in remote
-    finally:
-        for candidate in ("default", "lovelace"):
-            if candidate in remote:
-                ha.delete("dashboard", candidate)
+    assert "lovelace" not in ha.list_remote("dashboard")

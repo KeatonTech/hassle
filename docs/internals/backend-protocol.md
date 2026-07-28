@@ -436,11 +436,15 @@ internal to `FakeBackend`/`DirectBackend`.
 - **Identity: `meta.url_path`, verbatim, never re-slugified** — a real
   `url_path` IS HA's own slug (unlike a config-entry helper's `name`-derived
   identity, which genuinely is re-slugified). The sentinel `"default"` keys
-  the one dashboard with no registry item at all (`meta: null`); it is
-  collision-free because HA requires a created dashboard's `url_path` to
-  contain a hyphen (verified against HA 2026.7.4, ha-api-notes §39.3 --
-  bypassable via `allow_single_word: true`,
-  docs/internals/dashboards-design.md §2.2 item 1). `dashboard` is in
+  the one dashboard with no registry item at all (`meta: null`). It is
+  collision-free only **by convention, not by construction** — DB0 retired the
+  old claim (ha-api-notes §39.3): HA does require a created `url_path` to
+  contain a hyphen, but `allow_single_word: true` bypasses that rule, so a
+  real dashboard at the literal `url_path: "default"` is creatable and
+  `list_remote` raises rather than merging the two. On HA 2026.x the default
+  dashboard usually has its own registry item at `url_path: "lovelace"` and is
+  keyed under that ordinary identity instead (§39.2); Hassle can adopt and
+  update that dashboard but never create it (§39.11). `dashboard` is in
   `hassle.sync.apply._CALLER_KEYED_KINDS` (alongside `automation`): the
   identity is always an intrinsic part of the envelope the caller sends,
   never HA-assigned, so `create`'s `CreatedIdentityDivergedError` guard does
@@ -450,8 +454,8 @@ internal to `FakeBackend`/`DirectBackend`.
 
   | Protocol call | Wire commands |
   |---|---|
-  | `list_remote("dashboard")` | `lovelace/dashboards/list` → for each registry item (mode `!= "storage"` filtered out, I1) plus the default: `lovelace/config` → compose the envelope. A `config_not_found` error (the never-customized-default case) omits that dashboard from the result entirely. |
-  | `create` | non-default: `lovelace/dashboards/create` (from `meta`, plus `mode: "storage"`) then `lovelace/config/save`; default (`meta: null`): `lovelace/config/save(url_path=null)` only — no registry call at all. |
+  | `list_remote("dashboard")` | `lovelace/dashboards/list` → for each registry item (mode `!= "storage"` filtered out, I1): `lovelace/config` → compose the envelope. A `config_not_found` error (the never-customized-default case) omits that dashboard entirely. The default dashboard is probed separately (`lovelace/config(url_path=null)`) **only when the registry holds no item at `url_path: "lovelace"`** — when it does, `url_path=null` is an alias for that item and probing would adopt one HA dashboard twice (ha-api-notes §39.2). **Raises** if a registry item’s `url_path` is literally `"default"` (§39.3: creatable via `allow_single_word`, and it would collide with the identity sentinel). |
+  | `create` | non-default: `lovelace/dashboards/create` (from `meta`, plus `mode: "storage"`) then `lovelace/config/save`; **refuses** `url_path: "lovelace"` up-front, which HA never allows to be created (ha-api-notes §39.11). Default (`meta: null`): one `lovelace/dashboards/list` first — the migrated-default guard, which **refuses** when an item at `url_path: "lovelace"` exists (§39.2) — then `lovelace/config/save(url_path=null)`; no registry *write* in either case. |
   | `update` | when `meta` is not null: `lovelace/dashboards/update` (dashboard_id resolved from `url_path` via `lovelace/dashboards/list`, cached per connection) with the FULL desired state of exactly `{title, icon, show_in_sidebar, require_admin}` — built from an explicit allowlist, never from `meta`'s own keys, and never `url_path` (PREVENT_EXTRA schema; see the payload/convergence bullet below). Always `lovelace/config/save` for `config`. |
   | `delete` | non-default: `lovelace/dashboards/delete`; default: `lovelace/config/delete` (reverts to auto-generated, enumerated loudly in the plan like every delete). |
 
@@ -495,12 +499,17 @@ internal to `FakeBackend`/`DirectBackend`.
   `FakeBackend` still routes dashboard bodies through `normalize_ha` on write
   for consistency with every other kind's code path; the guard is what makes
   that a no-op, not a kind-specific skip in `FakeBackend` itself.
-- **`FakeBackend`** stores the envelope verbatim, keyed by the identity rule
-  above; `create` rejects a hyphen-less `url_path` (keyed off `meta is None`
-  — the actual default-dashboard marker, never the derived identity string,
-  so a real dashboard whose `url_path` happens to be the literal string
-  `"default"` is still rejected) and a duplicate `url_path` (mirroring the
-  two HA-side registry rejections DB0 is expected to confirm); `update`
+- **`FakeBackend`** stores the envelope keyed by the identity rule above,
+  reshaping only `meta` to match how HA's registry actually stores a written
+  item (ha-api-notes §39.1, `_dashboard_registry_stored_shape`): an explicit
+  `icon: null` is dropped rather than persisted, and `create` materializes
+  `show_in_sidebar: true` / `require_admin: false` when omitted. The `config`
+  blob is stored verbatim (§39.4). `create` rejects a hyphen-less `url_path`
+  (keyed off `meta is None` — the actual default-dashboard marker, never the
+  derived identity string, so a real dashboard whose `url_path` happens to be
+  the literal string `"default"` is still rejected; `"lovelace"` is exempt,
+  §39.11) and a duplicate `url_path` (mirroring the two HA-side registry
+  rejections, both confirmed live by DB0); `update`
   needs one small fidelity guard (an unknown non-default identity raises,
   mirroring `DirectBackend._aresolve_dashboard_id` — the default dashboard
   is exempt, since real HA's `config/save` genuinely upserts it) but

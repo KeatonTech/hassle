@@ -3876,6 +3876,27 @@ scenario design §2.2 item 8 feared. Mitigating fact, also captured: HA
 — but adopting an unmanageable dashboard still breaks the pull→plan-noop
 invariant (§23) and fails every push with an opaque "Not supported".
 
+**How this was verified (it cannot be tested through the API — §39.11).**
+The migrated shape is not constructible by a test: `lovelace` is permanently
+uncreatable through `lovelace/dashboards/create`. So the bug was reproduced by
+hand, by driving HA into the migrated state and comparing the two code
+versions against it:
+
+1. `lovelace/config/save(url_path=null)` to seed a legacy `.storage/lovelace`;
+2. restart HA — `_async_migrate_default_config` runs, producing
+   `.storage/lovelace.lovelace` and the `url_path: "lovelace"` registry item;
+3. `DirectBackend.list_remote("dashboard")` on each version:
+
+```
+PRE-FIX  -> ['default', 'lovelace']      # same underlying config in both
+POST-FIX -> ['lovelace']
+```
+
+The standing regression is therefore the unit suite
+(`test_direct_backend_dashboards.py`), whose `_FakeClient` models HA's
+`dashboards.get("lovelace") or dashboards[None]` aliasing — all four §39.2/
+§39.3 tests fail against the pre-fix implementation.
+
 **Fix (implemented).** `_alist_dashboards` scans all items for
 `url_path == "lovelace"` **before** the mode filter and skips the default
 probe entirely when one exists; that item (already mode-filtered) *is* the
@@ -4103,9 +4124,14 @@ survives a save/read round-trip keyless.
 ### 39.10 DB0 acceptance run — and a Hassle bug it found (`hassle test` resolves the bundle one level too high)
 
 The design §12.1 acceptance loop was run end-to-end against the live HA
-2026.7.4, on an instance whose default dashboard HA had **already migrated**
-to `url_path: "lovelace"` (§39.2), so the fix was exercised in production
-shape rather than only in a unit fake:
+2026.7.4. **Scope note (corrected after review):** the instance HAD been
+through the §39.2 migration earlier in the session, but its `lovelace`
+dashboard was deleted by the integration suite's `ha` fixture before this run,
+so the loop below exercised an ordinary dashboard (`db0-climate`), NOT the
+migrated-default path. The §39.2 fix was verified separately — see that
+section's "verified by hand" note — and its regression lives at the unit
+level, because §39.11 makes the migrated shape impossible to construct
+through the API from a test.
 
 | Step | Result |
 |---|---|
@@ -4145,3 +4171,64 @@ Workaround used for the acceptance run: the supported
 `fix/` branch: resolve the bundle by walking up from the test file for
 `hassle.toml` (the same discovery `_bundle_root_or_fail` already does) instead
 of inferring it from pytest's rootdir, and register the marker.
+
+### 39.11 DB0 (review round): `lovelace` can never be CREATED through the public API
+
+> Live capture: reproduced against HA 2026.7.4 while writing §39.2's
+> regression — `lovelace/dashboards/create` with `url_path: "lovelace"`
+> returns `home_assistant_error` / `url_already_exists` even on an instance
+> where `dashboards/list` is empty.
+
+Found while trying to write a live regression for §39.2: the migrated shape
+cannot be constructed by a test, because **`DashboardsCollection._process_create_data`
+has two independent gates**, and the second one can never be satisfied for
+this url_path:
+
+```python
+allow_single_word = data.pop(CONF_ALLOW_SINGLE_WORD, False)
+if not allow_single_word and "-" not in url_path:
+    raise vol.Invalid("Url path needs to contain a hyphen (-)")
+if async_panel_exists(self.hass, url_path):
+    raise HomeAssistantError(translation_key="url_already_exists", ...)
+```
+
+- Gate 1 (the hyphen rule) IS bypassable with `allow_single_word: True` — that
+  is exactly how `_async_migrate_default_config` creates the item.
+- Gate 2 is not. `_async_ensure_default_panel` runs at every startup and
+  guarantees a panel is registered at `lovelace`, so `async_panel_exists` is
+  always true for it. HA's own migration only succeeds because it runs
+  **before** that call (`__init__.py`: migration at line 296,
+  `_async_ensure_default_panel` at line 299).
+
+Confirmed empirically — with `allow_single_word: True` the error simply moves
+from gate 1 to gate 2:
+
+```jsonc
+→ lovelace/dashboards/create {url_path:"lovelace", title:"Overview", mode:"storage"}
+← {code:"invalid_format", message:"Url path needs to contain a hyphen (-). …"}
+
+→ …same, plus allow_single_word:true      // on an instance with an EMPTY registry
+← {code:"home_assistant_error", translation_key:"url_already_exists",
+   message:"The URL \"lovelace\" is already in use. Please choose a different one"}
+```
+
+**Consequences, implemented:**
+
+- Hassle **can adopt and update** the `lovelace` dashboard, and **never
+  creates** it. `DirectBackend._acreate_dashboard` refuses that `url_path`
+  up-front with an explanation, rather than surfacing HA's `url_already_exists`
+  for a dashboard `list_remote` just reported absent.
+- The DSL's hyphen rule now **exempts `lovelace`**
+  (`compiler/dashboards/decorators.HA_DEFAULT_DASHBOARD_URL_PATH`). This is
+  required, not cosmetic: after §39.2's fix the `lovelace` registry item is the
+  only representation a migrated instance's default dashboard has, and the
+  decompiler emits `@dashboard(url_path="lovelace")` for it. Without the
+  exemption every migrated instance would pull a bundle that cannot compile.
+  The rule is unchanged for every other hyphen-less `url_path`.
+- **Residual gap, recorded not fixed:** a bundle carrying an adopted
+  `lovelace` dashboard cannot be pushed onto a *different* HA that has not been
+  through the migration — there is no API to create it there. The error says
+  so and tells the user to customise that instance's default dashboard once in
+  the UI and re-pull. Making this seamless would mean writing through
+  `config/save(url_path=null)` on an instance with no `lovelace` item, which is
+  a genuinely different object; Hassle does not guess between them.

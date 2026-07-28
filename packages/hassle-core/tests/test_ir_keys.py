@@ -9,7 +9,8 @@ def test_dashboard_kind_is_registered() -> None:
     assert DASHBOARD_KIND in OBJECT_KINDS
     assert object_key("dashboard", "climate-control") == "dashboard:climate-control"
     # The default dashboard has no registry item and no `url_path`; it keys off
-    # the `default` sentinel, collision-free because a real `url_path` must
+    # the `default` sentinel -- collision-free only by convention, not by
+    # construction (ha-api-notes §39.3); nominally a real `url_path` must
     # contain a hyphen.
     assert object_key(DASHBOARD_KIND, "default") == "dashboard:default"
 

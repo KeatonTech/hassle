@@ -37,9 +37,27 @@ from hassle.compiler.spans import SourceSpan, capture_span
 #: for an un-type-checked bundle file.
 F = TypeVar("F", bound=Callable[[], dict[str, Any]])
 
-#: The identity sentinel for THE default dashboard (§3.1). Collision-free by
-#: construction: a real `url_path` must contain a hyphen.
+#: The identity sentinel for THE default dashboard (§3.1), used when it has no
+#: registry item of its own and is reachable only as `url_path = null`.
+#:
+#: NOT collision-free by construction -- that claim was retired by DB0
+#: (docs/internals/ha-api-notes.md §39.3): HA's hyphen rule is bypassable via
+#: `allow_single_word: true` on `lovelace/dashboards/create`, so a real
+#: dashboard at the literal `url_path: "default"` is creatable.
+#: `DirectBackend._alist_dashboards` raises on that collision rather than
+#: letting two dashboards share one object key.
 DEFAULT_IDENTITY = "default"
+
+#: HA's OWN `url_path` for the default dashboard once it has a registry item
+#: (`homeassistant/components/lovelace`'s `DOMAIN`). HA 2026.x's
+#: `_async_migrate_default_config` creates it with `allow_single_word: True`,
+#: so it is the one real, HA-authored `url_path` with NO hyphen -- and after
+#: the §39.2 fix it is the only representation the default dashboard has on a
+#: migrated instance. It is therefore EXEMPT from the hyphen rule below: the
+#: decompiler emits `@dashboard(url_path="lovelace")` for it, and that has to
+#: compile or a migrated instance pulls a bundle that cannot build
+#: (docs/internals/ha-api-notes.md §39.2).
+HA_DEFAULT_DASHBOARD_URL_PATH = "lovelace"
 
 #: `@dashboard`/`@raw_dashboard` option names, in `meta` emission order.
 DASHBOARD_OPTIONS: tuple[str, ...] = ("url_path", *DASHBOARD_METADATA_KWARGS)
@@ -86,7 +104,7 @@ def _check_identity(
             raise DefaultDashboardMetadataError(given, span)
         return DEFAULT_IDENTITY
     assert url_path is not None
-    if "-" not in url_path:
+    if "-" not in url_path and url_path != HA_DEFAULT_DASHBOARD_URL_PATH:
         raise DashboardUrlPathError("hyphen", span, decorator=decorator, url_path=url_path)
     return url_path
 

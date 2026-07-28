@@ -275,7 +275,10 @@ class DashboardConfig(IRObject):
 
     Identity (§3.1): the ``url_path`` from ``meta``, used verbatim; else the
     extrinsic ``_key_id``; else the sentinel ``"default"``. The sentinel is
-    collision-free because HA requires a real ``url_path`` to contain a hyphen.
+    collision-free only by convention: HA's hyphen rule is bypassable via
+    ``allow_single_word`` (docs/internals/ha-api-notes.md §39.3), and on HA
+    2026.x the default dashboard usually has its own registry item at
+    ``url_path: "lovelace"`` instead (§39.2).
     """
 
     # Both halves are passthrough `Any` -- see the class docstring. `None`

@@ -236,13 +236,16 @@ def test_ha_own_default_dashboard_url_path_is_exempt_from_the_hyphen_rule() -> N
     """
     from hassle.compiler.dashboards.decorators import _check_identity
 
-    assert _check_identity(
-        url_path="lovelace",
-        default=False,
-        metadata={},
-        span=None,
-        decorator="@dashboard",
-    ) == "lovelace"
+    assert (
+        _check_identity(
+            url_path="lovelace",
+            default=False,
+            metadata={},
+            span=None,
+            decorator="@dashboard",
+        )
+        == "lovelace"
+    )
 
     with pytest.raises(DashboardUrlPathError):
         _check_identity(

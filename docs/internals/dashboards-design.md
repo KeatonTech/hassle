@@ -225,9 +225,12 @@ Energy family (leaf, mostly option-free): `energy-date-selection`,
 `energy-carbon-consumed-gauge`, `energy-self-sufficiency-gauge`,
 `energy-sankey`.
 
-This inventory is pinned against HA 2026.7.4 (DB0) and recorded in
-ha-api-notes §39.9, which also lists the three `energy_sankey` options the
-builder leaves to `extra=`; the fixture corpus (§9.2) then covers every name. The
+This inventory was written against HA 2026.7.4's frontend. DB0 did NOT
+re-derive the whole ~60-name list from the wire — it verified the three
+DSL-shape questions that were flagged as unconfirmed (`cond.not_`,
+`energy_sankey`'s `title=`, and view `type` materialization) in ha-api-notes
+§39.9, which also lists the three `energy_sankey` options the builder leaves
+to `extra=`; the fixture corpus (§9.2) then covers every name. The
 vocabulary is a **closed, versioned set** — unlike the purpose-trigger
 vocabulary (DESIGN §5.4), it ships in HA frontend releases rather than being
 enumerable from the instance, so typed builders are code, and an
@@ -256,7 +259,12 @@ new HA release added a card.
   > raises with a fix instruction rather than silently merging two dashboards
   > into one object key. See also §2.1's correction: on HA 2026.x the default
   > dashboard usually has a real `url_path: "lovelace"` registry item, and is
-  > adopted under **that** identity, not the sentinel.
+  > adopted under **that** identity, not the sentinel. That `url_path` is
+  > exempt from the DSL's hyphen rule — HA creates it without one, and after
+  > the §2.1 fix it is the migrated default's only representation, so
+  > `@dashboard(url_path="lovelace")` has to compile. Hassle can adopt and
+  > update it but **never create** it: HA rejects that `url_path` on create
+  > unconditionally (ha-api-notes §39.11).
 - Object key: `dashboard:<identity>` (e.g. `dashboard:climate-control`,
   `dashboard:default`). Keys stay opaque downstream (ir-format.md's
   first-colon rule holds; `url_path` is colon-free by HA's own slug rules,

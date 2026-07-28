@@ -169,9 +169,12 @@ class DashboardUrlPathError(CompileError):
             return (
                 f"`{decorator}(url_path={url_path!r})`{where} has no hyphen in its "
                 f"`url_path`. Home Assistant requires a dashboard's `url_path` to contain a "
-                f"hyphen (its own frontend and backend both enforce it), and Hassle relies on "
-                f"that rule to keep the `default` identity sentinel collision-free. Fix: "
-                f'rename it to a hyphenated slug, e.g. `url_path="{url_path}-dashboard"`.'
+                f"hyphen (its own frontend and backend both enforce it on everything you can "
+                f"create through the UI), so no dashboard with this `url_path` can exist to "
+                f"push to. Fix: rename it to a hyphenated slug, e.g. "
+                f'`url_path="{url_path}-dashboard"`. (The one exception is `"lovelace"`, '
+                f"which is HA's own `url_path` for the default dashboard once HA has "
+                f"migrated it to a registry item -- Hassle accepts that one.)"
             )
         if reason == "meta_without_url_path":
             return (

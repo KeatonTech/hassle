@@ -1256,3 +1256,52 @@ def test_typed_emission_does_not_depend_on_import_order() -> None:
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "OK"
+
+
+def test_full_round_trip_for_has_own_migrated_default_dashboard() -> None:
+    """DB0 review finding B2/B4 (ha-api-notes §39.2/§39.11): HA 2026.x's
+    migration gives the default dashboard a real registry item at
+    `url_path: "lovelace"`, created with `allow_single_word: True` so it has
+    NO hyphen. After §39.2's fix that item is the ONLY representation the
+    default dashboard has, and the decompiler emits
+    `@dashboard(url_path="lovelace")` for it.
+
+    So `compile(decompile(x)) == x` has to hold for that envelope -- if the
+    DSL's hyphen rule rejected the spelling the decompiler itself produces,
+    every migrated instance would pull a bundle that cannot compile, and the
+    dashboard would be unrepresentable.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from hassle.compiler.bundle import compile_bundle
+    from hassle.decompiler import decompile_bundle
+    from hassle.ir.canonical import sha256_hash
+
+    config = {
+        "meta": {
+            "url_path": "lovelace",
+            "title": "Overview",
+            "icon": "mdi:view-dashboard",
+            "show_in_sidebar": True,
+            "require_admin": False,
+        },
+        "config": {"views": [{"title": "Home", "cards": []}]},
+    }
+    obj = _dashboard_obj(config["meta"], config["config"])
+    assert obj.object_key() == "dashboard:lovelace"
+
+    src = decompile_bundle({obj.object_key(): obj})
+    # Typed, not escalated to the raw ladder, and NOT spelled `default=True`
+    # (that identity now means something else -- §39.2).
+    assert "@dashboard(" in src
+    assert "raw_dashboard" not in src
+    assert 'url_path="lovelace"' in src
+    assert "default=True" not in src
+
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "objects.py").write_text(src, encoding="utf-8")
+        result = compile_bundle(Path(tmp))
+    assert len(result.objects) == 1
+    (recompiled,) = result.objects.values()
+    assert sha256_hash(recompiled.to_ha()) == sha256_hash(config)

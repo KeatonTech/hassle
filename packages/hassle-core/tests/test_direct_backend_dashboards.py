@@ -775,3 +775,43 @@ def test_create_default_refuses_for_a_yaml_mode_lovelace_item_too() -> None:
             )
         )
     assert not any(t == "lovelace/config/save" for t, _ in client.calls)
+
+
+def test_create_refuses_has_own_lovelace_url_path_before_calling_ha() -> None:
+    """ha-api-notes §39.11: `lovelace` cannot be created through the public
+    API at ALL. `DashboardsCollection._process_create_data` has two gates --
+    the hyphen rule (bypassable with `allow_single_word: True`, which is how
+    HA's own migration creates it) AND `async_panel_exists`, which
+    `_async_ensure_default_panel` guarantees is always true for `lovelace`.
+    Hassle must say so itself rather than surfacing HA's confusing
+    `url_already_exists` for a dashboard `list_remote` just reported absent.
+    """
+    client = _FakeClient()
+    backend = _make_backend(client)
+
+    with pytest.raises(ValueError, match="reserves that URL"):
+        asyncio.run(
+            backend._acreate_dashboard(  # type: ignore[attr-defined]
+                {
+                    "meta": {"url_path": "lovelace", "title": "Overview"},
+                    "config": {"views": []},
+                }
+            )
+        )
+    assert not any(t == "lovelace/dashboards/create" for t, _ in client.calls)
+
+
+def test_create_still_works_for_an_ordinary_hyphenated_url_path() -> None:
+    client = _FakeClient()
+    backend = _make_backend(client)
+    identity = asyncio.run(
+        backend._acreate_dashboard(  # type: ignore[attr-defined]
+            {
+                "meta": {"url_path": "climate-control", "title": "Climate"},
+                "config": {"views": []},
+            }
+        )
+    )
+    assert identity == "climate-control"
+    ordinary = next(p for t, p in client.calls if t == "lovelace/dashboards/create")
+    assert "allow_single_word" not in ordinary

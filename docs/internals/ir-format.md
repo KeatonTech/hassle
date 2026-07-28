@@ -27,10 +27,15 @@ Module: `hassle.ir` (package `hassle-core`). Public surface (`hassle.ir.__all__`
   from `meta` — it is already HA's own slug and is never re-slugified (that
   would turn `climate-control` into `climate_control` and target the wrong
   dashboard). Derivation order: `meta["url_path"]` → the extrinsic `key_hint`
-  → the sentinel `"default"`. The sentinel is the **default dashboard**, which
-  has no registry item and `url_path = null` on the wire; it cannot collide
-  with a real dashboard because HA requires a created `url_path` to contain a
-  hyphen. Unlike every other kind, `object_key()` therefore never raises for a
+  → the sentinel `"default"`. The sentinel is the **default dashboard** when it
+  has no registry item of its own and is reachable only as `url_path = null`.
+  Two DB0 corrections (ha-api-notes §39.2/§39.3): on HA 2026.x the default
+  dashboard usually DOES have a registry item, at `url_path: "lovelace"`, and
+  is keyed under that ordinary identity instead; and the sentinel is **not**
+  collision-free by construction — HA's hyphen rule is bypassable via
+  `allow_single_word`, so a real dashboard at the literal `url_path: "default"`
+  is creatable (`DirectBackend` raises on that collision rather than letting
+  two dashboards share one key). Unlike every other kind, `object_key()` therefore never raises for a
   `dashboard`, and the identity segment routinely contains a hyphen — which is
   exactly why the key-opacity rule below matters.
 - **Key opacity (downstream contract):** treat an object key as an opaque
