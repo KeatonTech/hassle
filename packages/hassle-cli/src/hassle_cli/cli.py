@@ -10,6 +10,7 @@ Command surface (DESIGN §8.4 loop + §10.4 + §14):
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -129,8 +130,6 @@ def _report_compile_error(exc: CompileError, root: Path, *, as_json: bool = Fals
 
 
 def _require_backend_config(root: Path) -> tuple[str, str]:
-    import os
-
     from hassle_cli.token import TokenResolutionError, resolve_token_or_raise
 
     # HASSLE_HA_URL + HASSLE_TOKEN env override (same convention as the
@@ -1096,17 +1095,31 @@ def test_cmd(pytest_args: tuple[str, ...]) -> None:
     exactly the isolation a real terminal invocation of `hassle test` gets
     for free from being its own process.
 
-    Invoked with cwd set to the bundle's `tests/` directory: the `sim`
-    fixture's bundle-discovery default (`hassle.testing.plugin._bundle_dir_for`)
-    is "one level above pytest's rootdir", which only resolves correctly when
-    pytest's rootdir *is* `tests/` (its own convention, predating this CLI) --
-    passing `tests/` as a path argument instead makes pytest root at the
-    bundle itself, one level too high.
+    Invoked with cwd at the **bundle root**, whatever directory the user ran
+    `hassle test` from. This used to be `<bundle>/tests` instead, to bend
+    pytest's rootdir into the shape the `sim` fixture's bundle discovery then
+    wanted ("one level above rootdir") -- a doomed arrangement, since pytest
+    derives rootdir by walking up for a config anchor, not from cwd, and
+    `hassle init` writes a `pyproject.toml` at the bundle root for it to find
+    (docs/internals/cli.md). Discovery now walks up from the
+    test file to `hassle.toml` (`hassle.testing.plugin._bundle_dir_for`) and
+    ignores rootdir entirely, so cwd is free to be the obvious thing:
+    relative `pytest_args` resolve against the bundle root, and a bare run
+    collects the whole bundle rather than only `tests/`.
+
+    Run with ``PYTHONSAFEPATH=1``, because `python -m pytest` would otherwise
+    prepend that cwd to `sys.path`. A bundle's root-level sources are named
+    after the user's HA *categories* (`bundle_ops`, `<slug(category)>.py`)
+    with no reserved-word guard, so a category called "Calendar" produces a
+    `calendar.py` that shadows the stdlib module for every import after it --
+    including pytest's own startup chain, which then dies with a
+    circular-import `AttributeError` mentioning neither Hassle nor the user's
+    file. pytest inserts each test file's own directory itself, so nothing
+    about collection depends on the cwd entry.
     """
     root = _bundle_root_or_fail()
-    tests_dir = root / "tests"
-    cwd = tests_dir if tests_dir.is_dir() and not pytest_args else root
-    result = subprocess.run([sys.executable, "-m", "pytest", *pytest_args], cwd=cwd)
+    env = {**os.environ, "PYTHONSAFEPATH": "1"}
+    result = subprocess.run([sys.executable, "-m", "pytest", *pytest_args], cwd=root, env=env)
     raise SystemExit(result.returncode)
 
 

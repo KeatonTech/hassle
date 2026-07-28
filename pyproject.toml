@@ -71,7 +71,9 @@ reportMissingTypeStubs = false
 [tool.pytest.ini_options]
 testpaths = ["packages/hassle-core/tests", "packages/hassle-dev/tests", "packages/hassle-cli/tests"]
 addopts = "-ra"
+# `hassle_bundle` is NOT declared here: `hassle.testing.plugin`'s
+# `pytest_configure` registers it, so it is available to every bundle (which
+# has no marker declarations of its own) and to this workspace alike.
 markers = [
     "integration: tests that talk to a real Dockerized HA; never run in unit CI",
-    "hassle_bundle(path): simulator tests -- bundle directory the `sim` fixture compiles",
 ]

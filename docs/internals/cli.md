@@ -149,6 +149,67 @@ machine-independent output (`hassle-dev acceptance-bundle`) pass `suppress_sourc
 which always emits the bare-dependency shape regardless of what auto-detection would
 otherwise find.
 
+## `hassle test`: bundle discovery must not go through pytest's rootdir
+
+`hassle test` is `pytest` with `hassle.testing.plugin` (the `sim` fixture) already
+loaded via its `pytest11` entry point, run as a **subprocess** rather than in-process
+`pytest.main()`: bundles reuse test-file basenames (`test_hallway.py`) across
+directories, and repeated in-process runs in one long-lived interpreter collide in
+`sys.modules` / pytest's import cache ("import file mismatch"). A subprocess gets the
+isolation a real terminal invocation gets for free.
+
+The `sim` fixture used to resolve "which bundle do I compile?" as **one level above
+pytest's rootdir**, and `hassle test` ran pytest with cwd set to `<bundle>/tests` so
+that rootdir would come out as `tests/`. That never worked in a scaffolded bundle, and
+the failure mode was bad:
+
+- pytest does not derive rootdir from the working directory. It walks **upward** from
+  the invocation args looking for a config anchor.
+- `hassle init` writes a `pyproject.toml` at the **bundle root** (see
+  "Bundle-as-uv-project scaffolding" above). pytest 9 selects it — `rootdir: <bundle>`,
+  `configfile: pyproject.toml`.
+- So `rootdir.parent` was the bundle's *parent* directory, and the fixture called
+  `compile_bundle(<parent>)`. Compiling a directory **imports** every `.py` file under
+  it, so `hassle test` executed arbitrary Python sitting next to the bundle, and
+  simulated the wrong tree (or failed outright). The two scaffolding decisions —
+  bundle-root `pyproject.toml` and rootdir-relative bundle discovery — were individually
+  reasonable and jointly broken.
+
+Discovery now ignores rootdir entirely: `_bundle_dir_for` walks **up from the test file**
+(`request.path`) looking for `hassle.toml` — the same anchor
+`hassle_cli.config.find_bundle_root` uses for every subcommand, reimplemented inside
+hassle-core because hassle-core never imports hassle-cli (`tests/test_package_layering.py`).
+No `hassle.toml` above the test file is a `BundleNotFoundError` naming the file and the
+fix, never a guessed directory: guessing a directory here means executing whatever is in
+it. `@pytest.mark.hassle_bundle(path)` remains the explicit override (this repo's own
+simulator tests use it, since their bundles live under `fixtures/sim/`), and the plugin's
+`pytest_configure` registers that marker — a scaffolded bundle declares no markers of its
+own, so an unregistered marker meant `PytestUnknownMarkWarning` in the user's face.
+
+With discovery no longer cwd-sensitive, `hassle test` runs pytest with cwd at the
+**bundle root** for every invocation shape: relative `pytest_args` resolve against the
+bundle root, and a bare run collects the whole bundle rather than only `tests/`.
+
+That cwd comes with one consequence worth its own guard: `python -m pytest` prepends its
+working directory to `sys.path`, and a bundle's root-level sources are named after the
+user's HA **categories** (`bundle_ops.py`, `<slug(category name)>.py`) with **no
+reserved-word guard**. A category called "Calendar" produces a `calendar.py` at the
+bundle root, which then shadows the stdlib `calendar` for every import after it —
+including pytest's own startup chain (pydantic → `importlib.metadata` → `email` →
+`calendar`), which dies with a circular-import `AttributeError` mentioning neither Hassle
+nor the user's file, before collection begins. `hassle test` therefore runs the
+subprocess with `PYTHONSAFEPATH=1`, which suppresses exactly that cwd entry; pytest
+inserts each test file's own directory itself, so collection is unaffected. This is also
+why `hassle test tests/test_x.py` (which always ran from the bundle root) used to crash
+in such a bundle.
+
+**Known adjacent bug, not fixed here:** with the crash out of the way, a bundle root
+file whose module name collides with an already-imported stdlib module still compiles to
+*nothing* — `compile_bundle` imports it under its bare slug, `sys.modules` already holds
+the stdlib module, and the file's objects are silently dropped (`hassle validate` reports
+no findings). That is a "no edit is ever silently lost" (DESIGN §2) problem on the
+compile side and needs its own regression test and fix.
+
 ## The agent-acceptance harness (`hassle-dev`)
 
 `hassle_dev.acceptance` builds a small harness for evaluating how well an AI coding agent
