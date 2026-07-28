@@ -111,20 +111,48 @@ def arrange_input_boolean(
 
 
 def arrange_counter(ha: LiveBackend, *, name: str, timeout: float = SETTLE_TIMEOUT) -> str:
-    """Create a `counter` helper; return its entity id once observable.
+    """Create a `counter` helper; return its entity id once it reads numeric.
 
-    A counter's value is likewise restored on a re-used `entity_id`, so
-    tests compare it against a reading taken before the phase under test
-    rather than against a hard-coded starting value.
+    A counter's value is likewise restored on a re-used `entity_id`, so tests
+    compare it against a reading taken before the phase under test rather
+    than against a hard-coded starting value -- which means the first
+    readable value has to be a number, not `"unknown"`. Waiting for that here
+    keeps a slow start from surfacing as a `ValueError` out of
+    `counter_value` mid-assertion.
     """
     object_id = ha.create("counter", {"name": name})
     entity_id = f"counter.{object_id}"
-    await_entity(ha, entity_id, timeout=timeout)
-    return entity_id
+    deadline = time.monotonic() + timeout
+    while True:
+        state = await_entity(ha, entity_id, timeout=timeout)
+        if _as_int(state) is not None:
+            return entity_id
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"{entity_id} never reported a numeric value within {timeout}s "
+                f"(last observed: {state!r})"
+            )
+        time.sleep(POLL_INTERVAL)
 
 
 def counter_value(ha: LiveBackend, entity_id: str) -> int:
+    """The counter's current value.
+
+    Both failure modes raise `AssertionError` naming the entity, never a bare
+    `ValueError` from `int()` -- a counter reading `"unknown"` is a broken
+    arrangement, and it should say so.
+    """
     state = entity_state(ha, entity_id)
     if state is None:
         raise AssertionError(f"{entity_id} not found in /api/states")
-    return int(state)
+    value = _as_int(state)
+    if value is None:
+        raise AssertionError(f"{entity_id} reads {state!r}, not a numeric counter value")
+    return value
+
+
+def _as_int(state: str) -> int | None:
+    try:
+        return int(state)
+    except ValueError:
+        return None

@@ -2410,7 +2410,9 @@ three rounds.
 > typo kept for link stability. Code and tests cite all of them as "§29 addendum".
 
 **Field report (HA 2026.7.4, live).** `uv run pytest -m integration -q` against a **fresh** HA:
-46 passed, 2 skipped. The identical command re-run against the **same** instance:
+46 passed, 2 skipped — recorded verbatim as received; that is 48 items and this tree collects 44,
+so the report came from a working tree with four extra integration tests, not from `main`. The
+identical command re-run against the **same** instance:
 `test_run_live_creates_shadow_triggers_and_cleans_up` fails at its first phase-1 assertion,
 `assert "failed_conditions" in result.output.lower()` — the rendered trace shows the condition
 **passing**, i.e. the gating `input_boolean` was `"on"` when phase 1 triggered. A
@@ -2427,9 +2429,13 @@ initial state, and the create schema (`{name, icon}`, §4) has no way to supply 
 fixture's wipe deletes the *collection item*; it cannot delete the instance's restore-state
 history. So on run 2, the gate helper is re-created under the `entity_id` run 1 used and comes
 back up `"on"` — the state **phase 2 of run 1 left it in** — and phase 1's whole premise is gone.
-The two observations fit that one mechanism: a passing condition (a restored `"on"`), and a state
-lookup for a helper this test no longer creates at all (`hassle_flag_2` was vestigial arrangement
-left over from round 3's shape, referenced by nothing).
+
+The report's second observation, `input_boolean.hassle_flag_2 → Entity not found`, is **not**
+explained by that mechanism and is not part of the root cause. At the time of the report the test
+did still create `Hassle Flag 2` — but nothing referenced it (it was vestigial arrangement left
+over from round 3's shape, and this fix deletes it), and the `ha` fixture wipes helpers on
+teardown, so the likeliest reading is simply a lookup made after the wipe. It is recorded here as
+an unexplained-but-benign detail rather than folded into the diagnosis.
 
 **Live-verified in this PR** (HA **2026.2.3**, `pip`-installed and run directly — no Docker daemon
 in this environment; the field report is 2026.7.4, and the mechanism is not version-specific).

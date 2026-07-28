@@ -25,18 +25,44 @@ against a pristine instance and fail when re-run against the same one
 
 from __future__ import annotations
 
+import importlib.util
 import os
+import sys
 from pathlib import Path
 
 import pytest
 
-# `tests/integration/` is not a package (no `__init__.py`, deliberately -- the
-# same directory name exists under `packages/hassle-core/tests/`); pytest's
-# default `prepend` import mode puts this directory on `sys.path`, so the
-# sibling helper module is imported by its bare name.
-from live_helpers import arrange_counter, arrange_input_boolean, await_state, counter_value
-
 from hassle.backend import DirectBackend
+
+
+def _load_live_helpers():
+    """Load the sibling helper module by path.
+
+    NOT `from live_helpers import ...`: `tests/integration/` is deliberately
+    not a package (`packages/hassle-core/tests/integration/` shares the
+    directory name), so a bare import would depend on pytest's default
+    `prepend` import mode putting this directory on `sys.path` first, and on
+    the top-level name `live_helpers` staying unclaimed by the other
+    integration directory. Both hold today and neither is guaranteed --
+    `--import-mode=importlib` breaks the bare import outright, and it breaks
+    the UNIT job, not just this one (marker deselection happens after
+    collection has already imported this module). `test_run_live_isolation.py`
+    loads the same file the same way.
+    """
+    path = Path(__file__).resolve().parent / "live_helpers.py"
+    spec = importlib.util.spec_from_file_location("hassle_cli_live_helpers", path)
+    assert spec is not None and spec.loader is not None, path
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_live = _load_live_helpers()
+arrange_counter = _live.arrange_counter
+arrange_input_boolean = _live.arrange_input_boolean
+await_state = _live.await_state
+counter_value = _live.counter_value
 
 
 def test_cli_runner_invoke_rejects_cwd_kwarg_regression(tmp_path: Path) -> None:
@@ -219,8 +245,12 @@ def test_run_live_creates_shadow_triggers_and_cleans_up(
     assert counter_value(ha, counter_entity_id) == before_phase2 + 1
     # Shadow cleaned up on success.
     assert _shadow_ids(ha) == []
-    # Leave the gate as this test found it, so a later test (or a re-run
-    # against this instance) inherits nothing from phase 2.
+    # Courtesy, not a guarantee: leave the gate as this test found it so the
+    # instance is tidy for whatever reads it next. It is deliberately NOT the
+    # thing that makes the suite re-runnable -- this line is skipped whenever
+    # a phase-2 assertion above fails, and correctness rests entirely on the
+    # NEXT run arranging its own gate (`_owned_entities`) rather than on this
+    # one cleaning up after itself.
     ha.call_service(  # type: ignore[attr-defined]
         "input_boolean", "turn_off", entity_id=gate_entity_id
     )
