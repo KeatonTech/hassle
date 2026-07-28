@@ -349,8 +349,13 @@ def test_create_default_only_calls_config_save() -> None:
     assert identity == "default"
     call_types = [call for call, _ in client.calls]
     assert "lovelace/dashboards/create" not in call_types
-    assert call_types == ["lovelace/config/save"]
-    save_payload = client.calls[0][1]
+    # `config/save` is the only WRITE. The read that precedes it is the
+    # migrated-default guard (ha-api-notes §39.2): on an instance where HA has
+    # already moved the default dashboard to `url_path: "lovelace"`, saving
+    # through `url_path=null` would overwrite it, so the registry is checked
+    # first. Here there is no such item, so the save proceeds.
+    assert call_types == ["lovelace/dashboards/list", "lovelace/config/save"]
+    save_payload = client.calls[-1][1]
     assert save_payload["url_path"] is None
 
 

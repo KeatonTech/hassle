@@ -201,6 +201,30 @@ def _coerce_number_selector_fields(kind: str, config: dict[str, Any]) -> dict[st
     return coerced
 
 
+def _dashboard_registry_stored_shape(envelope: dict[str, Any]) -> dict[str, Any]:
+    """Mirror how HA's dashboard registry actually STORES a written item
+    (docs/internals/ha-api-notes.md §39.1, DB0 capture `list_after_icon_null`).
+
+    `lovelace/dashboards/update` merges (`{**item, **update}`) but an explicit
+    `icon: null` REMOVES the key -- HA never persists a literal JSON `null`
+    there, and `dashboards/list` accordingly never returns one.
+    `DirectBackend._dashboard_registry_payload` sends `icon: None` on every
+    update precisely to clear a deleted icon, so a fake that stored the
+    envelope verbatim would report an `icon: None` key real HA cannot produce,
+    and the pull-side comparison would diverge from production.
+
+    Only `meta` is reshaped; the `config` blob is opaque and stored verbatim
+    (§39.4 -- byte-verbatim, key order and all).
+    """
+    raw_meta = envelope.get("meta")
+    if not isinstance(raw_meta, dict):
+        return envelope
+    meta = cast("dict[str, Any]", raw_meta)
+    if "icon" not in meta or meta["icon"] is not None:
+        return envelope
+    return {**envelope, "meta": {k: v for k, v in meta.items() if k != "icon"}}
+
+
 def _empty_str_list() -> list[str]:
     return []
 
@@ -351,6 +375,8 @@ class FakeBackend:
             )
         normalized = normalize_ha(config, kind=kind)
         normalized = self._stored_body(kind, identity, normalized)
+        if kind == DASHBOARD_KIND:
+            normalized = _dashboard_registry_stored_shape(normalized)
         self._store[kind][identity] = normalized
         self._writes += 1
 
@@ -397,7 +423,7 @@ class FakeBackend:
                 f"lovelace/dashboards/create rejected: a dashboard with url_path "
                 f"{identity!r} already exists"
             )
-        self._store[DASHBOARD_KIND][identity] = normalized
+        self._store[DASHBOARD_KIND][identity] = _dashboard_registry_stored_shape(normalized)
         self._writes += 1
         return identity
 

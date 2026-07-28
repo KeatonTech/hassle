@@ -68,6 +68,25 @@ _CONFIG_NOT_FOUND = object()
 # real HA with `invalid_format`).
 _DASHBOARD_REGISTRY_FIELDS = ("title", "icon", "show_in_sidebar", "require_admin")
 
+# Hassle's identity for the DEFAULT dashboard (docs/internals/
+# dashboards-design.md §3.1). Spelled here rather than imported from
+# `hassle.compiler.dashboards.decorators` (which owns the DSL-side constant):
+# `hassle.backend` must not depend on `hassle.compiler`
+# (`tests/test_package_layering.py`).
+DEFAULT_IDENTITY = "default"
+
+# HA's OWN url_path for the default dashboard once it has a registry item
+# (`homeassistant/components/lovelace`'s `DOMAIN`). Two independent HA
+# behaviors key off this exact string, both captured in
+# docs/internals/ha-api-notes.md §39.2:
+#   - `_async_migrate_default_config` (storage mode) moves a legacy
+#     `.storage/lovelace` into a real registry item at this url_path;
+#   - the YAML-mode shim registers ui-lovelace.yaml at this url_path;
+# and `lovelace/config`'s handler resolves `url_path=null` to
+# `dashboards.get("lovelace") or dashboards[None]`, making `null` an ALIAS for
+# this item whenever it exists.
+_DEFAULT_DASHBOARD_URL_PATH = "lovelace"
+
 # Defaults HA's dashboard registry schema assigns when a field is omitted on
 # create (source-informed, DB0-pending verification --
 # `homeassistant/components/lovelace/dashboard.py`'s
@@ -813,12 +832,34 @@ class DirectBackend:
     async def _alist_dashboards(self) -> dict[str, dict[str, Any]]:
         items = await self._client.ws_command("lovelace/dashboards/list")
         out: dict[str, dict[str, Any]] = {}
+        # Set while scanning ALL items -- deliberately BEFORE the mode filter,
+        # since a YAML-mode `lovelace` item aliases the default probe just as
+        # a storage-mode one does (docs/internals/ha-api-notes.md §39.2).
+        has_lovelace_item = any(
+            item.get("url_path") == _DEFAULT_DASHBOARD_URL_PATH for item in items
+        )
         for item in items:
             if item.get("mode") != "storage":
                 continue  # YAML-mode dashboard: not ours to manage (I1)
             dashboard_id = str(item["id"])
             url_path = item.get("url_path")
-            identity = str(url_path) if url_path is not None else "default"
+            identity = str(url_path) if url_path is not None else DEFAULT_IDENTITY
+            if identity == DEFAULT_IDENTITY and url_path is not None:
+                # §39.3: `lovelace/dashboards/create` exposes
+                # `allow_single_word: true`, which bypasses HA's hyphen rule,
+                # so a REAL dashboard at the literal `url_path: "default"` is
+                # creatable -- and would silently share Hassle's sentinel
+                # identity with the actual default dashboard.
+                raise ValueError(
+                    "this Home Assistant has a dashboard whose url_path is literally "
+                    f"{DEFAULT_IDENTITY!r}, which collides with the identity Hassle "
+                    "reserves for the DEFAULT dashboard (docs/internals/"
+                    "dashboards-design.md §3.1) -- two different dashboards would "
+                    "share one object key. Fix: rename that dashboard's URL in "
+                    "Settings > Dashboards to anything containing a hyphen (HA "
+                    "requires a hyphen for every dashboard created through the UI), "
+                    "then re-run this command."
+                )
             self._dashboard_ids[identity] = dashboard_id
             # `meta` is the registry item minus `id` (HA-assigned,
             # transport-only) and minus `mode` (always "storage" here, §3.2).
@@ -827,12 +868,23 @@ class DirectBackend:
             if config is _CONFIG_NOT_FOUND:
                 continue
             out[identity] = {"meta": meta, "config": config}
-        # The default dashboard has NO registry item at all (§2.1) -- it
-        # never appears in `lovelace/dashboards/list`, so it's always probed
-        # separately.
-        default_config = await self._afetch_dashboard_config(None)
-        if default_config is not _CONFIG_NOT_FOUND:
-            out["default"] = {"meta": None, "config": default_config}
+        # The default dashboard is probed separately ONLY when it has no
+        # registry item of its own (docs/internals/ha-api-notes.md §39.2). On
+        # HA 2026.x it usually DOES have one: `_async_migrate_default_config`
+        # moves a legacy `.storage/lovelace` into a real registry item at
+        # `url_path: "lovelace"`, and `lovelace/config`'s handler is
+        # `dashboards.get("lovelace") or dashboards[None]` -- so `url_path=null`
+        # is then an ALIAS for that item, not a second store. Probing anyway
+        # would adopt one HA dashboard as TWO Hassle objects (`"lovelace"` and
+        # `"default"`) that overwrite each other's config on every push. The
+        # same guard covers the YAML-mode default (mode `yaml` at the same
+        # url_path): the mode filter above drops the registry item, but the
+        # probe would otherwise adopt ui-lovelace.yaml's content, which Hassle
+        # must never manage (I1).
+        if not has_lovelace_item:
+            default_config = await self._afetch_dashboard_config(None)
+            if default_config is not _CONFIG_NOT_FOUND:
+                out[DEFAULT_IDENTITY] = {"meta": None, "config": default_config}
         return out
 
     async def _acreate_dashboard(self, config: dict[str, Any]) -> str:
@@ -841,8 +893,28 @@ class DirectBackend:
         if meta is None:
             # The default dashboard has no registry item -- config/save only
             # (§4.1's mapping table).
+            #
+            # ...unless HA has already migrated it into one (ha-api-notes
+            # §39.2). There, `config/save(url_path=null)` writes THROUGH to the
+            # `lovelace` dashboard, so a bundle still spelling
+            # `@dashboard(default=True)` would silently overwrite it -- and,
+            # since `list_remote` reports that dashboard as `"lovelace"` and
+            # never as `"default"`, re-plan the identical create on every
+            # single push. Fail loudly with the fix instead.
+            await self._alist_dashboards_ids_only()
+            if _DEFAULT_DASHBOARD_URL_PATH in self._dashboard_ids:
+                raise ValueError(
+                    "this Home Assistant's default dashboard already has its own "
+                    f"registry entry at url_path={_DEFAULT_DASHBOARD_URL_PATH!r} (Home "
+                    "Assistant migrates it there on upgrade), so `default=True` no "
+                    "longer addresses it -- saving through it would overwrite that "
+                    "dashboard and re-plan this create forever. Fix: declare it as "
+                    f"@dashboard(url_path={_DEFAULT_DASHBOARD_URL_PATH!r}, ...) "
+                    "instead of @dashboard(default=True), or run `hassle pull` to "
+                    "have Hassle rewrite the declaration for you."
+                )
             await self._client.ws_command("lovelace/config/save", url_path=None, config=view_config)
-            return "default"
+            return DEFAULT_IDENTITY
         if not isinstance(meta, dict):
             raise ValueError(
                 "dashboard config's meta must be a dict or null (required to "
@@ -913,7 +985,7 @@ class DirectBackend:
             if item.get("mode") != "storage":
                 continue
             url_path = item.get("url_path")
-            identity = str(url_path) if url_path is not None else "default"
+            identity = str(url_path) if url_path is not None else DEFAULT_IDENTITY
             self._dashboard_ids[identity] = str(item["id"])
 
     async def _aupdate_dashboard(self, identity: str, config: dict[str, Any]) -> None:
