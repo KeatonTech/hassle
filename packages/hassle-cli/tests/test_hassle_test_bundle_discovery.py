@@ -1,5 +1,6 @@
 """Regression: `hassle test` inside a bundle scaffolded by `hassle init`
-(docs/internals/ha-api-notes.md §39.10).
+(docs/internals/cli.md, "`hassle test`: bundle discovery must not go through
+pytest's rootdir").
 
 The `sim` fixture used to resolve the bundle as "one level above pytest's
 rootdir", and `hassle test` set cwd to `<bundle>/tests` to make that land on

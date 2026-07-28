@@ -1096,17 +1096,20 @@ def test_cmd(pytest_args: tuple[str, ...]) -> None:
     exactly the isolation a real terminal invocation of `hassle test` gets
     for free from being its own process.
 
-    Invoked with cwd set to the bundle's `tests/` directory: the `sim`
-    fixture's bundle-discovery default (`hassle.testing.plugin._bundle_dir_for`)
-    is "one level above pytest's rootdir", which only resolves correctly when
-    pytest's rootdir *is* `tests/` (its own convention, predating this CLI) --
-    passing `tests/` as a path argument instead makes pytest root at the
-    bundle itself, one level too high.
+    Invoked with cwd at the **bundle root**, whatever directory the user ran
+    `hassle test` from. This used to be `<bundle>/tests` instead, to bend
+    pytest's rootdir into the shape the `sim` fixture's bundle discovery then
+    wanted ("one level above rootdir") -- a doomed arrangement, since pytest
+    derives rootdir by walking up for a config anchor, not from cwd, and
+    `hassle init` writes a `pyproject.toml` at the bundle root for it to find
+    (docs/internals/cli.md). Discovery now walks up from the
+    test file to `hassle.toml` (`hassle.testing.plugin._bundle_dir_for`) and
+    ignores rootdir entirely, so cwd is free to be the obvious thing:
+    relative `pytest_args` resolve against the bundle root, and a bare run
+    collects the whole bundle rather than only `tests/`.
     """
     root = _bundle_root_or_fail()
-    tests_dir = root / "tests"
-    cwd = tests_dir if tests_dir.is_dir() and not pytest_args else root
-    result = subprocess.run([sys.executable, "-m", "pytest", *pytest_args], cwd=cwd)
+    result = subprocess.run([sys.executable, "-m", "pytest", *pytest_args], cwd=root)
     raise SystemExit(result.returncode)
 
 

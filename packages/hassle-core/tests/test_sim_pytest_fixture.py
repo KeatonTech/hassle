@@ -1,9 +1,9 @@
 """The `sim` pytest fixture (DESIGN §10.2): auto-loads a compiled bundle and
-pins the clock. A real bundle's `tests/` directory sits one level below the
-bundle root, so the fixture's default bundle-dir resolution is "the parent of
-rootdir" -- overridable per test module with the `hassle_bundle(path)` marker
-(what this file uses, since the bundle actually lives under `fixtures/sim/`,
-not next to this tests directory). The fixture itself is
+pins the clock. Its default bundle-dir resolution walks up from the test file
+looking for `hassle.toml` (see `test_sim_bundle_discovery`) -- overridable per
+test module with the `hassle_bundle(path)` marker (what this file uses, since
+the bundle actually lives under `fixtures/sim/`, not in a bundle of its own).
+The fixture itself is
 `hassle.testing.plugin`'s pytest11 entry point, registered on the
 `hassle-core` distribution so plain `pytest` picks it up automatically once
 hassle-core is installed (DESIGN §10.2: "plain `pytest` works too") -- no

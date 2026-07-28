@@ -1,5 +1,6 @@
 """Regression: how the `sim` fixture finds the bundle it compiles
-(docs/internals/ha-api-notes.md §39.10).
+(docs/internals/cli.md, "`hassle test`: bundle discovery must not go through
+pytest's rootdir").
 
 `_bundle_dir_for` used to return ``Path(request.config.rootpath).parent`` --
 "one level above pytest's rootdir", which assumed pytest roots at the
@@ -71,7 +72,9 @@ def _make_bundle(root: Path) -> Path:
     `pyproject.toml` at the root, tests one level below."""
     (root / "tests").mkdir(parents=True)
     (root / "hassle.toml").write_text("format_version = 1\n", encoding="utf-8")
-    (root / "pyproject.toml").write_text('[project]\nname = "b"\nversion = "0.0.0"\n', encoding="utf-8")
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "b"\nversion = "0.0.0"\n', encoding="utf-8"
+    )
     test_file = root / "tests" / "test_hallway.py"
     test_file.write_text("", encoding="utf-8")
     return test_file
@@ -158,4 +161,6 @@ def test_hassle_bundle_marker_is_registered() -> None:
 
     pytest_configure(cast("pytest.Config", _ConfigStub()))  # pyright: ignore[reportArgumentType]
 
-    assert [line for name, line in recorded if name == "markers" and line.startswith("hassle_bundle(")]
+    assert [
+        line for name, line in recorded if name == "markers" and line.startswith("hassle_bundle(")
+    ]

@@ -27,6 +27,27 @@ class UnsupportedTemplateError(Exception):
         )
 
 
+class BundleNotFoundError(Exception):
+    """The ``sim`` fixture could not tell which bundle to compile.
+
+    Bundle discovery walks up from the test file looking for ``hassle.toml``
+    (the same anchor every ``hassle`` subcommand uses). Nothing is guessed
+    when that search comes up empty: guessing a directory means *importing*
+    -- and therefore executing -- whatever Python happens to live in it.
+    """
+
+    def __init__(self, test_file: str) -> None:
+        self.test_file = test_file
+        super().__init__(
+            f"The `sim` fixture could not find a Hassle bundle for {test_file}: no "
+            f"`hassle.toml` exists in that file's directory or any parent, so there is "
+            f"no bundle to compile. Fix: put the test inside a bundle (a `hassle init` "
+            f"bundle keeps its tests in `<bundle>/tests/`, one level below the "
+            f"`hassle.toml`), or name the bundle explicitly with "
+            f'`@pytest.mark.hassle_bundle("/path/to/bundle")` on the test or module.'
+        )
+
+
 class ScriptRecursionError(Exception):
     """Script-call expansion exceeded the nesting cap.
 
