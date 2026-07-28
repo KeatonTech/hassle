@@ -1,11 +1,16 @@
 # Dashboards (Lovelace storage-mode) — design
 
-Status: **proposed** (no implementation yet). This document is the design and
+Status: **implemented and behaviorally verified** (DB0 completed 2026-07-27
+against a live HA **2026.7.4**). This document is the design and
 implementation plan for DESIGN.md §13's "Dashboards" plugin — the last major
 piece of the G12 extensibility story. It follows the same conventions as the
-rest of `docs/internals/`: everything HA-behavioral is either cited from
-`docs/internals/ha-api-notes.md` or explicitly flagged as **source-informed,
-to be behaviorally verified** (workstream DB0 below, the analogue of M0.V).
+rest of `docs/internals/`: everything HA-behavioral is cited from
+`docs/internals/ha-api-notes.md` — for this kind, **§39.1–§39.10**, whose raw
+captures are in `docs/ha-api-captures/dashboards-db0.json`.
+
+Where DB0 found reality diverging from an earlier hypothesis, the statement is
+corrected **in place** with a dated, boxed note naming the finding; §2.1, §2.2
+and §3.1 each carry one. Read those before trusting a §2 claim from memory.
 
 Companion documents: [DESIGN.md](../../DESIGN.md) (invariants I1–I6 all apply),
 [CONTRIBUTING.md](../../CONTRIBUTING.md) (R1–R8 all apply), and the three
@@ -95,27 +100,42 @@ registry) are out of scope in v1.
 
 ---
 
-## 2. The HA substrate (source-informed — DB0 must verify)
+## 2. The HA substrate (VERIFIED — DB0 ran 2026-07-27 against HA 2026.7.4)
 
-⚠️ **Nothing in this section is yet captured in ha-api-notes.md.** The repo's
-convention (ha-api-notes §0) is that every wire shape is behaviorally verified
-against a live HA before code relies on it. Workstream DB0 does that and
-writes the new ha-api-notes § — the statements below are from HA core/frontend
-source reading and are the *hypotheses to verify*, with the known-risk items
-called out.
+✅ **This section is now captured**, in ha-api-notes.md §39.1–§39.8 with raw
+request/response pairs in `docs/ha-api-captures/dashboards-db0.json`. DB0 stood
+up a disposable HA **2026.7.4** (the real `stable`) and worked the checklist
+below; three statements turned out to be wrong and are corrected in place, with
+the finding cited inline. Everything else is confirmed as written.
 
 ### 2.1 Storage model — two objects per dashboard
 
 | Store | Contents |
 |---|---|
-| `.storage/lovelace_dashboards` | the dashboard **registry**: one item per non-default dashboard — `{id, url_path, title, icon, show_in_sidebar, require_admin, mode: "storage"}` |
-| `.storage/lovelace` | the **default** dashboard's view config |
+| `.storage/lovelace_dashboards` | the dashboard **registry**: one item per dashboard — `{id, url_path, title, icon, show_in_sidebar, require_admin, mode: "storage"}` |
+| `.storage/lovelace` | the **legacy** default dashboard's view config (migrated away on HA 2026.x — see below) |
 | `.storage/lovelace.<url_path>` | each other dashboard's view config |
 
-The default dashboard has **no registry item** and `url_path = null` on the
-wire. A never-customized default dashboard has no config at all (HA
-auto-generates a strategy view; fetching returns a `config_not_found` error) —
-Hassle treats it as **absent from `list_remote`** until someone saves it.
+A never-customized default dashboard has no config at all (HA auto-generates a
+strategy view; fetching returns a `config_not_found` error) — Hassle treats it
+as **absent from `list_remote`** until someone saves it. That much is
+confirmed (§39.6).
+
+> ⚠️ **CORRECTED 2026-07-27 (ha-api-notes §39.2).** This section used to say the
+> default dashboard has "**no registry item** and `url_path = null` on the
+> wire". That is obsolete on HA 2026.x: `_async_migrate_default_config` runs at
+> every storage-mode startup and moves a legacy `.storage/lovelace` into a
+> **real registry item at `url_path: "lovelace"`** (config moves to
+> `.storage/lovelace.lovelace`). `lovelace/config`'s handler is
+> `dashboards.get("lovelace") or dashboards[None]`, so once that item exists
+> `url_path = null` is an **alias for it**, not a separate store — and
+> `_alist_dashboards` was adopting the one dashboard as two Hassle objects
+> (`"lovelace"` and `"default"`). The same alias exposes a YAML-mode default
+> through the null probe despite the `mode` filter (item 8 below). Both are
+> fixed: the default is probed **only when no `url_path: "lovelace"` item
+> exists**. On such an instance the default dashboard is simply the ordinary
+> storage dashboard `"lovelace"`, and `default=True` no longer addresses it
+> (creating through it now fails loudly with that instruction).
 
 ### 2.2 WS API (the same commands the UI uses — I1)
 
@@ -129,77 +149,62 @@ Hassle treats it as **absent from `list_remote`** until someone saves it.
 | `lovelace/config/save` | `url_path \| null, config` | write view config |
 | `lovelace/config/delete` | `url_path \| null` | revert to auto-generated |
 
-Known-risk items DB0 must pin down (each gets a ha-api-notes subsection):
+DB0's checklist, resolved (ha-api-notes §39.1-§39.8, captures in
+`docs/ha-api-captures/dashboards-db0.json`):
 
-1. **`url_path` constraint**: HA requires a created dashboard's `url_path` to
-   contain a hyphen (frontend + backend enforced). If confirmed, the sentinel
-   identity `default` (§3.1) is collision-free by construction, and tier-1
-   validation teaches the rule.
-2. **Config opacity**: the Lovelace store is believed to save the config body
-   **verbatim** — no server-side schema validation, no normalization (unlike
-   automations' plural-schema rewrite). If true, `normalize_ha` and
-   `storage_canonical` are both no-ops for this kind; if HA *does* materialize
-   any defaults on save, they go into `storage_canonical`'s per-kind table
-   (`ir/canonical.py`), comparison-side only.
-3. **Delete semantics**: does `dashboards/delete` also remove the
-   `lovelace.<url_path>` config store? (Believed yes.)
-4. **View `type` materialization**: does the UI store `type: sections` /
-   `type: masonry` explicitly, or omit the key for masonry (the legacy
-   default)? Both shapes exist in the wild; §5.2's `type=None` spelling
-   handles the absent-key form regardless.
-5. **Card action payload shape on current HA**: `tap_action` may carry the
-   modern `{action: "perform-action", perform_action: "..."}` or the legacy
-   `{action: "call-service", service: "..."}` — both must round-trip verbatim.
-   This is also why the `service:` → `action:` rewrite must never run on
-   dashboard bodies (§3.3).
-6. **Badges storage shape**: modern object badges
-   (`{type: "entity", entity: ...}`) vs. legacy bare entity strings.
-7. **Admin/auth requirements** per command, and behavior of `dashboards/list`
-   for a fresh instance (empty list vs. error).
-8. **Default dashboard mode filtering**: `DirectBackend._alist_dashboards`
-   filters out any registry item whose `mode != "storage"` (I1), but the
-   default dashboard has no registry item at all, so this filter never runs
-   against it — if a YAML-mode *default* dashboard install turns out to
-   have some other observable marker (a panel-mode probe, or a `lovelace`
-   integration config-entry check), Hassle would currently adopt an
-   unmanageable default dashboard and attempt to write over YAML behind
-   HA's back (an I1 violation). DB0 must verify whether this case exists on
-   a real instance and, if so, what marker distinguishes it.
-9. **Never-customized, UI-created dashboard gap**: a dashboard the UI
-   creates (a `lovelace_dashboards` registry item exists) but whose config
-   was never saved (`lovelace/config` still 404s `config_not_found`) is
-   *invisible* to `list_remote` (§2.1's rule, applied verbatim to a
-   non-default dashboard too) — but its registry item still exists. If a
-   bundle then declares a dashboard at that same `url_path`, `create`'s
-   duplicate-`url_path` check (§4.1) fires immediately and loudly on the
-   registry call, rather than silently double-creating — DB0 should capture
-   this exact request/response pair to confirm the error shape (and that it
-   really is loud, not a silent no-op).
-10. **Does `icon: null` survive a `lovelace_dashboards/update` round-trip?**
-    (review-round finding, 2026-07-27.) `DirectBackend._dashboard_registry_payload`
-    sends `icon: None` on every registry update, but two source-informed
-    readings of HA's storage-collection merge conflict on what that does:
-    either the registry item's `icon` key is genuinely persisted as JSON
-    `null` and comes back that way from `dashboards/list`, or an explicit
-    `None` is treated as "no change"/"remove" and the key never appears (or
-    is dropped) in the stored item. This determines whether the decompiler's
-    BLOCK-1 fix (§6.2: a modeled key present with JSON `null` escalates that
-    node to the raw ladder rather than silently dropping the key) is reachable
-    from a real pull, or only from hand-constructed/`raw_dashboard`-authored
-    envelopes — the decompiler now handles both readings correctly regardless,
-    so this is a DB0 confirmation item, not a blocker.
+| # | Item | Outcome |
+|---|---|---|
+| 1 | `url_path` must contain a hyphen | ✅ confirmed (`invalid_format`, "Url path needs to contain a hyphen") -- **but bypassable**, see the correction below (§39.3) |
+| 2 | Config opacity: the store saves the body verbatim | ✅ confirmed **byte-for-byte, key order included** -- `normalize_ha` and `storage_canonical` stay no-ops for this kind, no per-kind canonical entry needed (§39.4) |
+| 3 | `dashboards/delete` also removes the config store | ✅ confirmed; a recreate at the same `url_path` is a clean slate, never a resurrection (§39.5) |
+| 4 | View `type` materialization | ✅ a view with no `type:` key stays keyless -- §5.2's `type=None` spelling is right (§39.4) |
+| 5 | Legacy `tap_action: {action: "call-service", service: ...}` round-trips | ✅ confirmed verbatim -- pinned against real HA, so §3.3's "never rewrite `service:` on dashboard bodies" is now behavioral, not assumed (§39.4) |
+| 6 | Badges: modern object vs. legacy bare string | ✅ both round-trip verbatim at the wire level; the gap is in `badge()`, not in HA, so §39.0's `raw_view` escalation stands (§39.4) |
+| 7 | `dashboards/list` on a fresh instance | ✅ returns `[]`, not an error (§39.6) |
+| 8 | YAML-mode default dashboard (I1 risk) | ⚠️ **the risk was real** -- see the correction below (§39.2) |
+| 9 | Registry item with a never-saved config | ✅ confirmed loud: a duplicate create fails with `home_assistant_error` / `url_already_exists` (note: **not** `invalid_format`). No product change needed (§39.6) |
+| 10 | Does `icon: null` survive an update round-trip? | ✅ answered: it **removes the key**; HA never stores a null there. `DirectBackend` was already right; `FakeBackend` was not, and is fixed (§39.1) |
 
-DB0 also captures raw request/response pairs into `docs/ha-api-captures/`
-exactly as M0.V did.
+Three corrections came out of the run:
 
-**Known test-fixture limitation (not a DB0 item, flagged here for
-visibility):** `FakeBackend.update` stores the local envelope it is given
-verbatim, rather than modelling HA's actual registry-item merge semantics (the
-open question in item 10 above). Update-convergence is therefore only
-asserted at the payload level in this repo's unit tests today — an
-end-to-end convergence test against HA's real merge behavior (once DB0
-confirms it) is a DB0 follow-on, not something FakeBackend can honestly
-simulate yet.
+> ⚠️ **CORRECTION 1 -- items 8 and §2.1 (ha-api-notes §39.2, BLOCKER, fixed).**
+> `_alist_dashboards` filters registry items by `mode != "storage"` (I1), but
+> it *also* probed `lovelace/config(url_path=null)` unconditionally. On HA
+> 2026.x that probe is an alias for the `url_path: "lovelace"` dashboard
+> whenever one exists -- so a migrated default was adopted **twice** (as
+> `"lovelace"` and as `"default"`), and a YAML-mode default's
+> ui-lovelace.yaml content was adopted despite the mode filter. Fixed by
+> skipping the probe whenever a `url_path: "lovelace"` item is present (the
+> scan runs before the mode filter, so it covers both cases). Mitigating fact
+> captured for the record: HA **refuses** `config/save` against a YAML-mode
+> dashboard (`{code: "error", message: "Not supported"}`), so Hassle could
+> never actually have written over a YAML file -- the damage was adoption and
+> a permanently failing push, not data loss.
+
+> ⚠️ **CORRECTION 2 -- item 1 and §3.1 (ha-api-notes §39.3, fixed).**
+> `lovelace/dashboards/create` accepts `allow_single_word: true`
+> (`STORAGE_DASHBOARD_CREATE_FIELDS`), which bypasses the hyphen rule. A real
+> dashboard at the literal `url_path: "default"` is therefore creatable, so
+> §3.1's "the `default` sentinel is collision-free by construction" **does not
+> hold**. HA's own default-dashboard migration uses this same flag, so it is
+> not a theoretical path. `_alist_dashboards` now raises a clear, actionable
+> error instead of letting two dashboards share one object key.
+
+> ⚠️ **CORRECTION 3 -- item 1's charset half (ha-api-notes §39.7, no code
+> change).** `url_path` has **no** charset constraint beyond the hyphen:
+> `Has-Upper`, `has-space x`, `has-dot.x` and `has-slash/x` are all accepted
+> and stored verbatim. `_dashboard_module_name`'s defensive sanitizing (drop
+> everything outside `[a-z0-9_]`; hash-fallback for a degenerate result) is
+> therefore load-bearing rather than paranoia -- the DB6 reviewer should-fix
+> that added it was correct on the merits.
+
+**Resolved fixture limitation (was: "FakeBackend cannot honestly simulate
+this").** `FakeBackend.update` stored the local envelope verbatim rather than
+modelling HA's registry merge. Now that §39.1 has settled what the merge
+actually does, `_dashboard_registry_stored_shape` models it: an explicitly
+null `icon` is dropped, exactly as HA stores it. Update convergence is
+asserted end-to-end in `test_fake_backend_dashboard.py`, not just at the
+payload level.
 
 ### 2.3 Built-in card inventory (the D-G4 checklist)
 
@@ -220,8 +225,9 @@ Energy family (leaf, mostly option-free): `energy-date-selection`,
 `energy-carbon-consumed-gauge`, `energy-self-sufficiency-gauge`,
 `energy-sankey`.
 
-This inventory is pinned by DB0 against the target HA release and recorded in
-the new ha-api-notes §; the fixture corpus (§9.2) then covers every name. The
+This inventory is pinned against HA 2026.7.4 (DB0) and recorded in
+ha-api-notes §39.9, which also lists the three `energy_sankey` options the
+builder leaves to `extra=`; the fixture corpus (§9.2) then covers every name. The
 vocabulary is a **closed, versioned set** — unlike the purpose-trigger
 vocabulary (DESIGN §5.4), it ships in HA frontend releases rather than being
 enumerable from the instance, so typed builders are code, and an
@@ -239,8 +245,18 @@ new HA release added a card.
   `hassle/ir/keys.py` and folded into `OBJECT_KINDS` (re-exported through
   `ir/__init__.py`, per the frozen-contract additive rule).
 - **Identity = `url_path`** for registry-listed dashboards; the identity
-  sentinel **`default`** for the default dashboard (safe: a real `url_path`
-  must contain a hyphen — §2.2 item 1 — so `default` can never collide).
+  sentinel **`default`** for the default dashboard.
+  > ⚠️ **CORRECTED 2026-07-27 (ha-api-notes §39.3).** This used to claim the
+  > sentinel is "safe: a real `url_path` must contain a hyphen — §2.2 item 1 —
+  > so `default` can never collide". The hyphen rule is real but **bypassable**
+  > via `allow_single_word: true`, a public field on
+  > `lovelace/dashboards/create`, so a dashboard at the literal `url_path:
+  > "default"` IS creatable. The sentinel is therefore collision-free only by
+  > convention. `DirectBackend._alist_dashboards` detects the collision and
+  > raises with a fix instruction rather than silently merging two dashboards
+  > into one object key. See also §2.1's correction: on HA 2026.x the default
+  > dashboard usually has a real `url_path: "lovelace"` registry item, and is
+  > adopted under **that** identity, not the sentinel.
 - Object key: `dashboard:<identity>` (e.g. `dashboard:climate-control`,
   `dashboard:default`). Keys stay opaque downstream (ir-format.md's
   first-colon rule holds; `url_path` is colon-free by HA's own slug rules,
@@ -311,8 +327,10 @@ is kept as a kind-level *contract* rather than an artifact of recursion
 depth. Both functions are kind-guarded and regression-tested both ways
 (`test_ir_dashboard_normalize.py`).
 
-`storage_canonical` starts as identity for the kind; DB0 findings populate
-its tables if HA materializes any defaults (§2.2 item 2). List order is
+`storage_canonical` is identity for the kind, and **DB0 confirmed it stays
+that way**: HA stores a dashboard config byte-verbatim, key order included, so
+it materializes no defaults for the tables to absorb (ha-api-notes §39.4).
+List order is
 semantically meaningful everywhere in a dashboard (views, sections, cards) —
 the existing canonical-JSON rules already preserve it.
 
@@ -407,7 +425,8 @@ merge to `main`:
    ineffective update forever. The fix sends the FULL desired state of the
    allowlist on every update: `icon` explicitly `None` when absent from
    `meta`, `show_in_sidebar`/`require_admin` with source-informed defaults
-   (`True`/`False`, DB0-pending verification) when absent.
+   (`True`/`False`, verified against HA 2026.7.4 -- ha-api-notes §39.1)
+   when absent.
 
 Both are unit-tested against a `_FakeClient` that now models the real
 PREVENT_EXTRA schema (rejecting `url_path` and any unknown key), so a future
@@ -589,16 +608,17 @@ cond.user(user_id, ...)                   # {condition: user, users: [...]}
 cond.any(...) / cond.all(...) / cond.not_(...)
 ```
 
-**DB2 implementation note (2026-07-27), for DB0 to confirm:** the shapes above
+**DB2 implementation note (2026-07-27) — DB0 CONFIRMED:** the shapes above
 are what the builders emit. `state`/`numeric_state`/`screen`/`user` are read
 straight off the HA frontend's own condition schema; `cond.any`/`cond.all` emit
 `{condition: "or"|"and", conditions: [...]}`. `cond.not_` emits
-`{condition: "not", conditions: [...]}` by symmetry with those two, and is the
-**one shape in this vocabulary not corroborated by a second source** — DB0
-should pin whether current HA's Lovelace condition schema has a `not` kind at
-all, and with which key. Nothing is lost either way: a verbatim dict is
-accepted anywhere a condition is, so a corrected shape is a one-line builder
-change plus a golden regeneration.
+`{condition: "not", conditions: [...]}`, which was the one shape in this
+vocabulary not corroborated by a second source. DB0 pinned it against HA
+2026.7.4's shipped frontend bundle (ha-api-notes §39.9): the conditional-card
+editor's type list is
+`["location","numeric_state","state","screen","time","user","and","not","or"]`
+and the `not` editor's own empty value is `{condition: "not", conditions: []}`.
+The builder is correct as written; no change was needed.
 
 Cross-vocabulary confusion is trap-caught in both directions with teaching
 errors (the `CompileTimeBranchError` tradition): an automation
@@ -1293,16 +1313,23 @@ list is its acceptance contract (R1).
 
 ### 12.1 Workstreams
 
-**DB0 — Wire-shape capture (Opus implementer + Haiku)** — *no code deps*
-Stand up the Dockerized HA harness (exists from M6); drive every §2.2
-command; capture request/response pairs into `docs/ha-api-captures/`;
-resolve the seven known-risk items; write the new ha-api-notes § (next free
-number, following §26/§38's structure). Haiku harvests ≥ 10 real dashboard
-configs into `fixtures/configs/dashboard_*.json` + PROVENANCE (after DB6's
-tiny `_kind_for` patch, which the orchestrator can land directly — one
-guarded prefix). Opus judgment is required here: this workstream *decides
-facts* the whole design cites, and wrong captures poison everything
-downstream.
+**DB0 — Wire-shape capture** — ✅ **DONE 2026-07-27** (HA 2026.7.4)
+Ran against a disposable HA **2026.7.4** — the real `stable`, from
+`pip install homeassistant` under Python 3.14 (no Docker needed, and the
+first captures in this repo from 2026.7 rather than §0's 2026.2.3). Every
+§2.2 command driven; 48 request/response pairs captured into
+`docs/ha-api-captures/dashboards-db0.json`; all ten known-risk items
+resolved and written up as ha-api-notes **§39.1–§39.10**. Three statements in
+§2 were wrong and are corrected in place (see §2.1/§2.2/§3.1's boxed
+corrections); one was a **blocker** — the default dashboard was adopted
+twice. The §12.1 acceptance loop was then run end-to-end on a migrated
+instance (ha-api-notes §39.10).
+
+Still open from this workstream's original scope: harvesting ≥ 10 **real**
+dashboard configs into `fixtures/configs/dashboard_*.json` + PROVENANCE. The
+current 12 fixtures remain hand-built and marked provisional; corpus
+enrichment against a real household is an independent follow-on and does not
+gate anything DB0 was verifying.
 *Tests first*: integration-marked tests asserting each captured behavior
 (they double as the permanent `tests/integration/` suite).
 

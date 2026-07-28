@@ -15,16 +15,15 @@ the whole family is ``collection_key=`` (which energy-collection instance to
 read from -- HA defaults it when omitted); ``energy_distribution`` alone also
 takes ``link_dashboard=`` (show a link back to the Energy dashboard).
 
-**Implementation note (2026-07-27), for DB0 to confirm:** ``energy_sankey``
-additionally models ``title=``. Unlike the other eleven cards (whose HA
-frontend schemas are genuinely option-free besides ``collection_key``), the
-Sankey card is the newest and most configurable of the family and is believed
-to accept a card-level ``title``; this is the one shape in this batch not
-corroborated by a second source (the DB0 HA-version pin this design doc calls
-for hadn't landed yet when this batch was written). Nothing is lost either
-way: an unrecognized ``title=`` would simply round-trip through ``extra=``
-instead, so a correction here is a one-line change plus a golden
-regeneration -- flagged in the DB3c report rather than silently assumed.
+**Implementation note (2026-07-27) -- DB0 CONFIRMED:** ``energy_sankey``
+additionally models ``title=``, and that was this batch's one unverified
+assumption. DB0 read the card's schema out of the ``hass_frontend`` bundle
+shipped with HA 2026.7.4 (docs/internals/ha-api-notes.md §39.9) and it does
+carry ``title: optional(string())``. The same schema shows three options this
+builder does NOT model -- ``layout`` (``auto``/``vertical``/``horizontal``),
+``group_by_floor``, ``group_by_area`` -- which round-trip losslessly through
+``extra=`` (I3); promoting them to typed kwargs is an additive follow-on, not
+a correctness gap.
 """
 
 from __future__ import annotations
@@ -446,8 +445,9 @@ def energy_sankey(
 ) -> None:
     """``c.energy_sankey(...)`` -- the grid/solar/battery/device Sankey flow diagram.
 
-    ``title=`` is this batch's one unverified assumption -- see the module
-    docstring's DB0 note.
+    ``title=`` is confirmed against HA 2026.7.4's frontend schema -- see the
+    module docstring's DB0 note, which also lists the three options this
+    builder leaves to ``extra=``.
     """
     span = capture_span(depth=0)
     body: dict[str, Any] = {"type": "energy-sankey"}

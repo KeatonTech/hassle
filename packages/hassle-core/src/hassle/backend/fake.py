@@ -415,8 +415,8 @@ class FakeBackend:
             raise ValueError(
                 f"lovelace/dashboards/create rejected: url_path {identity!r} must "
                 "contain a hyphen (mirrors HA's real create-flow validation -- "
-                "source-informed, docs/internals/dashboards-design.md §2.2 item 1, "
-                "DB0-pending verification)"
+                "verified against HA 2026.7.4, docs/internals/ha-api-notes.md "
+                "§39.3 -- note HA lets `allow_single_word: true` bypass the rule)"
             )
         if identity in self._store[DASHBOARD_KIND]:
             raise ValueError(

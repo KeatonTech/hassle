@@ -438,7 +438,8 @@ internal to `FakeBackend`/`DirectBackend`.
   identity, which genuinely is re-slugified). The sentinel `"default"` keys
   the one dashboard with no registry item at all (`meta: null`); it is
   collision-free because HA requires a created dashboard's `url_path` to
-  contain a hyphen (source-informed, DB0-pending verification,
+  contain a hyphen (verified against HA 2026.7.4, ha-api-notes §39.3 --
+  bypassable via `allow_single_word: true`,
   docs/internals/dashboards-design.md §2.2 item 1). `dashboard` is in
   `hassle.sync.apply._CALLER_KEYED_KINDS` (alongside `automation`): the
   identity is always an intrinsic part of the envelope the caller sends,
@@ -483,7 +484,7 @@ internal to `FakeBackend`/`DirectBackend`.
   (`{**item, **update}`) rather than replacing it outright, so `icon` is
   sent explicitly as `None` when absent from `meta` (clearing it) and
   `show_in_sidebar`/`require_admin` fall back to source-informed defaults
-  (`True`/`False`, DB0-pending) rather than being omitted — a
+  (`True`/`False`, verified -- ha-api-notes §39.1) rather than being omitted — a
   presence-based payload would leave a locally-deleted field's stale remote
   value in place forever, silently re-planning the same ineffective update
   on every subsequent push.
@@ -527,9 +528,10 @@ internal to `FakeBackend`/`DirectBackend`.
   same "new kinds are added explicitly" discipline `_KIND_ORDER` already
   follows, made structural rather than just documented.
 
-See docs/internals/dashboards-design.md §2 (the source-informed HA substrate
-this addendum is built against — DB0-pending) and §4 (the backend/sync
-design this section mirrors) for the full rationale.
+See docs/internals/dashboards-design.md §2 (the HA substrate this addendum is
+built against — verified live by DB0 against HA 2026.7.4; ha-api-notes
+§39.1–§39.8) and §4 (the backend/sync design this section mirrors) for the
+full rationale.
 
 ## 4. Where things live
 

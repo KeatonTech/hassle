@@ -88,10 +88,9 @@ DEFAULT_IDENTITY = "default"
 _DEFAULT_DASHBOARD_URL_PATH = "lovelace"
 
 # Defaults HA's dashboard registry schema assigns when a field is omitted on
-# create (source-informed, DB0-pending verification --
-# `homeassistant/components/lovelace/dashboard.py`'s
-# `ConfigNotFound`/`DashboardsCollection` schema is believed to default
-# `show_in_sidebar` to True and `require_admin` to False). Sent EXPLICITLY on
+# create -- VERIFIED against HA 2026.7.4 (docs/internals/ha-api-notes.md
+# §39.1's captures: every `dashboards/create` that omitted them came back
+# `show_in_sidebar: true, require_admin: false`). Sent EXPLICITLY on
 # every UPDATE, never omitted: HA's storage collection MERGES
 # (`{**item, **update}`) rather than replacing the item outright, so a
 # presence-based payload can never clear/revert a field back to its default
