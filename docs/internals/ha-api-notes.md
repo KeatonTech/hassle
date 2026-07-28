@@ -2467,7 +2467,8 @@ item it belongs to was created seconds earlier. That is the restore, direct.
 - New `packages/hassle-cli/tests/integration/live_helpers.py`: `arrange_input_boolean(ha,
   name=…, state=…)` creates the helper, waits for its entity to exist in `/api/states`
   (`await_entity` — a service call at an entity that does not exist yet is silently no-op'd by
-  HA, which is how the round-2 bug hid), **calls `input_boolean.turn_on|turn_off` explicitly**,
+  HA, the same silence an earlier round of this test hid behind), **calls
+  `input_boolean.turn_on|turn_off` explicitly**,
   and waits until that state is observable (`await_state`). Both waits fail loudly, naming the
   entity, rather than letting a downstream assertion fail for an unrelated-looking reason.
   `arrange_counter`/`counter_value` do the presence half for the counter helper.
