@@ -225,7 +225,7 @@ keyword conventions, implemented once
 | a card | directly under a `sections` view | `SectionRequiredError` |
 | `section()`/`raw_section()` | under a masonry/panel/sidebar view, or nested | `SectionOutsideSectionsViewError` |
 | 0 or ≥2 cards | in a `panel` view | `PanelViewArityError` |
-| no `url_path=`+no `default=True`, both, a hyphen-less `url_path`, a raw `meta` without `url_path`, or a `meta` `url_path` contradicting the decorator's | `@dashboard`/`@raw_dashboard` | `DashboardUrlPathError` |
+| no `url_path=`+no `default=True`, both, a hyphen-less `url_path` (except the reserved `"lovelace"` — ha-api-notes §39.11), a raw `meta` without `url_path`, or a `meta` `url_path` contradicting the decorator's | `@dashboard`/`@raw_dashboard` | `DashboardUrlPathError` |
 | `title=`/`icon=`/`show_in_sidebar=`/`require_admin=` with `default=True`, or a `@raw_dashboard(default=True)` body returning a non-null `meta` | `@dashboard`/`@raw_dashboard` | `DefaultDashboardMetadataError` (message branches on which one) |
 | a body returning anything but a `dict` (a forgotten `return`, a YAML string) | `@raw_dashboard` | `RawDashboardReturnTypeError` — also a pyright error, the TypeVar is bound to `Callable[[], dict[str, Any]]` |
 | two dashboards claiming one `url_path` | `@dashboard`/`@raw_dashboard` | `DuplicateObjectError`, whose fix sentence names `url_path=` for this kind (a dashboard has no `id=`, and its function name is not its identity) |
@@ -634,8 +634,12 @@ are in `hassle.__all__`.
 - `dashboard` — `@dashboard(url_path=, default=, title=, icon=,
   show_in_sidebar=, require_admin=)` registers a Lovelace storage-mode
   dashboard. Exactly one of `url_path=` (HA requires the slug to contain a
-  hyphen) or `default=True` (THE default dashboard, which has no
-  dashboard-registry item and therefore forbids the four metadata keywords).
+  hyphen, with ONE exception: `"lovelace"`, HA's own url_path for the default
+  dashboard once HA has migrated it to a registry item — accepted since that
+  is what the decompiler emits for a migrated instance, ha-api-notes
+  §39.2/§39.11) or `default=True` (THE default dashboard when it has no
+  dashboard-registry item at all, which therefore forbids the four metadata
+  keywords).
   Compiles to the two-store envelope `{"meta": {...} | null, "config":
   {"views": [...]}}` (ir-format.md).
 - `raw_dashboard` — `@raw_dashboard(url_path=|default=)` over a zero-argument

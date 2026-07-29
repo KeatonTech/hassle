@@ -4225,6 +4225,15 @@ from gate 1 to gate 2:
   decompiler emits `@dashboard(url_path="lovelace")` for it. Without the
   exemption every migrated instance would pull a bundle that cannot compile.
   The rule is unchanged for every other hyphen-less `url_path`.
+- **Deleting it is IRREVERSIBLE.** Nothing can put it back, so this is the one
+  object in the system whose delete cannot be undone by Hassle. The plan
+  enumerates dashboard deletes loudly and the user confirms them, so the
+  product behavior is unchanged — but the integration suite's `ha` fixture,
+  which wipes every object of every kind before and after each test, now
+  **excludes** it (`tests/integration/conftest.py::_UNDELETABLE`). Without that
+  exclusion, the first run of this suite against a non-disposable instance
+  would silently destroy the operator's real default dashboard. This was
+  observed for real during DB0, on the throwaway instance.
 - **Residual gap, recorded not fixed:** a bundle carrying an adopted
   `lovelace` dashboard cannot be pushed onto a *different* HA that has not been
   through the migration — there is no API to create it there. The error says
