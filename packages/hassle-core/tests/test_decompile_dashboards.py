@@ -1305,3 +1305,42 @@ def test_full_round_trip_for_has_own_migrated_default_dashboard() -> None:
     assert len(result.objects) == 1
     (recompiled,) = result.objects.values()
     assert sha256_hash(recompiled.to_ha()) == sha256_hash(config)
+
+
+def test_full_round_trip_for_ha_auto_created_hyphenless_dashboards() -> None:
+    """DB0 real-instance finding (ha-api-notes §39.12): the hyphen rule is HA's
+    CREATE-time validation, not a property of valid dashboards. HA itself
+    creates hyphen-less ones -- `map` at onboarding, `lovelace` on migration --
+    both `mode: "storage"` and both perfectly real.
+
+    Found by pulling a real household: eight dashboards, one of them `map`,
+    and the whole pull aborted because the DSL refused to compile the source
+    the decompiler had just emitted for it. That is a direct I3 violation --
+    `compile(decompile(x)) == x` must hold for ANY config, so a dashboard that
+    EXISTS in HA has to be representable, whatever its url_path looks like.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from hassle.compiler.bundle import compile_bundle
+    from hassle.decompiler import decompile_bundle
+    from hassle.ir.canonical import sha256_hash
+
+    for url_path in ("map", "lovelace", "energy"):
+        config = {
+            "meta": {"url_path": url_path, "title": url_path.title()},
+            "config": {"views": [{"title": "Overview", "cards": []}]},
+        }
+        obj = _dashboard_obj(config["meta"], config["config"])
+        assert obj.object_key() == f"dashboard:{url_path}"
+
+        src = decompile_bundle({obj.object_key(): obj})
+        assert "@dashboard(" in src, url_path
+        assert "raw_dashboard" not in src, url_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "objects.py").write_text(src, encoding="utf-8")
+            result = compile_bundle(Path(tmp))
+        assert len(result.objects) == 1, url_path
+        (recompiled,) = result.objects.values()
+        assert sha256_hash(recompiled.to_ha()) == sha256_hash(config), url_path
