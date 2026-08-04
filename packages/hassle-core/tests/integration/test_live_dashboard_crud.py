@@ -4,7 +4,7 @@
 **DB0 COMPLETE (2026-07-27)**: every wire shape this suite asserts
 (`lovelace/dashboards/*`, `lovelace/config*`) has been captured against a
 live HA **2026.7.4** and written up in docs/internals/ha-api-notes.md
-§39.1-§39.11, with raw request/response pairs in
+§39.1-§39.12, with raw request/response pairs in
 `docs/ha-api-captures/dashboards-db0.json`. All four tests below pass
 there. This suite is now the standing guard: a divergence on a future HA
 release surfaces here as a failure, not silently.

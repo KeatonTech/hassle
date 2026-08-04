@@ -48,16 +48,6 @@ F = TypeVar("F", bound=Callable[[], dict[str, Any]])
 #: letting two dashboards share one object key.
 DEFAULT_IDENTITY = "default"
 
-#: HA's OWN `url_path` for the default dashboard once it has a registry item
-#: (`homeassistant/components/lovelace`'s `DOMAIN`). HA 2026.x's
-#: `_async_migrate_default_config` creates it with `allow_single_word: True`,
-#: so it is the one real, HA-authored `url_path` with NO hyphen -- and after
-#: the §39.2 fix it is the only representation the default dashboard has on a
-#: migrated instance. It is therefore EXEMPT from the hyphen rule below: the
-#: decompiler emits `@dashboard(url_path="lovelace")` for it, and that has to
-#: compile or a migrated instance pulls a bundle that cannot build
-#: (docs/internals/ha-api-notes.md §39.2).
-HA_DEFAULT_DASHBOARD_URL_PATH = "lovelace"
 
 #: `@dashboard`/`@raw_dashboard` option names, in `meta` emission order.
 DASHBOARD_OPTIONS: tuple[str, ...] = ("url_path", *DASHBOARD_METADATA_KWARGS)
@@ -104,8 +94,21 @@ def _check_identity(
             raise DefaultDashboardMetadataError(given, span)
         return DEFAULT_IDENTITY
     assert url_path is not None
-    if "-" not in url_path and url_path != HA_DEFAULT_DASHBOARD_URL_PATH:
-        raise DashboardUrlPathError("hyphen", span, decorator=decorator, url_path=url_path)
+    # NO hyphen check here, deliberately (docs/internals/ha-api-notes.md
+    # §39.12). HA's hyphen rule is CREATE-time validation on the dashboards
+    # collection, not a property of a valid dashboard -- HA bypasses it for
+    # its own (`map`, created at onboarding; `lovelace`, created by the
+    # default-dashboard migration), and both are ordinary `mode: "storage"`
+    # dashboards a real instance genuinely has. Rejecting them at compile time
+    # broke `hassle pull` outright on a real household: the decompiler emitted
+    # `@dashboard(url_path="map")` and the compiler then refused its own
+    # output, violating I3 (`compile(decompile(x)) == x` for ANY config).
+    #
+    # The rule is enforced where it actually applies -- CREATE, in
+    # `DirectBackend._acreate_dashboard`/`FakeBackend._create_dashboard`,
+    # mirroring the error real HA returns. A hand-authored NEW dashboard with
+    # a hyphen-less url_path therefore fails at push with HA's own reason,
+    # instead of being rejected offline on a rule that does not hold.
     return url_path
 
 

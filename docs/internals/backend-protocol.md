@@ -539,7 +539,7 @@ internal to `FakeBackend`/`DirectBackend`.
 
 See docs/internals/dashboards-design.md §2 (the HA substrate this addendum is
 built against — verified live by DB0 against HA 2026.7.4; ha-api-notes
-§39.1–§39.11) and §4 (the backend/sync design this section mirrors) for the
+§39.1–§39.12) and §4 (the backend/sync design this section mirrors) for the
 full rationale.
 
 ## 4. Where things live

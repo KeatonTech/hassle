@@ -4241,3 +4241,65 @@ from gate 1 to gate 2:
   the UI and re-pull. Making this seamless would mean writing through
   `config/save(url_path=null)` on an instance with no `lovelace` item, which is
   a genuinely different object; Hassle does not guess between them.
+
+### 39.12 DB0 (real-instance finding): the hyphen rule is HA's CREATE validation, not a property of a valid dashboard — enforcing it at compile time was a bug
+
+> Found by pulling a **real household** (8 storage-mode dashboards) rather than
+> a test instance. This is exactly the class of thing the hand-built fixture
+> corpus could not surface, and it is the strongest argument for the corpus
+> enrichment DB0 left open.
+
+`hassle pull` aborted outright, refusing to write any of the eight files:
+
+```
+hassle pull: the bundle content about to be written to [dashboards/…, dashboards/map.py, …]
+does not compile (DashboardUrlPathError: `@dashboard(url_path='map')` … has no hyphen in its
+`url_path`. …) -- object(s): dashboard:dashboard-climate, …, dashboard:map, …
+This is a bug in Hassle's decompiler, not a mistake in your HA configuration.
+```
+
+The instance's registry:
+
+```jsonc
+{url_path:"map",                 mode:"storage", title:"Map"}          // <-- no hyphen
+{url_path:"dashboard-home",      mode:"storage", title:"Home"}
+{url_path:"dashboard-lights",    mode:"storage", title:"Lights"}
+… five more, all hyphenated …
+```
+
+**`map` is created by HA itself**, at onboarding
+(`lovelace/__init__.py`'s `_create_map_dashboard`, registered via
+`onboarding.async_add_listener`), the same way `lovelace` is created by the
+default-dashboard migration (§39.2) — both with `allow_single_word: True`.
+So §39.11's framing was too narrow: `lovelace` is not a special case, it is
+one instance of a general rule.
+
+**The general rule.** HA's hyphen requirement lives in
+`DashboardsCollection._process_create_data` — it is **create-time validation on
+the collection**, not an invariant of stored dashboards. HA exempts itself
+whenever it wants. Any `url_path` HA actually has is legitimate.
+
+**Why enforcing it at compile time was a bug**, not merely inconvenient: the
+decompiler emitted `@dashboard(url_path="map")` and the compiler then refused
+its own output. That is a direct **I3 violation** — `compile(decompile(x)) == x`
+must hold for ANY config — and it failed closed across the whole pull, so seven
+perfectly fine dashboards were unwritable because of the eighth. The error even
+asserted "no dashboard with this `url_path` can exist to push to", which the
+instance disproves.
+
+**Fix.** The hyphen check is removed from `_check_identity` entirely (the
+`DashboardUrlPathError` "hyphen" branch and its fixture/snapshot are gone with
+it), and the earlier `lovelace`-only exemption is retired as whack-a-mole. The
+rule is enforced where HA actually applies it — CREATE, in
+`DirectBackend._acreate_dashboard` and `FakeBackend._create_dashboard`, which
+mirror HA's own rejection. `FakeBackend` no longer exempts `lovelace` either,
+since §39.11 established HA refuses to create that one too.
+
+**Accepted UX consequence, recorded deliberately:** a hand-authored NEW
+dashboard with a hyphen-less `url_path` is no longer caught offline at compile
+time; it fails at push with HA's own reason. That is the honest trade — the
+compile-time check was rejecting valid, existing configurations to catch a
+mistake the backend already catches truthfully. A tier-1 `hassle validate`
+WARNING (not an error) for a hyphen-less `url_path` that is not already present
+remotely would restore the teaching without re-breaking adoption; noted as a
+follow-on, not done here.

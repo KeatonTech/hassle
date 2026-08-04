@@ -129,11 +129,16 @@ class PanelViewArityError(CompileError):
 class DashboardUrlPathError(CompileError):
     """A dashboard's identity (``url_path`` / ``default``) is missing or malformed.
 
-    Five trigger shapes, all about the ONE thing that identifies a dashboard
-    (§3.1): neither ``url_path=`` nor ``default=True``; both; a ``url_path``
-    with no hyphen (HA requires one, §2.2 item 1); a ``@raw_dashboard`` body
-    returning a ``meta`` dict with no ``url_path`` (§3.4's identity-sentinel
-    guard); and a ``meta`` ``url_path`` that contradicts the decorator's.
+    Four trigger shapes, all about the ONE thing that identifies a dashboard
+    (§3.1): neither ``url_path=`` nor ``default=True``; both; a
+    ``@raw_dashboard`` body returning a ``meta`` dict with no ``url_path``
+    (§3.4's identity-sentinel guard); and a ``meta`` ``url_path`` that
+    contradicts the decorator's.
+
+    There is deliberately NO hyphen-rule branch: that is HA's create-time
+    validation, not a property of a valid dashboard, and enforcing it at
+    compile time made real dashboards (`map`, `lovelace`) unrepresentable
+    -- docs/internals/ha-api-notes.md §39.12.
     """
 
     def __init__(self, reason: str, span: SourceSpan | None, **detail: Any) -> None:
@@ -163,18 +168,6 @@ class DashboardUrlPathError(CompileError):
                 f"the two are mutually exclusive identities, not a pair of options. Fix: keep "
                 f"exactly one: `url_path={url_path!r}` for a sidebar dashboard, or "
                 f"`default=True` for the default one."
-            )
-        if reason == "hyphen":
-            url_path = str(detail.get("url_path", ""))
-            return (
-                f"`{decorator}(url_path={url_path!r})`{where} has no hyphen in its "
-                f"`url_path`. Home Assistant requires a dashboard's `url_path` to contain a "
-                f"hyphen (its own frontend and backend both enforce it on everything you can "
-                f"create through the UI), so no dashboard with this `url_path` can exist to "
-                f"push to. Fix: rename it to a hyphenated slug, e.g. "
-                f'`url_path="{url_path}-dashboard"`. (The one exception is `"lovelace"`, '
-                f"which is HA's own `url_path` for the default dashboard once HA has "
-                f"migrated it to a registry item -- Hassle accepts that one.)"
             )
         if reason == "meta_without_url_path":
             return (

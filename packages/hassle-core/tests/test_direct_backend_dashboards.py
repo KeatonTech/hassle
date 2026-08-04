@@ -34,7 +34,7 @@ Mapping under test:
 This suite is unit-level (no network), mirroring
 `test_direct_backend_group_helpers.py`'s pattern. The end-to-end path against
 real HA is `tests/integration/test_live_dashboard_crud.py` (integration-only;
-DB0 ran it green against HA 2026.7.4 -- ha-api-notes §39.1-§39.11).
+DB0 ran it green against HA 2026.7.4 -- ha-api-notes §39.1-§39.12).
 """
 
 from __future__ import annotations

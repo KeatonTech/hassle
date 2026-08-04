@@ -443,14 +443,14 @@ class FakeBackend:
         # `url_path` happens to be the literal string "default" is NOT
         # exempt from HA's unconditional hyphen rule.
         is_default = normalized.get("meta") is None
-        if not is_default and "-" not in identity and identity != _HA_DEFAULT_DASHBOARD_URL_PATH:
+        if not is_default and "-" not in identity:
             raise ValueError(
                 f"lovelace/dashboards/create rejected: url_path {identity!r} must "
                 "contain a hyphen (mirrors HA's real create-flow validation -- "
                 "verified against HA 2026.7.4, docs/internals/ha-api-notes.md "
-                "§39.3 -- note HA lets `allow_single_word: true` bypass the rule, "
-                "which is how HA's own migration creates the hyphen-less "
-                f"{_HA_DEFAULT_DASHBOARD_URL_PATH!r} dashboard, §39.2)"
+                "§39.3). HA bypasses its own rule with `allow_single_word: true` "
+                "for the dashboards IT creates (`lovelace`, `map`), which is why "
+                "those are adoptable but not creatable -- §39.11/§39.12)"
             )
         if identity in self._store[DASHBOARD_KIND]:
             raise ValueError(

@@ -145,13 +145,6 @@ def test_url_path_both_message() -> None:
     )
 
 
-def test_url_path_hyphenless_message() -> None:
-    _check(
-        "dashboard_url_path_hyphenless",
-        _compile_error("dashboard_error_url_path_hyphenless", DashboardUrlPathError),
-    )
-
-
 def test_raw_dashboard_meta_without_url_path_message() -> None:
     _check(
         "dashboard_url_path_meta_missing",
@@ -222,36 +215,37 @@ def test_dashboard_condition_in_automation_message() -> None:
     _check("dashboard_condition_in_automation", str(excinfo.value))
 
 
-def test_ha_own_default_dashboard_url_path_is_exempt_from_the_hyphen_rule() -> None:
-    """DB0 review finding (ha-api-notes §39.2): HA 2026.x migrates the default
-    dashboard into a registry item at `url_path: "lovelace"` -- created with
-    `allow_single_word: True`, so it has NO hyphen. After the §39.2 fix that
-    item is the ONLY representation of the default dashboard, and the
-    decompiler emits `@dashboard(url_path="lovelace")` for it. If the hyphen
-    rule rejected that spelling, every migrated instance would pull a bundle
-    that cannot compile -- the dashboard would be unrepresentable.
-
-    The rule stays for every other hyphen-less `url_path`: HA enforces it on
-    everything a user can create through the UI.
+def test_hyphen_less_url_paths_compile_the_rule_is_not_a_compile_error() -> None:
+    """ha-api-notes §39.12: the hyphen rule is HA's CREATE-time validation, not
+    a property of a valid dashboard. HA creates hyphen-less ones itself (`map`
+    at onboarding, `lovelace` on migration), so refusing to compile them made
+    real, existing dashboards unrepresentable and broke `hassle pull` on a real
+    household. The rule is enforced at CREATE instead, by the backends, where
+    real HA actually applies it.
     """
     from hassle.compiler.dashboards.decorators import _check_identity
 
-    assert (
-        _check_identity(
-            url_path="lovelace",
-            default=False,
-            metadata={},
-            span=None,
-            decorator="@dashboard",
+    for url_path in ("map", "lovelace", "energy", "climate"):
+        assert (
+            _check_identity(
+                url_path=url_path,
+                default=False,
+                metadata={},
+                span=None,
+                decorator="@dashboard",
+            )
+            == url_path
         )
-        == "lovelace"
-    )
 
-    with pytest.raises(DashboardUrlPathError):
-        _check_identity(
-            url_path="climate",
-            default=False,
-            metadata={},
-            span=None,
-            decorator="@dashboard",
+
+def test_create_is_where_the_hyphen_rule_is_enforced() -> None:
+    """The other half of §39.12: the rule did not disappear, it moved to the
+    place real HA applies it."""
+    from hassle.backend.fake import FakeBackend
+
+    backend = FakeBackend()
+    with pytest.raises(ValueError, match="hyphen"):
+        backend.create(
+            "dashboard",
+            {"meta": {"url_path": "climate", "title": "C"}, "config": {"views": []}},
         )

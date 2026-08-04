@@ -5,7 +5,7 @@ against a live HA **2026.7.4**). This document is the design and
 implementation plan for DESIGN.md §13's "Dashboards" plugin — the last major
 piece of the G12 extensibility story. It follows the same conventions as the
 rest of `docs/internals/`: everything HA-behavioral is cited from
-`docs/internals/ha-api-notes.md` — for this kind, **§39.1–§39.11**, whose raw
+`docs/internals/ha-api-notes.md` — for this kind, **§39.1–§39.12**, whose raw
 captures are in `docs/ha-api-captures/dashboards-db0.json`.
 
 Where DB0 found reality diverging from an earlier hypothesis, the statement is
@@ -102,7 +102,7 @@ registry) are out of scope in v1.
 
 ## 2. The HA substrate (VERIFIED — DB0 ran 2026-07-27 against HA 2026.7.4)
 
-✅ **This section is now captured**, in ha-api-notes.md §39.1–§39.11 with raw
+✅ **This section is now captured**, in ha-api-notes.md §39.1–§39.12 with raw
 request/response pairs in `docs/ha-api-captures/dashboards-db0.json`. DB0 stood
 up a disposable HA **2026.7.4** (the real `stable`) and worked the checklist
 below; three statements turned out to be wrong and are corrected in place, with
@@ -149,7 +149,7 @@ confirmed (§39.6).
 | `lovelace/config/save` | `url_path \| null, config` | write view config |
 | `lovelace/config/delete` | `url_path \| null` | revert to auto-generated |
 
-DB0's checklist, resolved (ha-api-notes §39.1-§39.11, captures in
+DB0's checklist, resolved (ha-api-notes §39.1-§39.12, captures in
 `docs/ha-api-captures/dashboards-db0.json`):
 
 | # | Item | Outcome |
@@ -259,12 +259,19 @@ new HA release added a card.
   > raises with a fix instruction rather than silently merging two dashboards
   > into one object key. See also §2.1's correction: on HA 2026.x the default
   > dashboard usually has a real `url_path: "lovelace"` registry item, and is
-  > adopted under **that** identity, not the sentinel. That `url_path` is
-  > exempt from the DSL's hyphen rule — HA creates it without one, and after
-  > the §2.1 fix it is the migrated default's only representation, so
-  > `@dashboard(url_path="lovelace")` has to compile. Hassle can adopt and
-  > update it but **never create** it: HA rejects that `url_path` on create
-  > unconditionally (ha-api-notes §39.11).
+  > adopted under **that** identity, not the sentinel. Hassle can adopt and
+  > update that dashboard but **never create** it: HA rejects that `url_path`
+  > on create unconditionally (ha-api-notes §39.11).
+  >
+  > ⚠️ **AND THE HYPHEN RULE IS NOT A COMPILE-TIME RULE AT ALL**
+  > (ha-api-notes §39.12, found on a real household). HA's requirement is
+  > create-time validation on its dashboards collection, and HA exempts its
+  > own — `map` is created at onboarding with no hyphen, `lovelace` on
+  > migration. Enforcing it in `_check_identity` made those real dashboards
+  > refuse to compile, so `hassle pull` aborted for the whole bundle: a direct
+  > I3 violation, since the compiler was rejecting the decompiler's own
+  > output. `url_path=` now accepts any slug; the backends' `create` enforce
+  > the rule where HA does.
 - Object key: `dashboard:<identity>` (e.g. `dashboard:climate-control`,
   `dashboard:default`). Keys stay opaque downstream (ir-format.md's
   first-colon rule holds; `url_path` is colon-free by HA's own slug rules,
@@ -1327,7 +1334,7 @@ Ran against a disposable HA **2026.7.4** — the real `stable`, from
 first captures in this repo from 2026.7 rather than §0's 2026.2.3). Every
 §2.2 command driven; 48 request/response pairs captured into
 `docs/ha-api-captures/dashboards-db0.json`; all ten known-risk items
-resolved and written up as ha-api-notes **§39.1–§39.11**. Three statements in
+resolved and written up as ha-api-notes **§39.1–§39.12**. Three statements in
 §2 were wrong and are corrected in place (see §2.1/§2.2/§3.1's boxed
 corrections); one was a **blocker** — the default dashboard was adopted
 twice. The §12.1 acceptance loop was then run end-to-end (ha-api-notes
