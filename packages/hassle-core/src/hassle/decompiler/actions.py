@@ -311,6 +311,14 @@ def _script_call(body: dict[str, Any], resolver: CallResolver) -> list[str] | No
     if target is None:
         return None
     data = body.get("data")
+    if "data" in body and data == {}:
+        # An explicit, empty `data: {}` is NOT expressible in this form,
+        # unlike `service()`/namespace calls (see `_service_call`): a script
+        # call's kwargs are its DECLARED FIELDS, with no reserved `data=`
+        # to pass through, and `ScriptCallAction.to_action` emits `data`
+        # on truthiness. Decline so the caller falls back to a form that
+        # can round-trip the key rather than silently dropping it.
+        return None
     if data is None:
         data = {}
     if not isinstance(data, dict):
@@ -469,6 +477,14 @@ def _namespace_service_call(
     parts: list[str] = []
     if "target" in body:
         parts.append(f"target={_target_src(body['target'])}")
+    if isinstance(data, dict) and not data_dict:
+        # An explicit, empty `data: {}` -- see `_service_call`. Expressible
+        # here too: a namespace call forwards its kwargs straight to
+        # `service()` (hassle/services.py `_ServiceDomain.__getattr__`),
+        # whose `data=` is a real keyword-only parameter rather than another
+        # bare field. `data` ABSENT stays absent (this branch needs the key
+        # to have actually been there).
+        parts.append("data={}")
     for k, v in data_dict.items():
         parts.append(f"{k}={_render_data_value(v)}")
     if "response_variable" in body:
@@ -490,6 +506,15 @@ def _service_call(body: dict[str, Any]) -> list[str]:
     data = body.get("data")
     if isinstance(data, dict):
         data_dict = cast("dict[str, Any]", data)
+        if not data_dict:
+            # Presence, not truthiness -- the same rule `metadata` follows
+            # below and `ServiceAction._data_present` already implements on
+            # the compiler side. HA stores `data: {}` verbatim on a
+            # field-less call (it is not a spelling HA normalizes away), so
+            # spreading an EMPTY dict as kwargs would emit nothing and drop
+            # the key on recompile. Observed in the field 2026-08-06:
+            # `hassle pull` refused a real bundle over exactly this.
+            parts.append("data={}")
         for k, v in data_dict.items():
             parts.append(f"{k}={_render_data_value(v)}")
     elif data is not None:

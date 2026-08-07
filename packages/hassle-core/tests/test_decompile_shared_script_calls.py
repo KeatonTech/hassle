@@ -31,6 +31,9 @@ Covers:
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from hassle.compiler.bundle import compile_bundle
 from hassle.decompiler import decompile_bundle
 from hassle.decompiler.codegen import ScriptRef
@@ -71,9 +74,6 @@ def test_shared_script_decompile_recompiles_to_identical_ir() -> None:
     }
     obj = parse(config, kind="script", key_hint="flash_lights")
     source = decompile_bundle({obj.object_key(): obj})
-
-    import tempfile
-    from pathlib import Path
 
     with tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / "scripts.py").write_text(source, encoding="utf-8")
@@ -222,6 +222,36 @@ def test_call_with_undeclared_data_key_falls_back_to_service() -> None:
 
     assert '"script.dismiss_notification"' in source or "'script.dismiss_notification'" in source
     assert "dismiss_notification(notification_id=" not in source
+
+
+def test_call_with_an_explicit_empty_data_falls_back_to_service() -> None:
+    # `data: {}` is not reproducible by the rewrite: a script call's kwargs
+    # ARE its declared fields, with no reserved `data=` to pass through, and
+    # `ScriptCallAction.to_action` emits `data` on truthiness -- so rewriting
+    # this would silently drop the key. Found in the field 2026-08-06, when
+    # `hassle pull` refused a real bundle whose actions carried `data: {}`
+    # (fixtures/configs/automation_service_call_empty_data.json).
+    objects = _script_and_caller(
+        {
+            "action": "script.dismiss_notification",
+            "data": {},
+            "metadata": {},
+        }
+    )
+    source = decompile_bundle(objects)
+
+    assert "dismiss_notification(metadata=" not in source, (
+        "the script-call rewrite cannot express an explicit empty data; it "
+        "must decline so a form that can round-trips the key instead"
+    )
+    assert "data={}" in source, "the empty data must survive into the decompiled source"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "objects.py").write_text(source, encoding="utf-8")
+        result = compile_bundle(tmp)
+    assert sha256_hash(result.objects["automation:1"].to_ha()) == sha256_hash(
+        objects["automation:1"].to_ha()  # type: ignore[union-attr]
+    ), "compile(decompile(x)) != x for an action carrying an explicit empty data"
 
 
 def test_call_with_target_falls_back_to_service() -> None:
