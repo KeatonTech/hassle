@@ -239,7 +239,18 @@ def login(url: str, token: str) -> None:
 
 @main.command()
 @click.option("--allow-dirty", is_flag=True, default=False)
-def pull(allow_dirty: bool) -> None:
+@click.option(
+    "--skip-kind",
+    "skip_kind",
+    multiple=True,
+    help=(
+        "Exclude an object kind from THIS run (repeatable), e.g. "
+        "`--skip-kind dashboard`. Unlike hassle.toml's `ignore` globs the "
+        "object stays managed: its manifest entry is preserved and the next "
+        "run without the flag is unaffected."
+    ),
+)
+def pull(allow_dirty: bool, skip_kind: tuple[str, ...]) -> None:
     """Merge UI-side edits into the working tree (never writes to HA)."""
     from hassle.ir.keys import OBJECT_KINDS
     from hassle.sync.plan import compute_plan
@@ -426,6 +437,13 @@ def pull(allow_dirty: bool) -> None:
             ]
         }
     )
+
+    plan, skipped_keys = _apply_skip_kinds(plan, skip_kind, console, command="pull")
+    for skipped in skipped_keys:
+        console.print(
+            f"[dim]hassle pull: skipped {skipped} (--skip-kind); still managed, "
+            "manifest untouched.[/dim]"
+        )
 
     # A mixed-kind category file that used to be shared by objects of
     # different category-registry scopes may have split this pull, if
@@ -712,32 +730,79 @@ def _build_plan_with_compile_result(root: Path):
     return the_plan, compile_result
 
 
-def _build_plan(root: Path):
+def _apply_skip_kinds(the_plan, skip_kind, console, *, command: str):
+    """Drop `--skip-kind` kinds from a computed plan (hassle_cli.skip_kind).
+
+    Filters PLAN ENTRIES, never the manifest: `_advance_manifest` starts from
+    the full manifest and rewrites only keys present in the plan, so a skipped
+    object keeps its sync base by construction. An unknown kind aborts here --
+    silently skipping nothing would look like the flag worked.
+    """
+    from hassle_cli.skip_kind import drop_skipped_kinds, parse_skip_kinds
+
+    if not skip_kind:
+        return the_plan, []
+    try:
+        kinds = parse_skip_kinds(skip_kind)
+    except ValueError as exc:
+        console.print(f"[red]hassle {command}: {_esc(str(exc))}[/red]")
+        raise SystemExit(1) from exc
+    result = drop_skipped_kinds(the_plan, kinds)
+    return result.plan, result.skipped_keys
+
+
+def _build_plan(root: Path, skip_kind: tuple[str, ...] = (), console=None):
     the_plan, _compile_result = _build_plan_with_compile_result(root)
+    if skip_kind:
+        the_plan, _ = _apply_skip_kinds(
+            the_plan, skip_kind, console or get_console(), command="plan"
+        )
     return the_plan
 
 
 @main.command()
+@click.option(
+    "--skip-kind",
+    "skip_kind",
+    multiple=True,
+    help=(
+        "Exclude an object kind from THIS run (repeatable), e.g. "
+        "`--skip-kind dashboard`. Unlike hassle.toml's `ignore` globs the "
+        "object stays managed: its manifest entry is preserved and the next "
+        "run without the flag is unaffected."
+    ),
+)
 @click.pass_context
-def plan(ctx: click.Context) -> None:
+def plan(ctx: click.Context, skip_kind: tuple[str, ...]) -> None:
     """Preview the three-way sync plan (DESIGN §8.2)."""
     from hassle_cli.plan_render import render_plan
 
     root = _bundle_root_or_fail()
-    the_plan = _build_plan(root)
     console = get_console(force_plain=ctx.obj.get("plain", False))
+    the_plan = _build_plan(root, skip_kind, console)
     render_plan(console, the_plan)
 
 
 @main.command()
+@click.option(
+    "--skip-kind",
+    "skip_kind",
+    multiple=True,
+    help=(
+        "Exclude an object kind from THIS run (repeatable), e.g. "
+        "`--skip-kind dashboard`. Unlike hassle.toml's `ignore` globs the "
+        "object stays managed: its manifest entry is preserved and the next "
+        "run without the flag is unaffected."
+    ),
+)
 @click.pass_context
-def status(ctx: click.Context) -> None:
+def status(ctx: click.Context, skip_kind: tuple[str, ...]) -> None:
     """Plan preview + git status in one view (DESIGN §8.4)."""
     from hassle_cli.plan_render import render_plan
 
     root = _bundle_root_or_fail()
-    the_plan = _build_plan(root)
     console = get_console(force_plain=ctx.obj.get("plain", False))
+    the_plan = _build_plan(root, skip_kind, console)
     render_plan(console, the_plan)
     if git_support.is_git_repo(root):
         result = subprocess.run(
@@ -781,9 +846,24 @@ def _interactive() -> bool:
     multiple=True,
     help="Object key(s) to resolve using the remote version.",
 )
+@click.option(
+    "--skip-kind",
+    "skip_kind",
+    multiple=True,
+    help=(
+        "Exclude an object kind from THIS run (repeatable), e.g. "
+        "`--skip-kind dashboard`. Unlike hassle.toml's `ignore` globs the "
+        "object stays managed: its manifest entry is preserved and the next "
+        "run without the flag is unaffected."
+    ),
+)
 @click.pass_context
 def push(
-    ctx: click.Context, yes: bool, accept_local: tuple[str, ...], accept_remote: tuple[str, ...]
+    ctx: click.Context,
+    yes: bool,
+    accept_local: tuple[str, ...],
+    accept_remote: tuple[str, ...],
+    skip_kind: tuple[str, ...],
 ) -> None:
     """Plan, confirm, and apply to HA (DESIGN §8.2)."""
     from hassle.sync.apply import apply_plan
@@ -800,6 +880,12 @@ def push(
             the_plan, compile_result = _build_plan_with_compile_result(root)
     else:
         the_plan, compile_result = _build_plan_with_compile_result(root)
+    the_plan, skipped_keys = _apply_skip_kinds(the_plan, skip_kind, console, command="push")
+    for skipped in skipped_keys:
+        console.print(
+            f"[dim]hassle push: skipped {skipped} (--skip-kind); still managed, "
+            "manifest untouched.[/dim]"
+        )
     # `category_overrides` (bundle-relative source path -> exact display
     # name) from every file's `CATEGORY` global that actually
     # slugifies to its own file stem; a mismatched file's global is left out

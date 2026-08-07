@@ -206,6 +206,37 @@ null `icon` is dropped, exactly as HA stores it. Update convergence is
 asserted end-to-end in `test_fake_backend_dashboard.py`, not just at the
 payload level.
 
+### 2.2.1 Opting out per run — `--skip-kind`
+
+Dashboards are the newest kind and the one most likely to churn from UI edits,
+so `pull`/`plan`/`status`/`push` all accept `--skip-kind dashboard`
+(repeatable, any kind in `OBJECT_KINDS`) to exclude a whole kind from ONE
+invocation:
+
+```sh
+hassle pull --skip-kind dashboard      # keep automations in sync, ignore dashboards
+hassle push --skip-kind dashboard      # never write a dashboard on this push
+```
+
+This is deliberately NOT the same as `hassle.toml`'s `ignore` globs
+(`hassle_cli.ignore_filter`), and the difference is the design:
+
+| | `ignore = ["dashboard:*"]` | `--skip-kind dashboard` |
+|---|---|---|
+| Lifetime | permanent, in the bundle config | one invocation |
+| Manifest | entry **dropped** — the object is unmanaged, its sync base forgotten | **preserved untouched** |
+| Next run without it | treats the object as brand new (adopt) | exactly as if the skipped run never happened |
+
+The implementation reflects that: `ignore` filters `local_objects`/
+`remote_objects` *before* `compute_plan` (and must therefore migrate the
+manifest, since `compute_plan` keys off `manifest | local | remote`), whereas
+`--skip-kind` filters the **computed plan's entries**. Because
+`hassle.sync.apply._advance_manifest` starts from `dict(manifest.objects)` and
+rewrites only keys present in the plan it is handed, an entry dropped from the
+plan keeps its manifest state by construction rather than by care — and, having
+no entry, is unreachable by both the apply engine and the pull writer. An
+unknown kind aborts the command rather than skipping nothing silently.
+
 ### 2.3 Built-in card inventory (the D-G4 checklist)
 
 Container cards (context managers in the DSL): `vertical-stack`,

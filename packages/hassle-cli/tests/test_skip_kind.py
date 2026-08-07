@@ -123,3 +123,106 @@ def test_skip_preserves_the_manifest_entry_so_the_next_run_is_unaffected() -> No
     # the same object, entry-for-entry.
     assert manifest.objects["dashboard:dashboard-home"] == entry
     assert filtered.plan.entries == []
+
+
+# -- end-to-end through the real CLI -----------------------------------------
+
+
+def _commit_all(bundle, message: str) -> None:
+    import subprocess
+
+    subprocess.run(["git", "add", "-A"], cwd=bundle, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-q", "-m", message], cwd=bundle, check=True, capture_output=True
+    )
+
+
+def _seed_dashboard(backend) -> None:
+    backend.create(
+        "dashboard",
+        {
+            "meta": {"url_path": "dashboard-home", "title": "Home"},
+            "config": {"views": [{"title": "Overview", "cards": []}]},
+        },
+    )
+
+
+def test_plan_without_the_flag_shows_the_dashboard(git_repo, cli, fake_backend, toml_writer):
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    _seed_dashboard(backend)
+    result = cli(["plan"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+    assert "dashboard:dashboard-home" in result.output
+
+
+def test_plan_with_skip_kind_hides_the_dashboard(git_repo, cli, fake_backend, toml_writer):
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    _seed_dashboard(backend)
+    result = cli(["plan", "--skip-kind", "dashboard"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+    assert "dashboard:dashboard-home" not in result.output
+
+
+def test_pull_with_skip_kind_writes_no_dashboard_file(git_repo, cli, fake_backend, toml_writer):
+    """The point of the flag: a dashboard the bundle has never adopted stays
+    unadopted, so no `dashboards/` file appears."""
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    _seed_dashboard(backend)
+    _commit_all(git_repo, "point at fake backend")
+
+    result = cli(["pull", "--skip-kind", "dashboard"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+    assert not (git_repo / "dashboards").exists(), sorted(q.name for q in git_repo.iterdir())
+
+    # ...and without the flag the very same bundle DOES adopt it, so the test
+    # above is not passing vacuously. (The skipped pull still adopts the other
+    # kinds and regenerates stubs, so commit before pulling again -- pull
+    # refuses a dirty tree.)
+    _commit_all(git_repo, "after the skipped pull")
+    result = cli(["pull"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+    assert (git_repo / "dashboards" / "dashboard_home.py").is_file()
+
+
+def test_push_with_skip_kind_never_writes_the_dashboard_to_ha(
+    git_repo, cli, fake_backend, toml_writer
+):
+    """THE safety property end-to-end: with the kind skipped, a push must not
+    create/update/delete anything of that kind on the backend."""
+    backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    (git_repo / "dashboards").mkdir()
+    (git_repo / "dashboards" / "home.py").write_text(
+        "from hassle import *\n\n\n"
+        '@dashboard(url_path="dashboard-home", title="Home")\n'
+        "def home():\n"
+        '    with view(title="Overview"):\n'
+        "        pass\n",
+        encoding="utf-8",
+    )
+    _commit_all(git_repo, "declare a dashboard")
+
+    dashboards_before = dict(backend.list_remote("dashboard"))
+    result = cli(["push", "--yes", "--skip-kind", "dashboard"], cwd=git_repo)
+    assert result.exit_code == 0, result.output
+
+    # Nothing of the skipped kind reached HA...
+    assert backend.list_remote("dashboard") == dashboards_before
+    assert "dashboard-home" not in backend.list_remote("dashboard")
+    # ...while the run was otherwise a normal push, so this is not vacuous:
+    # the bundle's automation was created as usual.
+    assert "create automation:" in result.output, result.output
+    assert "skipped dashboard:dashboard-home" in result.output, result.output
+
+
+def test_unknown_skip_kind_fails_loudly(git_repo, cli, fake_backend, toml_writer):
+    """A typo must not silently skip nothing while every dashboard is pushed."""
+    _backend, token = fake_backend
+    toml_writer(git_repo, backend_token=token)
+    result = cli(["plan", "--skip-kind", "dashboards"], cwd=git_repo)
+    assert result.exit_code == 1, result.output
+    assert "dashboards" in result.output
+    assert "Fix:" in result.output
