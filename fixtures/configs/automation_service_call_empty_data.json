@@ -1,0 +1,35 @@
+{
+  "id": "1754369000005",
+  "alias": "Service Call With Empty Data",
+  "description": "Shape observed in the owner's real house (2026-08-06): six automations written through HA's own /api/config/automation/config endpoint stored an explicit `data: {}` alongside a target, and `hassle pull` refused to write the bundle because recompiling the decompiled source dropped the key. HA stores `data: {}` verbatim -- it is not a spelling HA itself normalizes away -- so eliding it is a lossy round-trip, exactly like the empty `metadata: {}` the decompiler already emits deliberately. Covers all three call shapes that spread `data` as kwargs: the generic `service()` longhand, the namespace call, and a script call.",
+  "triggers": [
+    {
+      "trigger": "state",
+      "entity_id": "event.living_room_chandelier_switch_button_config",
+      "not_to": ["unavailable", "unknown"]
+    }
+  ],
+  "conditions": [],
+  "actions": [
+    {
+      "action": "switch.turn_on",
+      "data": {},
+      "target": {
+        "entity_id": "switch.living_room_lighting_manual_override"
+      }
+    },
+    {
+      "action": "light.turn_off",
+      "data": {},
+      "target": {
+        "entity_id": ["light.smart_multicolor_bulb", "light.smart_multicolor_bulb_2"]
+      }
+    },
+    {
+      "action": "script.dismiss_notification",
+      "data": {},
+      "metadata": {}
+    }
+  ],
+  "mode": "single"
+}
