@@ -539,3 +539,67 @@ def cookbook_washing_machine_done():
     when(numeric_state("sensor.washing_machine_power", below=3))
     service("notify.mobile_app_kai", message="Washing machine finished")
 ```
+
+## 23. conditional guest-mode section
+
+`fixtures/cookbook/bundle/dashboards/guest_mode_conditional.py`
+
+```python
+"""Cookbook recipe: conditional guest-mode section.
+
+Lovelace visibility/conditional conditions (`hassle.cards.cond`) are a
+DIFFERENT vocabulary from automation conditions (docs/internals/
+dashboards-design.md §5.4 -- `entity`/`state`/`state_not` keys, not
+`entity_id`/`condition`). `c.conditional(...)` wraps exactly one child card,
+shown only when every condition passes; here it hides a guest-mode banner
+behind `cond.state(...)` the same way the design doc's own §0 example does.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, section, view
+from hassle.cards import cond
+
+
+@dashboard(url_path="cookbook-guest-mode", title="Guest Mode")
+def cookbook_guest_mode():
+    with view(title="Overview", path="overview"), section():
+        c.heading(heading="Welcome")
+        with c.conditional(cond.state("input_boolean.guest_mode", "on")):
+            c.markdown(content="Guest mode is on -- make yourself at home!")
+```
+
+## 24. a dashboard from a Python list
+
+`fixtures/cookbook/bundle/dashboards/heat_pump_list.py`
+
+```python
+"""Cookbook recipe: a dashboard from a Python list.
+
+The headline dashboards pattern (docs/internals/dashboards-design.md §0):
+Python is the metaprogramming layer, so a card per heat-pump head is a
+compile-time `for` loop over a plain list, not copy-paste. The `c.entities`
+card built from the SAME list stays in sync automatically -- add a head to
+`HEAT_PUMP_HEADS` and both the loop and the entities card pick it up the next
+time this compiles, with nothing else to edit.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, section, view
+
+HEAT_PUMP_HEADS = [
+    "climate.living_room",
+    "climate.bedroom_thermostat",
+    "climate.office_thermostat",
+]
+
+
+@dashboard(url_path="cookbook-heat-pumps", title="Heat Pumps", icon="mdi:heat-pump")
+def cookbook_heat_pumps():
+    with view(title="Overview", path="overview"):
+        with section():
+            c.heading(heading="Heat pumps")
+            for head in HEAT_PUMP_HEADS:
+                c.thermostat(entity=head)
+        with section(column_span=2):
+            c.entities(*HEAT_PUMP_HEADS, title="All heads")
+```

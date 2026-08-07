@@ -940,8 +940,10 @@ they're near-identical). Designed-for future plugins, in rough order:
 - **Scenes** — same config REST pattern as automations; nearly free.
 - **Config-entry helpers** (template sensor, threshold, derivative, group…) — needs the config
   flow WS API; the plugin protocol already allows async multi-step applies.
-- **Dashboards** — Lovelace storage-mode config via WS; decompiles to a card-builder DSL. The
-  bundle layout reserves `dashboards/`.
+- **Dashboards** — Lovelace storage-mode config via WS; decompiles to a card-builder DSL.
+  Designed in [docs/internals/dashboards-design.md](docs/internals/dashboards-design.md); the
+  `dashboards/` directory reservation stands, refined to a per-dashboard-file default
+  (`dashboards/<module_name>.py`) — the compiler itself imposes no file discipline.
 - **Entity registry metadata** (friendly names, areas, labels as code) — read side already exists.
 - **A thin add-on** — only if a genuinely server-side feature earns it (apply locking for
   multi-user households, scheduled snapshots, webhook-triggered CI pulls, a web UI). It would be

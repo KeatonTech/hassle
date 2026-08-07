@@ -42,9 +42,86 @@ from typing import Any, cast
 from hassle.backend.client import HaClient
 from hassle.backend.errors import HaApiError
 from hassle.backend.version import version_warning
-from hassle.ir.keys import GROUP_DOMAINS, HELPER_DOMAINS, OBJECT_KINDS, TEMPLATE_DOMAINS
+from hassle.ir.keys import (
+    DASHBOARD_KIND,
+    GROUP_DOMAINS,
+    HELPER_DOMAINS,
+    OBJECT_KINDS,
+    TEMPLATE_DOMAINS,
+)
 from hassle.ir.keys import slugify as _slugify
 from hassle.registry.snapshot import PurposeVocabulary, RegistrySnapshot
+
+# Sentinel distinguishing "HA returned config_not_found" (never-saved
+# dashboard, docs/internals/dashboards-design.md §2.1) from a legitimately
+# empty/falsy config body -- `None`/`{}` are both valid stored configs.
+_CONFIG_NOT_FOUND = object()
+
+# The dashboard registry item's mutable fields (docs/internals/
+# dashboards-design.md §2.2/§4.1, DB5 2026-07-27 implementation finding):
+# HA's real `lovelace/dashboards/update` schema is PREVENT_EXTRA over exactly
+# these four -- `url_path` is deliberately excluded (a url_path change is
+# delete+create, never an in-place rename, I2) and `id`/`mode` never travel
+# in a write payload at all. The update PAYLOAD must be built from this
+# explicit allowlist, NEVER by copying `meta`'s own keys wholesale (`meta`
+# always carries `url_path` too, and forwarding it verbatim 400s against
+# real HA with `invalid_format`).
+_DASHBOARD_REGISTRY_FIELDS = ("title", "icon", "show_in_sidebar", "require_admin")
+
+# Hassle's identity for the DEFAULT dashboard (docs/internals/
+# dashboards-design.md §3.1). Spelled here rather than imported from
+# `hassle.compiler.dashboards.decorators` (which owns the DSL-side constant):
+# `hassle.backend` must not depend on `hassle.compiler`
+# (`tests/test_package_layering.py`).
+DEFAULT_IDENTITY = "default"
+
+# HA's OWN url_path for the default dashboard once it has a registry item
+# (`homeassistant/components/lovelace`'s `DOMAIN`). Two independent HA
+# behaviors key off this exact string, both captured in
+# docs/internals/ha-api-notes.md §39.2:
+#   - `_async_migrate_default_config` (storage mode) moves a legacy
+#     `.storage/lovelace` into a real registry item at this url_path;
+#   - the YAML-mode shim registers ui-lovelace.yaml at this url_path;
+# and `lovelace/config`'s handler resolves `url_path=null` to
+# `dashboards.get("lovelace") or dashboards[None]`, making `null` an ALIAS for
+# this item whenever it exists.
+_DEFAULT_DASHBOARD_URL_PATH = "lovelace"
+
+# Defaults HA's dashboard registry schema assigns when a field is omitted on
+# create -- VERIFIED against HA 2026.7.4 (docs/internals/ha-api-notes.md
+# §39.1's captures: every `dashboards/create` that omitted them came back
+# `show_in_sidebar: true, require_admin: false`). Sent EXPLICITLY on
+# every UPDATE, never omitted: HA's storage collection MERGES
+# (`{**item, **update}`) rather than replacing the item outright, so a
+# presence-based payload can never clear/revert a field back to its default
+# -- the stale remote value would linger forever, `_advance_manifest` would
+# record that unchanged remote as the new base, and every subsequent
+# `hassle push` would silently re-plan the same no-op update forever
+# (docs/internals/dashboards-design.md §4.1's 2026-07-27 finding).
+_DASHBOARD_FIELD_DEFAULTS: dict[str, Any] = {
+    "show_in_sidebar": True,
+    "require_admin": False,
+}
+
+
+def _dashboard_registry_payload(meta: dict[str, Any]) -> dict[str, Any]:
+    """The FULL desired state of the registry item's mutable fields, built
+    from `_DASHBOARD_REGISTRY_FIELDS` -- never from `meta`'s own keys (see
+    the module-level comment above for why). `icon` is sent explicitly as
+    `None` when absent from `meta` (clearing it, convergent update);
+    `show_in_sidebar`/`require_admin` fall back to their source-informed
+    defaults rather than being omitted."""
+    if not meta.get("title"):
+        raise ValueError(
+            "dashboard config's meta has no 'title' (required for lovelace/dashboards/update)"
+        )
+    payload: dict[str, Any] = {"title": meta["title"], "icon": meta.get("icon")}
+    for field_name in ("show_in_sidebar", "require_admin"):
+        payload[field_name] = meta.get(field_name, _DASHBOARD_FIELD_DEFAULTS[field_name])
+    assert set(payload) == set(_DASHBOARD_REGISTRY_FIELDS)
+    assert "url_path" not in payload
+    return payload
+
 
 # The template integration's config-flow menu step_id per domain
 # (docs/internals/ha-api-notes.md §26.1); verified against a real HA instance by
@@ -126,6 +203,13 @@ class DirectBackend:
         # folded into `_template_entry_ids`), mirroring FakeBackend's split
         # (`hassle.backend.fake`'s own `_group_entry_ids` docstring).
         self._group_entry_ids: dict[tuple[str, str], str] = {}
+        # (url_path, or the sentinel "default") -> HA-assigned dashboard_id,
+        # discovered via list_remote/create and consumed by update/delete
+        # (docs/internals/dashboards-design.md §4.1: `dashboard_id` stays
+        # transport-internal -- there is a stable user-visible correlator,
+        # `url_path`, so this is a process-local cache, never a manifest
+        # field, mirroring `_template_entry_ids`/`_group_entry_ids` above).
+        self._dashboard_ids: dict[str, str] = {}
 
     # -- lifecycle / bridge ------------------------------------------------
 
@@ -185,6 +269,8 @@ class DirectBackend:
             return self._run(self._alist_template_helpers(kind))
         if kind in GROUP_DOMAINS:
             return self._run(self._alist_group_helpers(kind))
+        if kind == DASHBOARD_KIND:
+            return self._run(self._alist_dashboards())
         return self._run(self._alist_helpers(kind))
 
     def create(self, kind: str, config: dict[str, Any]) -> str:
@@ -197,6 +283,8 @@ class DirectBackend:
             return self._run(self._acreate_template_helper(kind, config))
         if kind in GROUP_DOMAINS:
             return self._run(self._acreate_group_helper(kind, config))
+        if kind == DASHBOARD_KIND:
+            return self._run(self._acreate_dashboard(config))
         return self._run(self._acreate_helper(kind, config))
 
     def update(self, kind: str, identity: str, config: dict[str, Any]) -> None:
@@ -209,6 +297,8 @@ class DirectBackend:
             self._run(self._aupdate_template_helper(kind, identity, config))
         elif kind in GROUP_DOMAINS:
             self._run(self._aupdate_group_helper(kind, identity, config))
+        elif kind == DASHBOARD_KIND:
+            self._run(self._aupdate_dashboard(identity, config))
         else:
             self._run(self._aupdate_helper(kind, identity, config))
 
@@ -222,8 +312,10 @@ class DirectBackend:
             self._run(self._adelete_template_helper(kind, identity))
         elif kind in GROUP_DOMAINS:
             self._run(self._adelete_group_helper(kind, identity))
+        elif kind == DASHBOARD_KIND:
+            self._run(self._adelete_dashboard(identity))
         else:
-            self._run(self._client.ws_command(f"{kind}/delete", **{f"{kind}_id": identity}))
+            self._run(self._adelete_helper(kind, identity))
 
     def entry_id_for(self, kind: str, identity: str) -> str | None:
         """Additive, non-`Backend`-Protocol lookup (docs/internals/backend-protocol.md §3.1):
@@ -318,20 +410,54 @@ class DirectBackend:
         return object_id
 
     # -- helpers (WebSocket storage collections) --------------------------
+    #
+    # These four are the GENERIC storage-collection fallthrough every other
+    # branch in list_remote/create/update/delete falls past. Each asserts
+    # `kind in HELPER_DOMAINS` (docs/internals/dashboards-design.md §4.1's
+    # last bullet, a DB1 review finding): a kind added to `OBJECT_KINDS`
+    # without an explicit dispatch branch above must fail loudly HERE, at the
+    # dispatch layer -- an `AssertionError` naming the offending kind --
+    # rather than silently sending a nonexistent `<kind>/list`-style WS
+    # command against real HA and aborting pull/plan/push with a confusing
+    # "Unknown command" error far from the actual bug (adding the kind
+    # without wiring its backend support).
 
     async def _alist_helpers(self, kind: str) -> dict[str, dict[str, Any]]:
+        assert kind in HELPER_DOMAINS, (
+            f"_alist_helpers called for non-helper kind {kind!r} -- a kind must have an "
+            "explicit DirectBackend dispatch branch, never fall through to the generic "
+            "storage-collection commands"
+        )
         items = await self._client.ws_command(f"{kind}/list")
         return {str(item["id"]): item for item in items}
 
     async def _acreate_helper(self, kind: str, config: dict[str, Any]) -> str:
+        assert kind in HELPER_DOMAINS, (
+            f"_acreate_helper called for non-helper kind {kind!r} -- a kind must have an "
+            "explicit DirectBackend dispatch branch, never fall through to the generic "
+            "storage-collection commands"
+        )
         # HA assigns the id from the name slug; it rejects a caller-supplied id.
         payload = {k: v for k, v in config.items() if k != "id"}
         result = await self._client.ws_command(f"{kind}/create", **payload)
         return str(result["id"])
 
     async def _aupdate_helper(self, kind: str, identity: str, config: dict[str, Any]) -> None:
+        assert kind in HELPER_DOMAINS, (
+            f"_aupdate_helper called for non-helper kind {kind!r} -- a kind must have an "
+            "explicit DirectBackend dispatch branch, never fall through to the generic "
+            "storage-collection commands"
+        )
         payload = {k: v for k, v in config.items() if k != "id"}
         await self._client.ws_command(f"{kind}/update", **{f"{kind}_id": identity}, **payload)
+
+    async def _adelete_helper(self, kind: str, identity: str) -> None:
+        assert kind in HELPER_DOMAINS, (
+            f"_adelete_helper called for non-helper kind {kind!r} -- a kind must have an "
+            "explicit DirectBackend dispatch branch, never fall through to the generic "
+            "storage-collection commands"
+        )
+        await self._client.ws_command(f"{kind}/delete", **{f"{kind}_id": identity})
 
     # -- config-entry template helpers (docs/internals/ha-api-notes.md §26) ----------
     #
@@ -675,6 +801,268 @@ class DirectBackend:
             return  # already gone / never existed -- delete is idempotent
         await self._client.rest_delete(f"/api/config/config_entries/entry/{entry_id}")
         self._group_entry_ids.pop((kind, identity), None)
+
+    # -- dashboards (Lovelace storage-mode, docs/internals/dashboards-design.md
+    # §4.1) ------------------------------------------------------------------
+    #
+    # Unlike template/group helpers, every dashboard command is WebSocket
+    # (§2.2's table) -- there is no REST flow here. `list_remote` composes
+    # each dashboard's two HA-side stores (the `lovelace_dashboards` registry
+    # item + its `lovelace[.<url_path>]` config blob) into the one
+    # `{"meta": ..., "config": ...}` envelope `DashboardConfig` expects
+    # (docs/internals/dashboards-design.md §3.2); `create`/`update`/`delete`
+    # drive the two stores' WS commands to completion inside the single
+    # synchronous `Backend` method call, exactly like the config-entry flows
+    # above -- the sync engine never sees the two-store seam.
+
+    async def _afetch_dashboard_config(self, url_path: str | None) -> Any:
+        """`lovelace/config` for `url_path` (`None` == the default
+        dashboard). Returns the sentinel `_CONFIG_NOT_FOUND` for a dashboard
+        that has never been saved (§2.1: a never-customized default has no
+        config at all; HA raises `config_not_found` -- Hassle treats this as
+        absent from `list_remote` rather than an empty/default body)."""
+        try:
+            return await self._client.ws_command("lovelace/config", url_path=url_path)
+        except HaApiError as exc:
+            if exc.code == "config_not_found":
+                return _CONFIG_NOT_FOUND
+            raise
+
+    @staticmethod
+    def _has_default_dashboard_registry_item(items: Any) -> bool:
+        """Does the registry already hold the default dashboard's OWN item?
+
+        Scans ALL items -- deliberately BEFORE any `mode` filter, since a
+        YAML-mode `lovelace` item aliases `lovelace/config(url_path=null)`
+        exactly as a storage-mode one does
+        (docs/internals/ha-api-notes.md §39.2). Both callers -- the
+        `list_remote` probe and the `create(meta=None)` guard -- must agree on
+        this predicate, so it lives in one place.
+        """
+        return any(item.get("url_path") == _DEFAULT_DASHBOARD_URL_PATH for item in items)
+
+    async def _ahas_default_dashboard_registry_item(self) -> bool:
+        items = await self._client.ws_command("lovelace/dashboards/list")
+        return self._has_default_dashboard_registry_item(items)
+
+    async def _alist_dashboards(self) -> dict[str, dict[str, Any]]:
+        items = await self._client.ws_command("lovelace/dashboards/list")
+        out: dict[str, dict[str, Any]] = {}
+        has_lovelace_item = self._has_default_dashboard_registry_item(items)
+        for item in items:
+            if item.get("mode") != "storage":
+                continue  # YAML-mode dashboard: not ours to manage (I1)
+            dashboard_id = str(item["id"])
+            url_path = item.get("url_path")
+            identity = str(url_path) if url_path is not None else DEFAULT_IDENTITY
+            if identity == DEFAULT_IDENTITY and url_path is not None:
+                # §39.3: `lovelace/dashboards/create` exposes
+                # `allow_single_word: true`, which bypasses HA's hyphen rule,
+                # so a REAL dashboard at the literal `url_path: "default"` is
+                # creatable -- and would silently share Hassle's sentinel
+                # identity with the actual default dashboard.
+                raise ValueError(
+                    "this Home Assistant has a dashboard whose url_path is literally "
+                    f"{DEFAULT_IDENTITY!r}, which collides with the identity Hassle "
+                    "reserves for the DEFAULT dashboard (docs/internals/"
+                    "dashboards-design.md §3.1) -- two different dashboards would "
+                    "share one object key, so Hassle stops rather than silently "
+                    "merging them. Fix: give that dashboard a different URL. Home "
+                    "Assistant has no rename -- `lovelace/dashboards/update` rejects "
+                    "`url_path` outright (docs/internals/ha-api-notes.md §39.3) -- so "
+                    "in Settings > Dashboards, open it and copy its config (its raw "
+                    "YAML via the three-dot menu > 'Raw configuration editor'), "
+                    "delete the dashboard, create a new one with a hyphenated URL, "
+                    "and paste the config back. Then re-run this command."
+                )
+            self._dashboard_ids[identity] = dashboard_id
+            # `meta` is the registry item minus `id` (HA-assigned,
+            # transport-only) and minus `mode` (always "storage" here, §3.2).
+            meta = {k: v for k, v in item.items() if k not in ("id", "mode")}
+            config = await self._afetch_dashboard_config(url_path)
+            if config is _CONFIG_NOT_FOUND:
+                continue
+            out[identity] = {"meta": meta, "config": config}
+        # The default dashboard is probed separately ONLY when it has no
+        # registry item of its own (docs/internals/ha-api-notes.md §39.2). On
+        # HA 2026.x it usually DOES have one: `_async_migrate_default_config`
+        # moves a legacy `.storage/lovelace` into a real registry item at
+        # `url_path: "lovelace"`, and `lovelace/config`'s handler is
+        # `dashboards.get("lovelace") or dashboards[None]` -- so `url_path=null`
+        # is then an ALIAS for that item, not a second store. Probing anyway
+        # would adopt one HA dashboard as TWO Hassle objects (`"lovelace"` and
+        # `"default"`) that overwrite each other's config on every push. The
+        # same guard covers the YAML-mode default (mode `yaml` at the same
+        # url_path): the mode filter above drops the registry item, but the
+        # probe would otherwise adopt ui-lovelace.yaml's content, which Hassle
+        # must never manage (I1).
+        if not has_lovelace_item:
+            default_config = await self._afetch_dashboard_config(None)
+            if default_config is not _CONFIG_NOT_FOUND:
+                out[DEFAULT_IDENTITY] = {"meta": None, "config": default_config}
+        return out
+
+    async def _acreate_dashboard(self, config: dict[str, Any]) -> str:
+        meta = config.get("meta")
+        view_config = config.get("config")
+        if meta is None:
+            # The default dashboard has no registry item -- config/save only
+            # (§4.1's mapping table).
+            #
+            # ...unless HA has already migrated it into one (ha-api-notes
+            # §39.2). There, `config/save(url_path=null)` writes THROUGH to the
+            # `lovelace` dashboard, so a bundle still spelling
+            # `@dashboard(default=True)` would silently overwrite it -- and,
+            # since `list_remote` reports that dashboard as `"lovelace"` and
+            # never as `"default"`, re-plan the identical create on every
+            # single push. Fail loudly with the fix instead.
+            #
+            # The marker is resolved with the SAME all-items scan
+            # `_alist_dashboards` uses, NOT via `_alist_dashboards_ids_only`:
+            # that helper filters `mode != "storage"` first, so a YAML-mode
+            # `lovelace` item would never reach `self._dashboard_ids` and the
+            # guard would silently not fire -- leaving the push to fail on
+            # real HA's opaque `Not supported` instead (§39.2's
+            # `yaml_mode_default_save_rejected`).
+            if await self._ahas_default_dashboard_registry_item():
+                raise ValueError(
+                    "this Home Assistant's default dashboard already has its own "
+                    f"registry entry at url_path={_DEFAULT_DASHBOARD_URL_PATH!r} (Home "
+                    "Assistant migrates it there on upgrade, and a YAML-mode install "
+                    "registers ui-lovelace.yaml there), so `default=True` no longer "
+                    "addresses it -- saving through it would overwrite that dashboard, "
+                    "or be refused outright in YAML mode, and re-plan this create "
+                    "forever either way. Fix: run `hassle pull`, which adopts it as "
+                    f"@dashboard(url_path={_DEFAULT_DASHBOARD_URL_PATH!r}, ...), then "
+                    "delete the `default=True` declaration this bundle still carries. "
+                    "(If it is YAML-mode, Hassle cannot manage it at all -- I1 -- and "
+                    "the declaration should simply be removed.)"
+                )
+            await self._client.ws_command("lovelace/config/save", url_path=None, config=view_config)
+            return DEFAULT_IDENTITY
+        if not isinstance(meta, dict):
+            raise ValueError(
+                "dashboard config's meta must be a dict or null (required to "
+                "create a dashboard's registry item)"
+            )
+        meta = cast("dict[str, Any]", meta)
+        if not meta.get("url_path"):
+            raise ValueError(
+                "dashboard config's meta has no 'url_path' (required to create a "
+                "non-default dashboard's registry item, docs/internals/"
+                "dashboards-design.md §5.2's @dashboard(url_path=...) contract)"
+            )
+        identity = str(meta["url_path"])
+        payload = {k: v for k, v in meta.items() if k != "id"}
+        payload["mode"] = "storage"
+        if identity == _DEFAULT_DASHBOARD_URL_PATH:
+            # `lovelace` cannot be CREATED through the public API at all
+            # (docs/internals/ha-api-notes.md §39.11), so fail here with an
+            # explanation rather than letting HA return a confusing
+            # `url_already_exists` for a dashboard `list_remote` just said
+            # does not exist. Two independent gates in
+            # `DashboardsCollection._process_create_data`:
+            #   1. the hyphen rule -- bypassable with `allow_single_word: True`
+            #      (which is how HA's own migration creates it), but
+            #   2. `async_panel_exists(hass, url_path)`, and
+            #      `_async_ensure_default_panel` guarantees a `lovelace` panel
+            #      always exists -- so this one can never be satisfied.
+            # Only HA's internal migration can produce this dashboard, because
+            # it runs before the panel is registered.
+            raise ValueError(
+                f"cannot create a dashboard at url_path={identity!r}: Home Assistant "
+                "reserves that URL for the default dashboard and always has a panel "
+                "registered there, so `lovelace/dashboards/create` refuses it "
+                "unconditionally (docs/internals/ha-api-notes.md §39.11). Only HA "
+                "itself creates this dashboard, by migrating a pre-existing default "
+                "dashboard on upgrade -- Hassle can adopt and update it, never create "
+                "it. Fix: if you are restoring this bundle onto a different Home "
+                "Assistant, drop the @dashboard(url_path='lovelace', ...) declaration "
+                "and re-create its views on that instance's own default dashboard "
+                "(customise it once in the UI, then `hassle pull`)."
+            )
+        result = await self._client.ws_command("lovelace/dashboards/create", **payload)
+        dashboard_id = str(result["id"])
+        self._dashboard_ids[identity] = dashboard_id
+        try:
+            await self._client.ws_command(
+                "lovelace/config/save", url_path=identity, config=view_config
+            )
+        except BaseException:
+            # Partial-create rollback (§4.1): the registry item was created
+            # but the config write failed -- delete it before surfacing the
+            # error, so the apply engine's snapshot/rollback model (DESIGN
+            # §8.2) still holds at the object level (never a half-created
+            # dashboard left dangling in HA). Best-effort: if the rollback
+            # delete itself fails, the ORIGINAL error is still what
+            # propagates, not the cleanup failure.
+            with contextlib.suppress(Exception):
+                await self._client.ws_command(
+                    "lovelace/dashboards/delete", dashboard_id=dashboard_id
+                )
+            self._dashboard_ids.pop(identity, None)
+            raise
+        return identity
+
+    async def _aresolve_dashboard_id(self, identity: str) -> str:
+        """`dashboard_id` stays transport-internal (§4.1): resolved from
+        `url_path` via `lovelace/dashboards/list`, cached per connection
+        (`self._dashboard_ids`) -- no manifest field needed, unlike a
+        config-entry's `entry_id`, since `url_path` is itself a stable,
+        user-visible correlator."""
+        cached = self._dashboard_ids.get(identity)
+        if cached is not None:
+            return cached
+        await self._alist_dashboards_ids_only()
+        dashboard_id = self._dashboard_ids.get(identity)
+        if dashboard_id is None:
+            raise ValueError(
+                f"no dashboard registry item found for url_path {identity!r} -- an "
+                "UPDATE/DELETE must target an existing dashboard, never a recreate "
+                "(a url_path rename is modeled as delete+create, docs/internals/"
+                "dashboards-design.md §4.1 -- an existing object's HA id is never "
+                "changed in place)"
+            )
+        return dashboard_id
+
+    async def _alist_dashboards_ids_only(self) -> None:
+        """Refresh `self._dashboard_ids` from `lovelace/dashboards/list`
+        without paying for a `lovelace/config` fetch per dashboard (unlike
+        `_alist_dashboards`, which composes full envelopes for
+        `Backend.list_remote`) -- used only to resolve a `dashboard_id` for
+        `update`/`delete`."""
+        items = await self._client.ws_command("lovelace/dashboards/list")
+        for item in items:
+            if item.get("mode") != "storage":
+                continue
+            url_path = item.get("url_path")
+            identity = str(url_path) if url_path is not None else DEFAULT_IDENTITY
+            self._dashboard_ids[identity] = str(item["id"])
+
+    async def _aupdate_dashboard(self, identity: str, config: dict[str, Any]) -> None:
+        meta = config.get("meta")
+        view_config = config.get("config")
+        if meta is not None:
+            if not isinstance(meta, dict):
+                raise ValueError("dashboard config's meta must be a dict or null")
+            meta = cast("dict[str, Any]", meta)
+            dashboard_id = await self._aresolve_dashboard_id(identity)
+            payload = _dashboard_registry_payload(meta)
+            await self._client.ws_command(
+                "lovelace/dashboards/update", dashboard_id=dashboard_id, **payload
+            )
+        url_path = None if identity == DEFAULT_IDENTITY else identity
+        await self._client.ws_command("lovelace/config/save", url_path=url_path, config=view_config)
+
+    async def _adelete_dashboard(self, identity: str) -> None:
+        if identity == DEFAULT_IDENTITY:
+            # Reverts to auto-generated (§4.1) -- there is no registry item
+            # to remove for the default dashboard.
+            await self._client.ws_command("lovelace/config/delete", url_path=None)
+            return
+        dashboard_id = await self._aresolve_dashboard_id(identity)
+        await self._client.ws_command("lovelace/dashboards/delete", dashboard_id=dashboard_id)
+        self._dashboard_ids.pop(identity, None)
 
     # -- registry snapshot (DESIGN §9.2) ----------------------------------
 

@@ -5,7 +5,7 @@ Subcommands:
                      minimum-coverage contract.
   goldens            Manage golden files (DSL<->IR pairs).
   docs               Build/check docs/DSL.md + docs/COOKBOOK.md.
-  acceptance-tasks   Emit the 10 agent-acceptance task prompts for a bundle
+  acceptance-tasks   Emit the 11 agent-acceptance task prompts for a bundle
                      (build only; running the actual model sessions is a separate step).
   acceptance-bundle  Generate the sample-house bundle acceptance-tasks' prompts are written
                      against (see hassle_dev.bundle_gen).
@@ -95,6 +95,14 @@ def _cmd_decompile_coverage(args: argparse.Namespace) -> int:
     print(f"decompile-coverage: {report['total_objects']} object(s) analyzed")
     print(f"  clean (zero raw_* nodes): {report['clean_objects']}/{report['total_objects']}")
     print(f"  clean fraction: {report['clean_fraction']:.1%} (gate: 90%)")
+    by_kind = report.get("by_kind", {})
+    if by_kind:
+        print("  by kind:")
+        for kind in sorted(by_kind):
+            k = by_kind[kind]
+            print(
+                f"    {kind}: {k['clean_objects']}/{k['total_objects']} ({k['clean_fraction']:.1%})"
+            )
     print(f"  report written to {out_file}")
     if report["exceptions"]:
         print("  exceptions:")
@@ -117,6 +125,11 @@ def _cmd_docs(args: argparse.Namespace) -> int:
         print(f"docs: MISSING golden pair for {len(report.missing_dsl_names)} name(s):")
         for name in sorted(report.missing_dsl_names):
             print(f"  {name}")
+
+    if report.missing_card_types:
+        print(f"docs: MISSING golden pair for {len(report.missing_card_types)} card type(s):")
+        for card_type in sorted(report.missing_card_types):
+            print(f"  {card_type}")
 
     print(f"docs: cookbook has {report.cookbook_recipe_count} recipe(s) (gate: >= 20)")
     if report.cookbook_recipe_count < 20:
@@ -213,7 +226,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     p_acc = sub.add_parser(
         "acceptance-tasks",
-        help="emit the 10 agent-acceptance task prompts for a bundle",
+        help="emit the 11 agent-acceptance task prompts for a bundle",
     )
     p_acc.add_argument("--bundle", type=Path, required=True, help="path to the bundle directory")
     p_acc.add_argument("--json", action="store_true", help="emit machine-readable JSON")

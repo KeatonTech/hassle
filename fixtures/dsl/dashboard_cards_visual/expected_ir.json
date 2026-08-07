@@ -1,0 +1,107 @@
+{
+  "dashboard:cards-visual": {
+    "meta": {
+      "url_path": "cards-visual",
+      "title": "Visual & History"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "masonry",
+          "title": "Visual",
+          "cards": [
+            {
+              "type": "gauge",
+              "entity": "sensor.cpu_temp",
+              "name": "CPU Temp",
+              "unit": "°C",
+              "min": 0,
+              "max": 100,
+              "needle": true,
+              "severity": {
+                "green": 0,
+                "yellow": 60,
+                "red": 85
+              }
+            },
+            {
+              "type": "history-graph",
+              "entities": [
+                "sensor.cpu_temp",
+                "sensor.living_room_temp",
+                {
+                  "entity": "sensor.attic_temp",
+                  "name": "Attic"
+                }
+              ],
+              "title": "Temperatures",
+              "hours_to_show": 48,
+              "show_names": true
+            },
+            {
+              "type": "statistics-graph",
+              "entities": [
+                "sensor.energy_usage"
+              ],
+              "title": "Energy",
+              "stat_types": [
+                "mean",
+                "max"
+              ],
+              "period": "hour",
+              "days_to_show": 7
+            },
+            {
+              "type": "sensor",
+              "entity": "sensor.cpu_temp",
+              "name": "CPU",
+              "graph": "line",
+              "detail": 2,
+              "hours_to_show": 24,
+              "unit": "°C"
+            },
+            {
+              "type": "statistic",
+              "entity": "sensor.energy_usage",
+              "name": "Energy this month",
+              "stat_type": "sum",
+              "period": {
+                "calendar": {
+                  "period": "month"
+                }
+              }
+            },
+            {
+              "type": "markdown",
+              "content": "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+              "title": "Status"
+            },
+            {
+              "type": "clock",
+              "clock_style": "analog",
+              "show_seconds": true,
+              "time_format": "24"
+            },
+            {
+              "type": "calendar",
+              "entities": [
+                "calendar.family",
+                "calendar.work"
+              ],
+              "title": "Schedule",
+              "initial_view": "listWeek"
+            },
+            {
+              "type": "logbook",
+              "entities": [
+                "sensor.cpu_temp"
+              ],
+              "title": "Recent activity",
+              "hours_to_show": 12
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "dashboard:cards-media-extra": {
+    "meta": {
+      "url_path": "cards-media-extra",
+      "title": "Media extra="
+    },
+    "config": {
+      "views": [
+        {
+          "type": "masonry",
+          "title": "Extra",
+          "cards": [
+            {
+              "type": "iframe",
+              "url": "https://example.com/panel",
+              "loading": "lazy",
+              "sandbox": "allow-scripts"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

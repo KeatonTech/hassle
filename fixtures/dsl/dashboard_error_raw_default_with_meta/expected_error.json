@@ -1,0 +1,4 @@
+{
+  "error_type": "DefaultDashboardMetadataError",
+  "contains": ["bad.py:11", "@raw_dashboard(default=True)", "returned"]
+}

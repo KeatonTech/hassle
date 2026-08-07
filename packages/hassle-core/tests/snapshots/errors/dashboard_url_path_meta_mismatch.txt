@@ -1,0 +1,1 @@
+The `@raw_dashboard(url_path='declared-one')` body at bad.py:10 returned a `meta` dict whose `url_path` is 'other-one'. A dashboard has exactly one identity, and these two spellings of it disagree -- Hassle would register the object under one and push it to the other. Fix: make them the same, or drop the `meta` key entirely and let the decorator's `url_path=` supply it.

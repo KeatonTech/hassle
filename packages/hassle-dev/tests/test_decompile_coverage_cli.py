@@ -53,6 +53,16 @@ def test_decompile_coverage_writes_json_artifact(tmp_path: Path) -> None:
     assert "inline single-trigger form" in by_key["automation:automation_legacy_platform_naming"]
     assert "templated delay" in by_key["script:script_with_fields"]
 
+    # Dashboards are folded into the gate (dashboards-design.md §6.2): with
+    # DB3's 47 card builders merged, the corpus-wide fraction holds >= 90%
+    # with dashboards included (asserted above via the top-level
+    # `clean_fraction`). They still get their own reported percentage via
+    # `by_kind`, so a future regression in one specific kind is visible even
+    # while the blended fraction still holds.
+    assert "dashboard" in report["by_kind"]
+    assert report["by_kind"]["dashboard"]["total_objects"] >= 10
+    assert report["by_kind"]["dashboard"]["clean_objects"] >= 8
+
 
 def test_decompile_coverage_fails_gate_when_forced_low(tmp_path: Path) -> None:
     # A configs dir containing only device-trigger-shaped (raw-only) fixtures

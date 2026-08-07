@@ -51,7 +51,17 @@ _STORAGE_DEFAULTS = {
 def storage_canonical(kind: str, config: dict[str, Any]) -> dict[str, Any]:
     """`config` as real HA would store it, for sync comparison. Identity for
     kinds without known normalization (automations, scripts, template
-    helpers -- the latter are already coerced at compile time)."""
+    helpers -- the latter are already coerced at compile time).
+
+    **`dashboard` has no entries in either table, deliberately** (docs/internals/
+    dashboards-design.md §3.3): the Lovelace store saves the config body
+    verbatim -- no server-side schema validation and no materialized defaults,
+    unlike the storage-collection helper domains this function exists for. List
+    order is semantically meaningful everywhere in a dashboard (views, sections,
+    cards) and the canonical-JSON rules already preserve it. If DB0's live
+    capture shows HA materializing anything after all, the findings go in the
+    tables above and the kind stops being identity -- comparison-side only,
+    never applied to compiled output."""
     if kind not in _STORAGE_FLOAT_FIELDS and kind not in _STORAGE_DEFAULTS:
         return config
     out = dict(config)

@@ -111,12 +111,27 @@ class DuplicateObjectError(CompileError):
         self.object_key = object_key
         loc_a = f"{first.file}:{first.line}" if first is not None else "<unknown>"
         loc_b = f"{second.file}:{second.line}" if second is not None else "<unknown>"
-        message = (
-            f"Duplicate object key `{object_key}`: two objects in this bundle claim the "
-            f"same id, first at {loc_a} and again at {loc_b}. An object's id is its HA "
-            f"identity and must be unique bundle-wide. Fix: give one of them a distinct "
-            f"`id=` (or rename the function, whose name is the default id)."
-        )
+        # A dashboard's identity is its `url_path` (or the `default` sentinel) --
+        # it has no `id=` keyword at all, and its function name is NOT its
+        # identity, so the generic fix sentence would send the author looking
+        # for a knob that does not exist (docs/internals/dashboards-design.md
+        # §3.1/§5.6). Every other kind keeps its message byte-for-byte.
+        if object_key.startswith("dashboard:"):
+            message = (
+                f"Duplicate object key `{object_key}`: two dashboards in this bundle claim "
+                f"the same identity, first at {loc_a} and again at {loc_b}. A dashboard's "
+                f"identity is its `url_path` (or `default=True` for THE default dashboard), "
+                f"and it must be unique bundle-wide. Fix: give one of them a different "
+                f"`url_path=` -- renaming the decorated function does not help, since a "
+                f"dashboard's identity comes from its decorator, not from the function name."
+            )
+        else:
+            message = (
+                f"Duplicate object key `{object_key}`: two objects in this bundle claim the "
+                f"same id, first at {loc_a} and again at {loc_b}. An object's id is its HA "
+                f"identity and must be unique bundle-wide. Fix: give one of them a distinct "
+                f"`id=` (or rename the function, whose name is the default id)."
+            )
         is_splice_reconcile = any(
             span is not None and _line_is_ui_splice_marker(span.file, span.line)
             for span in (first, second)
@@ -223,10 +238,28 @@ class NoRecordingContextError(CompileError):
 
     This happens when DSL recording calls are made at module scope instead of inside
     an ``@automation``/``@script`` body (which the compiler invokes inside a context).
+
+    ``in_dashboard=`` is the one case with a specific, teachable cause rather
+    than "you forgot the decorator": a ``@dashboard`` body IS being traced, but
+    it records cards, not automation triggers/conditions/actions (the §5.6
+    mirror of :class:`~hassle.compiler.dashboards.errors.NoDashboardContextError`).
     """
 
-    def __init__(self, call: str, span: SourceSpan | None) -> None:
+    def __init__(self, call: str, span: SourceSpan | None, *, in_dashboard: bool = False) -> None:
         where = f" at {span.file}:{span.line}" if span is not None else ""
+        if in_dashboard:
+            super().__init__(
+                f"`{call}` was called inside a `@dashboard` body{where}, which records cards "
+                f"-- not triggers, conditions or actions. A Home Assistant dashboard has no "
+                f"action list of its own: it describes what to DISPLAY, and anything it runs "
+                f"is an option ON a card (`tap_action`, `hold_action`, a button card's "
+                f"target). Fix: to make a card do something when tapped, set that option on "
+                f'the card itself (e.g. `raw_card({{..., "tap_action": {{"action": '
+                f'"perform-action", "perform_action": "light.turn_on"}}}})`); to '
+                f"automate something instead, move this call into an `@automation`/`@script` "
+                f"function body."
+            )
+            return
         super().__init__(
             f"`{call}` was called outside any recording context{where}. Trigger, condition "
             f"and action calls only make sense inside an `@automation`/`@script` function "

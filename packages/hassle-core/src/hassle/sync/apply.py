@@ -74,7 +74,13 @@ from hassle.sync.models import (
 # is still satisfied by "every config-entry helper before scripts/
 # automations" since apply doesn't need a stricter order within the family --
 # then scripts, then automations (automations may reference scripts/helpers,
-# so those must exist first).
+# so those must exist first), then dashboards LAST (docs/internals/
+# dashboards-design.md §4.2): a dashboard's cards reference entities produced
+# by every other kind, but nothing references a dashboard -- an explicit
+# tuple entry even though the sort-last fallback (`_kind_sort_key` below)
+# would happen to put an unlisted kind here anyway, because the rule is
+# "kinds are added to `_KIND_ORDER` explicitly", not "whatever falls out of
+# the fallback is fine" (docs/internals/backend-protocol.md §3.1.1 step 6).
 _KIND_ORDER = (
     "input_boolean",
     "input_number",
@@ -103,6 +109,7 @@ _KIND_ORDER = (
     "group_valve",
     "script",
     "automation",
+    "dashboard",
 )
 
 
@@ -320,8 +327,12 @@ def _identity_of(object_key: str) -> str:
 #: "caller-keyed" says nothing about whether the object_id actually reached
 #: the backend -- it did not, for the whole of M5-M11, and the exemption is
 #: what made that silent (docs/internals/ha-api-notes.md §17.5;
-#: `tests/test_script_create_object_id.py`).
-_CALLER_KEYED_KINDS = frozenset({"automation"})
+#: `tests/test_script_create_object_id.py`). `dashboard` joins `automation`
+#: here (docs/internals/dashboards-design.md §4.1): identity is
+#: `meta.url_path` (or the `"default"` sentinel when `meta` is null), always
+#: an intrinsic part of the envelope the caller sends -- never HA-assigned,
+#: so it can never diverge the way a slugified helper name can.
+_CALLER_KEYED_KINDS = frozenset({"automation", "dashboard"})
 
 
 def _create_body(kind: str, identity: str, local: dict[str, Any]) -> dict[str, Any]:

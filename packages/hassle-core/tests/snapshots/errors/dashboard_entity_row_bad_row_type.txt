@@ -1,0 +1,1 @@
+`c.entities(...)` at test_dashboard_card_row_validation.py:<line> was given ['a', 'b'] (a list) as one of its `entities` rows. Every row must be an entity id (`str`/`EntityRef`) or a `dict` (a per-row option object) — anything else would either be silently stringified into a nonsense row or dropped. Fix: pass an entity id string or a dict, not a list.

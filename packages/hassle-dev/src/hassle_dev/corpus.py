@@ -76,6 +76,8 @@ def _kind_for(stem: str) -> str:
         return "automation"
     if stem.startswith("script"):
         return "script"
+    if stem.startswith("dashboard"):
+        return "dashboard"
     if stem.startswith("helper_"):
         rest = stem[len("helper_") :]
         for dom in sorted(HELPER_DOMAINS, key=len, reverse=True):

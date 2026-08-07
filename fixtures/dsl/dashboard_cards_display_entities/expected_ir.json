@@ -1,0 +1,41 @@
+{
+  "dashboard:display-entities": {
+    "meta": {
+      "url_path": "display-entities",
+      "title": "Entities"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "entities",
+                  "entities": [
+                    "light.kitchen",
+                    "light.living_room",
+                    {
+                      "type": "divider"
+                    },
+                    {
+                      "entity": "climate.office",
+                      "tap_action": {
+                        "action": "more-info"
+                      }
+                    }
+                  ],
+                  "title": "All lights",
+                  "state_color": true
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

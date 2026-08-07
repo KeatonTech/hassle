@@ -1,0 +1,4 @@
+{
+  "error_type": "DashboardUrlPathError",
+  "contains": ["bad.py:6", "both-ways", "default=True"]
+}

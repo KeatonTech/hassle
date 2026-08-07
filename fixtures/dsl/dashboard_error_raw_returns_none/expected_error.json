@@ -1,0 +1,4 @@
+{
+  "error_type": "RawDashboardReturnTypeError",
+  "contains": ["bad.py:11", "forgot-return", "NoneType", "return"]
+}

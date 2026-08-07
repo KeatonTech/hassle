@@ -1,0 +1,33 @@
+{
+  "dashboard:display-button": {
+    "meta": {
+      "url_path": "display-button",
+      "title": "Button"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "button",
+                  "entity": "script.movie_time",
+                  "name": "Movie time",
+                  "icon": "mdi:movie",
+                  "tap_action": {
+                    "action": "perform-action",
+                    "perform_action": "script.movie_time"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

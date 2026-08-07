@@ -53,10 +53,26 @@ def _require_env() -> tuple[str, str]:
     return url, token
 
 
+# The one object this suite must NEVER delete (docs/internals/ha-api-notes.md
+# §39.11): HA's migrated default dashboard at `url_path: "lovelace"` cannot be
+# recreated through the public API -- `dashboards/create` rejects that url_path
+# unconditionally, because `_async_ensure_default_panel` guarantees a panel
+# always exists there. Deleting it is therefore IRREVERSIBLE, and unlike every
+# other object here the suite could not put it back. Any instance that has been
+# through HA's startup migration has one, so a plain "wipe everything" teardown
+# would silently destroy the operator's real default dashboard the first time
+# this suite ran against a non-disposable instance. (Observed for real during
+# DB0 -- this exclusion is the fix.)
+_UNDELETABLE = {("dashboard", "lovelace")}
+
+
 def _wipe(backend: DirectBackend) -> None:
-    """Delete every Hassle-managed object of every kind."""
+    """Delete every Hassle-managed object of every kind, except the one that
+    could never be restored (see `_UNDELETABLE`)."""
     for kind in OBJECT_KINDS:
         for identity in list(backend.list_remote(kind)):
+            if (kind, identity) in _UNDELETABLE:
+                continue
             with contextlib.suppress(Exception):  # best-effort teardown
                 backend.delete(kind, identity)
 

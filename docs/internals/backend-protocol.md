@@ -219,6 +219,60 @@ Three implementations:
   records every call for assertions; used throughout the pull-engine unit
   tests and the fuzz test for lost edits.
 
+### Adopt-into-existing-file safety (`adopt_write`)
+
+`hassle.sync.source_writer.adopt_write` is an ADDITIVE module-level function
+(not part of the `SourceWriter` Protocol itself) that `hassle.sync.pull.
+apply_pull`'s ADOPT branch calls instead of `source_writer.write_whole_file`
+directly. **Amendment to the `write_whole_file`/`WholeFileSourceWriter`
+bullets above:** those bullets describe the underlying Protocol methods;
+`apply_pull`'s ADOPT action no longer calls `write_whole_file` unconditionally
+— it routes through `adopt_write`, which decides between a direct
+`write_whole_file` and a byte-preserving merge depending on whether the
+target path already exists.
+
+This exists because a dashboard's per-object default placement
+(docs/internals/dashboards-design.md §7, one file per dashboard) makes
+"ADOPT's target path already has real content" a realistic case for the
+first time — a hand-authored file, or two identities that module-safen to
+the same stem — where every prior kind's shared `misc.py`/category-file
+default was populated only by ADOPT itself. The byte-preservation contract:
+
+```python
+def adopt_write(source_writer: SourceWriter, path: Path, object_key: str, content: str) -> None: ...
+```
+
+- If `path` does **not** already exist: `write_whole_file(path, content)`,
+  unchanged from before — the common case, nothing to preserve.
+- If `path` **already exists**: `adopt_write` reads it directly and calls
+  `write_whole_file(path, existing_bytes + separator + "# hassle: adopted
+  <object_key> below" marker + content)` — ONE `write_whole_file` call,
+  existing bytes first. It does **not** call `splice_object` for this case.
+
+That last point is deliberate, not an oversight: an earlier version of this
+function routed the existing-path case to `source_writer.splice_object`
+instead, reasoning that `SplicingSourceWriter`'s own "stale manifest" append
+fallback (§3 above) would handle it safely. That reasoning was wrong for any
+writer, not just `SplicingSourceWriter` — `WholeFileSourceWriter.
+splice_object` **is** `write_whole_file` (zero preservation by design, see
+its bullet above), and `SplicingSourceWriter.splice_object` itself falls back
+to a plain `write_whole_file` whenever the new content fails to parse as one
+spliceable statement plus imports, which `apply_pull`'s own placeholder
+content (`_placeholder_dsl_source`, comment-only — not valid Python) always
+does. Both real writers therefore destroyed the existing file's bytes when
+routed through `splice_object` with placeholder content. `adopt_write` now
+reads-and-concatenates itself so the guarantee holds unconditionally,
+regardless of `content`'s shape or which `SourceWriter` implementation is in
+play; it never depends on any writer's own splice/parse logic.
+
+`hassle.sync.pull_apply.apply_pull_with_decompiler` (the real
+decompiler-backed engine) does not call `adopt_write` — it already has its
+own, independently-correct kind-generic equivalent for its BATCHED adopt
+writes (`_merge_adopt_batch_into_existing`, which operates on real decompiled
+Python source and so can safely reuse LibCST-based import merging;
+docs/internals/sync.md), proven for `automation`/`input_boolean` in
+`test_pull_adopt_batching.py` and `test_pull_adopt_preserves_existing_file.py`.
+
 ### Conflict marker format
 
 When the pull engine writes a `conflict` plan entry, it hands `SourceWriter` a
@@ -359,6 +413,134 @@ other named follow-ons) needs:
 Steps 1–2 are the only places that see genuinely new code per domain (an IR
 shape + a DSL builder); steps 3–6 are membership-set additions into machinery
 that already exists generically.
+
+## 3.2 Dashboards addendum (`Backend` unchanged)
+
+Lovelace storage-mode dashboards (`hassle.ir.keys.DASHBOARD_KIND`,
+docs/internals/dashboards-design.md) are the third `Backend`-unchanged
+plugin kind, alongside the config-entry addendum above: the same four
+methods, addressed the same `(kind, identity)` way. What differs is entirely
+internal to `FakeBackend`/`DirectBackend`.
+
+- **Two HA-side stores, one Hassle object.** A dashboard is a
+  `lovelace_dashboards` registry item (`{id, url_path, title, icon,
+  show_in_sidebar, require_admin, mode: "storage"}`) plus a
+  `lovelace[.<url_path>]` view-config blob. `list_remote`/`create`/`update`
+  compose/decompose these into one envelope, `{"meta": ..., "config": ...}`
+  (`meta` is the registry item minus `id`/`mode`, `null` for the default
+  dashboard; `config` is the view config verbatim) — see
+  docs/internals/dashboards-design.md §3.2 for the full IR shape. The
+  Protocol's caller (the sync engine) never sees the two-store seam, exactly
+  as it never sees the helper `{domain}_id` payload-key convention or the
+  config-entry flow steps.
+- **Identity: `meta.url_path`, verbatim, never re-slugified** — a real
+  `url_path` IS HA's own slug (unlike a config-entry helper's `name`-derived
+  identity, which genuinely is re-slugified). The sentinel `"default"` keys
+  the one dashboard with no registry item at all (`meta: null`). It is
+  collision-free only **by convention, not by construction** — DB0 retired the
+  old claim (ha-api-notes §39.3): HA does require a created `url_path` to
+  contain a hyphen, but `allow_single_word: true` bypasses that rule, so a
+  real dashboard at the literal `url_path: "default"` is creatable and
+  `list_remote` raises rather than merging the two. On HA 2026.x the default
+  dashboard usually has its own registry item at `url_path: "lovelace"` and is
+  keyed under that ordinary identity instead (§39.2); Hassle can adopt and
+  update that dashboard but never create it (§39.11). `dashboard` is in
+  `hassle.sync.apply._CALLER_KEYED_KINDS` (alongside `automation`): the
+  identity is always an intrinsic part of the envelope the caller sends,
+  never HA-assigned, so `create`'s `CreatedIdentityDivergedError` guard does
+  not apply to it.
+- **Mapping table** (`DirectBackend`, WS-only — no REST here, unlike the
+  config-entry flows):
+
+  | Protocol call | Wire commands |
+  |---|---|
+  | `list_remote("dashboard")` | `lovelace/dashboards/list` → for each registry item (mode `!= "storage"` filtered out, I1): `lovelace/config` → compose the envelope. A `config_not_found` error (the never-customized-default case) omits that dashboard entirely. The default dashboard is probed separately (`lovelace/config(url_path=null)`) **only when the registry holds no item at `url_path: "lovelace"`** — when it does, `url_path=null` is an alias for that item and probing would adopt one HA dashboard twice (ha-api-notes §39.2). **Raises** if a registry item’s `url_path` is literally `"default"` (§39.3: creatable via `allow_single_word`, and it would collide with the identity sentinel). |
+  | `create` | non-default: `lovelace/dashboards/create` (from `meta`, plus `mode: "storage"`) then `lovelace/config/save`; **refuses** `url_path: "lovelace"` up-front, which HA never allows to be created (ha-api-notes §39.11). Default (`meta: null`): one `lovelace/dashboards/list` first — the migrated-default guard, which **refuses** when an item at `url_path: "lovelace"` exists (§39.2) — then `lovelace/config/save(url_path=null)`; no registry *write* in either case. |
+  | `update` | when `meta` is not null: `lovelace/dashboards/update` (dashboard_id resolved from `url_path` via `lovelace/dashboards/list`, cached per connection) with the FULL desired state of exactly `{title, icon, show_in_sidebar, require_admin}` — built from an explicit allowlist, never from `meta`'s own keys, and never `url_path` (PREVENT_EXTRA schema; see the payload/convergence bullet below). Always `lovelace/config/save` for `config`. |
+  | `delete` | non-default: `lovelace/dashboards/delete`; default: `lovelace/config/delete` (reverts to auto-generated, enumerated loudly in the plan like every delete). |
+
+- **`dashboard_id` stays transport-internal.** `DirectBackend` re-resolves it
+  from `url_path` via `lovelace/dashboards/list` (cached per connection,
+  `self._dashboard_ids`), the same pattern as the config-entry `entry_id`
+  cache above — no `ManifestEntry` change, since `url_path` is itself a
+  stable, user-visible correlator. Renaming a dashboard's `url_path` is an
+  identity change and is therefore modeled as delete+create, exactly like
+  changing an automation `id` (I2 — the tooling never mutates identity in
+  place).
+- **Partial-create rollback.** `create` for a non-default dashboard is two
+  writes; if `lovelace/config/save` fails after `lovelace/dashboards/create`
+  succeeded, `DirectBackend` deletes the just-created registry item
+  (best-effort — a failed cleanup never masks the original error) before
+  re-raising, so the apply engine's snapshot/rollback model (DESIGN §8.2)
+  keeps holding at the object level.
+- **Update payload: explicit allowlist, full desired state** (DB5 2026-07-27
+  implementation finding, reviewer-blocked and fixed forward before merge to
+  `main` — see docs/internals/dashboards-design.md §4.1 for the full
+  writeup). HA's real `lovelace/dashboards/update` schema is PREVENT_EXTRA
+  over exactly `title`/`icon`/`show_in_sidebar`/`require_admin` —
+  `url_path` is deliberately excluded (a url_path change is delete+create,
+  never an in-place rename, I2). `DirectBackend._dashboard_registry_payload`
+  builds the payload from that explicit allowlist, **never** by copying
+  `meta`'s own keys (which always includes `url_path`, and would 400 with
+  `invalid_format` if forwarded). The payload also carries the kind's FULL
+  desired state on every update, never a presence-based subset: HA's
+  registry item is a storage collection that MERGES an update
+  (`{**item, **update}`) rather than replacing it outright, so `icon` is
+  sent explicitly as `None` when absent from `meta` (clearing it) and
+  `show_in_sidebar`/`require_admin` fall back to source-informed defaults
+  (`True`/`False`, verified -- ha-api-notes §39.1) rather than being omitted — a
+  presence-based payload would leave a locally-deleted field's stale remote
+  value in place forever, silently re-planning the same ineffective update
+  on every subsequent push.
+- **No normalization for this kind.** `normalize_ha`/`modernize_for_comparison`
+  are exact identity functions for `kind == "dashboard"` (docs/internals/
+  dashboards-design.md §3.3) — a card's `tap_action`/`hold_action` legitimately
+  keeps a legacy `service:` key, which must never be rewritten to `action:`.
+  `FakeBackend` still routes dashboard bodies through `normalize_ha` on write
+  for consistency with every other kind's code path; the guard is what makes
+  that a no-op, not a kind-specific skip in `FakeBackend` itself.
+- **`FakeBackend`** stores the envelope keyed by the identity rule above,
+  reshaping only `meta` to match how HA's registry actually stores a written
+  item (ha-api-notes §39.1, `_dashboard_registry_stored_shape`): an explicit
+  `icon: null` is dropped rather than persisted, and `create` materializes
+  `show_in_sidebar: true` / `require_admin: false` when omitted. The `config`
+  blob is stored verbatim (§39.4). `create` rejects a hyphen-less `url_path`
+  (keyed off `meta is None` — the actual default-dashboard marker, never the
+  derived identity string, so a real dashboard whose `url_path` happens to be
+  the literal string `"default"` is still rejected; `"lovelace"` is exempt,
+  §39.11) and a duplicate `url_path` (mirroring the two HA-side registry
+  rejections, both confirmed live by DB0); `update`
+  needs one small fidelity guard (an unknown non-default identity raises,
+  mirroring `DirectBackend._aresolve_dashboard_id` — the default dashboard
+  is exempt, since real HA's `config/save` genuinely upserts it) but
+  otherwise falls through to the generic tail; `delete` needs no
+  dashboard-specific branch at all (the generic dict `.pop` already does
+  the right thing).
+- **`_KIND_ORDER`** (`hassle.sync.apply`) gains `"dashboard"` **last**, after
+  `"automation"`: a dashboard's cards reference entities produced by every
+  other kind, but nothing references a dashboard. Explicit tuple entry, per
+  this document's "new kinds are added explicitly" rule (§3.1.1 step 6) —
+  the sort-last fallback would happen to agree, but the rule stands
+  regardless.
+- **`_CALLER_KEYED_KINDS`** (`hassle.sync.apply`) gains `"dashboard"` (see
+  the identity bullet above); `_create_body` needs **no** injection branch
+  for it — the identity always travels inside the envelope
+  (`meta.url_path`, or `meta: null` ⇒ `"default"`), unlike a script's
+  extrinsic object_id.
+- **Kind registration and `DirectBackend` support are inseparable.** The
+  generic storage-collection fallthrough (`_alist_helpers`/`_acreate_helper`/
+  `_aupdate_helper`/`_adelete_helper`) now asserts `kind in HELPER_DOMAINS` —
+  a kind added to `OBJECT_KINDS` without an explicit dispatch branch in
+  `list_remote`/`create`/`update`/`delete` fails loudly here (an
+  `AssertionError` naming the kind) instead of silently sending a
+  nonexistent `<kind>/list`-style WS command against real HA. This is the
+  same "new kinds are added explicitly" discipline `_KIND_ORDER` already
+  follows, made structural rather than just documented.
+
+See docs/internals/dashboards-design.md §2 (the HA substrate this addendum is
+built against — verified live by DB0 against HA 2026.7.4; ha-api-notes
+§39.1–§39.12) and §4 (the backend/sync design this section mirrors) for the
+full rationale.
 
 ## 4. Where things live
 

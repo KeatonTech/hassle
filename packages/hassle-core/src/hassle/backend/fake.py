@@ -96,10 +96,16 @@ before a push (the "category already exists" case).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from hassle.ir.canonical import sha256_hash
-from hassle.ir.keys import GROUP_DOMAINS, HELPER_DOMAINS, OBJECT_KINDS, TEMPLATE_DOMAINS
+from hassle.ir.keys import (
+    DASHBOARD_KIND,
+    GROUP_DOMAINS,
+    HELPER_DOMAINS,
+    OBJECT_KINDS,
+    TEMPLATE_DOMAINS,
+)
 from hassle.ir.keys import slugify as _slugify
 from hassle.ir.normalize import normalize_ha
 
@@ -195,6 +201,62 @@ def _coerce_number_selector_fields(kind: str, config: dict[str, Any]) -> dict[st
     return coerced
 
 
+# HA's own `url_path` for the default dashboard once it has a registry item
+# (docs/internals/ha-api-notes.md §39.2). HA's migration creates it with
+# `allow_single_word: True`, so it is exempt from the hyphen rule below --
+# mirroring the same exemption in
+# `hassle.compiler.dashboards.decorators.HA_DEFAULT_DASHBOARD_URL_PATH`
+# (spelled separately: `hassle.backend` must not import `hassle.compiler`).
+_HA_DEFAULT_DASHBOARD_URL_PATH = "lovelace"
+
+# Registry fields HA's `dashboards/create` schema materializes when the caller
+# omits them (docs/internals/ha-api-notes.md §39.1: every `create_*` capture in
+# `dashboards-db0.json` comes back carrying both).
+_DASHBOARD_CREATE_DEFAULTS: dict[str, Any] = {
+    "show_in_sidebar": True,
+    "require_admin": False,
+}
+
+
+def _dashboard_registry_stored_shape(
+    envelope: dict[str, Any], *, creating: bool = False
+) -> dict[str, Any]:
+    """Mirror how HA's dashboard registry actually STORES a written item
+    (docs/internals/ha-api-notes.md §39.1, DB0 captures `list_after_icon_null`
+    and the `create_*` family).
+
+    Two behaviors, both observed against HA 2026.7.4:
+
+    - `lovelace/dashboards/update` merges (`{**item, **update}`) but an
+      explicit `icon: null` REMOVES the key -- HA never persists a literal
+      JSON `null` there, and `dashboards/list` accordingly never returns one.
+      `DirectBackend._dashboard_registry_payload` sends `icon: None` on every
+      update precisely to clear a deleted icon, so a fake that stored the
+      envelope verbatim would report an `icon: None` key real HA cannot
+      produce.
+    - `lovelace/dashboards/create` materializes `show_in_sidebar: true` and
+      `require_admin: false` when they are omitted (``creating=True``). Storing
+      the envelope verbatim instead made a hand-authored `@dashboard` that
+      omits those two kwargs show phantom UI drift on the first plan after its
+      own push.
+
+    Only `meta` is reshaped; the `config` blob is opaque and stored verbatim
+    (§39.4 -- byte-verbatim, key order and all). A null `meta` is THE default
+    dashboard, which has no registry item for either rule to apply to.
+    """
+    raw_meta = envelope.get("meta")
+    if not isinstance(raw_meta, dict):
+        return envelope
+    meta = cast("dict[str, Any]", raw_meta)
+    stored = {k: v for k, v in meta.items() if not (k == "icon" and v is None)}
+    if creating:
+        for field_name, default in _DASHBOARD_CREATE_DEFAULTS.items():
+            stored.setdefault(field_name, default)
+    if stored == meta:
+        return envelope
+    return {**envelope, "meta": stored}
+
+
 def _empty_str_list() -> list[str]:
     return []
 
@@ -282,6 +344,8 @@ class FakeBackend:
             return self._create_via_flow(kind, config)
         if kind in GROUP_DOMAINS:
             return self._create_group_via_flow(kind, config)
+        if kind == DASHBOARD_KIND:
+            return self._create_dashboard(config)
         # normalize_ha only special-cases kind == "automation" (outer-key
         # pluralization); every other kind gets the same service:->action:
         # recursive rewrite, so passing `kind` straight through is correct.
@@ -329,10 +393,75 @@ class FakeBackend:
             # longer exists in the store -- an upserting fake would let that
             # mistake pass silently instead of raising like real HA.
             raise ValueError(f"WS command failed: Unable to find {kind}_id {identity}")
+        if kind == DASHBOARD_KIND and identity != "default" and identity not in self._store[kind]:
+            # Fidelity with real HA (mirrors the HELPER_DOMAINS guard just
+            # above, should-fix 3(b)): `DirectBackend._aresolve_dashboard_id`
+            # raises when a non-default `url_path` has no known registry
+            # item -- an UPDATE never upserts a dashboard's registry item
+            # into existence. The DEFAULT dashboard is exempt: real HA's
+            # `lovelace/config/save(url_path=null)` genuinely upserts it,
+            # since there is no registry item that could ever be "missing".
+            raise ValueError(
+                f"lovelace: no dashboard registry item found for url_path {identity!r} "
+                "-- an UPDATE must target an existing dashboard, never a recreate"
+            )
         normalized = normalize_ha(config, kind=kind)
         normalized = self._stored_body(kind, identity, normalized)
+        if kind == DASHBOARD_KIND:
+            normalized = _dashboard_registry_stored_shape(normalized)
         self._store[kind][identity] = normalized
         self._writes += 1
+
+    # -- dashboards (Lovelace storage-mode, docs/internals/dashboards-design.md
+    # §4.1) ------------------------------------------------------------------
+    #
+    # `delete`/`list_remote` need NO dashboard-specific branch at all:
+    # `list_remote` is the plain generic copy (the default dashboard is
+    # simply absent from `self._store["dashboard"]` until `create` puts it
+    # there -- the `config_not_found` analogue, §2.1); `delete`'s generic
+    # `self._store[kind].pop(identity, None)` already removes the whole
+    # envelope. `update` needs one small guard above (the missing-identity
+    # fidelity check, should-fix 3(b)) but otherwise falls through to the
+    # generic tail, which already runs `normalize_ha` (an identity function
+    # for this kind, §3.3) and stores the envelope verbatim (`_stored_body`'s
+    # default passthrough branch) -- exactly "replaces meta and/or config".
+    # Only `create` needs a dedicated method: HA rejects a hyphen-less
+    # `url_path` and a duplicate one (§2.2 item 1), neither of which the
+    # generic create path checks for any other kind.
+
+    def _create_dashboard(self, config: dict[str, Any]) -> str:
+        # normalize_ha is an identity function for this kind (§3.3) -- called
+        # here for consistency with every other kind's write path, not
+        # because a dashboard body needs any rewriting (a card's `tap_action`
+        # legitimately keeps a legacy `service:` key, §2.2 item 5, and must
+        # never be touched).
+        normalized = normalize_ha(config, kind=DASHBOARD_KIND)
+        identity = self._derive_identity(DASHBOARD_KIND, normalized)
+        # Should-fix 3(a): the hyphen exemption is keyed off `meta is None`
+        # (the ACTUAL default-dashboard marker), never off the derived
+        # identity STRING -- a real, non-default dashboard whose declared
+        # `url_path` happens to be the literal string "default" is NOT
+        # exempt from HA's unconditional hyphen rule.
+        is_default = normalized.get("meta") is None
+        if not is_default and "-" not in identity:
+            raise ValueError(
+                f"lovelace/dashboards/create rejected: url_path {identity!r} must "
+                "contain a hyphen (mirrors HA's real create-flow validation -- "
+                "verified against HA 2026.7.4, docs/internals/ha-api-notes.md "
+                "§39.3). HA bypasses its own rule with `allow_single_word: true` "
+                "for the dashboards IT creates (`lovelace`, `map`), which is why "
+                "those are adoptable but not creatable -- §39.11/§39.12)"
+            )
+        if identity in self._store[DASHBOARD_KIND]:
+            raise ValueError(
+                f"lovelace/dashboards/create rejected: a dashboard with url_path "
+                f"{identity!r} already exists"
+            )
+        self._store[DASHBOARD_KIND][identity] = _dashboard_registry_stored_shape(
+            normalized, creating=True
+        )
+        self._writes += 1
+        return identity
 
     # -- config-entry template-helper flows ---------------------------------
     #
@@ -823,4 +952,18 @@ class FakeBackend:
             # which meant a duplicate-create bug (creating a second helper
             # with the same name but a different id) went uncaught in tests.
             return _slugify(str(normalized.get("name") or normalized.get("id") or kind))
+        if kind == DASHBOARD_KIND:
+            # Mirrors `DashboardConfig.identity` (docs/internals/
+            # dashboards-design.md §3.1/§3.2): `meta.url_path` verbatim
+            # (never re-slugified -- a real url_path IS HA's own slug), or
+            # the sentinel `"default"` when `meta` is null/absent. Unlike
+            # every other kind this is NOT HA-assigned -- it's the caller's
+            # own declared url_path, which is why `dashboard` is in
+            # `_CALLER_KEYED_KINDS` (`hassle.sync.apply`).
+            meta = normalized.get("meta")
+            if isinstance(meta, dict):
+                meta = cast("dict[str, Any]", meta)
+                if meta.get("url_path") is not None:
+                    return str(meta["url_path"])
+            return "default"
         raise ValueError(f"unknown object kind {kind!r}")

@@ -88,10 +88,40 @@ GROUP_DOMAINS: frozenset[str] = frozenset(
 # "helpers" from the DSL/bundle-placement point of view (DESIGN §5.7/§7.3).
 CONFIG_ENTRY_DOMAINS: frozenset[str] = TEMPLATE_DOMAINS | GROUP_DOMAINS
 
-# Every object kind Hassle syncs: automation, script, the nine storage-collection
-# helpers, and the config-entry template-helper + group-helper domains.
+# Lovelace storage-mode dashboards (docs/internals/dashboards-design.md §3.1).
+#
+# Identity is the dashboard's `url_path` -- HA's own slug, used VERBATIM (never
+# re-slugified: `slugify` would turn "climate-control" into "climate_control"
+# and every push would target the wrong dashboard). This is the one kind whose
+# identity segment routinely contains a HYPHEN; HA in fact *requires* a created
+# dashboard's `url_path` to contain one.
+#
+# The DEFAULT dashboard keys off the sentinel identity `"default"` when it has
+# no registry item of its own and is reachable only as `url_path = null`.
+#
+# Two DB0 findings qualify that (docs/internals/ha-api-notes.md §39.2/§39.3,
+# verified against HA 2026.7.4):
+#   - On HA 2026.x the default dashboard usually DOES have a registry item, at
+#     `url_path: "lovelace"` (HA migrates it there at startup), and is adopted
+#     under that ordinary identity -- `url_path = null` is then merely an alias
+#     for it, which is why `DirectBackend` probes the null path only when no
+#     such item exists.
+#   - The sentinel is NOT collision-free by construction: HA's hyphen rule is
+#     bypassable via `allow_single_word: true` on `lovelace/dashboards/create`,
+#     so a real dashboard at the literal `url_path: "default"` is creatable.
+#     `DirectBackend._alist_dashboards` raises on that collision.
+#
+# Unlike every other kind, one Hassle `dashboard` object spans TWO HA-side
+# stores (the `lovelace_dashboards` registry item and the `lovelace[.<url_path>]`
+# config blob); `hassle.ir.models.DashboardConfig` composes them into a single
+# `{"meta": ..., "config": ...}` envelope so one plan row diffs both.
+DASHBOARD_KIND: str = "dashboard"
+
+# Every object kind Hassle syncs: automation, script, dashboard, the nine
+# storage-collection helpers, and the config-entry template-helper +
+# group-helper domains.
 OBJECT_KINDS: frozenset[str] = (
-    frozenset({"automation", "script"}) | HELPER_DOMAINS | CONFIG_ENTRY_DOMAINS
+    frozenset({"automation", "script", DASHBOARD_KIND}) | HELPER_DOMAINS | CONFIG_ENTRY_DOMAINS
 )
 
 

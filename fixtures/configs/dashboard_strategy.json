@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "url_path": "auto-generated",
+    "title": "Strategy Dashboard",
+    "icon": "mdi:auto-mode",
+    "show_in_sidebar": true,
+    "require_admin": false
+  },
+  "config": {
+    "strategy": {
+      "type": "original-states"
+    }
+  }
+}

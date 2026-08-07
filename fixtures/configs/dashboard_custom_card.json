@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "url_path": "custom-cards",
+    "title": "Custom Cards",
+    "icon": "mdi:puzzle-outline",
+    "show_in_sidebar": true,
+    "require_admin": false
+  },
+  "config": {
+    "views": [
+      {
+        "type": "sections",
+        "title": "Third-party Cards",
+        "path": "third-party",
+        "sections": [
+          {
+            "type": "grid",
+            "cards": [
+              {
+                "type": "custom:mushroom-entity-card",
+                "entity": "light.living_room",
+                "name": "Living Room Light",
+                "icon": "mdi:lightbulb",
+                "layout": "vertical"
+              },
+              {
+                "type": "custom:bubble-card",
+                "card_type": "button",
+                "entity": "light.bedroom",
+                "name": "Bedroom",
+                "icon": "mdi:bed"
+              },
+              {
+                "type": "tile",
+                "entity": "switch.kitchen"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

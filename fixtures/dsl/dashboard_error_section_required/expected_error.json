@@ -1,0 +1,4 @@
+{
+  "error_type": "SectionRequiredError",
+  "contains": ["bad.py:9", "with section():"]
+}

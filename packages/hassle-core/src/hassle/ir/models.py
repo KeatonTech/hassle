@@ -18,12 +18,18 @@ the identity/key derivation, and the serialization contract.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from hassle.ir.canonical import canonical_json, sha256_hash
-from hassle.ir.keys import GROUP_DOMAINS, HELPER_DOMAINS, TEMPLATE_DOMAINS, object_key
+from hassle.ir.keys import (
+    DASHBOARD_KIND,
+    GROUP_DOMAINS,
+    HELPER_DOMAINS,
+    TEMPLATE_DOMAINS,
+    object_key,
+)
 
 
 class IRObject(BaseModel):
@@ -229,6 +235,78 @@ class GroupHelperConfig(IRObject):
         return None
 
 
+class DashboardConfig(IRObject):
+    """A Lovelace storage-mode dashboard -- the two-store envelope
+    (docs/internals/dashboards-design.md §3.2).
+
+    A dashboard is **two HA-side objects** (a `lovelace_dashboards` registry
+    item and a `lovelace[.<url_path>]` config blob) but **one Hassle object**:
+    one decorator declares both, one plan row diffs both, one conflict covers
+    both. The IR body is therefore a Hassle-composed envelope -- the one
+    deliberate departure from "the body mirrors exactly one HA store"::
+
+        {"meta": {"url_path": ..., "title": ..., "icon": ...,
+                  "show_in_sidebar": ..., "require_admin": ...},
+         "config": {"views": [...]}}
+
+    - ``meta`` is the registry item **minus** ``id`` (HA-assigned,
+      transport-only, never in the body -- same rule as a config entry's
+      ``entry_id``) and minus ``mode`` (always ``"storage"``; a YAML-mode
+      dashboard is filtered out of ``list_remote`` entirely, it is not ours to
+      manage -- I1). ``meta`` is ``None`` for the DEFAULT dashboard, which has
+      no registry item at all.
+    - ``config`` is the view config **verbatim** -- native-JSON passthrough
+      (``Any``), exactly like ``triggers``/``actions`` on
+      :class:`AutomationConfig`. The typed card layer lives in the compiler/
+      decompiler, not here (ir-format.md's "structural blocks pass through
+      verbatim" rule), so ``serialize(parse(x)) == x`` holds by construction
+      for both halves.
+
+    Rejected alternative: flattening ``meta`` into the config top level. The
+    Lovelace config historically allows its own top-level ``title`` key, so
+    flattening risks a silent collision between "sidebar title" and "config
+    title"; the envelope keeps the two stores' keyspaces disjoint by
+    construction, at the cost of one documented wrapper.
+
+    Because ``compiled_hash`` is the canonical hash of the whole envelope, a UI
+    edit to *either* the sidebar metadata or the cards shows up as one drifted
+    object -- refresh/conflict at dashboard granularity, which is the sync
+    behavior the design wants (§4.4).
+
+    Identity (§3.1): the ``url_path`` from ``meta``, used verbatim; else the
+    extrinsic ``_key_id``; else the sentinel ``"default"``. The sentinel is
+    collision-free only by convention: HA's hyphen rule is bypassable via
+    ``allow_single_word`` (docs/internals/ha-api-notes.md §39.3), and on HA
+    2026.x the default dashboard usually has its own registry item at
+    ``url_path: "lovelace"`` instead (§39.2).
+    """
+
+    # Both halves are passthrough `Any` -- see the class docstring. `None`
+    # defaults (rather than required fields) keep a partial/hand-written body
+    # parseable; `exclude_unset=True` means an explicitly-set `meta: null`
+    # still round-trips as `null` while an absent `meta` stays absent.
+    meta: Any = None
+    config: Any = None
+
+    def kind(self) -> str:
+        return DASHBOARD_KIND
+
+    @property
+    def identity(self) -> str | None:
+        meta = self.meta
+        if isinstance(meta, dict):
+            url_path = cast("dict[str, Any]", meta).get("url_path")
+            if url_path is not None:
+                # Verbatim -- never slugified. A `url_path` IS HA's slug.
+                return str(url_path)
+        if self._key_id is not None:
+            return self._key_id
+        # The default dashboard (no registry item, no `url_path`). Returning
+        # the sentinel rather than `None` means `object_key()` never raises for
+        # this kind: a dashboard body is always self-describing enough to key.
+        return "default"
+
+
 def parse(config: dict[str, Any], *, kind: str, key_hint: str | None = None) -> IRObject:
     """Parse an HA config body into the IR model for ``kind``.
 
@@ -252,6 +330,8 @@ def parse(config: dict[str, Any], *, kind: str, key_hint: str | None = None) -> 
         group_helper = GroupHelperConfig.model_validate(config)
         group_helper.attach_domain(kind)
         obj = group_helper
+    elif kind == DASHBOARD_KIND:
+        obj = DashboardConfig.model_validate(config)
     else:
         raise ValueError(f"unknown object kind {kind!r}")
     if key_hint is not None:

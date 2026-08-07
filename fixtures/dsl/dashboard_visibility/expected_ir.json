@@ -1,0 +1,102 @@
+{
+  "dashboard:conditional-views": {
+    "meta": {
+      "url_path": "conditional-views",
+      "title": "Conditional"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Mobile",
+          "path": "mobile",
+          "visibility": [
+            {
+              "condition": "screen",
+              "media_query": "(max-width: 600px)"
+            }
+          ],
+          "sections": [
+            {
+              "type": "grid",
+              "visibility": [
+                {
+                  "condition": "state",
+                  "entity": "input_boolean.guest_mode",
+                  "state": "on"
+                }
+              ],
+              "cards": [
+                {
+                  "type": "markdown",
+                  "content": "Guest mode is on."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "sections",
+          "title": "Admins",
+          "path": "admins",
+          "visibility": [
+            {
+              "condition": "user",
+              "users": [
+                "abc123",
+                "def456"
+              ]
+            }
+          ],
+          "sections": [
+            {
+              "type": "grid",
+              "visibility": [
+                {
+                  "condition": "or",
+                  "conditions": [
+                    {
+                      "condition": "numeric_state",
+                      "entity": "sensor.outside_temp",
+                      "above": 25
+                    },
+                    {
+                      "condition": "state",
+                      "entity": "weather.home",
+                      "state_not": "sunny"
+                    }
+                  ]
+                },
+                {
+                  "condition": "and",
+                  "conditions": [
+                    {
+                      "condition": "not",
+                      "conditions": [
+                        {
+                          "condition": "state",
+                          "entity": "light.hall",
+                          "state": "off"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "condition": "future_kind",
+                  "kept": true
+                }
+              ],
+              "cards": [
+                {
+                  "type": "markdown",
+                  "content": "Hot outside."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

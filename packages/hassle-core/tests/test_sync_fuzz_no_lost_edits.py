@@ -151,11 +151,11 @@ def _run_sequence(
     *,
     kind: str = KIND,
     object_key: str = OBJECT_KEY,
+    identity: str = "fuzz",
     value_factory: Any = None,
 ) -> None:
     rng = random.Random(seed)
     backend = FakeBackend()
-    identity = "fuzz"
     state = _FuzzState(
         backend, identity, kind=kind, object_key=object_key, value_factory=value_factory
     )
@@ -257,16 +257,30 @@ def _same(a: dict[str, object] | None, b: dict[str, object] | None) -> bool:
     return sha256_hash(a) == sha256_hash(b)
 
 
+def _parametrized_seed_count(test_func: Any) -> int:
+    """Read the ACTUAL number of `seed` values `test_func` is parametrized
+    over (via its `@pytest.mark.parametrize("seed", ...)` mark), rather than
+    restating a literal `1000` next to it -- a prior version of each
+    "runs_exactly_1000_seeds" test below asserted `len(list(range(1000))) ==
+    1000`, which is a tautology about a FRESH literal, not a check on the
+    parametrized test it claims to document: it would stay green even if the
+    parametrize decorator's own range shrank to 10. This introspects the
+    real mark instead, so it actually fails if the two ever diverge."""
+    for mark in test_func.pytestmark:
+        if mark.name == "parametrize" and mark.args[0] == "seed":
+            return len(mark.args[1])
+    raise AssertionError(f"{test_func.__name__} has no 'seed' parametrize mark")
+
+
 @pytest.mark.parametrize("seed", list(range(1000)))
 def test_i6_fuzz_no_silent_data_loss(seed: int) -> None:
     _run_sequence(seed)
 
 
 def test_i6_fuzz_runs_exactly_1000_seeds() -> None:
-    # Documents the required fuzz volume (1 000 random
-    # sequences); the parametrized test above IS the 1000 runs, this test
-    # just pins the count so a future edit can't quietly shrink coverage.
-    assert len(list(range(1000))) == 1000
+    # Documents the required fuzz volume (1 000 random sequences) by reading
+    # the parametrize mark on the test above, not by restating the literal.
+    assert _parametrized_seed_count(test_i6_fuzz_no_silent_data_loss) == 1000
 
 
 # -- Fuzz extension for the config-entry template-helper kind ---------------
@@ -299,4 +313,52 @@ def test_i6_fuzz_template_helper_no_silent_data_loss(seed: int) -> None:
 
 
 def test_i6_fuzz_template_helper_runs_exactly_1000_seeds() -> None:
-    assert len(list(range(1000))) == 1000
+    assert _parametrized_seed_count(test_i6_fuzz_template_helper_no_silent_data_loss) == 1000
+
+
+# -- Fuzz extension for the dashboard kind -----------------------------------
+#
+# (docs/internals/dashboards-design.md §4.3/§9.2): a dashboard's compiled body
+# is a two-part envelope (`{"meta": ..., "config": ...}`) rather than one flat
+# dict -- `_dashboard_value` below rotates through meta-only, config-only, and
+# both-changed mutations so the 1000-seed run exercises all three envelope
+# shapes `compute_plan`/`apply_pull`/`apply_plan` must treat as "the object
+# changed" at dashboard granularity (§4.4: the sync unit is the WHOLE
+# dashboard, never a single card).
+#
+# `hassle.backend.fake.FakeBackend` has real dashboard support (DB5 landed:
+# the hyphen rule on create, identity derivation from `meta.url_path`/the
+# `"default"` sentinel) -- this run uses the real `FakeBackend` directly,
+# same as the `automation`/`template_number` extensions above, so the fuzzer
+# exercises production create/update/delete/list_remote for the kind, not a
+# stand-in. (An earlier version of this file used a test-local
+# `_DashboardSeedableFakeBackend` shim written before DB5 landed; deleted
+# once the real backend supported the kind.)
+
+
+def _dashboard_value(identity: str, label: str, counter: int) -> dict[str, object]:
+    variant = counter % 3  # 0: meta-only, 1: config-only, 2: both
+    meta = {"url_path": identity, "title": f"{label}-{counter}", "icon": "mdi:test-tube"}
+    fixed_meta = {"url_path": identity, "title": "static-title", "icon": "mdi:test-tube"}
+    config = {"views": [{"title": f"view-{label}-{counter}", "cards": []}]}
+    fixed_config = {"views": [{"title": "static-view", "cards": []}]}
+    if variant == 0:
+        return {"meta": meta, "config": fixed_config}
+    if variant == 1:
+        return {"meta": fixed_meta, "config": config}
+    return {"meta": meta, "config": config}
+
+
+@pytest.mark.parametrize("seed", list(range(1000)))
+def test_i6_fuzz_dashboard_no_silent_data_loss(seed: int) -> None:
+    _run_sequence(
+        seed,
+        kind="dashboard",
+        object_key="dashboard:fuzz-dash",
+        identity="fuzz-dash",
+        value_factory=_dashboard_value,
+    )
+
+
+def test_i6_fuzz_dashboard_runs_exactly_1000_seeds() -> None:
+    assert _parametrized_seed_count(test_i6_fuzz_dashboard_no_silent_data_loss) == 1000

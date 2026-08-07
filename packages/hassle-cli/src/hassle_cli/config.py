@@ -20,7 +20,11 @@ Fields:
   keys (e.g. `"input_boolean:material_you_*"`) that Hassle must never adopt,
   refresh, or delete -- see `hassle_cli.ignore_filter` for the filtering
   semantics. Defaults to empty (today's "nothing is ever unmanaged" behavior
-  is unchanged unless the user opts in).
+  is unchanged unless the user opts in). Note the deliberate contrast with
+  `--skip-kind` (`hassle_cli.skip_kind`), its TRANSIENT sibling: `ignore`
+  *unmanages* an object -- its manifest entry is dropped, so Hassle forgets
+  its sync base -- whereas `--skip-kind` excludes a kind from a single run and
+  leaves everything, manifest included, exactly as it found it.
 - `toolchain_path` -- an explicit path to a Hassle source
   checkout (the directory containing `packages/`), used by
   `hassle_cli.uv_project.resolve_toolchain_path` as the HIGHEST-priority entry

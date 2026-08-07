@@ -1,0 +1,4 @@
+{
+  "error_type": "ConditionalCardArityError",
+  "contains": ["bad.py:10", "holds 2 cards", "exactly one", "c.vertical_stack"]
+}

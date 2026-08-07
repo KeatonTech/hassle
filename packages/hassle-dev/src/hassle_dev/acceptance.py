@@ -3,19 +3,24 @@ prompts and checks results for evaluating code-generation quality against the
 generated docs -- "a scripted harness gives a fresh model session the pulled
 sample bundle + AGENTS.md only, and 10 representative tasks ... >= 8/10 must
 produce changes that pass `hassle validate && hassle test` without human
-help".
+help" (the quoted text is DESIGN's original M9 scope, docs/history/
+milestones.md, predating dashboards). `emit_tasks` now returns 11: those same
+10 automation-era tasks plus one dashboard task added for DB8
+(docs/internals/dashboards-design.md §10's "a fresh agent session ... must
+complete 'add a card for each new device to the right section' from the docs
+alone").
 
 **This module builds the harness; it does not run any model session.**
 Spawning fresh model sessions is a separate driver script's job (a capability
 this module deliberately does not have and must not grow) -- everything here
-is pure/offline: emitting the 10 task prompts for a given bundle, and
+is pure/offline: emitting the 11 task prompts for a given bundle, and
 mechanically scoring the *result* of a session against that bundle by
 running `hassle validate` and `hassle test` (as real subprocesses, exactly
 what a human/agent would run) and reporting pass/fail.
 
 ## How a driver script runs this (one session per task)
 
-For each of the 10 tasks `emit_tasks(bundle_dir)` returns:
+For each of the 11 tasks `emit_tasks(bundle_dir)` returns:
 
 1. Start a **fresh** model session (no memory of any other task in this
    run) with exactly two inputs: a clean copy of `bundle_dir` (freshly
@@ -35,7 +40,7 @@ For each of the 10 tasks `emit_tasks(bundle_dir)` returns:
    check that the diff actually does what the task asked; `score_task`
    narrows that review to "does this candidate even meet the floor", not a
    full grade.
-4. Record `TaskResult` for the task; repeat for the remaining 9 (each from
+4. Record `TaskResult` for the task; repeat for the remaining 10 (each from
    its own fresh copy of the ORIGINAL bundle_dir -- tasks must never see
    each other's edits).
 5. Tally: `>= 8/10` mechanically-passing (`score_task(...).passed`) *and*
@@ -51,20 +56,22 @@ a driver script shells out to for step 1's prompt text (see
 
 ## The bundle these prompts are written against
 
-`emit_tasks`'s 10 prompts are not generic -- each presupposes specific
+`emit_tasks`'s 11 prompts are not generic -- each presupposes specific
 content (a hallway motion automation controlling `light.hallway` with a
 sun-based night gate, a declared-but-not-yet-wired-in
 `input_boolean.guest_mode` helper, two notify-sending automations to extract
 into a macro, a deliberately-failing `tests/` test with an isolated
-automation-logic bug, ...). `hassle_dev.bundle_gen.generate_sample_bundle`
-(`hassle-dev acceptance-bundle --out DIR`) is what builds a real, freshly-
-pulled bundle satisfying every one of those presuppositions -- see that
-module's docstring for the full inventory, how each is seeded, and the
-`diagnose_failing_test` scoring nuance (a pre-existing failing test would
-otherwise sink all 10 tasks' `score_task` floor; resolved with
-`xfail(strict=True)`). `packages/hassle-dev/tests/test_bundle_gen.py` pins
-one presupposition-check per category against that generator's output, so
-this docstring's claim stays true by construction rather than by convention.
+automation-logic bug, a `dashboards/home_main.py` "Home" dashboard whose
+"Lights" section is missing cards for two just-added lights, ...).
+`hassle_dev.bundle_gen.generate_sample_bundle` (`hassle-dev acceptance-bundle
+--out DIR`) is what builds a real, freshly-pulled bundle satisfying every one
+of those presuppositions -- see that module's docstring for the full
+inventory, how each is seeded, and the `diagnose_failing_test` scoring
+nuance (a pre-existing failing test would otherwise sink all 11 tasks'
+`score_task` floor; resolved with `xfail(strict=True)`).
+`packages/hassle-dev/tests/test_bundle_gen.py` pins one presupposition-check
+per category against that generator's output, so this docstring's claim
+stays true by construction rather than by convention.
 """
 
 from __future__ import annotations
@@ -107,16 +114,16 @@ def _bundle_display_name(bundle_dir: Path) -> str:
 
 
 def emit_tasks(bundle_dir: Path) -> list[AcceptanceTask]:
-    """Build the 10 representative task prompts for ``bundle_dir``
-    (DESIGN §12's example list, made concrete against this
-    specific bundle's own files/entities so a session has something real to
-    act on -- not a generic placeholder).
+    """Build the 11 representative task prompts for ``bundle_dir``
+    (DESIGN §12's example list plus one dashboard task added for DB8, made
+    concrete against this specific bundle's own files/entities so a session
+    has something real to act on -- not a generic placeholder).
 
     These prompts presuppose the specific "sample house" shape
     `hassle_dev.bundle_gen.generate_sample_bundle` produces (see this
     module's docstring, "The bundle these prompts are written against") --
     calling `emit_tasks` against an arbitrary bundle that doesn't share that
-    shape (e.g. an empty `hassle init` scaffold) will still return 10 valid
+    shape (e.g. an empty `hassle init` scaffold) will still return 11 valid
     prompts, but some may reference entities/files that bundle doesn't have.
     """
     name = _bundle_display_name(bundle_dir)
@@ -225,6 +232,18 @@ def emit_tasks(bundle_dir: Path) -> list[AcceptanceTask]:
                 "`light.hallwya` instead of `light.hallway`), run `hassle validate`, read "
                 "the Finding it produces, and then fix the typo so validation is clean "
                 "again. Show the Finding text you saw before fixing it."
+            ),
+        ),
+        AcceptanceTask(
+            task_id="add_dashboard_card",
+            category="add_dashboard_card",
+            prompt=(
+                "Two new lights were just added in Home Assistant: `light.office_ceiling` and "
+                "`light.office_desk`. This bundle's Home dashboard (`dashboards/home_main.py`) "
+                "has a 'Lights' section with cards for the existing lights, but no card for "
+                "either new light yet. Add a card for each new light to that same section, "
+                "using the same card type as the existing cards there. Run `hassle validate` "
+                "and `hassle test` and make sure both pass before you're done."
             ),
         ),
     ]

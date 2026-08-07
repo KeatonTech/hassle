@@ -33,6 +33,7 @@ from __future__ import annotations
 import copy
 from typing import Any, cast
 
+from hassle.ir.keys import DASHBOARD_KIND
 from hassle.ir.normalize import normalize_ha
 
 _DELAY_DURATION_UNITS: tuple[str, ...] = ("hours", "minutes", "seconds", "milliseconds")
@@ -112,7 +113,18 @@ def modernize_for_comparison(config: dict[str, Any], *, kind: str) -> dict[str, 
     dict-of-units form, wherever either occurs. Nothing else. Never mutates
     ``config``; safe to call on the same dict repeatedly (idempotent, matching
     ``normalize_ha``'s own contract).
+
+    **Exempt kind: ``dashboard``** -- an exact identity function, for the same
+    reason `normalize_ha` is (docs/internals/dashboards-design.md §3.3). Unlike
+    `normalize_ha`, this exemption is not merely defensive: both rewrites below
+    walk EVERY dict in the body unconditionally, so without the guard a
+    third-party card carrying a `{"delay": "00:00:30"}` mapping or a nested
+    `wait_for_trigger` block would be silently rewritten -- and since the
+    decompiler applies no such modernization to card bodies, a perfectly
+    faithful round-trip would then compare as drifted forever.
     """
+    if kind == DASHBOARD_KIND:
+        return copy.deepcopy(config)
     normalized = normalize_ha(config, kind=kind)
     out = copy.deepcopy(normalized)
     for key in ("trigger", "triggers"):

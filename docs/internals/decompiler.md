@@ -3,6 +3,81 @@
 Design rationale that's too long to keep inline in the source. See DESIGN.md §7.3 for the
 user-facing decompile semantics; this file is for maintainers of `hassle.decompiler`.
 
+## The dashboard decompiler (`hassle.decompiler.dashboards`, workstream DB4)
+
+`DashboardConfig` -> DSL source (docs/internals/dashboards-design.md §6.2)
+lives in its own module rather than `codegen.py` because the card-tree walk
+is substantially bigger than an automation/script's flat trigger/condition/
+action lists. A few decisions worth recording here rather than only in the
+module's own docstring:
+
+- **Card emission never hardcodes a card type.** It looks a stored card's
+  `type` up in `CARD_REGISTRY` (docs/internals/dashboards-design.md §6.1.1),
+  resolves the row's `builder` name to the real callable, and drives the
+  call generically off `inspect.signature`. `CardSpec.declared` is read via
+  `getattr(spec, "declared", frozenset())` so this module works unchanged
+  whether or not that field is populated for a given row — absent/empty,
+  every REQUIRED (no-default) parameter is still resolved by name (a call
+  can't omit one) and every OPTIONAL leftover key routes through `extra=`
+  wholesale; populated, `declared` is the authoritative known-kwarg set
+  instead.
+- **Varargs-rows cards** (`entities`/`glance`/`history_graph`/
+  `statistics_graph`/`calendar`/`logbook`/`map`/`picture_glance`, plus
+  `conditional`'s `conditions=`): the builder has exactly one
+  `VAR_POSITIONAL` parameter, whose OWN Python name doesn't always match the
+  stored key that feeds it (`entities`/`glance` name theirs `*rows` while
+  storing under `"entities"`). `_resolve_rows_key` tries the parameter's own
+  name against the stored body first, then falls back to the one
+  `entity_params` entry that is itself list-valued (disambiguates
+  `picture_glance`'s two `entity_params` entries — `entities`, the rows list,
+  vs. `camera_image`, a plain scalar kwarg). Each row renders through the
+  `cond` inverter first (covers `conditional`'s condition rows), falling
+  back to the entity-position renderer for a string / a verbatim literal for
+  a dict (a dict row is stored via `copy.deepcopy`, never rewritten, so a
+  literal is always byte-exact). Every one of these builders unconditionally
+  materializes its stored key even for zero rows, so a card missing the key
+  entirely stays `raw_card` — not a gap, the same always-materialized-key
+  rule as any other required-parameter gap (see `dashboard:entity-filter-demo`
+  in dashboards-design.md §6.2's coverage note for the concrete, verified
+  example).
+- **Single-dict-child containers** (`container="card"`, `conditional`/
+  `entity_filter`): the compiler's `push_container(..., child_is_list=False)`
+  convention (a DB3 review-round fix) leaves the child key entirely ABSENT
+  for zero children, a bare dict for exactly one — never a list. Treating
+  "absent" as zero children generically (rather than forcing `raw_card`) is
+  what makes `entity_filter`'s legitimate zero-children shape decompile
+  typed; it's harmless for `conditional` too (a real compiled conditional
+  card always has its `card:` key — an additional compile-time-only arity
+  guard this module has no static way to see per stored row, but also never
+  needs to, since the shape it would reject never reaches storage).
+- **`section()` and `view()` are deliberately asymmetric** in how they treat
+  an unmodeled key: a view's stray key round-trips through its `extra=`
+  valve, but ANY key `section()` doesn't itself model forces the whole
+  section to `raw_section`. This matches §5.5's own wording ("a
+  section/view whose OWN keys are unmodeled..."), read literally for
+  sections; both builders support `extra=` at the compiler level, so this
+  is a decompiler-side policy choice, not a builder limitation.
+- **A container never goes raw merely because a descendant did** (the
+  `ha-api-notes.md` §20.4 precedent, restated for dashboards): an unknown
+  card wrapped inside an otherwise well-formed container/section/view stays
+  `raw_card`, with everything above it staying typed. Every `_try_emit_*`
+  function in this module returns `None` (never raises, never partially
+  emits) exactly when ITS OWN shape can't be modeled, letting the caller
+  degrade at the narrowest possible scope.
+- **`badge()` cannot reproduce a legacy bare-string badge entry** — see
+  `ha-api-notes.md` §39 for the full finding. The decompiler resolves it by
+  escalating the whole enclosing view to `raw_view` (a legitimate use of the
+  existing ladder, `badges` being an own-structure key of the view), not by
+  inventing a `raw_badge` verb outside the frozen F5 ladder.
+- **Import-line detection is a plain substring/regex check** on the already
+  assembled decompiled source (`from hassle import cards as c` / `from
+  hassle.cards import cond`, emitted only when actually used) — the same
+  convention `decompile_bundle` already uses for `TemplateExpr`, chosen for
+  the same reason: `c`/`cond` are never emitted as any other kind of
+  identifier by this decompiler, so a plain regex is exactly as safe as
+  threading a used-flag through every emission function, with far less
+  plumbing.
+
 ## Why a fresh bundle decompile emits a star import
 
 `decompile_bundle` always opens a generated module with `from hassle import *` rather than

@@ -83,6 +83,17 @@ class EntityRef(str):
         obj.object_id = object_id
         return obj
 
+    # An EntityRef is immutable, so copy and deepcopy return self — without
+    # these, `copy.deepcopy` tries to rebuild the str subclass through the
+    # generic single-argument reconstructor and dies on the two-argument
+    # `__new__` above (first hit by the card builders' deep-copied option
+    # dicts, which legitimately carry refs inside e.g. `tap_action`).
+    def __copy__(self) -> EntityRef:
+        return self
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> EntityRef:
+        return self
+
     def attr(self, attribute: str) -> Any:
         """``entity.attr("name")`` -> ``state_attr('domain.object_id', 'name')``
         (DESIGN §5.4).

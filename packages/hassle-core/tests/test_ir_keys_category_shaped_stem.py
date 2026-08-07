@@ -51,3 +51,16 @@ def test_non_py_file_is_never_category_shaped() -> None:
 
 def test_empty_stem_is_not_category_shaped() -> None:
     assert category_shaped_stem(".py") is None
+
+
+def test_dashboards_directory_is_not_category_shaped() -> None:
+    # docs/internals/dashboards-design.md §7: `dashboards/<module_name>.py` is
+    # a per-dashboard default placement, not a category package -- pull never
+    # creates a `dashboards/__init__.py` (see the scaffolding tests in
+    # `packages/hassle-cli/tests/test_pull_dashboards_placement.py`), so
+    # `dashboards/x.py` is just an ordinary nested path like `lib/x.py`: never
+    # in `package_roots`, hence never category-shaped. No dashboard-specific
+    # logic exists in (or is needed by) this predicate -- pinned here so a
+    # future change can't accidentally special-case the kind.
+    assert category_shaped_stem("dashboards/climate_control.py") is None
+    assert category_shaped_stem("dashboards/climate_control.py", package_roots=frozenset()) is None

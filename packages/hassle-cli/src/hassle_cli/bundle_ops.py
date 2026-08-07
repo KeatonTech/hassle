@@ -8,11 +8,13 @@ declaration-site span (`CompileResult.decl_span_for`), for `PlanEntry.source_pat
 
 from __future__ import annotations
 
+import hashlib
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from hassle.compiler.bundle import CompileResult, compile_bundle
-from hassle.ir.keys import category_shaped_stem
+from hassle.ir.keys import DASHBOARD_KIND, category_shaped_stem
 from hassle.ir.keys import slugify as _slugify
 from hassle.registry.snapshot import RegistrySnapshot
 from hassle.sync.category_writeback import (
@@ -153,6 +155,42 @@ def category_display_names_for_paths(
     return names
 
 
+_MODULE_UNSAFE_CHARS = re.compile(r"[^a-z0-9_]")
+
+
+def _dashboard_module_name(identity: str) -> str:
+    """``dashboard:<identity>`` -> the module-safe stem for
+    ``dashboards/<module_name>.py`` (docs/internals/dashboards-design.md §7):
+    hyphens become underscores (a real ``url_path`` must contain one, and the
+    sentinel identity ``"default"`` has none), then the stub generator's
+    leading-digit rule (`hassle.registry.stubs._attr_name`): a leading digit
+    gets a single underscore prefix (Python identifiers/module names can't
+    start with a digit).
+
+    **Sanitized against path traversal (should-fix, reviewer note on DB6):**
+    the hyphen requirement on a real ``url_path`` is source-informed, DB0-
+    pending verification (docs/internals/dashboards-design.md §2.2 item 1)
+    and enforced nowhere on THIS read path -- this function must not assume
+    an identity is otherwise well-formed. After the hyphen substitution,
+    every character other than ``[a-z0-9_]`` is DROPPED (never merely
+    escaped) -- in particular ``/``, ``\\``, and ``.``, so a
+    directory-traversal-shaped identity (``../../../tmp/pwned-x``) can never
+    place the resulting path outside ``dashboards/``. If the result is empty
+    or entirely underscores (an empty, dot-only, or hyphen/underscore-only
+    identity), it falls back to a deterministic, content-derived safe name
+    (``dashboard_<8 hex chars of sha256(identity)>``) rather than emitting a
+    degenerate filename like ``dashboards/.py``.
+    """
+    module_name = identity.replace("-", "_")
+    module_name = _MODULE_UNSAFE_CHARS.sub("", module_name)
+    if not module_name or module_name.strip("_") == "":
+        digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:8]
+        return f"dashboard_{digest}"
+    if module_name[0].isdigit():
+        module_name = f"_{module_name}"
+    return module_name
+
+
 def default_source_path(object_key: str, *, registry: RegistrySnapshot | None = None) -> str:
     """Fallback path for a brand-new (adopted) object with no existing file.
 
@@ -170,7 +208,19 @@ def default_source_path(object_key: str, *, registry: RegistrySnapshot | None = 
     this first placement the object stays wherever the user moves it
     (tracked by the manifest); this is only the *initial* landing spot for
     an object nobody has ever pulled before.
+
+    **Dashboards are the one kind with a placement default OTHER than
+    ``misc.py``** (docs/internals/dashboards-design.md §7): one file per
+    dashboard, ``dashboards/<module_name>.py``, checked BEFORE any registry
+    lookup -- dashboards have no category-registry scope at all
+    (`_SCOPE_FOR_KIND` deliberately has no entry for the kind; HA has no
+    ``lovelace`` category scope to write back to), so a ``registry`` argument
+    never redirects a dashboard's placement to a category file or `misc.py`.
     """
+    kind, _, identity = object_key.partition(":")
+    if kind == DASHBOARD_KIND:
+        return f"dashboards/{_dashboard_module_name(identity)}.py"
+
     if registry is not None:
         categorized = _category_source_path(object_key, registry)
         if categorized is not None:

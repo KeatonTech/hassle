@@ -1,0 +1,1284 @@
+{
+  "ha_version": "2026.7.4",
+  "captured": "2026-07-27",
+  "note": "DB0 (docs/internals/dashboards-db0-runbook.md): live verification of dashboards-design.md \u00a72 against Home Assistant 2026.7.4 (the real `stable`, pip-installed on Python 3.14 -- the first time this repo's captures come from 2026.7 rather than the 2026.2.3 of \u00a70's environment caveat). Findings are written up in ha-api-notes.md \u00a739.1-\u00a739.7. `id` is the WS frame id, not a payload field.",
+  "records": [
+    {
+      "section": "fresh_instance_dashboards_list",
+      "kind": "ws",
+      "type": "lovelace/dashboards/list",
+      "request": {
+        "type": "lovelace/dashboards/list"
+      },
+      "response": {
+        "id": 9,
+        "type": "result",
+        "success": true,
+        "result": []
+      },
+      "note": "DB0 item 10: dashboards/list on a fresh instance -- empty list or error?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "fresh_default_config_not_found",
+      "kind": "ws",
+      "type": "lovelace/config",
+      "request": {
+        "type": "lovelace/config",
+        "url_path": null
+      },
+      "response": {
+        "id": 10,
+        "type": "result",
+        "success": false,
+        "error": {
+          "code": "config_not_found",
+          "message": "No config found."
+        }
+      },
+      "note": "DB0 item 6a: never-customized default dashboard -> lovelace/config(url_path=null).",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "create_url_path_no_hyphen",
+      "kind": "ws",
+      "type": "lovelace/dashboards/create",
+      "request": {
+        "type": "lovelace/dashboards/create",
+        "url_path": "nohyphen",
+        "title": "No Hyphen",
+        "mode": "storage"
+      },
+      "response": {
+        "id": 11,
+        "type": "result",
+        "success": false,
+        "error": {
+          "code": "invalid_format",
+          "message": "Url path needs to contain a hyphen (-). Got {'url_path': 'nohyphen', 'title': 'No Hyphen', 'mode': 'storage', 'show_in_sidebar': True, 'require_admin': False}"
+        }
+      },
+      "note": "DB0 item 3: url_path without a hyphen must be rejected.",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "create_url_path_charset_Has-Upper",
+      "kind": "ws",
+      "type": "lovelace/dashboards/create",
+      "request": {
+        "type": "lovelace/dashboards/create",
+        "url_path": "Has-Upper",
+        "title": "Charset",
+        "mode": "storage"
+      },
+      "response": {
+        "id": 12,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "has_upper",
+          "url_path": "Has-Upper",
+          "title": "Charset",
+          "mode": "storage",
+          "show_in_sidebar": true,
+          "require_admin": false
+        }
+      },
+      "note": "DB0 item 3: url_path charset probe (module-name sanitizer assumes slug-ish).",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "create_url_path_charset_has_underscore-x",
+      "kind": "ws",
+      "type": "lovelace/dashboards/create",
+      "request": {
+        "type": "lovelace/dashboards/create",
+        "url_path": "has_underscore-x",
+        "title": "Charset",
+        "mode": "storage"
+      },
+      "response": {
+        "id": 13,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "has_underscore_x",
+          "url_path": "has_underscore-x",
+          "title": "Charset",
+          "mode": "storage",
+          "show_in_sidebar": true,
+          "require_admin": false
+        }
+      },
+      "note": "DB0 item 3: url_path charset probe (module-name sanitizer assumes slug-ish).",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "create_url_path_charset_has-space x",
+      "kind": "ws",
+      "type": "lovelace/dashboards/create",
+      "request": {
+        "type": "lovelace/dashboards/create",
+        "url_path": "has-space x",
+        "title": "Charset",
+        "mode": "storage"
+      },
+      "response": {
+        "id": 14,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "has_space_x",
+          "url_path": "has-space x",
+          "title": "Charset",
+          "mode": "storage",
+          "show_in_sidebar": true,
+          "require_admin": false
+        }
+      },
+      "note": "DB0 item 3: url_path charset probe (module-name sanitizer assumes slug-ish).",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "create_url_path_charset_has-dot.x",
+      "kind": "ws",
+      "type": "lovelace/dashboards/create",
+      "request": {
+        "type": "lovelace/dashboards/create",
+        "url_path": "has-dot.x",
+        "title": "Charset",
+        "mode": "storage"
+      },
+      "response": {
+        "id": 15,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "has_dot_x",
+          "url_path": "has-dot.x",
+          "title": "Charset",
+          "mode": "storage",
+          "show_in_sidebar": true,
+          "require_admin": false
+        }
+      },
+      "note": "DB0 item 3: url_path charset probe (module-name sanitizer assumes slug-ish).",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "create_url_path_charset_has-slash/x",
+      "kind": "ws",
+      "type": "lovelace/dashboards/create",
+      "request": {
+        "type": "lovelace/dashboards/create",
+        "url_path": "has-slash/x",
+        "title": "Charset",
+        "mode": "storage"
+      },
+      "response": {
+        "id": 16,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "has_slash_x",
+          "url_path": "has-slash/x",
+          "title": "Charset",
+          "mode": "storage",
+          "show_in_sidebar": true,
+          "require_admin": false
+        }
+      },
+      "note": "DB0 item 3: url_path charset probe (module-name sanitizer assumes slug-ish).",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "list_after_charset_probes",
+      "kind": "ws",
+      "type": "lovelace/dashboards/list",
+      "request": {
+        "type": "lovelace/dashboards/list"
+      },
+      "response": {
+        "id": 17,
+        "type": "result",
+        "success": true,
+        "result": [
+          {
+            "id": "has_upper",
+            "url_path": "Has-Upper",
+            "title": "Charset",
+            "mode": "storage",
+            "show_in_sidebar": true,
+            "require_admin": false
+          },
+          {
+            "id": "has_underscore_x",
+            "url_path": "has_underscore-x",
+            "title": "Charset",
+            "mode": "storage",
+            "show_in_sidebar": true,
+            "require_admin": false
+          },
+          {
+            "id": "has_space_x",
+            "url_path": "has-space x",
+            "title": "Charset",
+            "mode": "storage",
+            "show_in_sidebar": true,
+            "require_admin": false
+          },
+          {
+            "id": "has_dot_x",
+            "url_path": "has-dot.x",
+            "title": "Charset",
+            "mode": "storage",
+            "show_in_sidebar": true,
+            "require_admin": false
+          },
+          {
+            "id": "has_slash_x",
+            "url_path": "has-slash/x",
+            "title": "Charset",
+            "mode": "storage",
+            "show_in_sidebar": true,
+            "require_admin": false
+          }
+        ]
+      },
+      "note": "DB0 item 3: which charset probes actually landed in the registry, and what registry `id` HA derived from each url_path.",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "create_with_icon",
+      "kind": "ws",
+      "type": "lovelace/dashboards/create",
+      "request": {
+        "type": "lovelace/dashboards/create",
+        "url_path": "db0-icon",
+        "title": "DB0 Icon",
+        "icon": "mdi:flask",
+        "mode": "storage"
+      },
+      "response": {
+        "id": 24,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "db0_icon",
+          "url_path": "db0-icon",
+          "title": "DB0 Icon",
+          "icon": "mdi:flask",
+          "mode": "storage",
+          "show_in_sidebar": true,
+          "require_admin": false
+        }
+      },
+      "note": "DB0 item 1: create a dashboard carrying an icon, to probe icon:null clearing.",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "list_after_create_with_icon",
+      "kind": "ws",
+      "type": "lovelace/dashboards/list",
+      "request": {
+        "type": "lovelace/dashboards/list"
+      },
+      "response": {
+        "id": 25,
+        "type": "result",
+        "success": true,
+        "result": [
+          {
+            "id": "db0_icon",
+            "url_path": "db0-icon",
+            "title": "DB0 Icon",
+            "icon": "mdi:flask",
+            "mode": "storage",
+            "show_in_sidebar": true,
+            "require_admin": false
+          }
+        ]
+      },
+      "note": "DB0 item 1: registry item as stored right after create.",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "update_icon_null",
+      "kind": "ws",
+      "type": "lovelace/dashboards/update",
+      "request": {
+        "type": "lovelace/dashboards/update",
+        "dashboard_id": "db0_icon",
+        "title": "DB0 Icon",
+        "icon": null,
+        "show_in_sidebar": true,
+        "require_admin": false
+      },
+      "response": {
+        "id": 26,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "db0_icon",
+          "url_path": "db0-icon",
+          "title": "DB0 Icon",
+          "mode": "storage",
+          "show_in_sidebar": true,
+          "require_admin": false
+        }
+      },
+      "note": "DB0 item 1 (HIGHEST): does update with icon:null remove the key, store null, or reject?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "list_after_icon_null",
+      "kind": "ws",
+      "type": "lovelace/dashboards/list",
+      "request": {
+        "type": "lovelace/dashboards/list"
+      },
+      "response": {
+        "id": 27,
+        "type": "result",
+        "success": true,
+        "result": [
+          {
+            "id": "db0_icon",
+            "url_path": "db0-icon",
+            "title": "DB0 Icon",
+            "mode": "storage",
+            "show_in_sidebar": true,
+            "require_admin": false
+          }
+        ]
+      },
+      "note": "DB0 item 1: the decisive read-back -- key absent, key present as null, or unchanged?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "update_with_url_path_rejected",
+      "kind": "ws",
+      "type": "lovelace/dashboards/update",
+      "request": {
+        "type": "lovelace/dashboards/update",
+        "dashboard_id": "db0_icon",
+        "title": "DB0 Icon",
+        "url_path": "db0-icon"
+      },
+      "response": {
+        "id": 28,
+        "type": "result",
+        "success": false,
+        "error": {
+          "code": "invalid_format",
+          "message": "extra keys not allowed @ data['url_path']. Got 'db0-icon'"
+        }
+      },
+      "note": "DB0 item 2: confirm url_path is NOT in the update allowlist (expect invalid_format).",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "update_with_mode_rejected",
+      "kind": "ws",
+      "type": "lovelace/dashboards/update",
+      "request": {
+        "type": "lovelace/dashboards/update",
+        "dashboard_id": "db0_icon",
+        "title": "DB0 Icon",
+        "mode": "storage"
+      },
+      "response": {
+        "id": 29,
+        "type": "result",
+        "success": false,
+        "error": {
+          "code": "invalid_format",
+          "message": "extra keys not allowed @ data['mode']. Got 'storage'"
+        }
+      },
+      "note": "DB0 item 2: confirm `mode` is rejected by the update schema too.",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "update_title_only",
+      "kind": "ws",
+      "type": "lovelace/dashboards/update",
+      "request": {
+        "type": "lovelace/dashboards/update",
+        "dashboard_id": "db0_icon",
+        "title": "DB0 Icon 2"
+      },
+      "response": {
+        "id": 31,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "db0_icon",
+          "url_path": "db0-icon",
+          "title": "DB0 Icon 2",
+          "mode": "storage",
+          "show_in_sidebar": true,
+          "require_admin": false
+        }
+      },
+      "note": "DB0 item 2: is `title` alone accepted (are the other three optional)?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "list_after_title_only",
+      "kind": "ws",
+      "type": "lovelace/dashboards/list",
+      "request": {
+        "type": "lovelace/dashboards/list"
+      },
+      "response": {
+        "id": 32,
+        "type": "result",
+        "success": true,
+        "result": [
+          {
+            "id": "db0_icon",
+            "url_path": "db0-icon",
+            "title": "DB0 Icon 2",
+            "mode": "storage",
+            "show_in_sidebar": true,
+            "require_admin": false
+          }
+        ]
+      },
+      "note": "DB0 item 2: read-back after a title-only update -- merge or replace?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "update_no_fields",
+      "kind": "ws",
+      "type": "lovelace/dashboards/update",
+      "request": {
+        "type": "lovelace/dashboards/update",
+        "dashboard_id": "db0_icon"
+      },
+      "response": {
+        "id": 33,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "db0_icon",
+          "url_path": "db0-icon",
+          "title": "DB0 Icon 2",
+          "mode": "storage",
+          "show_in_sidebar": true,
+          "require_admin": false
+        }
+      },
+      "note": "DB0 item 2: is an empty update (dashboard_id only) accepted?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "config_save_opaque",
+      "kind": "ws",
+      "type": "lovelace/config/save",
+      "request": {
+        "type": "lovelace/config/save",
+        "url_path": "db0-icon",
+        "config": {
+          "views": [
+            {
+              "title": "Opaque",
+              "path": "opaque",
+              "zzz_unknown_view_key": {
+                "nested": [
+                  1,
+                  2,
+                  {
+                    "deep": null
+                  }
+                ]
+              },
+              "cards": [
+                {
+                  "type": "tile",
+                  "entity": "light.kitchen",
+                  "tap_action": {
+                    "action": "call-service",
+                    "service": "light.turn_on"
+                  },
+                  "zzz_unknown_card_key": "kept?"
+                },
+                {
+                  "type": "custom:bubble-card",
+                  "b": 2,
+                  "a": 1,
+                  "nested": {
+                    "z": 1,
+                    "a": 2
+                  }
+                }
+              ],
+              "badges": [
+                "light.kitchen",
+                {
+                  "type": "entity",
+                  "entity": "light.kitchen"
+                }
+              ]
+            },
+            {
+              "title": "No type key",
+              "cards": []
+            }
+          ],
+          "zzz_unknown_top_key": true
+        }
+      },
+      "response": {
+        "id": 34,
+        "type": "result",
+        "success": true,
+        "result": null
+      },
+      "note": "DB0 item 4: save a config with legacy actions, unknown keys at every level, odd key order.",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "config_get_opaque",
+      "kind": "ws",
+      "type": "lovelace/config",
+      "request": {
+        "type": "lovelace/config",
+        "url_path": "db0-icon"
+      },
+      "response": {
+        "id": 35,
+        "type": "result",
+        "success": true,
+        "result": {
+          "views": [
+            {
+              "title": "Opaque",
+              "path": "opaque",
+              "zzz_unknown_view_key": {
+                "nested": [
+                  1,
+                  2,
+                  {
+                    "deep": null
+                  }
+                ]
+              },
+              "cards": [
+                {
+                  "type": "tile",
+                  "entity": "light.kitchen",
+                  "tap_action": {
+                    "action": "call-service",
+                    "service": "light.turn_on"
+                  },
+                  "zzz_unknown_card_key": "kept?"
+                },
+                {
+                  "type": "custom:bubble-card",
+                  "b": 2,
+                  "a": 1,
+                  "nested": {
+                    "z": 1,
+                    "a": 2
+                  }
+                }
+              ],
+              "badges": [
+                "light.kitchen",
+                {
+                  "type": "entity",
+                  "entity": "light.kitchen"
+                }
+              ]
+            },
+            {
+              "title": "No type key",
+              "cards": []
+            }
+          ],
+          "zzz_unknown_top_key": true
+        }
+      },
+      "note": "DB0 item 4: read back -- byte-verbatim, or does HA materialize defaults / reorder?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "config_opacity_verdict",
+      "kind": "analysis",
+      "request": null,
+      "response": {
+        "deep_equal": true,
+        "key_order_preserved": true
+      },
+      "note": "DB0 item 4: config opacity verdict (deep equality and key order).",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "delete_dashboard",
+      "kind": "ws",
+      "type": "lovelace/dashboards/delete",
+      "request": {
+        "type": "lovelace/dashboards/delete",
+        "dashboard_id": "db0_icon"
+      },
+      "response": {
+        "id": 36,
+        "type": "result",
+        "success": true,
+        "result": null
+      },
+      "note": "DB0 item 5: delete -- is the lovelace.<url_path> config store removed too?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "config_after_delete",
+      "kind": "ws",
+      "type": "lovelace/config",
+      "request": {
+        "type": "lovelace/config",
+        "url_path": "db0-icon"
+      },
+      "response": {
+        "id": 37,
+        "type": "result",
+        "success": false,
+        "error": {
+          "code": "config_not_found",
+          "message": "Unknown config specified: db0-icon"
+        }
+      },
+      "note": "DB0 item 5: config fetch for the deleted url_path.",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "recreate_same_url_path",
+      "kind": "ws",
+      "type": "lovelace/dashboards/create",
+      "request": {
+        "type": "lovelace/dashboards/create",
+        "url_path": "db0-icon",
+        "title": "DB0 Recreated",
+        "mode": "storage"
+      },
+      "response": {
+        "id": 38,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "db0_icon",
+          "url_path": "db0-icon",
+          "title": "DB0 Recreated",
+          "mode": "storage",
+          "show_in_sidebar": true,
+          "require_admin": false
+        }
+      },
+      "note": "DB0 item 5: recreate the same url_path -- clean slate or resurrected config?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "config_after_recreate",
+      "kind": "ws",
+      "type": "lovelace/config",
+      "request": {
+        "type": "lovelace/config",
+        "url_path": "db0-icon"
+      },
+      "response": {
+        "id": 39,
+        "type": "result",
+        "success": false,
+        "error": {
+          "code": "config_not_found",
+          "message": "No config found."
+        }
+      },
+      "note": "DB0 item 5 (decisive): does the old config come back?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "list_registry_never_saved_config",
+      "kind": "ws",
+      "type": "lovelace/dashboards/list",
+      "request": {
+        "type": "lovelace/dashboards/list"
+      },
+      "response": {
+        "id": 40,
+        "type": "result",
+        "success": true,
+        "result": [
+          {
+            "id": "db0_icon",
+            "url_path": "db0-icon",
+            "title": "DB0 Recreated",
+            "mode": "storage",
+            "show_in_sidebar": true,
+            "require_admin": false
+          }
+        ]
+      },
+      "note": "DB0 item 6b: a registry item exists but its config was never saved.",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "create_duplicate_url_path",
+      "kind": "ws",
+      "type": "lovelace/dashboards/create",
+      "request": {
+        "type": "lovelace/dashboards/create",
+        "url_path": "db0-icon",
+        "title": "Duplicate",
+        "mode": "storage"
+      },
+      "response": {
+        "id": 41,
+        "type": "result",
+        "success": false,
+        "error": {
+          "code": "home_assistant_error",
+          "message": "The URL \"db0-icon\" is already in use. Please choose a different one",
+          "translation_key": "url_already_exists",
+          "translation_placeholders": {
+            "url": "db0-icon"
+          },
+          "translation_domain": "lovelace"
+        }
+      },
+      "note": "DB0 item 6b: creating over an existing url_path -- loud error or silent no-op?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "default_config_save",
+      "kind": "ws",
+      "type": "lovelace/config/save",
+      "request": {
+        "type": "lovelace/config/save",
+        "url_path": null,
+        "config": {
+          "views": [
+            {
+              "title": "Home",
+              "cards": []
+            }
+          ]
+        }
+      },
+      "response": {
+        "id": 43,
+        "type": "result",
+        "success": true,
+        "result": null
+      },
+      "note": "DB0: save the default dashboard (url_path=null) -- the sentinel-identity path.",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "default_config_get",
+      "kind": "ws",
+      "type": "lovelace/config",
+      "request": {
+        "type": "lovelace/config",
+        "url_path": null
+      },
+      "response": {
+        "id": 44,
+        "type": "result",
+        "success": true,
+        "result": {
+          "views": [
+            {
+              "title": "Home",
+              "cards": []
+            }
+          ]
+        }
+      },
+      "note": "DB0: read the default dashboard back.",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "default_config_delete",
+      "kind": "ws",
+      "type": "lovelace/config/delete",
+      "request": {
+        "type": "lovelace/config/delete",
+        "url_path": null
+      },
+      "response": {
+        "id": 45,
+        "type": "result",
+        "success": true,
+        "result": null
+      },
+      "note": "DB0: config/delete on the default -- reverts to auto-generated?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "default_config_get_after_delete",
+      "kind": "ws",
+      "type": "lovelace/config",
+      "request": {
+        "type": "lovelace/config",
+        "url_path": null
+      },
+      "response": {
+        "id": 46,
+        "type": "result",
+        "success": false,
+        "error": {
+          "code": "config_not_found",
+          "message": "No config found."
+        }
+      },
+      "note": "DB0: after config/delete the default is config_not_found again?",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "config_delete_never_saved",
+      "kind": "ws",
+      "type": "lovelace/config/delete",
+      "request": {
+        "type": "lovelace/config/delete",
+        "url_path": null
+      },
+      "response": {
+        "id": 47,
+        "type": "result",
+        "success": true,
+        "result": null
+      },
+      "note": "DB0: config/delete on a never-saved default -- error shape.",
+      "instance_phase": "storage-mode"
+    },
+    {
+      "section": "yaml_mode_dashboards_list",
+      "kind": "ws",
+      "type": "lovelace/dashboards/list",
+      "request": {
+        "type": "lovelace/dashboards/list"
+      },
+      "response": {
+        "id": 1,
+        "type": "result",
+        "success": true,
+        "result": [
+          {
+            "title": "Overview",
+            "icon": "mdi:view-dashboard",
+            "show_in_sidebar": true,
+            "require_admin": false,
+            "mode": "yaml",
+            "filename": "ui-lovelace.yaml",
+            "url_path": "lovelace"
+          },
+          {
+            "mode": "yaml",
+            "title": "YAML Extra",
+            "filename": "yaml-extra.yaml",
+            "show_in_sidebar": true,
+            "require_admin": false,
+            "url_path": "yaml-extra"
+          }
+        ]
+      },
+      "note": "DB0 item 7: does a YAML-mode dashboard declared in configuration.yaml appear in lovelace/dashboards/list, and with what `mode`?",
+      "instance_phase": "yaml-mode"
+    },
+    {
+      "section": "yaml_mode_default_config",
+      "kind": "ws",
+      "type": "lovelace/config",
+      "request": {
+        "type": "lovelace/config",
+        "url_path": null
+      },
+      "response": {
+        "id": 2,
+        "type": "result",
+        "success": true,
+        "result": {
+          "title": "YAML Home",
+          "views": [
+            {
+              "title": "YAML View",
+              "cards": [
+                {
+                  "type": "markdown",
+                  "content": "from ui-lovelace.yaml"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "note": "DB0 item 7 (DECISIVE, I1): does lovelace/config(url_path=null) serve ui-lovelace.yaml content when the default dashboard is YAML mode?",
+      "instance_phase": "yaml-mode"
+    },
+    {
+      "section": "yaml_mode_named_config",
+      "kind": "ws",
+      "type": "lovelace/config",
+      "request": {
+        "type": "lovelace/config",
+        "url_path": "yaml-extra"
+      },
+      "response": {
+        "id": 3,
+        "type": "result",
+        "success": true,
+        "result": {
+          "title": "YAML Extra",
+          "views": [
+            {
+              "title": "Extra",
+              "cards": []
+            }
+          ]
+        }
+      },
+      "note": "DB0 item 7: same question for a NAMED yaml-mode dashboard.",
+      "instance_phase": "yaml-mode"
+    },
+    {
+      "section": "yaml_mode_default_save_rejected",
+      "kind": "ws",
+      "type": "lovelace/config/save",
+      "request": {
+        "type": "lovelace/config/save",
+        "url_path": null,
+        "config": {
+          "views": [
+            {
+              "title": "HASSLE MUST NEVER WRITE THIS",
+              "cards": []
+            }
+          ]
+        }
+      },
+      "response": {
+        "id": 4,
+        "type": "result",
+        "success": false,
+        "error": {
+          "code": "error",
+          "message": "Not supported"
+        }
+      },
+      "note": "DB0 item 7 (DECISIVE, I1): would a config/save against a YAML-mode default dashboard actually WRITE (an I1 violation) or be refused?",
+      "instance_phase": "yaml-mode"
+    },
+    {
+      "section": "yaml_mode_default_config_after_save_attempt",
+      "kind": "ws",
+      "type": "lovelace/config",
+      "request": {
+        "type": "lovelace/config",
+        "url_path": null
+      },
+      "response": {
+        "id": 5,
+        "type": "result",
+        "success": true,
+        "result": {
+          "title": "YAML Home",
+          "views": [
+            {
+              "title": "YAML View",
+              "cards": [
+                {
+                  "type": "markdown",
+                  "content": "from ui-lovelace.yaml"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "note": "DB0 item 7: read back after the save attempt -- did anything change?",
+      "instance_phase": "yaml-mode"
+    },
+    {
+      "section": "yaml_mode_named_save_rejected",
+      "kind": "ws",
+      "type": "lovelace/config/save",
+      "request": {
+        "type": "lovelace/config/save",
+        "url_path": "yaml-extra",
+        "config": {
+          "views": [
+            {
+              "title": "HASSLE MUST NEVER WRITE THIS",
+              "cards": []
+            }
+          ]
+        }
+      },
+      "response": {
+        "id": 6,
+        "type": "result",
+        "success": false,
+        "error": {
+          "code": "error",
+          "message": "Not supported"
+        }
+      },
+      "note": "DB0 item 7: config/save against a NAMED yaml-mode dashboard.",
+      "instance_phase": "yaml-mode"
+    },
+    {
+      "section": "yaml_mode_create_storage_dashboard",
+      "kind": "ws",
+      "type": "lovelace/dashboards/create",
+      "request": {
+        "type": "lovelace/dashboards/create",
+        "url_path": "db0-mixed",
+        "title": "DB0 Mixed",
+        "mode": "storage"
+      },
+      "response": {
+        "id": 7,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "db0_mixed",
+          "url_path": "db0-mixed",
+          "title": "DB0 Mixed",
+          "mode": "storage",
+          "show_in_sidebar": true,
+          "require_admin": false
+        }
+      },
+      "note": "DB0 item 7: can a STORAGE dashboard still be created while the default is yaml mode? (the mixed case Hassle must handle)",
+      "instance_phase": "yaml-mode"
+    },
+    {
+      "section": "yaml_mode_list_mixed",
+      "kind": "ws",
+      "type": "lovelace/dashboards/list",
+      "request": {
+        "type": "lovelace/dashboards/list"
+      },
+      "response": {
+        "id": 8,
+        "type": "result",
+        "success": true,
+        "result": [
+          {
+            "title": "Overview",
+            "icon": "mdi:view-dashboard",
+            "show_in_sidebar": true,
+            "require_admin": false,
+            "mode": "yaml",
+            "filename": "ui-lovelace.yaml",
+            "url_path": "lovelace"
+          },
+          {
+            "mode": "yaml",
+            "title": "YAML Extra",
+            "filename": "yaml-extra.yaml",
+            "show_in_sidebar": true,
+            "require_admin": false,
+            "url_path": "yaml-extra"
+          },
+          {
+            "id": "db0_mixed",
+            "url_path": "db0-mixed",
+            "title": "DB0 Mixed",
+            "mode": "storage",
+            "show_in_sidebar": true,
+            "require_admin": false
+          }
+        ]
+      },
+      "note": "DB0 item 7: the registry with both a yaml-mode and a storage-mode entry.",
+      "instance_phase": "yaml-mode"
+    },
+    {
+      "section": "yaml_mode_cleanup",
+      "kind": "ws",
+      "type": "lovelace/dashboards/delete",
+      "request": {
+        "type": "lovelace/dashboards/delete",
+        "dashboard_id": "db0_mixed"
+      },
+      "response": {
+        "id": 9,
+        "type": "result",
+        "success": true,
+        "result": null
+      },
+      "note": "cleanup",
+      "instance_phase": "yaml-mode"
+    },
+    {
+      "section": "create_hyphenless_allow_single_word",
+      "kind": "ws",
+      "type": "lovelace/dashboards/create",
+      "request": {
+        "type": "lovelace/dashboards/create",
+        "url_path": "default",
+        "title": "Literally Default",
+        "mode": "storage",
+        "allow_single_word": true
+      },
+      "response": {
+        "id": 1,
+        "type": "result",
+        "success": true,
+        "result": {
+          "id": "default",
+          "url_path": "default",
+          "title": "Literally Default",
+          "mode": "storage",
+          "require_admin": false,
+          "show_in_sidebar": true
+        }
+      },
+      "note": "DB0 finding A: `allow_single_word: true` bypasses the hyphen rule -- so \u00a73.1's 'the `default` sentinel is collision-free by construction' does NOT hold.",
+      "instance_phase": "storage-mode, before restart"
+    },
+    {
+      "section": "list_after_hyphenless_create",
+      "kind": "ws",
+      "type": "lovelace/dashboards/list",
+      "request": {
+        "type": "lovelace/dashboards/list"
+      },
+      "response": {
+        "id": 2,
+        "type": "result",
+        "success": true,
+        "result": [
+          {
+            "id": "default",
+            "url_path": "default",
+            "title": "Literally Default",
+            "mode": "storage",
+            "require_admin": false,
+            "show_in_sidebar": true
+          }
+        ]
+      },
+      "note": "DB0 finding A: the hyphen-less registry item as stored.",
+      "instance_phase": "storage-mode, before restart"
+    },
+    {
+      "section": "seed_legacy_default_config",
+      "kind": "ws",
+      "type": "lovelace/config/save",
+      "request": {
+        "type": "lovelace/config/save",
+        "url_path": null,
+        "config": {
+          "views": [
+            {
+              "title": "Legacy Default",
+              "cards": []
+            }
+          ]
+        }
+      },
+      "response": {
+        "id": 6,
+        "type": "result",
+        "success": true,
+        "result": null
+      },
+      "note": "DB0 finding B: save the DEFAULT dashboard (url_path=null) -- this is what a pre-migration instance's .storage/lovelace looks like. HA is restarted after this to trigger _async_migrate_default_config.",
+      "instance_phase": "storage-mode, before restart"
+    },
+    {
+      "section": "list_before_restart",
+      "kind": "ws",
+      "type": "lovelace/dashboards/list",
+      "request": {
+        "type": "lovelace/dashboards/list"
+      },
+      "response": {
+        "id": 7,
+        "type": "result",
+        "success": true,
+        "result": []
+      },
+      "note": "DB0 finding B: registry BEFORE the restart -- no item for the default.",
+      "instance_phase": "storage-mode, before restart"
+    },
+    {
+      "section": "list_after_restart",
+      "kind": "ws",
+      "type": "lovelace/dashboards/list",
+      "request": {
+        "type": "lovelace/dashboards/list"
+      },
+      "response": {
+        "id": 1,
+        "type": "result",
+        "success": true,
+        "result": [
+          {
+            "id": "lovelace",
+            "icon": "mdi:view-dashboard",
+            "title": "Overview",
+            "url_path": "lovelace",
+            "require_admin": false,
+            "mode": "storage",
+            "show_in_sidebar": true
+          }
+        ]
+      },
+      "note": "DB0 finding B (DECISIVE): registry AFTER the restart -- did HA migrate the default dashboard into a real registry item with url_path 'lovelace'?",
+      "instance_phase": "storage-mode, after restart (migration ran)"
+    },
+    {
+      "section": "config_null_after_restart",
+      "kind": "ws",
+      "type": "lovelace/config",
+      "request": {
+        "type": "lovelace/config",
+        "url_path": null
+      },
+      "response": {
+        "id": 2,
+        "type": "result",
+        "success": true,
+        "result": {
+          "views": [
+            {
+              "title": "Legacy Default",
+              "cards": []
+            }
+          ]
+        }
+      },
+      "note": "DB0 finding B (DECISIVE): does lovelace/config(url_path=null) still serve the same content? If yes, ONE HA dashboard is visible to Hassle as TWO objects ('lovelace' from the registry + 'default' from the probe).",
+      "instance_phase": "storage-mode, after restart (migration ran)"
+    },
+    {
+      "section": "config_lovelace_after_restart",
+      "kind": "ws",
+      "type": "lovelace/config",
+      "request": {
+        "type": "lovelace/config",
+        "url_path": "lovelace"
+      },
+      "response": {
+        "id": 3,
+        "type": "result",
+        "success": true,
+        "result": {
+          "views": [
+            {
+              "title": "Legacy Default",
+              "cards": []
+            }
+          ]
+        }
+      },
+      "note": "DB0 finding B: and via its new url_path.",
+      "instance_phase": "storage-mode, after restart (migration ran)"
+    }
+  ]
+}

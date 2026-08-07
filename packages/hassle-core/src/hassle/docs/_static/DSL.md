@@ -10498,6 +10498,628 @@ Compiles to (canonical IR / stored HA shape):
 }
 ```
 
+### `dashboard`
+
+Golden case: `fixtures/dsl/dashboard_minimal_sections/`.
+
+```python
+"""Golden case: the smallest useful dashboard -- one sections view, one section.
+
+`type=` defaults to `"sections"` and is materialized EXPLICITLY into the stored
+config (docs/internals/dashboards-design.md §5.2).
+"""
+
+from hassle import dashboard, raw_card, section, view
+
+
+@dashboard(
+    url_path="home-main",
+    title="Home",
+    icon="mdi:home",
+    show_in_sidebar=True,
+    require_admin=False,
+)
+def home_main():
+    with view(title="Overview", path="overview"), section():
+        raw_card({"type": "markdown", "content": "Welcome home."})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:home-main": {
+    "config": {
+      "views": [
+        {
+          "path": "overview",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "Welcome home.",
+                  "type": "markdown"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "icon": "mdi:home",
+      "require_admin": false,
+      "show_in_sidebar": true,
+      "title": "Home",
+      "url_path": "home-main"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_compile_time_loop/`, `fixtures/dsl/dashboard_default/`, `fixtures/dsl/dashboard_two_in_one_module/`
+
+### `raw_dashboard`
+
+Golden case: `fixtures/dsl/dashboard_raw_dashboard/`.
+
+```python
+"""Golden case: `@raw_dashboard` -- the top rung of the raw ladder.
+
+The decorated function returns either the whole §3.2 envelope (`meta` +
+`config`) or just a config dict, in which case the decorator's own `url_path=`
+supplies the registry metadata. A returned `meta` dict MUST carry `url_path`
+(§3.4's identity-sentinel guard) -- otherwise the envelope would silently key
+as the DEFAULT dashboard.
+"""
+
+from hassle import raw_dashboard
+
+
+@raw_dashboard(url_path="strategy-one")
+def strategy_one():
+    return {
+        "meta": {
+            "url_path": "strategy-one",
+            "title": "Strategy",
+            "icon": "mdi:auto-fix",
+            "show_in_sidebar": True,
+        },
+        "config": {"strategy": {"type": "original-states"}},
+    }
+
+
+@raw_dashboard(url_path="config-only")
+def config_only():
+    return {"views": [{"title": "Only a config", "cards": []}]}
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:config-only": {
+    "config": {
+      "views": [
+        {
+          "cards": [],
+          "title": "Only a config"
+        }
+      ]
+    },
+    "meta": {
+      "url_path": "config-only"
+    }
+  },
+  "dashboard:strategy-one": {
+    "config": {
+      "strategy": {
+        "type": "original-states"
+      }
+    },
+    "meta": {
+      "icon": "mdi:auto-fix",
+      "show_in_sidebar": true,
+      "title": "Strategy",
+      "url_path": "strategy-one"
+    }
+  }
+}
+```
+
+### `view`
+
+Golden case: `fixtures/dsl/dashboard_minimal_sections/`.
+
+```python
+"""Golden case: the smallest useful dashboard -- one sections view, one section.
+
+`type=` defaults to `"sections"` and is materialized EXPLICITLY into the stored
+config (docs/internals/dashboards-design.md §5.2).
+"""
+
+from hassle import dashboard, raw_card, section, view
+
+
+@dashboard(
+    url_path="home-main",
+    title="Home",
+    icon="mdi:home",
+    show_in_sidebar=True,
+    require_admin=False,
+)
+def home_main():
+    with view(title="Overview", path="overview"), section():
+        raw_card({"type": "markdown", "content": "Welcome home."})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:home-main": {
+    "config": {
+      "views": [
+        {
+          "path": "overview",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "Welcome home.",
+                  "type": "markdown"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "icon": "mdi:home",
+      "require_admin": false,
+      "show_in_sidebar": true,
+      "title": "Home",
+      "url_path": "home-main"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_masonry/`, `fixtures/dsl/dashboard_panel/`, `fixtures/dsl/dashboard_sidebar/`
+
+### `section`
+
+Golden case: `fixtures/dsl/dashboard_minimal_sections/`.
+
+```python
+"""Golden case: the smallest useful dashboard -- one sections view, one section.
+
+`type=` defaults to `"sections"` and is materialized EXPLICITLY into the stored
+config (docs/internals/dashboards-design.md §5.2).
+"""
+
+from hassle import dashboard, raw_card, section, view
+
+
+@dashboard(
+    url_path="home-main",
+    title="Home",
+    icon="mdi:home",
+    show_in_sidebar=True,
+    require_admin=False,
+)
+def home_main():
+    with view(title="Overview", path="overview"), section():
+        raw_card({"type": "markdown", "content": "Welcome home."})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:home-main": {
+    "config": {
+      "views": [
+        {
+          "path": "overview",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "Welcome home.",
+                  "type": "markdown"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "icon": "mdi:home",
+      "require_admin": false,
+      "show_in_sidebar": true,
+      "title": "Home",
+      "url_path": "home-main"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_visibility/`
+
+### `badge`
+
+Golden case: `fixtures/dsl/dashboard_badges/`.
+
+```python
+"""Golden case: view badges, both shapes.
+
+`badge(entity_or_dict, **options)` records into the enclosing view's `badges`
+list: an entity id (or `e.`-ref) builds the modern object form, a plain dict
+passes through verbatim for legacy/unknown badge shapes
+(docs/internals/dashboards-design.md §5.2, §2.2 item 6).
+"""
+
+from hassle import badge, dashboard, raw_card, section, view
+
+
+@dashboard(url_path="badge-wall", title="Badges")
+def badge_wall():
+    with view(title="Overview", path="overview"):
+        badge("sensor.outside_temp", name="Outside")
+        badge("binary_sensor.front_door", extra={"show_state": False})
+        badge({"type": "custom:legacy-badge", "entity": "sensor.legacy"})
+        with section():
+            raw_card({"type": "markdown", "content": "Badges above."})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:badge-wall": {
+    "config": {
+      "views": [
+        {
+          "badges": [
+            {
+              "entity": "sensor.outside_temp",
+              "name": "Outside",
+              "type": "entity"
+            },
+            {
+              "entity": "binary_sensor.front_door",
+              "show_state": false,
+              "type": "entity"
+            },
+            {
+              "entity": "sensor.legacy",
+              "type": "custom:legacy-badge"
+            }
+          ],
+          "path": "overview",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "Badges above.",
+                  "type": "markdown"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Badges",
+      "url_path": "badge-wall"
+    }
+  }
+}
+```
+
+### `raw_card`
+
+Golden case: `fixtures/dsl/dashboard_raw_ladder/`.
+
+```python
+"""Golden case: the structural raw ladder (I3).
+
+Granular escape hatches at every level, mirroring `raw_trigger`/`raw_action`:
+an unknown CARD stays a `raw_card` inside a modelled section; a section whose
+own keys are unmodelled is a whole `raw_section`; a view Hassle does not model
+at all (a strategy view) is a whole `raw_view`. Never raw a parent merely
+because a child rawed (docs/internals/dashboards-design.md §5.5).
+"""
+
+from hassle import dashboard, raw_card, raw_section, raw_view, section, view
+
+
+@dashboard(url_path="raw-ladder", title="Raw ladder")
+def raw_ladder():
+    # Level 1: a third-party card, inside a fully modelled view + section.
+    with view(title="Cards", path="cards"), section():
+        raw_card({"type": "custom:bubble-card", "card_type": "button"})
+    # Level 2: a section whose own keys are unmodelled.
+    with view(title="Sections", path="sections"):
+        raw_section(
+            {
+                "type": "grid",
+                "column_span": 2,
+                "invented_section_key": ["kept"],
+                "cards": [{"type": "markdown", "content": "raw section"}],
+            }
+        )
+    # Level 3: a whole view Hassle does not model (a strategy view).
+    raw_view({"strategy": {"type": "original-states"}, "title": "Auto"})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:raw-ladder": {
+    "config": {
+      "views": [
+        {
+          "path": "cards",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "card_type": "button",
+                  "type": "custom:bubble-card"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Cards",
+          "type": "sections"
+        },
+        {
+          "path": "sections",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "raw section",
+                  "type": "markdown"
+                }
+              ],
+              "column_span": 2,
+              "invented_section_key": [
+                "kept"
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Sections",
+          "type": "sections"
+        },
+        {
+          "strategy": {
+            "type": "original-states"
+          },
+          "title": "Auto"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Raw ladder",
+      "url_path": "raw-ladder"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_compile_time_loop/`
+
+### `raw_section`
+
+Golden case: `fixtures/dsl/dashboard_raw_ladder/`.
+
+```python
+"""Golden case: the structural raw ladder (I3).
+
+Granular escape hatches at every level, mirroring `raw_trigger`/`raw_action`:
+an unknown CARD stays a `raw_card` inside a modelled section; a section whose
+own keys are unmodelled is a whole `raw_section`; a view Hassle does not model
+at all (a strategy view) is a whole `raw_view`. Never raw a parent merely
+because a child rawed (docs/internals/dashboards-design.md §5.5).
+"""
+
+from hassle import dashboard, raw_card, raw_section, raw_view, section, view
+
+
+@dashboard(url_path="raw-ladder", title="Raw ladder")
+def raw_ladder():
+    # Level 1: a third-party card, inside a fully modelled view + section.
+    with view(title="Cards", path="cards"), section():
+        raw_card({"type": "custom:bubble-card", "card_type": "button"})
+    # Level 2: a section whose own keys are unmodelled.
+    with view(title="Sections", path="sections"):
+        raw_section(
+            {
+                "type": "grid",
+                "column_span": 2,
+                "invented_section_key": ["kept"],
+                "cards": [{"type": "markdown", "content": "raw section"}],
+            }
+        )
+    # Level 3: a whole view Hassle does not model (a strategy view).
+    raw_view({"strategy": {"type": "original-states"}, "title": "Auto"})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:raw-ladder": {
+    "config": {
+      "views": [
+        {
+          "path": "cards",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "card_type": "button",
+                  "type": "custom:bubble-card"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Cards",
+          "type": "sections"
+        },
+        {
+          "path": "sections",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "raw section",
+                  "type": "markdown"
+                }
+              ],
+              "column_span": 2,
+              "invented_section_key": [
+                "kept"
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Sections",
+          "type": "sections"
+        },
+        {
+          "strategy": {
+            "type": "original-states"
+          },
+          "title": "Auto"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Raw ladder",
+      "url_path": "raw-ladder"
+    }
+  }
+}
+```
+
+### `raw_view`
+
+Golden case: `fixtures/dsl/dashboard_raw_ladder/`.
+
+```python
+"""Golden case: the structural raw ladder (I3).
+
+Granular escape hatches at every level, mirroring `raw_trigger`/`raw_action`:
+an unknown CARD stays a `raw_card` inside a modelled section; a section whose
+own keys are unmodelled is a whole `raw_section`; a view Hassle does not model
+at all (a strategy view) is a whole `raw_view`. Never raw a parent merely
+because a child rawed (docs/internals/dashboards-design.md §5.5).
+"""
+
+from hassle import dashboard, raw_card, raw_section, raw_view, section, view
+
+
+@dashboard(url_path="raw-ladder", title="Raw ladder")
+def raw_ladder():
+    # Level 1: a third-party card, inside a fully modelled view + section.
+    with view(title="Cards", path="cards"), section():
+        raw_card({"type": "custom:bubble-card", "card_type": "button"})
+    # Level 2: a section whose own keys are unmodelled.
+    with view(title="Sections", path="sections"):
+        raw_section(
+            {
+                "type": "grid",
+                "column_span": 2,
+                "invented_section_key": ["kept"],
+                "cards": [{"type": "markdown", "content": "raw section"}],
+            }
+        )
+    # Level 3: a whole view Hassle does not model (a strategy view).
+    raw_view({"strategy": {"type": "original-states"}, "title": "Auto"})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:raw-ladder": {
+    "config": {
+      "views": [
+        {
+          "path": "cards",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "card_type": "button",
+                  "type": "custom:bubble-card"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Cards",
+          "type": "sections"
+        },
+        {
+          "path": "sections",
+          "sections": [
+            {
+              "cards": [
+                {
+                  "content": "raw section",
+                  "type": "markdown"
+                }
+              ],
+              "column_span": 2,
+              "invented_section_key": [
+                "kept"
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Sections",
+          "type": "sections"
+        },
+        {
+          "strategy": {
+            "type": "original-states"
+          },
+          "title": "Auto"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Raw ladder",
+      "url_path": "raw-ladder"
+    }
+  }
+}
+```
+
 ### `CompileTimeBranchError`
 
 Raised when a Python `if`/`bool()` is used on a runtime state expression (DESIGN §5.5) -- Python control flow runs at *compile* time, so a native branch on a live entity state would be baked in wrong. Fix: use `with if_then(expr):` / `with else_then():` instead, which compile to HA's `if`/`choose` action.
@@ -10549,3 +11171,5855 @@ A `@shared_script` call-site kwarg is not among the script's declared `fields=` 
 ### `UnknownParamError`
 
 `param(name)` named a field absent from the `@shared_script`'s signature. Fix: add `name` as a parameter of the decorated function, or correct the spelling.
+
+## Card reference (`hassle.cards`)
+
+Dashboard card builders live in the dedicated `hassle.cards` namespace, not in
+`hassle.__all__` (docs/internals/dashboards-design.md §5.1 — HA card type names
+like `area`/`calendar`/`button` collide with the frozen top-level surface). Every
+built-in card type Hassle models gets its own section below, sourced from the
+same `fixtures/dsl/dashboard_cards_*` golden fixtures `hassle-dev goldens`
+verifies — pattern-match on these exactly like the constructs above.
+
+
+### `c.entities`
+
+Golden case: `fixtures/dsl/dashboard_cards_display_entities/`.
+
+```python
+"""Golden case: `c.entities` -- mixed varargs rows (`EntityRef`, `str`, a `dict` divider row)."""
+
+from hassle import cards as c
+from hassle import dashboard, section, view
+from hassle.registry import entities as e
+
+
+@dashboard(url_path="display-entities", title="Entities")
+def display_entities():
+    with view(title="Overview"), section():
+        c.entities(
+            e.light.kitchen,
+            "light.living_room",
+            {"type": "divider"},
+            {"entity": "climate.office", "tap_action": {"action": "more-info"}},
+            title="All lights",
+            state_color=True,
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:display-entities": {
+    "config": {
+      "views": [
+        {
+          "sections": [
+            {
+              "cards": [
+                {
+                  "entities": [
+                    "light.kitchen",
+                    "light.living_room",
+                    {
+                      "type": "divider"
+                    },
+                    {
+                      "entity": "climate.office",
+                      "tap_action": {
+                        "action": "more-info"
+                      }
+                    }
+                  ],
+                  "state_color": true,
+                  "title": "All lights",
+                  "type": "entities"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Entities",
+      "url_path": "display-entities"
+    }
+  }
+}
+```
+
+### `c.glance`
+
+Golden case: `fixtures/dsl/dashboard_cards_display_glance/`.
+
+```python
+"""Golden case: `c.glance` -- the same rows convention as `c.entities`."""
+
+from hassle import cards as c
+from hassle import dashboard, section, view
+from hassle.registry import entities as e
+
+
+@dashboard(url_path="display-glance", title="Glance")
+def display_glance():
+    with view(title="Overview"), section():
+        c.glance(
+            e.sensor.outside_temp,
+            e.sensor.outside_humidity,
+            title="Outside",
+            columns=2,
+            show_name=False,
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:display-glance": {
+    "config": {
+      "views": [
+        {
+          "sections": [
+            {
+              "cards": [
+                {
+                  "columns": 2,
+                  "entities": [
+                    "sensor.outside_temp",
+                    "sensor.outside_humidity"
+                  ],
+                  "show_name": false,
+                  "title": "Outside",
+                  "type": "glance"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Glance",
+      "url_path": "display-glance"
+    }
+  }
+}
+```
+
+### `c.tile`
+
+Golden case: `fixtures/dsl/dashboard_cards_display_tile/`.
+
+```python
+"""Golden case: `c.tile` -- `features=`, plus both `tap_action` forms (§5.3).
+
+`tap_action=` is a typed kwarg that widens to a verbatim `dict` ("dict
+passthrough"); `icon_tap_action` is a real tile-card option Hassle leaves
+undeclared on purpose, so it reaches the stored card only through `extra=`
+("extra passthrough") -- both mechanisms exercised on the same card.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, section, view
+from hassle.registry import entities as e
+
+
+@dashboard(url_path="display-tile", title="Tile")
+def display_tile():
+    with view(title="Overview"), section():
+        c.tile(
+            e.climate.living_room,
+            color="blue",
+            vertical=True,
+            features=[{"type": "climate-hvac-modes"}],
+            tap_action={"action": "more-info"},
+            extra={"icon_tap_action": {"action": "toggle"}},
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:display-tile": {
+    "config": {
+      "views": [
+        {
+          "sections": [
+            {
+              "cards": [
+                {
+                  "color": "blue",
+                  "entity": "climate.living_room",
+                  "features": [
+                    {
+                      "type": "climate-hvac-modes"
+                    }
+                  ],
+                  "icon_tap_action": {
+                    "action": "toggle"
+                  },
+                  "tap_action": {
+                    "action": "more-info"
+                  },
+                  "type": "tile",
+                  "vertical": true
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Tile",
+      "url_path": "display-tile"
+    }
+  }
+}
+```
+
+### `c.entity`
+
+Golden case: `fixtures/dsl/dashboard_cards_display_entity/`.
+
+```python
+"""Golden case: `c.entity` -- `attribute=`, plus an action passthrough."""
+
+from hassle import cards as c
+from hassle import dashboard, section, view
+from hassle.registry import entities as e
+
+
+@dashboard(url_path="display-entity", title="Entity")
+def display_entity():
+    with view(title="Overview"), section():
+        c.entity(
+            e.sensor.outside_temp,
+            attribute="battery_level",
+            name="Battery",
+            icon="mdi:battery",
+            hold_action={"action": "more-info"},
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:display-entity": {
+    "config": {
+      "views": [
+        {
+          "sections": [
+            {
+              "cards": [
+                {
+                  "attribute": "battery_level",
+                  "entity": "sensor.outside_temp",
+                  "hold_action": {
+                    "action": "more-info"
+                  },
+                  "icon": "mdi:battery",
+                  "name": "Battery",
+                  "type": "entity"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Entity",
+      "url_path": "display-entity"
+    }
+  }
+}
+```
+
+### `c.button`
+
+Golden case: `fixtures/dsl/dashboard_cards_display_button/`.
+
+```python
+"""Golden case: `c.button` -- `tap_action=` (the modern `perform-action` spelling)."""
+
+from hassle import cards as c
+from hassle import dashboard, section, view
+from hassle.registry import entities as e
+
+
+@dashboard(url_path="display-button", title="Button")
+def display_button():
+    with view(title="Overview"), section():
+        c.button(
+            entity=e.script.movie_time,
+            name="Movie time",
+            icon="mdi:movie",
+            tap_action={"action": "perform-action", "perform_action": "script.movie_time"},
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:display-button": {
+    "config": {
+      "views": [
+        {
+          "sections": [
+            {
+              "cards": [
+                {
+                  "entity": "script.movie_time",
+                  "icon": "mdi:movie",
+                  "name": "Movie time",
+                  "tap_action": {
+                    "action": "perform-action",
+                    "perform_action": "script.movie_time"
+                  },
+                  "type": "button"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Button",
+      "url_path": "display-button"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_cards_display_extra_roundtrip/`
+
+### `c.heading`
+
+Golden case: `fixtures/dsl/dashboard_cards_display_heading/`.
+
+```python
+"""Golden case: `c.heading` -- `heading_style=`, `badges=` (bare entity + verbatim dict)."""
+
+from hassle import cards as c
+from hassle import dashboard, section, view
+from hassle.registry import entities as e
+
+
+@dashboard(url_path="display-heading", title="Heading")
+def display_heading():
+    with view(title="Overview"), section():
+        c.heading(
+            heading="Living room",
+            heading_style="title",
+            icon="mdi:sofa",
+            badges=[e.sensor.outside_temp, {"type": "state-label", "entity": "light.hall"}],
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:display-heading": {
+    "config": {
+      "views": [
+        {
+          "sections": [
+            {
+              "cards": [
+                {
+                  "badges": [
+                    {
+                      "entity": "sensor.outside_temp",
+                      "type": "entity"
+                    },
+                    {
+                      "entity": "light.hall",
+                      "type": "state-label"
+                    }
+                  ],
+                  "heading": "Living room",
+                  "heading_style": "title",
+                  "icon": "mdi:sofa",
+                  "type": "heading"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Heading",
+      "url_path": "display-heading"
+    }
+  }
+}
+```
+
+### `c.alarm_panel`
+
+Golden case: `fixtures/dsl/dashboard_cards_domain/`.
+
+```python
+"""Golden case: DB3c's domain card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/domain.py`: `alarm_panel`,
+`area` (an AREA id, not an entity id), `light`, `thermostat`, `humidifier`,
+`media_control`, `plant_status`, `todo_list`, `shopping_list` (the legacy
+alias -- stays `"shopping-list"`, never upgraded to `todo-list`), and
+`weather_forecast`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-domain", title="Domain")
+def cards_domain():
+    with view(title="Domain", type="masonry"):
+        c.alarm_panel(
+            "alarm_control_panel.home",
+            name="Home Alarm",
+            states=["arm_home", "arm_away"],
+        )
+        c.area(
+            "living_room",
+            navigation_path="/lovelace/living-room",
+            show_camera=True,
+            display_type="compact",
+            alert_classes=["motion", "smoke"],
+            sensor_classes=["temperature", "humidity"],
+        )
+        c.light("light.living_room", name="Living Room", icon="mdi:ceiling-light")
+        c.thermostat("climate.living_room", features=[{"type": "climate-hvac-mode-select"}])
+        c.humidifier("humidifier.living_room", features=[{"type": "humidifier-toggle"}])
+        c.media_control("media_player.living_room")
+        c.plant_status("plant.tomato", name="Tomato")
+        c.todo_list("todo.groceries", title="Groceries", display_order="alphabetical")
+        c.shopping_list(title="Shopping", display_order="alphabetical")
+        c.weather_forecast(
+            "weather.home",
+            show_current=True,
+            show_forecast=True,
+            forecast_type="daily",
+            name="Weather",
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-domain": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "alarm_control_panel.home",
+              "name": "Home Alarm",
+              "states": [
+                "arm_home",
+                "arm_away"
+              ],
+              "type": "alarm-panel"
+            },
+            {
+              "alert_classes": [
+                "motion",
+                "smoke"
+              ],
+              "area": "living_room",
+              "display_type": "compact",
+              "navigation_path": "/lovelace/living-room",
+              "sensor_classes": [
+                "temperature",
+                "humidity"
+              ],
+              "show_camera": true,
+              "type": "area"
+            },
+            {
+              "entity": "light.living_room",
+              "icon": "mdi:ceiling-light",
+              "name": "Living Room",
+              "type": "light"
+            },
+            {
+              "entity": "climate.living_room",
+              "features": [
+                {
+                  "type": "climate-hvac-mode-select"
+                }
+              ],
+              "type": "thermostat"
+            },
+            {
+              "entity": "humidifier.living_room",
+              "features": [
+                {
+                  "type": "humidifier-toggle"
+                }
+              ],
+              "type": "humidifier"
+            },
+            {
+              "entity": "media_player.living_room",
+              "type": "media-control"
+            },
+            {
+              "entity": "plant.tomato",
+              "name": "Tomato",
+              "type": "plant-status"
+            },
+            {
+              "display_order": "alphabetical",
+              "entity": "todo.groceries",
+              "title": "Groceries",
+              "type": "todo-list"
+            },
+            {
+              "display_order": "alphabetical",
+              "title": "Shopping",
+              "type": "shopping-list"
+            },
+            {
+              "entity": "weather.home",
+              "forecast_type": "daily",
+              "name": "Weather",
+              "show_current": true,
+              "show_forecast": true,
+              "type": "weather-forecast"
+            }
+          ],
+          "title": "Domain",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Domain",
+      "url_path": "cards-domain"
+    }
+  }
+}
+```
+
+### `c.area`
+
+Golden case: `fixtures/dsl/dashboard_cards_domain/`.
+
+```python
+"""Golden case: DB3c's domain card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/domain.py`: `alarm_panel`,
+`area` (an AREA id, not an entity id), `light`, `thermostat`, `humidifier`,
+`media_control`, `plant_status`, `todo_list`, `shopping_list` (the legacy
+alias -- stays `"shopping-list"`, never upgraded to `todo-list`), and
+`weather_forecast`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-domain", title="Domain")
+def cards_domain():
+    with view(title="Domain", type="masonry"):
+        c.alarm_panel(
+            "alarm_control_panel.home",
+            name="Home Alarm",
+            states=["arm_home", "arm_away"],
+        )
+        c.area(
+            "living_room",
+            navigation_path="/lovelace/living-room",
+            show_camera=True,
+            display_type="compact",
+            alert_classes=["motion", "smoke"],
+            sensor_classes=["temperature", "humidity"],
+        )
+        c.light("light.living_room", name="Living Room", icon="mdi:ceiling-light")
+        c.thermostat("climate.living_room", features=[{"type": "climate-hvac-mode-select"}])
+        c.humidifier("humidifier.living_room", features=[{"type": "humidifier-toggle"}])
+        c.media_control("media_player.living_room")
+        c.plant_status("plant.tomato", name="Tomato")
+        c.todo_list("todo.groceries", title="Groceries", display_order="alphabetical")
+        c.shopping_list(title="Shopping", display_order="alphabetical")
+        c.weather_forecast(
+            "weather.home",
+            show_current=True,
+            show_forecast=True,
+            forecast_type="daily",
+            name="Weather",
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-domain": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "alarm_control_panel.home",
+              "name": "Home Alarm",
+              "states": [
+                "arm_home",
+                "arm_away"
+              ],
+              "type": "alarm-panel"
+            },
+            {
+              "alert_classes": [
+                "motion",
+                "smoke"
+              ],
+              "area": "living_room",
+              "display_type": "compact",
+              "navigation_path": "/lovelace/living-room",
+              "sensor_classes": [
+                "temperature",
+                "humidity"
+              ],
+              "show_camera": true,
+              "type": "area"
+            },
+            {
+              "entity": "light.living_room",
+              "icon": "mdi:ceiling-light",
+              "name": "Living Room",
+              "type": "light"
+            },
+            {
+              "entity": "climate.living_room",
+              "features": [
+                {
+                  "type": "climate-hvac-mode-select"
+                }
+              ],
+              "type": "thermostat"
+            },
+            {
+              "entity": "humidifier.living_room",
+              "features": [
+                {
+                  "type": "humidifier-toggle"
+                }
+              ],
+              "type": "humidifier"
+            },
+            {
+              "entity": "media_player.living_room",
+              "type": "media-control"
+            },
+            {
+              "entity": "plant.tomato",
+              "name": "Tomato",
+              "type": "plant-status"
+            },
+            {
+              "display_order": "alphabetical",
+              "entity": "todo.groceries",
+              "title": "Groceries",
+              "type": "todo-list"
+            },
+            {
+              "display_order": "alphabetical",
+              "title": "Shopping",
+              "type": "shopping-list"
+            },
+            {
+              "entity": "weather.home",
+              "forecast_type": "daily",
+              "name": "Weather",
+              "show_current": true,
+              "show_forecast": true,
+              "type": "weather-forecast"
+            }
+          ],
+          "title": "Domain",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Domain",
+      "url_path": "cards-domain"
+    }
+  }
+}
+```
+
+### `c.light`
+
+Golden case: `fixtures/dsl/dashboard_cards_domain/`.
+
+```python
+"""Golden case: DB3c's domain card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/domain.py`: `alarm_panel`,
+`area` (an AREA id, not an entity id), `light`, `thermostat`, `humidifier`,
+`media_control`, `plant_status`, `todo_list`, `shopping_list` (the legacy
+alias -- stays `"shopping-list"`, never upgraded to `todo-list`), and
+`weather_forecast`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-domain", title="Domain")
+def cards_domain():
+    with view(title="Domain", type="masonry"):
+        c.alarm_panel(
+            "alarm_control_panel.home",
+            name="Home Alarm",
+            states=["arm_home", "arm_away"],
+        )
+        c.area(
+            "living_room",
+            navigation_path="/lovelace/living-room",
+            show_camera=True,
+            display_type="compact",
+            alert_classes=["motion", "smoke"],
+            sensor_classes=["temperature", "humidity"],
+        )
+        c.light("light.living_room", name="Living Room", icon="mdi:ceiling-light")
+        c.thermostat("climate.living_room", features=[{"type": "climate-hvac-mode-select"}])
+        c.humidifier("humidifier.living_room", features=[{"type": "humidifier-toggle"}])
+        c.media_control("media_player.living_room")
+        c.plant_status("plant.tomato", name="Tomato")
+        c.todo_list("todo.groceries", title="Groceries", display_order="alphabetical")
+        c.shopping_list(title="Shopping", display_order="alphabetical")
+        c.weather_forecast(
+            "weather.home",
+            show_current=True,
+            show_forecast=True,
+            forecast_type="daily",
+            name="Weather",
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-domain": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "alarm_control_panel.home",
+              "name": "Home Alarm",
+              "states": [
+                "arm_home",
+                "arm_away"
+              ],
+              "type": "alarm-panel"
+            },
+            {
+              "alert_classes": [
+                "motion",
+                "smoke"
+              ],
+              "area": "living_room",
+              "display_type": "compact",
+              "navigation_path": "/lovelace/living-room",
+              "sensor_classes": [
+                "temperature",
+                "humidity"
+              ],
+              "show_camera": true,
+              "type": "area"
+            },
+            {
+              "entity": "light.living_room",
+              "icon": "mdi:ceiling-light",
+              "name": "Living Room",
+              "type": "light"
+            },
+            {
+              "entity": "climate.living_room",
+              "features": [
+                {
+                  "type": "climate-hvac-mode-select"
+                }
+              ],
+              "type": "thermostat"
+            },
+            {
+              "entity": "humidifier.living_room",
+              "features": [
+                {
+                  "type": "humidifier-toggle"
+                }
+              ],
+              "type": "humidifier"
+            },
+            {
+              "entity": "media_player.living_room",
+              "type": "media-control"
+            },
+            {
+              "entity": "plant.tomato",
+              "name": "Tomato",
+              "type": "plant-status"
+            },
+            {
+              "display_order": "alphabetical",
+              "entity": "todo.groceries",
+              "title": "Groceries",
+              "type": "todo-list"
+            },
+            {
+              "display_order": "alphabetical",
+              "title": "Shopping",
+              "type": "shopping-list"
+            },
+            {
+              "entity": "weather.home",
+              "forecast_type": "daily",
+              "name": "Weather",
+              "show_current": true,
+              "show_forecast": true,
+              "type": "weather-forecast"
+            }
+          ],
+          "title": "Domain",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Domain",
+      "url_path": "cards-domain"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_cards_domain_extra/`
+
+### `c.thermostat`
+
+Golden case: `fixtures/dsl/dashboard_cards_domain/`.
+
+```python
+"""Golden case: DB3c's domain card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/domain.py`: `alarm_panel`,
+`area` (an AREA id, not an entity id), `light`, `thermostat`, `humidifier`,
+`media_control`, `plant_status`, `todo_list`, `shopping_list` (the legacy
+alias -- stays `"shopping-list"`, never upgraded to `todo-list`), and
+`weather_forecast`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-domain", title="Domain")
+def cards_domain():
+    with view(title="Domain", type="masonry"):
+        c.alarm_panel(
+            "alarm_control_panel.home",
+            name="Home Alarm",
+            states=["arm_home", "arm_away"],
+        )
+        c.area(
+            "living_room",
+            navigation_path="/lovelace/living-room",
+            show_camera=True,
+            display_type="compact",
+            alert_classes=["motion", "smoke"],
+            sensor_classes=["temperature", "humidity"],
+        )
+        c.light("light.living_room", name="Living Room", icon="mdi:ceiling-light")
+        c.thermostat("climate.living_room", features=[{"type": "climate-hvac-mode-select"}])
+        c.humidifier("humidifier.living_room", features=[{"type": "humidifier-toggle"}])
+        c.media_control("media_player.living_room")
+        c.plant_status("plant.tomato", name="Tomato")
+        c.todo_list("todo.groceries", title="Groceries", display_order="alphabetical")
+        c.shopping_list(title="Shopping", display_order="alphabetical")
+        c.weather_forecast(
+            "weather.home",
+            show_current=True,
+            show_forecast=True,
+            forecast_type="daily",
+            name="Weather",
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-domain": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "alarm_control_panel.home",
+              "name": "Home Alarm",
+              "states": [
+                "arm_home",
+                "arm_away"
+              ],
+              "type": "alarm-panel"
+            },
+            {
+              "alert_classes": [
+                "motion",
+                "smoke"
+              ],
+              "area": "living_room",
+              "display_type": "compact",
+              "navigation_path": "/lovelace/living-room",
+              "sensor_classes": [
+                "temperature",
+                "humidity"
+              ],
+              "show_camera": true,
+              "type": "area"
+            },
+            {
+              "entity": "light.living_room",
+              "icon": "mdi:ceiling-light",
+              "name": "Living Room",
+              "type": "light"
+            },
+            {
+              "entity": "climate.living_room",
+              "features": [
+                {
+                  "type": "climate-hvac-mode-select"
+                }
+              ],
+              "type": "thermostat"
+            },
+            {
+              "entity": "humidifier.living_room",
+              "features": [
+                {
+                  "type": "humidifier-toggle"
+                }
+              ],
+              "type": "humidifier"
+            },
+            {
+              "entity": "media_player.living_room",
+              "type": "media-control"
+            },
+            {
+              "entity": "plant.tomato",
+              "name": "Tomato",
+              "type": "plant-status"
+            },
+            {
+              "display_order": "alphabetical",
+              "entity": "todo.groceries",
+              "title": "Groceries",
+              "type": "todo-list"
+            },
+            {
+              "display_order": "alphabetical",
+              "title": "Shopping",
+              "type": "shopping-list"
+            },
+            {
+              "entity": "weather.home",
+              "forecast_type": "daily",
+              "name": "Weather",
+              "show_current": true,
+              "show_forecast": true,
+              "type": "weather-forecast"
+            }
+          ],
+          "title": "Domain",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Domain",
+      "url_path": "cards-domain"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_compile_time_loop/`
+
+### `c.humidifier`
+
+Golden case: `fixtures/dsl/dashboard_cards_domain/`.
+
+```python
+"""Golden case: DB3c's domain card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/domain.py`: `alarm_panel`,
+`area` (an AREA id, not an entity id), `light`, `thermostat`, `humidifier`,
+`media_control`, `plant_status`, `todo_list`, `shopping_list` (the legacy
+alias -- stays `"shopping-list"`, never upgraded to `todo-list`), and
+`weather_forecast`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-domain", title="Domain")
+def cards_domain():
+    with view(title="Domain", type="masonry"):
+        c.alarm_panel(
+            "alarm_control_panel.home",
+            name="Home Alarm",
+            states=["arm_home", "arm_away"],
+        )
+        c.area(
+            "living_room",
+            navigation_path="/lovelace/living-room",
+            show_camera=True,
+            display_type="compact",
+            alert_classes=["motion", "smoke"],
+            sensor_classes=["temperature", "humidity"],
+        )
+        c.light("light.living_room", name="Living Room", icon="mdi:ceiling-light")
+        c.thermostat("climate.living_room", features=[{"type": "climate-hvac-mode-select"}])
+        c.humidifier("humidifier.living_room", features=[{"type": "humidifier-toggle"}])
+        c.media_control("media_player.living_room")
+        c.plant_status("plant.tomato", name="Tomato")
+        c.todo_list("todo.groceries", title="Groceries", display_order="alphabetical")
+        c.shopping_list(title="Shopping", display_order="alphabetical")
+        c.weather_forecast(
+            "weather.home",
+            show_current=True,
+            show_forecast=True,
+            forecast_type="daily",
+            name="Weather",
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-domain": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "alarm_control_panel.home",
+              "name": "Home Alarm",
+              "states": [
+                "arm_home",
+                "arm_away"
+              ],
+              "type": "alarm-panel"
+            },
+            {
+              "alert_classes": [
+                "motion",
+                "smoke"
+              ],
+              "area": "living_room",
+              "display_type": "compact",
+              "navigation_path": "/lovelace/living-room",
+              "sensor_classes": [
+                "temperature",
+                "humidity"
+              ],
+              "show_camera": true,
+              "type": "area"
+            },
+            {
+              "entity": "light.living_room",
+              "icon": "mdi:ceiling-light",
+              "name": "Living Room",
+              "type": "light"
+            },
+            {
+              "entity": "climate.living_room",
+              "features": [
+                {
+                  "type": "climate-hvac-mode-select"
+                }
+              ],
+              "type": "thermostat"
+            },
+            {
+              "entity": "humidifier.living_room",
+              "features": [
+                {
+                  "type": "humidifier-toggle"
+                }
+              ],
+              "type": "humidifier"
+            },
+            {
+              "entity": "media_player.living_room",
+              "type": "media-control"
+            },
+            {
+              "entity": "plant.tomato",
+              "name": "Tomato",
+              "type": "plant-status"
+            },
+            {
+              "display_order": "alphabetical",
+              "entity": "todo.groceries",
+              "title": "Groceries",
+              "type": "todo-list"
+            },
+            {
+              "display_order": "alphabetical",
+              "title": "Shopping",
+              "type": "shopping-list"
+            },
+            {
+              "entity": "weather.home",
+              "forecast_type": "daily",
+              "name": "Weather",
+              "show_current": true,
+              "show_forecast": true,
+              "type": "weather-forecast"
+            }
+          ],
+          "title": "Domain",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Domain",
+      "url_path": "cards-domain"
+    }
+  }
+}
+```
+
+### `c.media_control`
+
+Golden case: `fixtures/dsl/dashboard_cards_domain/`.
+
+```python
+"""Golden case: DB3c's domain card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/domain.py`: `alarm_panel`,
+`area` (an AREA id, not an entity id), `light`, `thermostat`, `humidifier`,
+`media_control`, `plant_status`, `todo_list`, `shopping_list` (the legacy
+alias -- stays `"shopping-list"`, never upgraded to `todo-list`), and
+`weather_forecast`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-domain", title="Domain")
+def cards_domain():
+    with view(title="Domain", type="masonry"):
+        c.alarm_panel(
+            "alarm_control_panel.home",
+            name="Home Alarm",
+            states=["arm_home", "arm_away"],
+        )
+        c.area(
+            "living_room",
+            navigation_path="/lovelace/living-room",
+            show_camera=True,
+            display_type="compact",
+            alert_classes=["motion", "smoke"],
+            sensor_classes=["temperature", "humidity"],
+        )
+        c.light("light.living_room", name="Living Room", icon="mdi:ceiling-light")
+        c.thermostat("climate.living_room", features=[{"type": "climate-hvac-mode-select"}])
+        c.humidifier("humidifier.living_room", features=[{"type": "humidifier-toggle"}])
+        c.media_control("media_player.living_room")
+        c.plant_status("plant.tomato", name="Tomato")
+        c.todo_list("todo.groceries", title="Groceries", display_order="alphabetical")
+        c.shopping_list(title="Shopping", display_order="alphabetical")
+        c.weather_forecast(
+            "weather.home",
+            show_current=True,
+            show_forecast=True,
+            forecast_type="daily",
+            name="Weather",
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-domain": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "alarm_control_panel.home",
+              "name": "Home Alarm",
+              "states": [
+                "arm_home",
+                "arm_away"
+              ],
+              "type": "alarm-panel"
+            },
+            {
+              "alert_classes": [
+                "motion",
+                "smoke"
+              ],
+              "area": "living_room",
+              "display_type": "compact",
+              "navigation_path": "/lovelace/living-room",
+              "sensor_classes": [
+                "temperature",
+                "humidity"
+              ],
+              "show_camera": true,
+              "type": "area"
+            },
+            {
+              "entity": "light.living_room",
+              "icon": "mdi:ceiling-light",
+              "name": "Living Room",
+              "type": "light"
+            },
+            {
+              "entity": "climate.living_room",
+              "features": [
+                {
+                  "type": "climate-hvac-mode-select"
+                }
+              ],
+              "type": "thermostat"
+            },
+            {
+              "entity": "humidifier.living_room",
+              "features": [
+                {
+                  "type": "humidifier-toggle"
+                }
+              ],
+              "type": "humidifier"
+            },
+            {
+              "entity": "media_player.living_room",
+              "type": "media-control"
+            },
+            {
+              "entity": "plant.tomato",
+              "name": "Tomato",
+              "type": "plant-status"
+            },
+            {
+              "display_order": "alphabetical",
+              "entity": "todo.groceries",
+              "title": "Groceries",
+              "type": "todo-list"
+            },
+            {
+              "display_order": "alphabetical",
+              "title": "Shopping",
+              "type": "shopping-list"
+            },
+            {
+              "entity": "weather.home",
+              "forecast_type": "daily",
+              "name": "Weather",
+              "show_current": true,
+              "show_forecast": true,
+              "type": "weather-forecast"
+            }
+          ],
+          "title": "Domain",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Domain",
+      "url_path": "cards-domain"
+    }
+  }
+}
+```
+
+### `c.plant_status`
+
+Golden case: `fixtures/dsl/dashboard_cards_domain/`.
+
+```python
+"""Golden case: DB3c's domain card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/domain.py`: `alarm_panel`,
+`area` (an AREA id, not an entity id), `light`, `thermostat`, `humidifier`,
+`media_control`, `plant_status`, `todo_list`, `shopping_list` (the legacy
+alias -- stays `"shopping-list"`, never upgraded to `todo-list`), and
+`weather_forecast`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-domain", title="Domain")
+def cards_domain():
+    with view(title="Domain", type="masonry"):
+        c.alarm_panel(
+            "alarm_control_panel.home",
+            name="Home Alarm",
+            states=["arm_home", "arm_away"],
+        )
+        c.area(
+            "living_room",
+            navigation_path="/lovelace/living-room",
+            show_camera=True,
+            display_type="compact",
+            alert_classes=["motion", "smoke"],
+            sensor_classes=["temperature", "humidity"],
+        )
+        c.light("light.living_room", name="Living Room", icon="mdi:ceiling-light")
+        c.thermostat("climate.living_room", features=[{"type": "climate-hvac-mode-select"}])
+        c.humidifier("humidifier.living_room", features=[{"type": "humidifier-toggle"}])
+        c.media_control("media_player.living_room")
+        c.plant_status("plant.tomato", name="Tomato")
+        c.todo_list("todo.groceries", title="Groceries", display_order="alphabetical")
+        c.shopping_list(title="Shopping", display_order="alphabetical")
+        c.weather_forecast(
+            "weather.home",
+            show_current=True,
+            show_forecast=True,
+            forecast_type="daily",
+            name="Weather",
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-domain": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "alarm_control_panel.home",
+              "name": "Home Alarm",
+              "states": [
+                "arm_home",
+                "arm_away"
+              ],
+              "type": "alarm-panel"
+            },
+            {
+              "alert_classes": [
+                "motion",
+                "smoke"
+              ],
+              "area": "living_room",
+              "display_type": "compact",
+              "navigation_path": "/lovelace/living-room",
+              "sensor_classes": [
+                "temperature",
+                "humidity"
+              ],
+              "show_camera": true,
+              "type": "area"
+            },
+            {
+              "entity": "light.living_room",
+              "icon": "mdi:ceiling-light",
+              "name": "Living Room",
+              "type": "light"
+            },
+            {
+              "entity": "climate.living_room",
+              "features": [
+                {
+                  "type": "climate-hvac-mode-select"
+                }
+              ],
+              "type": "thermostat"
+            },
+            {
+              "entity": "humidifier.living_room",
+              "features": [
+                {
+                  "type": "humidifier-toggle"
+                }
+              ],
+              "type": "humidifier"
+            },
+            {
+              "entity": "media_player.living_room",
+              "type": "media-control"
+            },
+            {
+              "entity": "plant.tomato",
+              "name": "Tomato",
+              "type": "plant-status"
+            },
+            {
+              "display_order": "alphabetical",
+              "entity": "todo.groceries",
+              "title": "Groceries",
+              "type": "todo-list"
+            },
+            {
+              "display_order": "alphabetical",
+              "title": "Shopping",
+              "type": "shopping-list"
+            },
+            {
+              "entity": "weather.home",
+              "forecast_type": "daily",
+              "name": "Weather",
+              "show_current": true,
+              "show_forecast": true,
+              "type": "weather-forecast"
+            }
+          ],
+          "title": "Domain",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Domain",
+      "url_path": "cards-domain"
+    }
+  }
+}
+```
+
+### `c.todo_list`
+
+Golden case: `fixtures/dsl/dashboard_cards_domain/`.
+
+```python
+"""Golden case: DB3c's domain card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/domain.py`: `alarm_panel`,
+`area` (an AREA id, not an entity id), `light`, `thermostat`, `humidifier`,
+`media_control`, `plant_status`, `todo_list`, `shopping_list` (the legacy
+alias -- stays `"shopping-list"`, never upgraded to `todo-list`), and
+`weather_forecast`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-domain", title="Domain")
+def cards_domain():
+    with view(title="Domain", type="masonry"):
+        c.alarm_panel(
+            "alarm_control_panel.home",
+            name="Home Alarm",
+            states=["arm_home", "arm_away"],
+        )
+        c.area(
+            "living_room",
+            navigation_path="/lovelace/living-room",
+            show_camera=True,
+            display_type="compact",
+            alert_classes=["motion", "smoke"],
+            sensor_classes=["temperature", "humidity"],
+        )
+        c.light("light.living_room", name="Living Room", icon="mdi:ceiling-light")
+        c.thermostat("climate.living_room", features=[{"type": "climate-hvac-mode-select"}])
+        c.humidifier("humidifier.living_room", features=[{"type": "humidifier-toggle"}])
+        c.media_control("media_player.living_room")
+        c.plant_status("plant.tomato", name="Tomato")
+        c.todo_list("todo.groceries", title="Groceries", display_order="alphabetical")
+        c.shopping_list(title="Shopping", display_order="alphabetical")
+        c.weather_forecast(
+            "weather.home",
+            show_current=True,
+            show_forecast=True,
+            forecast_type="daily",
+            name="Weather",
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-domain": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "alarm_control_panel.home",
+              "name": "Home Alarm",
+              "states": [
+                "arm_home",
+                "arm_away"
+              ],
+              "type": "alarm-panel"
+            },
+            {
+              "alert_classes": [
+                "motion",
+                "smoke"
+              ],
+              "area": "living_room",
+              "display_type": "compact",
+              "navigation_path": "/lovelace/living-room",
+              "sensor_classes": [
+                "temperature",
+                "humidity"
+              ],
+              "show_camera": true,
+              "type": "area"
+            },
+            {
+              "entity": "light.living_room",
+              "icon": "mdi:ceiling-light",
+              "name": "Living Room",
+              "type": "light"
+            },
+            {
+              "entity": "climate.living_room",
+              "features": [
+                {
+                  "type": "climate-hvac-mode-select"
+                }
+              ],
+              "type": "thermostat"
+            },
+            {
+              "entity": "humidifier.living_room",
+              "features": [
+                {
+                  "type": "humidifier-toggle"
+                }
+              ],
+              "type": "humidifier"
+            },
+            {
+              "entity": "media_player.living_room",
+              "type": "media-control"
+            },
+            {
+              "entity": "plant.tomato",
+              "name": "Tomato",
+              "type": "plant-status"
+            },
+            {
+              "display_order": "alphabetical",
+              "entity": "todo.groceries",
+              "title": "Groceries",
+              "type": "todo-list"
+            },
+            {
+              "display_order": "alphabetical",
+              "title": "Shopping",
+              "type": "shopping-list"
+            },
+            {
+              "entity": "weather.home",
+              "forecast_type": "daily",
+              "name": "Weather",
+              "show_current": true,
+              "show_forecast": true,
+              "type": "weather-forecast"
+            }
+          ],
+          "title": "Domain",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Domain",
+      "url_path": "cards-domain"
+    }
+  }
+}
+```
+
+### `c.shopping_list`
+
+Golden case: `fixtures/dsl/dashboard_cards_domain/`.
+
+```python
+"""Golden case: DB3c's domain card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/domain.py`: `alarm_panel`,
+`area` (an AREA id, not an entity id), `light`, `thermostat`, `humidifier`,
+`media_control`, `plant_status`, `todo_list`, `shopping_list` (the legacy
+alias -- stays `"shopping-list"`, never upgraded to `todo-list`), and
+`weather_forecast`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-domain", title="Domain")
+def cards_domain():
+    with view(title="Domain", type="masonry"):
+        c.alarm_panel(
+            "alarm_control_panel.home",
+            name="Home Alarm",
+            states=["arm_home", "arm_away"],
+        )
+        c.area(
+            "living_room",
+            navigation_path="/lovelace/living-room",
+            show_camera=True,
+            display_type="compact",
+            alert_classes=["motion", "smoke"],
+            sensor_classes=["temperature", "humidity"],
+        )
+        c.light("light.living_room", name="Living Room", icon="mdi:ceiling-light")
+        c.thermostat("climate.living_room", features=[{"type": "climate-hvac-mode-select"}])
+        c.humidifier("humidifier.living_room", features=[{"type": "humidifier-toggle"}])
+        c.media_control("media_player.living_room")
+        c.plant_status("plant.tomato", name="Tomato")
+        c.todo_list("todo.groceries", title="Groceries", display_order="alphabetical")
+        c.shopping_list(title="Shopping", display_order="alphabetical")
+        c.weather_forecast(
+            "weather.home",
+            show_current=True,
+            show_forecast=True,
+            forecast_type="daily",
+            name="Weather",
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-domain": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "alarm_control_panel.home",
+              "name": "Home Alarm",
+              "states": [
+                "arm_home",
+                "arm_away"
+              ],
+              "type": "alarm-panel"
+            },
+            {
+              "alert_classes": [
+                "motion",
+                "smoke"
+              ],
+              "area": "living_room",
+              "display_type": "compact",
+              "navigation_path": "/lovelace/living-room",
+              "sensor_classes": [
+                "temperature",
+                "humidity"
+              ],
+              "show_camera": true,
+              "type": "area"
+            },
+            {
+              "entity": "light.living_room",
+              "icon": "mdi:ceiling-light",
+              "name": "Living Room",
+              "type": "light"
+            },
+            {
+              "entity": "climate.living_room",
+              "features": [
+                {
+                  "type": "climate-hvac-mode-select"
+                }
+              ],
+              "type": "thermostat"
+            },
+            {
+              "entity": "humidifier.living_room",
+              "features": [
+                {
+                  "type": "humidifier-toggle"
+                }
+              ],
+              "type": "humidifier"
+            },
+            {
+              "entity": "media_player.living_room",
+              "type": "media-control"
+            },
+            {
+              "entity": "plant.tomato",
+              "name": "Tomato",
+              "type": "plant-status"
+            },
+            {
+              "display_order": "alphabetical",
+              "entity": "todo.groceries",
+              "title": "Groceries",
+              "type": "todo-list"
+            },
+            {
+              "display_order": "alphabetical",
+              "title": "Shopping",
+              "type": "shopping-list"
+            },
+            {
+              "entity": "weather.home",
+              "forecast_type": "daily",
+              "name": "Weather",
+              "show_current": true,
+              "show_forecast": true,
+              "type": "weather-forecast"
+            }
+          ],
+          "title": "Domain",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Domain",
+      "url_path": "cards-domain"
+    }
+  }
+}
+```
+
+### `c.weather_forecast`
+
+Golden case: `fixtures/dsl/dashboard_cards_domain/`.
+
+```python
+"""Golden case: DB3c's domain card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/domain.py`: `alarm_panel`,
+`area` (an AREA id, not an entity id), `light`, `thermostat`, `humidifier`,
+`media_control`, `plant_status`, `todo_list`, `shopping_list` (the legacy
+alias -- stays `"shopping-list"`, never upgraded to `todo-list`), and
+`weather_forecast`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-domain", title="Domain")
+def cards_domain():
+    with view(title="Domain", type="masonry"):
+        c.alarm_panel(
+            "alarm_control_panel.home",
+            name="Home Alarm",
+            states=["arm_home", "arm_away"],
+        )
+        c.area(
+            "living_room",
+            navigation_path="/lovelace/living-room",
+            show_camera=True,
+            display_type="compact",
+            alert_classes=["motion", "smoke"],
+            sensor_classes=["temperature", "humidity"],
+        )
+        c.light("light.living_room", name="Living Room", icon="mdi:ceiling-light")
+        c.thermostat("climate.living_room", features=[{"type": "climate-hvac-mode-select"}])
+        c.humidifier("humidifier.living_room", features=[{"type": "humidifier-toggle"}])
+        c.media_control("media_player.living_room")
+        c.plant_status("plant.tomato", name="Tomato")
+        c.todo_list("todo.groceries", title="Groceries", display_order="alphabetical")
+        c.shopping_list(title="Shopping", display_order="alphabetical")
+        c.weather_forecast(
+            "weather.home",
+            show_current=True,
+            show_forecast=True,
+            forecast_type="daily",
+            name="Weather",
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-domain": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "alarm_control_panel.home",
+              "name": "Home Alarm",
+              "states": [
+                "arm_home",
+                "arm_away"
+              ],
+              "type": "alarm-panel"
+            },
+            {
+              "alert_classes": [
+                "motion",
+                "smoke"
+              ],
+              "area": "living_room",
+              "display_type": "compact",
+              "navigation_path": "/lovelace/living-room",
+              "sensor_classes": [
+                "temperature",
+                "humidity"
+              ],
+              "show_camera": true,
+              "type": "area"
+            },
+            {
+              "entity": "light.living_room",
+              "icon": "mdi:ceiling-light",
+              "name": "Living Room",
+              "type": "light"
+            },
+            {
+              "entity": "climate.living_room",
+              "features": [
+                {
+                  "type": "climate-hvac-mode-select"
+                }
+              ],
+              "type": "thermostat"
+            },
+            {
+              "entity": "humidifier.living_room",
+              "features": [
+                {
+                  "type": "humidifier-toggle"
+                }
+              ],
+              "type": "humidifier"
+            },
+            {
+              "entity": "media_player.living_room",
+              "type": "media-control"
+            },
+            {
+              "entity": "plant.tomato",
+              "name": "Tomato",
+              "type": "plant-status"
+            },
+            {
+              "display_order": "alphabetical",
+              "entity": "todo.groceries",
+              "title": "Groceries",
+              "type": "todo-list"
+            },
+            {
+              "display_order": "alphabetical",
+              "title": "Shopping",
+              "type": "shopping-list"
+            },
+            {
+              "entity": "weather.home",
+              "forecast_type": "daily",
+              "name": "Weather",
+              "show_current": true,
+              "show_forecast": true,
+              "type": "weather-forecast"
+            }
+          ],
+          "title": "Domain",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Domain",
+      "url_path": "cards-domain"
+    }
+  }
+}
+```
+
+### `c.energy_date_selection`
+
+Golden case: `fixtures/dsl/dashboard_cards_energy/`.
+
+```python
+"""Golden case: DB3c's Energy dashboard card family (§2.3, §5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/energy.py` -- all 12
+built-in Energy cards. Ten of them are plain `{type, collection_key?}` shapes;
+`energy_distribution` also takes `link_dashboard=`, and `energy_sankey` also
+takes `title=` (see that module's docstring for the DB0 note on the latter).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-energy", title="Energy")
+def cards_energy():
+    with view(title="Energy", type="masonry"):
+        c.energy_date_selection(collection_key="energy_secondary")
+        c.energy_usage_graph(collection_key="energy_secondary")
+        c.energy_solar_graph(collection_key="energy_secondary")
+        c.energy_gas_graph(collection_key="energy_secondary")
+        c.energy_water_graph(collection_key="energy_secondary")
+        c.energy_distribution(collection_key="energy_secondary", link_dashboard=True)
+        c.energy_sources_table(collection_key="energy_secondary")
+        c.energy_grid_neutrality_gauge(collection_key="energy_secondary")
+        c.energy_solar_consumed_gauge(collection_key="energy_secondary")
+        c.energy_carbon_consumed_gauge(collection_key="energy_secondary")
+        c.energy_self_sufficiency_gauge(collection_key="energy_secondary")
+        c.energy_sankey(collection_key="energy_secondary", title="Flows")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-energy": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-date-selection"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-usage-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-gas-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-water-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "link_dashboard": true,
+              "type": "energy-distribution"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-sources-table"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-grid-neutrality-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-carbon-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-self-sufficiency-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "title": "Flows",
+              "type": "energy-sankey"
+            }
+          ],
+          "title": "Energy",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Energy",
+      "url_path": "cards-energy"
+    }
+  }
+}
+```
+
+### `c.energy_usage_graph`
+
+Golden case: `fixtures/dsl/dashboard_cards_energy/`.
+
+```python
+"""Golden case: DB3c's Energy dashboard card family (§2.3, §5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/energy.py` -- all 12
+built-in Energy cards. Ten of them are plain `{type, collection_key?}` shapes;
+`energy_distribution` also takes `link_dashboard=`, and `energy_sankey` also
+takes `title=` (see that module's docstring for the DB0 note on the latter).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-energy", title="Energy")
+def cards_energy():
+    with view(title="Energy", type="masonry"):
+        c.energy_date_selection(collection_key="energy_secondary")
+        c.energy_usage_graph(collection_key="energy_secondary")
+        c.energy_solar_graph(collection_key="energy_secondary")
+        c.energy_gas_graph(collection_key="energy_secondary")
+        c.energy_water_graph(collection_key="energy_secondary")
+        c.energy_distribution(collection_key="energy_secondary", link_dashboard=True)
+        c.energy_sources_table(collection_key="energy_secondary")
+        c.energy_grid_neutrality_gauge(collection_key="energy_secondary")
+        c.energy_solar_consumed_gauge(collection_key="energy_secondary")
+        c.energy_carbon_consumed_gauge(collection_key="energy_secondary")
+        c.energy_self_sufficiency_gauge(collection_key="energy_secondary")
+        c.energy_sankey(collection_key="energy_secondary", title="Flows")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-energy": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-date-selection"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-usage-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-gas-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-water-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "link_dashboard": true,
+              "type": "energy-distribution"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-sources-table"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-grid-neutrality-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-carbon-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-self-sufficiency-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "title": "Flows",
+              "type": "energy-sankey"
+            }
+          ],
+          "title": "Energy",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Energy",
+      "url_path": "cards-energy"
+    }
+  }
+}
+```
+
+### `c.energy_solar_graph`
+
+Golden case: `fixtures/dsl/dashboard_cards_energy/`.
+
+```python
+"""Golden case: DB3c's Energy dashboard card family (§2.3, §5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/energy.py` -- all 12
+built-in Energy cards. Ten of them are plain `{type, collection_key?}` shapes;
+`energy_distribution` also takes `link_dashboard=`, and `energy_sankey` also
+takes `title=` (see that module's docstring for the DB0 note on the latter).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-energy", title="Energy")
+def cards_energy():
+    with view(title="Energy", type="masonry"):
+        c.energy_date_selection(collection_key="energy_secondary")
+        c.energy_usage_graph(collection_key="energy_secondary")
+        c.energy_solar_graph(collection_key="energy_secondary")
+        c.energy_gas_graph(collection_key="energy_secondary")
+        c.energy_water_graph(collection_key="energy_secondary")
+        c.energy_distribution(collection_key="energy_secondary", link_dashboard=True)
+        c.energy_sources_table(collection_key="energy_secondary")
+        c.energy_grid_neutrality_gauge(collection_key="energy_secondary")
+        c.energy_solar_consumed_gauge(collection_key="energy_secondary")
+        c.energy_carbon_consumed_gauge(collection_key="energy_secondary")
+        c.energy_self_sufficiency_gauge(collection_key="energy_secondary")
+        c.energy_sankey(collection_key="energy_secondary", title="Flows")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-energy": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-date-selection"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-usage-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-gas-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-water-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "link_dashboard": true,
+              "type": "energy-distribution"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-sources-table"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-grid-neutrality-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-carbon-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-self-sufficiency-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "title": "Flows",
+              "type": "energy-sankey"
+            }
+          ],
+          "title": "Energy",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Energy",
+      "url_path": "cards-energy"
+    }
+  }
+}
+```
+
+### `c.energy_gas_graph`
+
+Golden case: `fixtures/dsl/dashboard_cards_energy/`.
+
+```python
+"""Golden case: DB3c's Energy dashboard card family (§2.3, §5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/energy.py` -- all 12
+built-in Energy cards. Ten of them are plain `{type, collection_key?}` shapes;
+`energy_distribution` also takes `link_dashboard=`, and `energy_sankey` also
+takes `title=` (see that module's docstring for the DB0 note on the latter).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-energy", title="Energy")
+def cards_energy():
+    with view(title="Energy", type="masonry"):
+        c.energy_date_selection(collection_key="energy_secondary")
+        c.energy_usage_graph(collection_key="energy_secondary")
+        c.energy_solar_graph(collection_key="energy_secondary")
+        c.energy_gas_graph(collection_key="energy_secondary")
+        c.energy_water_graph(collection_key="energy_secondary")
+        c.energy_distribution(collection_key="energy_secondary", link_dashboard=True)
+        c.energy_sources_table(collection_key="energy_secondary")
+        c.energy_grid_neutrality_gauge(collection_key="energy_secondary")
+        c.energy_solar_consumed_gauge(collection_key="energy_secondary")
+        c.energy_carbon_consumed_gauge(collection_key="energy_secondary")
+        c.energy_self_sufficiency_gauge(collection_key="energy_secondary")
+        c.energy_sankey(collection_key="energy_secondary", title="Flows")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-energy": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-date-selection"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-usage-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-gas-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-water-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "link_dashboard": true,
+              "type": "energy-distribution"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-sources-table"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-grid-neutrality-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-carbon-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-self-sufficiency-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "title": "Flows",
+              "type": "energy-sankey"
+            }
+          ],
+          "title": "Energy",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Energy",
+      "url_path": "cards-energy"
+    }
+  }
+}
+```
+
+### `c.energy_water_graph`
+
+Golden case: `fixtures/dsl/dashboard_cards_energy/`.
+
+```python
+"""Golden case: DB3c's Energy dashboard card family (§2.3, §5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/energy.py` -- all 12
+built-in Energy cards. Ten of them are plain `{type, collection_key?}` shapes;
+`energy_distribution` also takes `link_dashboard=`, and `energy_sankey` also
+takes `title=` (see that module's docstring for the DB0 note on the latter).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-energy", title="Energy")
+def cards_energy():
+    with view(title="Energy", type="masonry"):
+        c.energy_date_selection(collection_key="energy_secondary")
+        c.energy_usage_graph(collection_key="energy_secondary")
+        c.energy_solar_graph(collection_key="energy_secondary")
+        c.energy_gas_graph(collection_key="energy_secondary")
+        c.energy_water_graph(collection_key="energy_secondary")
+        c.energy_distribution(collection_key="energy_secondary", link_dashboard=True)
+        c.energy_sources_table(collection_key="energy_secondary")
+        c.energy_grid_neutrality_gauge(collection_key="energy_secondary")
+        c.energy_solar_consumed_gauge(collection_key="energy_secondary")
+        c.energy_carbon_consumed_gauge(collection_key="energy_secondary")
+        c.energy_self_sufficiency_gauge(collection_key="energy_secondary")
+        c.energy_sankey(collection_key="energy_secondary", title="Flows")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-energy": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-date-selection"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-usage-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-gas-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-water-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "link_dashboard": true,
+              "type": "energy-distribution"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-sources-table"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-grid-neutrality-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-carbon-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-self-sufficiency-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "title": "Flows",
+              "type": "energy-sankey"
+            }
+          ],
+          "title": "Energy",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Energy",
+      "url_path": "cards-energy"
+    }
+  }
+}
+```
+
+### `c.energy_distribution`
+
+Golden case: `fixtures/dsl/dashboard_cards_energy/`.
+
+```python
+"""Golden case: DB3c's Energy dashboard card family (§2.3, §5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/energy.py` -- all 12
+built-in Energy cards. Ten of them are plain `{type, collection_key?}` shapes;
+`energy_distribution` also takes `link_dashboard=`, and `energy_sankey` also
+takes `title=` (see that module's docstring for the DB0 note on the latter).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-energy", title="Energy")
+def cards_energy():
+    with view(title="Energy", type="masonry"):
+        c.energy_date_selection(collection_key="energy_secondary")
+        c.energy_usage_graph(collection_key="energy_secondary")
+        c.energy_solar_graph(collection_key="energy_secondary")
+        c.energy_gas_graph(collection_key="energy_secondary")
+        c.energy_water_graph(collection_key="energy_secondary")
+        c.energy_distribution(collection_key="energy_secondary", link_dashboard=True)
+        c.energy_sources_table(collection_key="energy_secondary")
+        c.energy_grid_neutrality_gauge(collection_key="energy_secondary")
+        c.energy_solar_consumed_gauge(collection_key="energy_secondary")
+        c.energy_carbon_consumed_gauge(collection_key="energy_secondary")
+        c.energy_self_sufficiency_gauge(collection_key="energy_secondary")
+        c.energy_sankey(collection_key="energy_secondary", title="Flows")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-energy": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-date-selection"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-usage-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-gas-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-water-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "link_dashboard": true,
+              "type": "energy-distribution"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-sources-table"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-grid-neutrality-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-carbon-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-self-sufficiency-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "title": "Flows",
+              "type": "energy-sankey"
+            }
+          ],
+          "title": "Energy",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Energy",
+      "url_path": "cards-energy"
+    }
+  }
+}
+```
+
+### `c.energy_sources_table`
+
+Golden case: `fixtures/dsl/dashboard_cards_energy/`.
+
+```python
+"""Golden case: DB3c's Energy dashboard card family (§2.3, §5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/energy.py` -- all 12
+built-in Energy cards. Ten of them are plain `{type, collection_key?}` shapes;
+`energy_distribution` also takes `link_dashboard=`, and `energy_sankey` also
+takes `title=` (see that module's docstring for the DB0 note on the latter).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-energy", title="Energy")
+def cards_energy():
+    with view(title="Energy", type="masonry"):
+        c.energy_date_selection(collection_key="energy_secondary")
+        c.energy_usage_graph(collection_key="energy_secondary")
+        c.energy_solar_graph(collection_key="energy_secondary")
+        c.energy_gas_graph(collection_key="energy_secondary")
+        c.energy_water_graph(collection_key="energy_secondary")
+        c.energy_distribution(collection_key="energy_secondary", link_dashboard=True)
+        c.energy_sources_table(collection_key="energy_secondary")
+        c.energy_grid_neutrality_gauge(collection_key="energy_secondary")
+        c.energy_solar_consumed_gauge(collection_key="energy_secondary")
+        c.energy_carbon_consumed_gauge(collection_key="energy_secondary")
+        c.energy_self_sufficiency_gauge(collection_key="energy_secondary")
+        c.energy_sankey(collection_key="energy_secondary", title="Flows")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-energy": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-date-selection"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-usage-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-gas-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-water-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "link_dashboard": true,
+              "type": "energy-distribution"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-sources-table"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-grid-neutrality-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-carbon-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-self-sufficiency-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "title": "Flows",
+              "type": "energy-sankey"
+            }
+          ],
+          "title": "Energy",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Energy",
+      "url_path": "cards-energy"
+    }
+  }
+}
+```
+
+### `c.energy_grid_neutrality_gauge`
+
+Golden case: `fixtures/dsl/dashboard_cards_energy/`.
+
+```python
+"""Golden case: DB3c's Energy dashboard card family (§2.3, §5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/energy.py` -- all 12
+built-in Energy cards. Ten of them are plain `{type, collection_key?}` shapes;
+`energy_distribution` also takes `link_dashboard=`, and `energy_sankey` also
+takes `title=` (see that module's docstring for the DB0 note on the latter).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-energy", title="Energy")
+def cards_energy():
+    with view(title="Energy", type="masonry"):
+        c.energy_date_selection(collection_key="energy_secondary")
+        c.energy_usage_graph(collection_key="energy_secondary")
+        c.energy_solar_graph(collection_key="energy_secondary")
+        c.energy_gas_graph(collection_key="energy_secondary")
+        c.energy_water_graph(collection_key="energy_secondary")
+        c.energy_distribution(collection_key="energy_secondary", link_dashboard=True)
+        c.energy_sources_table(collection_key="energy_secondary")
+        c.energy_grid_neutrality_gauge(collection_key="energy_secondary")
+        c.energy_solar_consumed_gauge(collection_key="energy_secondary")
+        c.energy_carbon_consumed_gauge(collection_key="energy_secondary")
+        c.energy_self_sufficiency_gauge(collection_key="energy_secondary")
+        c.energy_sankey(collection_key="energy_secondary", title="Flows")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-energy": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-date-selection"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-usage-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-gas-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-water-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "link_dashboard": true,
+              "type": "energy-distribution"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-sources-table"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-grid-neutrality-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-carbon-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-self-sufficiency-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "title": "Flows",
+              "type": "energy-sankey"
+            }
+          ],
+          "title": "Energy",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Energy",
+      "url_path": "cards-energy"
+    }
+  }
+}
+```
+
+### `c.energy_solar_consumed_gauge`
+
+Golden case: `fixtures/dsl/dashboard_cards_energy/`.
+
+```python
+"""Golden case: DB3c's Energy dashboard card family (§2.3, §5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/energy.py` -- all 12
+built-in Energy cards. Ten of them are plain `{type, collection_key?}` shapes;
+`energy_distribution` also takes `link_dashboard=`, and `energy_sankey` also
+takes `title=` (see that module's docstring for the DB0 note on the latter).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-energy", title="Energy")
+def cards_energy():
+    with view(title="Energy", type="masonry"):
+        c.energy_date_selection(collection_key="energy_secondary")
+        c.energy_usage_graph(collection_key="energy_secondary")
+        c.energy_solar_graph(collection_key="energy_secondary")
+        c.energy_gas_graph(collection_key="energy_secondary")
+        c.energy_water_graph(collection_key="energy_secondary")
+        c.energy_distribution(collection_key="energy_secondary", link_dashboard=True)
+        c.energy_sources_table(collection_key="energy_secondary")
+        c.energy_grid_neutrality_gauge(collection_key="energy_secondary")
+        c.energy_solar_consumed_gauge(collection_key="energy_secondary")
+        c.energy_carbon_consumed_gauge(collection_key="energy_secondary")
+        c.energy_self_sufficiency_gauge(collection_key="energy_secondary")
+        c.energy_sankey(collection_key="energy_secondary", title="Flows")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-energy": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-date-selection"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-usage-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-gas-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-water-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "link_dashboard": true,
+              "type": "energy-distribution"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-sources-table"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-grid-neutrality-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-carbon-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-self-sufficiency-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "title": "Flows",
+              "type": "energy-sankey"
+            }
+          ],
+          "title": "Energy",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Energy",
+      "url_path": "cards-energy"
+    }
+  }
+}
+```
+
+### `c.energy_carbon_consumed_gauge`
+
+Golden case: `fixtures/dsl/dashboard_cards_energy/`.
+
+```python
+"""Golden case: DB3c's Energy dashboard card family (§2.3, §5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/energy.py` -- all 12
+built-in Energy cards. Ten of them are plain `{type, collection_key?}` shapes;
+`energy_distribution` also takes `link_dashboard=`, and `energy_sankey` also
+takes `title=` (see that module's docstring for the DB0 note on the latter).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-energy", title="Energy")
+def cards_energy():
+    with view(title="Energy", type="masonry"):
+        c.energy_date_selection(collection_key="energy_secondary")
+        c.energy_usage_graph(collection_key="energy_secondary")
+        c.energy_solar_graph(collection_key="energy_secondary")
+        c.energy_gas_graph(collection_key="energy_secondary")
+        c.energy_water_graph(collection_key="energy_secondary")
+        c.energy_distribution(collection_key="energy_secondary", link_dashboard=True)
+        c.energy_sources_table(collection_key="energy_secondary")
+        c.energy_grid_neutrality_gauge(collection_key="energy_secondary")
+        c.energy_solar_consumed_gauge(collection_key="energy_secondary")
+        c.energy_carbon_consumed_gauge(collection_key="energy_secondary")
+        c.energy_self_sufficiency_gauge(collection_key="energy_secondary")
+        c.energy_sankey(collection_key="energy_secondary", title="Flows")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-energy": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-date-selection"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-usage-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-gas-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-water-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "link_dashboard": true,
+              "type": "energy-distribution"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-sources-table"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-grid-neutrality-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-carbon-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-self-sufficiency-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "title": "Flows",
+              "type": "energy-sankey"
+            }
+          ],
+          "title": "Energy",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Energy",
+      "url_path": "cards-energy"
+    }
+  }
+}
+```
+
+### `c.energy_self_sufficiency_gauge`
+
+Golden case: `fixtures/dsl/dashboard_cards_energy/`.
+
+```python
+"""Golden case: DB3c's Energy dashboard card family (§2.3, §5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/energy.py` -- all 12
+built-in Energy cards. Ten of them are plain `{type, collection_key?}` shapes;
+`energy_distribution` also takes `link_dashboard=`, and `energy_sankey` also
+takes `title=` (see that module's docstring for the DB0 note on the latter).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-energy", title="Energy")
+def cards_energy():
+    with view(title="Energy", type="masonry"):
+        c.energy_date_selection(collection_key="energy_secondary")
+        c.energy_usage_graph(collection_key="energy_secondary")
+        c.energy_solar_graph(collection_key="energy_secondary")
+        c.energy_gas_graph(collection_key="energy_secondary")
+        c.energy_water_graph(collection_key="energy_secondary")
+        c.energy_distribution(collection_key="energy_secondary", link_dashboard=True)
+        c.energy_sources_table(collection_key="energy_secondary")
+        c.energy_grid_neutrality_gauge(collection_key="energy_secondary")
+        c.energy_solar_consumed_gauge(collection_key="energy_secondary")
+        c.energy_carbon_consumed_gauge(collection_key="energy_secondary")
+        c.energy_self_sufficiency_gauge(collection_key="energy_secondary")
+        c.energy_sankey(collection_key="energy_secondary", title="Flows")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-energy": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-date-selection"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-usage-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-gas-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-water-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "link_dashboard": true,
+              "type": "energy-distribution"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-sources-table"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-grid-neutrality-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-carbon-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-self-sufficiency-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "title": "Flows",
+              "type": "energy-sankey"
+            }
+          ],
+          "title": "Energy",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Energy",
+      "url_path": "cards-energy"
+    }
+  }
+}
+```
+
+### `c.energy_sankey`
+
+Golden case: `fixtures/dsl/dashboard_cards_energy/`.
+
+```python
+"""Golden case: DB3c's Energy dashboard card family (§2.3, §5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/energy.py` -- all 12
+built-in Energy cards. Ten of them are plain `{type, collection_key?}` shapes;
+`energy_distribution` also takes `link_dashboard=`, and `energy_sankey` also
+takes `title=` (see that module's docstring for the DB0 note on the latter).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-energy", title="Energy")
+def cards_energy():
+    with view(title="Energy", type="masonry"):
+        c.energy_date_selection(collection_key="energy_secondary")
+        c.energy_usage_graph(collection_key="energy_secondary")
+        c.energy_solar_graph(collection_key="energy_secondary")
+        c.energy_gas_graph(collection_key="energy_secondary")
+        c.energy_water_graph(collection_key="energy_secondary")
+        c.energy_distribution(collection_key="energy_secondary", link_dashboard=True)
+        c.energy_sources_table(collection_key="energy_secondary")
+        c.energy_grid_neutrality_gauge(collection_key="energy_secondary")
+        c.energy_solar_consumed_gauge(collection_key="energy_secondary")
+        c.energy_carbon_consumed_gauge(collection_key="energy_secondary")
+        c.energy_self_sufficiency_gauge(collection_key="energy_secondary")
+        c.energy_sankey(collection_key="energy_secondary", title="Flows")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-energy": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-date-selection"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-usage-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-gas-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-water-graph"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "link_dashboard": true,
+              "type": "energy-distribution"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-sources-table"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-grid-neutrality-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-solar-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-carbon-consumed-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "type": "energy-self-sufficiency-gauge"
+            },
+            {
+              "collection_key": "energy_secondary",
+              "title": "Flows",
+              "type": "energy-sankey"
+            }
+          ],
+          "title": "Energy",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Energy",
+      "url_path": "cards-energy"
+    }
+  }
+}
+```
+
+### `c.vertical_stack`
+
+Golden case: `fixtures/dsl/dashboard_cards_layout_vertical_stack/`.
+
+```python
+"""Golden case: `c.vertical_stack` -- title, `extra=` round-trip, two children.
+
+docs/internals/dashboards-design.md §5.3: every builder takes `extra=`
+verbatim passthrough; `unknown_option` here is not a typed `vertical_stack`
+kwarg, so it must survive the compile untouched.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, raw_card, section, view
+
+CARD_A = {"type": "markdown", "content": "one"}
+CARD_B = {"type": "markdown", "content": "two"}
+
+
+@dashboard(url_path="layout-vertical-stack", title="Vertical stack")
+def layout_vertical_stack():
+    with (
+        view(title="Overview"),
+        section(),
+        c.vertical_stack(title="Two cards", extra={"unknown_option": 7}),
+    ):
+        raw_card(CARD_A)
+        raw_card(CARD_B)
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:layout-vertical-stack": {
+    "config": {
+      "views": [
+        {
+          "sections": [
+            {
+              "cards": [
+                {
+                  "cards": [
+                    {
+                      "content": "one",
+                      "type": "markdown"
+                    },
+                    {
+                      "content": "two",
+                      "type": "markdown"
+                    }
+                  ],
+                  "title": "Two cards",
+                  "type": "vertical-stack",
+                  "unknown_option": 7
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Vertical stack",
+      "url_path": "layout-vertical-stack"
+    }
+  }
+}
+```
+
+### `c.horizontal_stack`
+
+Golden case: `fixtures/dsl/dashboard_cards_layout_horizontal_stack/`.
+
+```python
+"""Golden case: `c.horizontal_stack` -- no `title` option (unlike `vertical_stack`)."""
+
+from hassle import cards as c
+from hassle import dashboard, raw_card, section, view
+
+
+@dashboard(url_path="layout-horizontal-stack", title="Horizontal stack")
+def layout_horizontal_stack():
+    with view(title="Overview"), section(), c.horizontal_stack():
+        raw_card({"type": "markdown", "content": "left"})
+        raw_card({"type": "markdown", "content": "right"})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:layout-horizontal-stack": {
+    "config": {
+      "views": [
+        {
+          "sections": [
+            {
+              "cards": [
+                {
+                  "cards": [
+                    {
+                      "content": "left",
+                      "type": "markdown"
+                    },
+                    {
+                      "content": "right",
+                      "type": "markdown"
+                    }
+                  ],
+                  "type": "horizontal-stack"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Horizontal stack",
+      "url_path": "layout-horizontal-stack"
+    }
+  }
+}
+```
+
+### `c.grid`
+
+Golden case: `fixtures/dsl/dashboard_cards_layout_nested_stacks/`.
+
+```python
+"""Golden case: containers nest three deep -- vertical -> horizontal -> grid.
+
+Also the `c.grid(columns=, square=)` golden usage: NOT the same construct as
+`section()` even though both store `{"type": "grid", ...}` -- position
+disambiguates (§6.1.1).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, raw_card, section, view
+
+
+@dashboard(url_path="layout-nested-stacks", title="Nested stacks")
+def layout_nested_stacks():
+    with (
+        view(title="Overview"),
+        section(),
+        c.vertical_stack(),
+        c.horizontal_stack(),
+        c.grid(columns=2, square=True),
+    ):
+        raw_card({"type": "markdown", "content": "deepest"})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:layout-nested-stacks": {
+    "config": {
+      "views": [
+        {
+          "sections": [
+            {
+              "cards": [
+                {
+                  "cards": [
+                    {
+                      "cards": [
+                        {
+                          "cards": [
+                            {
+                              "content": "deepest",
+                              "type": "markdown"
+                            }
+                          ],
+                          "columns": 2,
+                          "square": true,
+                          "type": "grid"
+                        }
+                      ],
+                      "type": "horizontal-stack"
+                    }
+                  ],
+                  "type": "vertical-stack"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Nested stacks",
+      "url_path": "layout-nested-stacks"
+    }
+  }
+}
+```
+
+### `c.conditional`
+
+Golden case: `fixtures/dsl/dashboard_cards_layout_conditional/`.
+
+```python
+"""Golden case: `c.conditional` -- exactly one child card behind its conditions."""
+
+from hassle import cards as c
+from hassle import dashboard, raw_card, section, view
+from hassle.cards import cond
+
+
+@dashboard(url_path="layout-conditional", title="Conditional")
+def layout_conditional():
+    with (
+        view(title="Overview"),
+        section(),
+        c.conditional(cond.state("input_boolean.guest_mode", "on")),
+    ):
+        raw_card({"type": "markdown", "content": "Guest mode is on."})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:layout-conditional": {
+    "config": {
+      "views": [
+        {
+          "sections": [
+            {
+              "cards": [
+                {
+                  "card": {
+                    "content": "Guest mode is on.",
+                    "type": "markdown"
+                  },
+                  "conditions": [
+                    {
+                      "condition": "state",
+                      "entity": "input_boolean.guest_mode",
+                      "state": "on"
+                    }
+                  ],
+                  "type": "conditional"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Conditional",
+      "url_path": "layout-conditional"
+    }
+  }
+}
+```
+
+### `c.entity_filter`
+
+Golden case: `fixtures/dsl/dashboard_cards_layout_entity_filter_with_child/`.
+
+```python
+"""Golden case: `c.entity_filter` WITH its presentation card."""
+
+from hassle import cards as c
+from hassle import dashboard, raw_card, section, view
+from hassle.registry import entities as e
+
+
+@dashboard(url_path="layout-entity-filter-with-child", title="Entity filter (with card)")
+def layout_entity_filter_with_child():
+    with (
+        view(title="Overview"),
+        section(),
+        c.entity_filter(entities=[e.light.kitchen, e.light.living_room], state_filter=["on"]),
+    ):
+        raw_card({"type": "glance"})
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:layout-entity-filter-with-child": {
+    "config": {
+      "views": [
+        {
+          "sections": [
+            {
+              "cards": [
+                {
+                  "card": {
+                    "type": "glance"
+                  },
+                  "entities": [
+                    "light.kitchen",
+                    "light.living_room"
+                  ],
+                  "state_filter": [
+                    "on"
+                  ],
+                  "type": "entity-filter"
+                }
+              ],
+              "type": "grid"
+            }
+          ],
+          "title": "Overview",
+          "type": "sections"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Entity filter (with card)",
+      "url_path": "layout-entity-filter-with-child"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_cards_layout_entity_filter_without_child/`
+
+### `c.gauge`
+
+Golden case: `fixtures/dsl/dashboard_cards_visual/`.
+
+```python
+"""Golden case: DB3b's visual/history/text card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/visual.py`: `gauge`,
+`history_graph`, `statistics_graph`, `sensor`, `statistic`, `markdown`
+(including a Jinja template `content=`, passed through verbatim -- HA renders
+it, Hassle never inspects it), `clock`, `calendar`, `logbook`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-visual", title="Visual & History")
+def cards_visual():
+    with view(title="Visual", type="masonry"):
+        c.gauge(
+            "sensor.cpu_temp",
+            name="CPU Temp",
+            unit="°C",
+            min=0,
+            max=100,
+            needle=True,
+            severity={"green": 0, "yellow": 60, "red": 85},
+        )
+        c.history_graph(
+            "sensor.cpu_temp",
+            "sensor.living_room_temp",
+            {"entity": "sensor.attic_temp", "name": "Attic"},
+            title="Temperatures",
+            hours_to_show=48,
+            show_names=True,
+        )
+        c.statistics_graph(
+            "sensor.energy_usage",
+            title="Energy",
+            stat_types=["mean", "max"],
+            period="hour",
+            days_to_show=7,
+        )
+        c.sensor(
+            "sensor.cpu_temp",
+            name="CPU",
+            graph="line",
+            detail=2,
+            hours_to_show=24,
+            unit="°C",
+        )
+        c.statistic(
+            "sensor.energy_usage",
+            name="Energy this month",
+            stat_type="sum",
+            period={"calendar": {"period": "month"}},
+        )
+        c.markdown(
+            "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+            title="Status",
+        )
+        c.clock(clock_style="analog", show_seconds=True, time_format="24")
+        c.calendar(
+            "calendar.family",
+            "calendar.work",
+            initial_view="listWeek",
+            title="Schedule",
+        )
+        c.logbook("sensor.cpu_temp", hours_to_show=12, title="Recent activity")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-visual": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "sensor.cpu_temp",
+              "max": 100,
+              "min": 0,
+              "name": "CPU Temp",
+              "needle": true,
+              "severity": {
+                "green": 0,
+                "red": 85,
+                "yellow": 60
+              },
+              "type": "gauge",
+              "unit": "°C"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp",
+                "sensor.living_room_temp",
+                {
+                  "entity": "sensor.attic_temp",
+                  "name": "Attic"
+                }
+              ],
+              "hours_to_show": 48,
+              "show_names": true,
+              "title": "Temperatures",
+              "type": "history-graph"
+            },
+            {
+              "days_to_show": 7,
+              "entities": [
+                "sensor.energy_usage"
+              ],
+              "period": "hour",
+              "stat_types": [
+                "mean",
+                "max"
+              ],
+              "title": "Energy",
+              "type": "statistics-graph"
+            },
+            {
+              "detail": 2,
+              "entity": "sensor.cpu_temp",
+              "graph": "line",
+              "hours_to_show": 24,
+              "name": "CPU",
+              "type": "sensor",
+              "unit": "°C"
+            },
+            {
+              "entity": "sensor.energy_usage",
+              "name": "Energy this month",
+              "period": {
+                "calendar": {
+                  "period": "month"
+                }
+              },
+              "stat_type": "sum",
+              "type": "statistic"
+            },
+            {
+              "content": "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+              "title": "Status",
+              "type": "markdown"
+            },
+            {
+              "clock_style": "analog",
+              "show_seconds": true,
+              "time_format": "24",
+              "type": "clock"
+            },
+            {
+              "entities": [
+                "calendar.family",
+                "calendar.work"
+              ],
+              "initial_view": "listWeek",
+              "title": "Schedule",
+              "type": "calendar"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp"
+              ],
+              "hours_to_show": 12,
+              "title": "Recent activity",
+              "type": "logbook"
+            }
+          ],
+          "title": "Visual",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Visual & History",
+      "url_path": "cards-visual"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_cards_visual_extra/`
+
+### `c.history_graph`
+
+Golden case: `fixtures/dsl/dashboard_cards_visual/`.
+
+```python
+"""Golden case: DB3b's visual/history/text card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/visual.py`: `gauge`,
+`history_graph`, `statistics_graph`, `sensor`, `statistic`, `markdown`
+(including a Jinja template `content=`, passed through verbatim -- HA renders
+it, Hassle never inspects it), `clock`, `calendar`, `logbook`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-visual", title="Visual & History")
+def cards_visual():
+    with view(title="Visual", type="masonry"):
+        c.gauge(
+            "sensor.cpu_temp",
+            name="CPU Temp",
+            unit="°C",
+            min=0,
+            max=100,
+            needle=True,
+            severity={"green": 0, "yellow": 60, "red": 85},
+        )
+        c.history_graph(
+            "sensor.cpu_temp",
+            "sensor.living_room_temp",
+            {"entity": "sensor.attic_temp", "name": "Attic"},
+            title="Temperatures",
+            hours_to_show=48,
+            show_names=True,
+        )
+        c.statistics_graph(
+            "sensor.energy_usage",
+            title="Energy",
+            stat_types=["mean", "max"],
+            period="hour",
+            days_to_show=7,
+        )
+        c.sensor(
+            "sensor.cpu_temp",
+            name="CPU",
+            graph="line",
+            detail=2,
+            hours_to_show=24,
+            unit="°C",
+        )
+        c.statistic(
+            "sensor.energy_usage",
+            name="Energy this month",
+            stat_type="sum",
+            period={"calendar": {"period": "month"}},
+        )
+        c.markdown(
+            "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+            title="Status",
+        )
+        c.clock(clock_style="analog", show_seconds=True, time_format="24")
+        c.calendar(
+            "calendar.family",
+            "calendar.work",
+            initial_view="listWeek",
+            title="Schedule",
+        )
+        c.logbook("sensor.cpu_temp", hours_to_show=12, title="Recent activity")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-visual": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "sensor.cpu_temp",
+              "max": 100,
+              "min": 0,
+              "name": "CPU Temp",
+              "needle": true,
+              "severity": {
+                "green": 0,
+                "red": 85,
+                "yellow": 60
+              },
+              "type": "gauge",
+              "unit": "°C"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp",
+                "sensor.living_room_temp",
+                {
+                  "entity": "sensor.attic_temp",
+                  "name": "Attic"
+                }
+              ],
+              "hours_to_show": 48,
+              "show_names": true,
+              "title": "Temperatures",
+              "type": "history-graph"
+            },
+            {
+              "days_to_show": 7,
+              "entities": [
+                "sensor.energy_usage"
+              ],
+              "period": "hour",
+              "stat_types": [
+                "mean",
+                "max"
+              ],
+              "title": "Energy",
+              "type": "statistics-graph"
+            },
+            {
+              "detail": 2,
+              "entity": "sensor.cpu_temp",
+              "graph": "line",
+              "hours_to_show": 24,
+              "name": "CPU",
+              "type": "sensor",
+              "unit": "°C"
+            },
+            {
+              "entity": "sensor.energy_usage",
+              "name": "Energy this month",
+              "period": {
+                "calendar": {
+                  "period": "month"
+                }
+              },
+              "stat_type": "sum",
+              "type": "statistic"
+            },
+            {
+              "content": "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+              "title": "Status",
+              "type": "markdown"
+            },
+            {
+              "clock_style": "analog",
+              "show_seconds": true,
+              "time_format": "24",
+              "type": "clock"
+            },
+            {
+              "entities": [
+                "calendar.family",
+                "calendar.work"
+              ],
+              "initial_view": "listWeek",
+              "title": "Schedule",
+              "type": "calendar"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp"
+              ],
+              "hours_to_show": 12,
+              "title": "Recent activity",
+              "type": "logbook"
+            }
+          ],
+          "title": "Visual",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Visual & History",
+      "url_path": "cards-visual"
+    }
+  }
+}
+```
+
+### `c.statistics_graph`
+
+Golden case: `fixtures/dsl/dashboard_cards_visual/`.
+
+```python
+"""Golden case: DB3b's visual/history/text card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/visual.py`: `gauge`,
+`history_graph`, `statistics_graph`, `sensor`, `statistic`, `markdown`
+(including a Jinja template `content=`, passed through verbatim -- HA renders
+it, Hassle never inspects it), `clock`, `calendar`, `logbook`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-visual", title="Visual & History")
+def cards_visual():
+    with view(title="Visual", type="masonry"):
+        c.gauge(
+            "sensor.cpu_temp",
+            name="CPU Temp",
+            unit="°C",
+            min=0,
+            max=100,
+            needle=True,
+            severity={"green": 0, "yellow": 60, "red": 85},
+        )
+        c.history_graph(
+            "sensor.cpu_temp",
+            "sensor.living_room_temp",
+            {"entity": "sensor.attic_temp", "name": "Attic"},
+            title="Temperatures",
+            hours_to_show=48,
+            show_names=True,
+        )
+        c.statistics_graph(
+            "sensor.energy_usage",
+            title="Energy",
+            stat_types=["mean", "max"],
+            period="hour",
+            days_to_show=7,
+        )
+        c.sensor(
+            "sensor.cpu_temp",
+            name="CPU",
+            graph="line",
+            detail=2,
+            hours_to_show=24,
+            unit="°C",
+        )
+        c.statistic(
+            "sensor.energy_usage",
+            name="Energy this month",
+            stat_type="sum",
+            period={"calendar": {"period": "month"}},
+        )
+        c.markdown(
+            "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+            title="Status",
+        )
+        c.clock(clock_style="analog", show_seconds=True, time_format="24")
+        c.calendar(
+            "calendar.family",
+            "calendar.work",
+            initial_view="listWeek",
+            title="Schedule",
+        )
+        c.logbook("sensor.cpu_temp", hours_to_show=12, title="Recent activity")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-visual": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "sensor.cpu_temp",
+              "max": 100,
+              "min": 0,
+              "name": "CPU Temp",
+              "needle": true,
+              "severity": {
+                "green": 0,
+                "red": 85,
+                "yellow": 60
+              },
+              "type": "gauge",
+              "unit": "°C"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp",
+                "sensor.living_room_temp",
+                {
+                  "entity": "sensor.attic_temp",
+                  "name": "Attic"
+                }
+              ],
+              "hours_to_show": 48,
+              "show_names": true,
+              "title": "Temperatures",
+              "type": "history-graph"
+            },
+            {
+              "days_to_show": 7,
+              "entities": [
+                "sensor.energy_usage"
+              ],
+              "period": "hour",
+              "stat_types": [
+                "mean",
+                "max"
+              ],
+              "title": "Energy",
+              "type": "statistics-graph"
+            },
+            {
+              "detail": 2,
+              "entity": "sensor.cpu_temp",
+              "graph": "line",
+              "hours_to_show": 24,
+              "name": "CPU",
+              "type": "sensor",
+              "unit": "°C"
+            },
+            {
+              "entity": "sensor.energy_usage",
+              "name": "Energy this month",
+              "period": {
+                "calendar": {
+                  "period": "month"
+                }
+              },
+              "stat_type": "sum",
+              "type": "statistic"
+            },
+            {
+              "content": "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+              "title": "Status",
+              "type": "markdown"
+            },
+            {
+              "clock_style": "analog",
+              "show_seconds": true,
+              "time_format": "24",
+              "type": "clock"
+            },
+            {
+              "entities": [
+                "calendar.family",
+                "calendar.work"
+              ],
+              "initial_view": "listWeek",
+              "title": "Schedule",
+              "type": "calendar"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp"
+              ],
+              "hours_to_show": 12,
+              "title": "Recent activity",
+              "type": "logbook"
+            }
+          ],
+          "title": "Visual",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Visual & History",
+      "url_path": "cards-visual"
+    }
+  }
+}
+```
+
+### `c.sensor`
+
+Golden case: `fixtures/dsl/dashboard_cards_visual/`.
+
+```python
+"""Golden case: DB3b's visual/history/text card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/visual.py`: `gauge`,
+`history_graph`, `statistics_graph`, `sensor`, `statistic`, `markdown`
+(including a Jinja template `content=`, passed through verbatim -- HA renders
+it, Hassle never inspects it), `clock`, `calendar`, `logbook`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-visual", title="Visual & History")
+def cards_visual():
+    with view(title="Visual", type="masonry"):
+        c.gauge(
+            "sensor.cpu_temp",
+            name="CPU Temp",
+            unit="°C",
+            min=0,
+            max=100,
+            needle=True,
+            severity={"green": 0, "yellow": 60, "red": 85},
+        )
+        c.history_graph(
+            "sensor.cpu_temp",
+            "sensor.living_room_temp",
+            {"entity": "sensor.attic_temp", "name": "Attic"},
+            title="Temperatures",
+            hours_to_show=48,
+            show_names=True,
+        )
+        c.statistics_graph(
+            "sensor.energy_usage",
+            title="Energy",
+            stat_types=["mean", "max"],
+            period="hour",
+            days_to_show=7,
+        )
+        c.sensor(
+            "sensor.cpu_temp",
+            name="CPU",
+            graph="line",
+            detail=2,
+            hours_to_show=24,
+            unit="°C",
+        )
+        c.statistic(
+            "sensor.energy_usage",
+            name="Energy this month",
+            stat_type="sum",
+            period={"calendar": {"period": "month"}},
+        )
+        c.markdown(
+            "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+            title="Status",
+        )
+        c.clock(clock_style="analog", show_seconds=True, time_format="24")
+        c.calendar(
+            "calendar.family",
+            "calendar.work",
+            initial_view="listWeek",
+            title="Schedule",
+        )
+        c.logbook("sensor.cpu_temp", hours_to_show=12, title="Recent activity")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-visual": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "sensor.cpu_temp",
+              "max": 100,
+              "min": 0,
+              "name": "CPU Temp",
+              "needle": true,
+              "severity": {
+                "green": 0,
+                "red": 85,
+                "yellow": 60
+              },
+              "type": "gauge",
+              "unit": "°C"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp",
+                "sensor.living_room_temp",
+                {
+                  "entity": "sensor.attic_temp",
+                  "name": "Attic"
+                }
+              ],
+              "hours_to_show": 48,
+              "show_names": true,
+              "title": "Temperatures",
+              "type": "history-graph"
+            },
+            {
+              "days_to_show": 7,
+              "entities": [
+                "sensor.energy_usage"
+              ],
+              "period": "hour",
+              "stat_types": [
+                "mean",
+                "max"
+              ],
+              "title": "Energy",
+              "type": "statistics-graph"
+            },
+            {
+              "detail": 2,
+              "entity": "sensor.cpu_temp",
+              "graph": "line",
+              "hours_to_show": 24,
+              "name": "CPU",
+              "type": "sensor",
+              "unit": "°C"
+            },
+            {
+              "entity": "sensor.energy_usage",
+              "name": "Energy this month",
+              "period": {
+                "calendar": {
+                  "period": "month"
+                }
+              },
+              "stat_type": "sum",
+              "type": "statistic"
+            },
+            {
+              "content": "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+              "title": "Status",
+              "type": "markdown"
+            },
+            {
+              "clock_style": "analog",
+              "show_seconds": true,
+              "time_format": "24",
+              "type": "clock"
+            },
+            {
+              "entities": [
+                "calendar.family",
+                "calendar.work"
+              ],
+              "initial_view": "listWeek",
+              "title": "Schedule",
+              "type": "calendar"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp"
+              ],
+              "hours_to_show": 12,
+              "title": "Recent activity",
+              "type": "logbook"
+            }
+          ],
+          "title": "Visual",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Visual & History",
+      "url_path": "cards-visual"
+    }
+  }
+}
+```
+
+### `c.statistic`
+
+Golden case: `fixtures/dsl/dashboard_cards_visual/`.
+
+```python
+"""Golden case: DB3b's visual/history/text card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/visual.py`: `gauge`,
+`history_graph`, `statistics_graph`, `sensor`, `statistic`, `markdown`
+(including a Jinja template `content=`, passed through verbatim -- HA renders
+it, Hassle never inspects it), `clock`, `calendar`, `logbook`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-visual", title="Visual & History")
+def cards_visual():
+    with view(title="Visual", type="masonry"):
+        c.gauge(
+            "sensor.cpu_temp",
+            name="CPU Temp",
+            unit="°C",
+            min=0,
+            max=100,
+            needle=True,
+            severity={"green": 0, "yellow": 60, "red": 85},
+        )
+        c.history_graph(
+            "sensor.cpu_temp",
+            "sensor.living_room_temp",
+            {"entity": "sensor.attic_temp", "name": "Attic"},
+            title="Temperatures",
+            hours_to_show=48,
+            show_names=True,
+        )
+        c.statistics_graph(
+            "sensor.energy_usage",
+            title="Energy",
+            stat_types=["mean", "max"],
+            period="hour",
+            days_to_show=7,
+        )
+        c.sensor(
+            "sensor.cpu_temp",
+            name="CPU",
+            graph="line",
+            detail=2,
+            hours_to_show=24,
+            unit="°C",
+        )
+        c.statistic(
+            "sensor.energy_usage",
+            name="Energy this month",
+            stat_type="sum",
+            period={"calendar": {"period": "month"}},
+        )
+        c.markdown(
+            "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+            title="Status",
+        )
+        c.clock(clock_style="analog", show_seconds=True, time_format="24")
+        c.calendar(
+            "calendar.family",
+            "calendar.work",
+            initial_view="listWeek",
+            title="Schedule",
+        )
+        c.logbook("sensor.cpu_temp", hours_to_show=12, title="Recent activity")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-visual": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "sensor.cpu_temp",
+              "max": 100,
+              "min": 0,
+              "name": "CPU Temp",
+              "needle": true,
+              "severity": {
+                "green": 0,
+                "red": 85,
+                "yellow": 60
+              },
+              "type": "gauge",
+              "unit": "°C"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp",
+                "sensor.living_room_temp",
+                {
+                  "entity": "sensor.attic_temp",
+                  "name": "Attic"
+                }
+              ],
+              "hours_to_show": 48,
+              "show_names": true,
+              "title": "Temperatures",
+              "type": "history-graph"
+            },
+            {
+              "days_to_show": 7,
+              "entities": [
+                "sensor.energy_usage"
+              ],
+              "period": "hour",
+              "stat_types": [
+                "mean",
+                "max"
+              ],
+              "title": "Energy",
+              "type": "statistics-graph"
+            },
+            {
+              "detail": 2,
+              "entity": "sensor.cpu_temp",
+              "graph": "line",
+              "hours_to_show": 24,
+              "name": "CPU",
+              "type": "sensor",
+              "unit": "°C"
+            },
+            {
+              "entity": "sensor.energy_usage",
+              "name": "Energy this month",
+              "period": {
+                "calendar": {
+                  "period": "month"
+                }
+              },
+              "stat_type": "sum",
+              "type": "statistic"
+            },
+            {
+              "content": "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+              "title": "Status",
+              "type": "markdown"
+            },
+            {
+              "clock_style": "analog",
+              "show_seconds": true,
+              "time_format": "24",
+              "type": "clock"
+            },
+            {
+              "entities": [
+                "calendar.family",
+                "calendar.work"
+              ],
+              "initial_view": "listWeek",
+              "title": "Schedule",
+              "type": "calendar"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp"
+              ],
+              "hours_to_show": 12,
+              "title": "Recent activity",
+              "type": "logbook"
+            }
+          ],
+          "title": "Visual",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Visual & History",
+      "url_path": "cards-visual"
+    }
+  }
+}
+```
+
+### `c.markdown`
+
+Golden case: `fixtures/dsl/dashboard_cards_visual/`.
+
+```python
+"""Golden case: DB3b's visual/history/text card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/visual.py`: `gauge`,
+`history_graph`, `statistics_graph`, `sensor`, `statistic`, `markdown`
+(including a Jinja template `content=`, passed through verbatim -- HA renders
+it, Hassle never inspects it), `clock`, `calendar`, `logbook`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-visual", title="Visual & History")
+def cards_visual():
+    with view(title="Visual", type="masonry"):
+        c.gauge(
+            "sensor.cpu_temp",
+            name="CPU Temp",
+            unit="°C",
+            min=0,
+            max=100,
+            needle=True,
+            severity={"green": 0, "yellow": 60, "red": 85},
+        )
+        c.history_graph(
+            "sensor.cpu_temp",
+            "sensor.living_room_temp",
+            {"entity": "sensor.attic_temp", "name": "Attic"},
+            title="Temperatures",
+            hours_to_show=48,
+            show_names=True,
+        )
+        c.statistics_graph(
+            "sensor.energy_usage",
+            title="Energy",
+            stat_types=["mean", "max"],
+            period="hour",
+            days_to_show=7,
+        )
+        c.sensor(
+            "sensor.cpu_temp",
+            name="CPU",
+            graph="line",
+            detail=2,
+            hours_to_show=24,
+            unit="°C",
+        )
+        c.statistic(
+            "sensor.energy_usage",
+            name="Energy this month",
+            stat_type="sum",
+            period={"calendar": {"period": "month"}},
+        )
+        c.markdown(
+            "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+            title="Status",
+        )
+        c.clock(clock_style="analog", show_seconds=True, time_format="24")
+        c.calendar(
+            "calendar.family",
+            "calendar.work",
+            initial_view="listWeek",
+            title="Schedule",
+        )
+        c.logbook("sensor.cpu_temp", hours_to_show=12, title="Recent activity")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-visual": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "sensor.cpu_temp",
+              "max": 100,
+              "min": 0,
+              "name": "CPU Temp",
+              "needle": true,
+              "severity": {
+                "green": 0,
+                "red": 85,
+                "yellow": 60
+              },
+              "type": "gauge",
+              "unit": "°C"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp",
+                "sensor.living_room_temp",
+                {
+                  "entity": "sensor.attic_temp",
+                  "name": "Attic"
+                }
+              ],
+              "hours_to_show": 48,
+              "show_names": true,
+              "title": "Temperatures",
+              "type": "history-graph"
+            },
+            {
+              "days_to_show": 7,
+              "entities": [
+                "sensor.energy_usage"
+              ],
+              "period": "hour",
+              "stat_types": [
+                "mean",
+                "max"
+              ],
+              "title": "Energy",
+              "type": "statistics-graph"
+            },
+            {
+              "detail": 2,
+              "entity": "sensor.cpu_temp",
+              "graph": "line",
+              "hours_to_show": 24,
+              "name": "CPU",
+              "type": "sensor",
+              "unit": "°C"
+            },
+            {
+              "entity": "sensor.energy_usage",
+              "name": "Energy this month",
+              "period": {
+                "calendar": {
+                  "period": "month"
+                }
+              },
+              "stat_type": "sum",
+              "type": "statistic"
+            },
+            {
+              "content": "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+              "title": "Status",
+              "type": "markdown"
+            },
+            {
+              "clock_style": "analog",
+              "show_seconds": true,
+              "time_format": "24",
+              "type": "clock"
+            },
+            {
+              "entities": [
+                "calendar.family",
+                "calendar.work"
+              ],
+              "initial_view": "listWeek",
+              "title": "Schedule",
+              "type": "calendar"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp"
+              ],
+              "hours_to_show": 12,
+              "title": "Recent activity",
+              "type": "logbook"
+            }
+          ],
+          "title": "Visual",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Visual & History",
+      "url_path": "cards-visual"
+    }
+  }
+}
+```
+
+### `c.clock`
+
+Golden case: `fixtures/dsl/dashboard_cards_visual/`.
+
+```python
+"""Golden case: DB3b's visual/history/text card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/visual.py`: `gauge`,
+`history_graph`, `statistics_graph`, `sensor`, `statistic`, `markdown`
+(including a Jinja template `content=`, passed through verbatim -- HA renders
+it, Hassle never inspects it), `clock`, `calendar`, `logbook`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-visual", title="Visual & History")
+def cards_visual():
+    with view(title="Visual", type="masonry"):
+        c.gauge(
+            "sensor.cpu_temp",
+            name="CPU Temp",
+            unit="°C",
+            min=0,
+            max=100,
+            needle=True,
+            severity={"green": 0, "yellow": 60, "red": 85},
+        )
+        c.history_graph(
+            "sensor.cpu_temp",
+            "sensor.living_room_temp",
+            {"entity": "sensor.attic_temp", "name": "Attic"},
+            title="Temperatures",
+            hours_to_show=48,
+            show_names=True,
+        )
+        c.statistics_graph(
+            "sensor.energy_usage",
+            title="Energy",
+            stat_types=["mean", "max"],
+            period="hour",
+            days_to_show=7,
+        )
+        c.sensor(
+            "sensor.cpu_temp",
+            name="CPU",
+            graph="line",
+            detail=2,
+            hours_to_show=24,
+            unit="°C",
+        )
+        c.statistic(
+            "sensor.energy_usage",
+            name="Energy this month",
+            stat_type="sum",
+            period={"calendar": {"period": "month"}},
+        )
+        c.markdown(
+            "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+            title="Status",
+        )
+        c.clock(clock_style="analog", show_seconds=True, time_format="24")
+        c.calendar(
+            "calendar.family",
+            "calendar.work",
+            initial_view="listWeek",
+            title="Schedule",
+        )
+        c.logbook("sensor.cpu_temp", hours_to_show=12, title="Recent activity")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-visual": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "sensor.cpu_temp",
+              "max": 100,
+              "min": 0,
+              "name": "CPU Temp",
+              "needle": true,
+              "severity": {
+                "green": 0,
+                "red": 85,
+                "yellow": 60
+              },
+              "type": "gauge",
+              "unit": "°C"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp",
+                "sensor.living_room_temp",
+                {
+                  "entity": "sensor.attic_temp",
+                  "name": "Attic"
+                }
+              ],
+              "hours_to_show": 48,
+              "show_names": true,
+              "title": "Temperatures",
+              "type": "history-graph"
+            },
+            {
+              "days_to_show": 7,
+              "entities": [
+                "sensor.energy_usage"
+              ],
+              "period": "hour",
+              "stat_types": [
+                "mean",
+                "max"
+              ],
+              "title": "Energy",
+              "type": "statistics-graph"
+            },
+            {
+              "detail": 2,
+              "entity": "sensor.cpu_temp",
+              "graph": "line",
+              "hours_to_show": 24,
+              "name": "CPU",
+              "type": "sensor",
+              "unit": "°C"
+            },
+            {
+              "entity": "sensor.energy_usage",
+              "name": "Energy this month",
+              "period": {
+                "calendar": {
+                  "period": "month"
+                }
+              },
+              "stat_type": "sum",
+              "type": "statistic"
+            },
+            {
+              "content": "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+              "title": "Status",
+              "type": "markdown"
+            },
+            {
+              "clock_style": "analog",
+              "show_seconds": true,
+              "time_format": "24",
+              "type": "clock"
+            },
+            {
+              "entities": [
+                "calendar.family",
+                "calendar.work"
+              ],
+              "initial_view": "listWeek",
+              "title": "Schedule",
+              "type": "calendar"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp"
+              ],
+              "hours_to_show": 12,
+              "title": "Recent activity",
+              "type": "logbook"
+            }
+          ],
+          "title": "Visual",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Visual & History",
+      "url_path": "cards-visual"
+    }
+  }
+}
+```
+
+### `c.calendar`
+
+Golden case: `fixtures/dsl/dashboard_cards_visual/`.
+
+```python
+"""Golden case: DB3b's visual/history/text card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/visual.py`: `gauge`,
+`history_graph`, `statistics_graph`, `sensor`, `statistic`, `markdown`
+(including a Jinja template `content=`, passed through verbatim -- HA renders
+it, Hassle never inspects it), `clock`, `calendar`, `logbook`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-visual", title="Visual & History")
+def cards_visual():
+    with view(title="Visual", type="masonry"):
+        c.gauge(
+            "sensor.cpu_temp",
+            name="CPU Temp",
+            unit="°C",
+            min=0,
+            max=100,
+            needle=True,
+            severity={"green": 0, "yellow": 60, "red": 85},
+        )
+        c.history_graph(
+            "sensor.cpu_temp",
+            "sensor.living_room_temp",
+            {"entity": "sensor.attic_temp", "name": "Attic"},
+            title="Temperatures",
+            hours_to_show=48,
+            show_names=True,
+        )
+        c.statistics_graph(
+            "sensor.energy_usage",
+            title="Energy",
+            stat_types=["mean", "max"],
+            period="hour",
+            days_to_show=7,
+        )
+        c.sensor(
+            "sensor.cpu_temp",
+            name="CPU",
+            graph="line",
+            detail=2,
+            hours_to_show=24,
+            unit="°C",
+        )
+        c.statistic(
+            "sensor.energy_usage",
+            name="Energy this month",
+            stat_type="sum",
+            period={"calendar": {"period": "month"}},
+        )
+        c.markdown(
+            "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+            title="Status",
+        )
+        c.clock(clock_style="analog", show_seconds=True, time_format="24")
+        c.calendar(
+            "calendar.family",
+            "calendar.work",
+            initial_view="listWeek",
+            title="Schedule",
+        )
+        c.logbook("sensor.cpu_temp", hours_to_show=12, title="Recent activity")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-visual": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "sensor.cpu_temp",
+              "max": 100,
+              "min": 0,
+              "name": "CPU Temp",
+              "needle": true,
+              "severity": {
+                "green": 0,
+                "red": 85,
+                "yellow": 60
+              },
+              "type": "gauge",
+              "unit": "°C"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp",
+                "sensor.living_room_temp",
+                {
+                  "entity": "sensor.attic_temp",
+                  "name": "Attic"
+                }
+              ],
+              "hours_to_show": 48,
+              "show_names": true,
+              "title": "Temperatures",
+              "type": "history-graph"
+            },
+            {
+              "days_to_show": 7,
+              "entities": [
+                "sensor.energy_usage"
+              ],
+              "period": "hour",
+              "stat_types": [
+                "mean",
+                "max"
+              ],
+              "title": "Energy",
+              "type": "statistics-graph"
+            },
+            {
+              "detail": 2,
+              "entity": "sensor.cpu_temp",
+              "graph": "line",
+              "hours_to_show": 24,
+              "name": "CPU",
+              "type": "sensor",
+              "unit": "°C"
+            },
+            {
+              "entity": "sensor.energy_usage",
+              "name": "Energy this month",
+              "period": {
+                "calendar": {
+                  "period": "month"
+                }
+              },
+              "stat_type": "sum",
+              "type": "statistic"
+            },
+            {
+              "content": "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+              "title": "Status",
+              "type": "markdown"
+            },
+            {
+              "clock_style": "analog",
+              "show_seconds": true,
+              "time_format": "24",
+              "type": "clock"
+            },
+            {
+              "entities": [
+                "calendar.family",
+                "calendar.work"
+              ],
+              "initial_view": "listWeek",
+              "title": "Schedule",
+              "type": "calendar"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp"
+              ],
+              "hours_to_show": 12,
+              "title": "Recent activity",
+              "type": "logbook"
+            }
+          ],
+          "title": "Visual",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Visual & History",
+      "url_path": "cards-visual"
+    }
+  }
+}
+```
+
+### `c.logbook`
+
+Golden case: `fixtures/dsl/dashboard_cards_visual/`.
+
+```python
+"""Golden case: DB3b's visual/history/text card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/visual.py`: `gauge`,
+`history_graph`, `statistics_graph`, `sensor`, `statistic`, `markdown`
+(including a Jinja template `content=`, passed through verbatim -- HA renders
+it, Hassle never inspects it), `clock`, `calendar`, `logbook`.
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-visual", title="Visual & History")
+def cards_visual():
+    with view(title="Visual", type="masonry"):
+        c.gauge(
+            "sensor.cpu_temp",
+            name="CPU Temp",
+            unit="°C",
+            min=0,
+            max=100,
+            needle=True,
+            severity={"green": 0, "yellow": 60, "red": 85},
+        )
+        c.history_graph(
+            "sensor.cpu_temp",
+            "sensor.living_room_temp",
+            {"entity": "sensor.attic_temp", "name": "Attic"},
+            title="Temperatures",
+            hours_to_show=48,
+            show_names=True,
+        )
+        c.statistics_graph(
+            "sensor.energy_usage",
+            title="Energy",
+            stat_types=["mean", "max"],
+            period="hour",
+            days_to_show=7,
+        )
+        c.sensor(
+            "sensor.cpu_temp",
+            name="CPU",
+            graph="line",
+            detail=2,
+            hours_to_show=24,
+            unit="°C",
+        )
+        c.statistic(
+            "sensor.energy_usage",
+            name="Energy this month",
+            stat_type="sum",
+            period={"calendar": {"period": "month"}},
+        )
+        c.markdown(
+            "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+            title="Status",
+        )
+        c.clock(clock_style="analog", show_seconds=True, time_format="24")
+        c.calendar(
+            "calendar.family",
+            "calendar.work",
+            initial_view="listWeek",
+            title="Schedule",
+        )
+        c.logbook("sensor.cpu_temp", hours_to_show=12, title="Recent activity")
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-visual": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "entity": "sensor.cpu_temp",
+              "max": 100,
+              "min": 0,
+              "name": "CPU Temp",
+              "needle": true,
+              "severity": {
+                "green": 0,
+                "red": 85,
+                "yellow": 60
+              },
+              "type": "gauge",
+              "unit": "°C"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp",
+                "sensor.living_room_temp",
+                {
+                  "entity": "sensor.attic_temp",
+                  "name": "Attic"
+                }
+              ],
+              "hours_to_show": 48,
+              "show_names": true,
+              "title": "Temperatures",
+              "type": "history-graph"
+            },
+            {
+              "days_to_show": 7,
+              "entities": [
+                "sensor.energy_usage"
+              ],
+              "period": "hour",
+              "stat_types": [
+                "mean",
+                "max"
+              ],
+              "title": "Energy",
+              "type": "statistics-graph"
+            },
+            {
+              "detail": 2,
+              "entity": "sensor.cpu_temp",
+              "graph": "line",
+              "hours_to_show": 24,
+              "name": "CPU",
+              "type": "sensor",
+              "unit": "°C"
+            },
+            {
+              "entity": "sensor.energy_usage",
+              "name": "Energy this month",
+              "period": {
+                "calendar": {
+                  "period": "month"
+                }
+              },
+              "stat_type": "sum",
+              "type": "statistic"
+            },
+            {
+              "content": "## Status\n\nCurrent temp: {{ states('sensor.cpu_temp') }}°C",
+              "title": "Status",
+              "type": "markdown"
+            },
+            {
+              "clock_style": "analog",
+              "show_seconds": true,
+              "time_format": "24",
+              "type": "clock"
+            },
+            {
+              "entities": [
+                "calendar.family",
+                "calendar.work"
+              ],
+              "initial_view": "listWeek",
+              "title": "Schedule",
+              "type": "calendar"
+            },
+            {
+              "entities": [
+                "sensor.cpu_temp"
+              ],
+              "hours_to_show": 12,
+              "title": "Recent activity",
+              "type": "logbook"
+            }
+          ],
+          "title": "Visual",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Visual & History",
+      "url_path": "cards-visual"
+    }
+  }
+}
+```
+
+### `c.iframe`
+
+Golden case: `fixtures/dsl/dashboard_cards_media/`.
+
+```python
+"""Golden case: DB3b's media card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/media.py`: `iframe`,
+`picture`, `picture_glance`, `picture_elements` (with an `elements=`
+passthrough list, §5.3's "passthrough-in-v1" sub-vocabulary), `map` (with
+`geo_location_sources=`).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-media", title="Media")
+def cards_media():
+    with view(title="Media", type="masonry"):
+        c.iframe(
+            "https://example.com/panel",
+            title="Panel",
+            aspect_ratio="75%",
+        )
+        c.picture(
+            "/local/floorplan.png",
+            tap_action={"action": "navigate", "navigation_path": "/lovelace/floorplan"},
+        )
+        c.picture_glance(
+            "light.hall",
+            "lock.front_door",
+            title="Entry",
+            image="/local/entry.jpg",
+            camera_image="camera.front_door",
+        )
+        c.picture_elements(
+            "/local/floorplan.png",
+            camera_image="camera.front_door",
+            elements=[
+                {
+                    "type": "state-icon",
+                    "entity": "light.hall",
+                    "style": {"top": "20%", "left": "30%"},
+                },
+                {"type": "state-label", "entity": "sensor.cpu_temp"},
+            ],
+        )
+        c.map(
+            "device_tracker.phone",
+            "person.alex",
+            geo_location_sources=["all"],
+            hours_to_show=6,
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-media": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "aspect_ratio": "75%",
+              "title": "Panel",
+              "type": "iframe",
+              "url": "https://example.com/panel"
+            },
+            {
+              "image": "/local/floorplan.png",
+              "tap_action": {
+                "action": "navigate",
+                "navigation_path": "/lovelace/floorplan"
+              },
+              "type": "picture"
+            },
+            {
+              "camera_image": "camera.front_door",
+              "entities": [
+                "light.hall",
+                "lock.front_door"
+              ],
+              "image": "/local/entry.jpg",
+              "title": "Entry",
+              "type": "picture-glance"
+            },
+            {
+              "camera_image": "camera.front_door",
+              "elements": [
+                {
+                  "entity": "light.hall",
+                  "style": {
+                    "left": "30%",
+                    "top": "20%"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "sensor.cpu_temp",
+                  "type": "state-label"
+                }
+              ],
+              "image": "/local/floorplan.png",
+              "type": "picture-elements"
+            },
+            {
+              "entities": [
+                "device_tracker.phone",
+                "person.alex"
+              ],
+              "geo_location_sources": [
+                "all"
+              ],
+              "hours_to_show": 6,
+              "type": "map"
+            }
+          ],
+          "title": "Media",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Media",
+      "url_path": "cards-media"
+    }
+  }
+}
+```
+
+See also: `fixtures/dsl/dashboard_cards_media_extra/`
+
+### `c.picture`
+
+Golden case: `fixtures/dsl/dashboard_cards_media/`.
+
+```python
+"""Golden case: DB3b's media card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/media.py`: `iframe`,
+`picture`, `picture_glance`, `picture_elements` (with an `elements=`
+passthrough list, §5.3's "passthrough-in-v1" sub-vocabulary), `map` (with
+`geo_location_sources=`).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-media", title="Media")
+def cards_media():
+    with view(title="Media", type="masonry"):
+        c.iframe(
+            "https://example.com/panel",
+            title="Panel",
+            aspect_ratio="75%",
+        )
+        c.picture(
+            "/local/floorplan.png",
+            tap_action={"action": "navigate", "navigation_path": "/lovelace/floorplan"},
+        )
+        c.picture_glance(
+            "light.hall",
+            "lock.front_door",
+            title="Entry",
+            image="/local/entry.jpg",
+            camera_image="camera.front_door",
+        )
+        c.picture_elements(
+            "/local/floorplan.png",
+            camera_image="camera.front_door",
+            elements=[
+                {
+                    "type": "state-icon",
+                    "entity": "light.hall",
+                    "style": {"top": "20%", "left": "30%"},
+                },
+                {"type": "state-label", "entity": "sensor.cpu_temp"},
+            ],
+        )
+        c.map(
+            "device_tracker.phone",
+            "person.alex",
+            geo_location_sources=["all"],
+            hours_to_show=6,
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-media": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "aspect_ratio": "75%",
+              "title": "Panel",
+              "type": "iframe",
+              "url": "https://example.com/panel"
+            },
+            {
+              "image": "/local/floorplan.png",
+              "tap_action": {
+                "action": "navigate",
+                "navigation_path": "/lovelace/floorplan"
+              },
+              "type": "picture"
+            },
+            {
+              "camera_image": "camera.front_door",
+              "entities": [
+                "light.hall",
+                "lock.front_door"
+              ],
+              "image": "/local/entry.jpg",
+              "title": "Entry",
+              "type": "picture-glance"
+            },
+            {
+              "camera_image": "camera.front_door",
+              "elements": [
+                {
+                  "entity": "light.hall",
+                  "style": {
+                    "left": "30%",
+                    "top": "20%"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "sensor.cpu_temp",
+                  "type": "state-label"
+                }
+              ],
+              "image": "/local/floorplan.png",
+              "type": "picture-elements"
+            },
+            {
+              "entities": [
+                "device_tracker.phone",
+                "person.alex"
+              ],
+              "geo_location_sources": [
+                "all"
+              ],
+              "hours_to_show": 6,
+              "type": "map"
+            }
+          ],
+          "title": "Media",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Media",
+      "url_path": "cards-media"
+    }
+  }
+}
+```
+
+### `c.picture_glance`
+
+Golden case: `fixtures/dsl/dashboard_cards_media/`.
+
+```python
+"""Golden case: DB3b's media card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/media.py`: `iframe`,
+`picture`, `picture_glance`, `picture_elements` (with an `elements=`
+passthrough list, §5.3's "passthrough-in-v1" sub-vocabulary), `map` (with
+`geo_location_sources=`).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-media", title="Media")
+def cards_media():
+    with view(title="Media", type="masonry"):
+        c.iframe(
+            "https://example.com/panel",
+            title="Panel",
+            aspect_ratio="75%",
+        )
+        c.picture(
+            "/local/floorplan.png",
+            tap_action={"action": "navigate", "navigation_path": "/lovelace/floorplan"},
+        )
+        c.picture_glance(
+            "light.hall",
+            "lock.front_door",
+            title="Entry",
+            image="/local/entry.jpg",
+            camera_image="camera.front_door",
+        )
+        c.picture_elements(
+            "/local/floorplan.png",
+            camera_image="camera.front_door",
+            elements=[
+                {
+                    "type": "state-icon",
+                    "entity": "light.hall",
+                    "style": {"top": "20%", "left": "30%"},
+                },
+                {"type": "state-label", "entity": "sensor.cpu_temp"},
+            ],
+        )
+        c.map(
+            "device_tracker.phone",
+            "person.alex",
+            geo_location_sources=["all"],
+            hours_to_show=6,
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-media": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "aspect_ratio": "75%",
+              "title": "Panel",
+              "type": "iframe",
+              "url": "https://example.com/panel"
+            },
+            {
+              "image": "/local/floorplan.png",
+              "tap_action": {
+                "action": "navigate",
+                "navigation_path": "/lovelace/floorplan"
+              },
+              "type": "picture"
+            },
+            {
+              "camera_image": "camera.front_door",
+              "entities": [
+                "light.hall",
+                "lock.front_door"
+              ],
+              "image": "/local/entry.jpg",
+              "title": "Entry",
+              "type": "picture-glance"
+            },
+            {
+              "camera_image": "camera.front_door",
+              "elements": [
+                {
+                  "entity": "light.hall",
+                  "style": {
+                    "left": "30%",
+                    "top": "20%"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "sensor.cpu_temp",
+                  "type": "state-label"
+                }
+              ],
+              "image": "/local/floorplan.png",
+              "type": "picture-elements"
+            },
+            {
+              "entities": [
+                "device_tracker.phone",
+                "person.alex"
+              ],
+              "geo_location_sources": [
+                "all"
+              ],
+              "hours_to_show": 6,
+              "type": "map"
+            }
+          ],
+          "title": "Media",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Media",
+      "url_path": "cards-media"
+    }
+  }
+}
+```
+
+### `c.picture_elements`
+
+Golden case: `fixtures/dsl/dashboard_cards_media/`.
+
+```python
+"""Golden case: DB3b's media card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/media.py`: `iframe`,
+`picture`, `picture_glance`, `picture_elements` (with an `elements=`
+passthrough list, §5.3's "passthrough-in-v1" sub-vocabulary), `map` (with
+`geo_location_sources=`).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-media", title="Media")
+def cards_media():
+    with view(title="Media", type="masonry"):
+        c.iframe(
+            "https://example.com/panel",
+            title="Panel",
+            aspect_ratio="75%",
+        )
+        c.picture(
+            "/local/floorplan.png",
+            tap_action={"action": "navigate", "navigation_path": "/lovelace/floorplan"},
+        )
+        c.picture_glance(
+            "light.hall",
+            "lock.front_door",
+            title="Entry",
+            image="/local/entry.jpg",
+            camera_image="camera.front_door",
+        )
+        c.picture_elements(
+            "/local/floorplan.png",
+            camera_image="camera.front_door",
+            elements=[
+                {
+                    "type": "state-icon",
+                    "entity": "light.hall",
+                    "style": {"top": "20%", "left": "30%"},
+                },
+                {"type": "state-label", "entity": "sensor.cpu_temp"},
+            ],
+        )
+        c.map(
+            "device_tracker.phone",
+            "person.alex",
+            geo_location_sources=["all"],
+            hours_to_show=6,
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-media": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "aspect_ratio": "75%",
+              "title": "Panel",
+              "type": "iframe",
+              "url": "https://example.com/panel"
+            },
+            {
+              "image": "/local/floorplan.png",
+              "tap_action": {
+                "action": "navigate",
+                "navigation_path": "/lovelace/floorplan"
+              },
+              "type": "picture"
+            },
+            {
+              "camera_image": "camera.front_door",
+              "entities": [
+                "light.hall",
+                "lock.front_door"
+              ],
+              "image": "/local/entry.jpg",
+              "title": "Entry",
+              "type": "picture-glance"
+            },
+            {
+              "camera_image": "camera.front_door",
+              "elements": [
+                {
+                  "entity": "light.hall",
+                  "style": {
+                    "left": "30%",
+                    "top": "20%"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "sensor.cpu_temp",
+                  "type": "state-label"
+                }
+              ],
+              "image": "/local/floorplan.png",
+              "type": "picture-elements"
+            },
+            {
+              "entities": [
+                "device_tracker.phone",
+                "person.alex"
+              ],
+              "geo_location_sources": [
+                "all"
+              ],
+              "hours_to_show": 6,
+              "type": "map"
+            }
+          ],
+          "title": "Media",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Media",
+      "url_path": "cards-media"
+    }
+  }
+}
+```
+
+### `c.map`
+
+Golden case: `fixtures/dsl/dashboard_cards_media/`.
+
+```python
+"""Golden case: DB3b's media card family (§5.3, §6.1.1).
+
+One usage of every `hassle.cards` builder in `cards/media.py`: `iframe`,
+`picture`, `picture_glance`, `picture_elements` (with an `elements=`
+passthrough list, §5.3's "passthrough-in-v1" sub-vocabulary), `map` (with
+`geo_location_sources=`).
+"""
+
+from hassle import cards as c
+from hassle import dashboard, view
+
+
+@dashboard(url_path="cards-media", title="Media")
+def cards_media():
+    with view(title="Media", type="masonry"):
+        c.iframe(
+            "https://example.com/panel",
+            title="Panel",
+            aspect_ratio="75%",
+        )
+        c.picture(
+            "/local/floorplan.png",
+            tap_action={"action": "navigate", "navigation_path": "/lovelace/floorplan"},
+        )
+        c.picture_glance(
+            "light.hall",
+            "lock.front_door",
+            title="Entry",
+            image="/local/entry.jpg",
+            camera_image="camera.front_door",
+        )
+        c.picture_elements(
+            "/local/floorplan.png",
+            camera_image="camera.front_door",
+            elements=[
+                {
+                    "type": "state-icon",
+                    "entity": "light.hall",
+                    "style": {"top": "20%", "left": "30%"},
+                },
+                {"type": "state-label", "entity": "sensor.cpu_temp"},
+            ],
+        )
+        c.map(
+            "device_tracker.phone",
+            "person.alex",
+            geo_location_sources=["all"],
+            hours_to_show=6,
+        )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "dashboard:cards-media": {
+    "config": {
+      "views": [
+        {
+          "cards": [
+            {
+              "aspect_ratio": "75%",
+              "title": "Panel",
+              "type": "iframe",
+              "url": "https://example.com/panel"
+            },
+            {
+              "image": "/local/floorplan.png",
+              "tap_action": {
+                "action": "navigate",
+                "navigation_path": "/lovelace/floorplan"
+              },
+              "type": "picture"
+            },
+            {
+              "camera_image": "camera.front_door",
+              "entities": [
+                "light.hall",
+                "lock.front_door"
+              ],
+              "image": "/local/entry.jpg",
+              "title": "Entry",
+              "type": "picture-glance"
+            },
+            {
+              "camera_image": "camera.front_door",
+              "elements": [
+                {
+                  "entity": "light.hall",
+                  "style": {
+                    "left": "30%",
+                    "top": "20%"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "sensor.cpu_temp",
+                  "type": "state-label"
+                }
+              ],
+              "image": "/local/floorplan.png",
+              "type": "picture-elements"
+            },
+            {
+              "entities": [
+                "device_tracker.phone",
+                "person.alex"
+              ],
+              "geo_location_sources": [
+                "all"
+              ],
+              "hours_to_show": 6,
+              "type": "map"
+            }
+          ],
+          "title": "Media",
+          "type": "masonry"
+        }
+      ]
+    },
+    "meta": {
+      "title": "Media",
+      "url_path": "cards-media"
+    }
+  }
+}
+```

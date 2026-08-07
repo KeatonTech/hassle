@@ -41,9 +41,10 @@ def test_object_kinds_cover_automation_script_and_helpers() -> None:
     assert HELPER_DOMAINS <= OBJECT_KINDS
     assert TEMPLATE_DOMAINS <= OBJECT_KINDS
     assert GROUP_DOMAINS <= OBJECT_KINDS
-    # automation + script + 9 storage helper domains + 4 template domains +
-    # 12 group domains == 27 kinds
-    assert len(OBJECT_KINDS) == 2 + len(HELPER_DOMAINS) + len(TEMPLATE_DOMAINS) + len(GROUP_DOMAINS)
+    assert "dashboard" in OBJECT_KINDS
+    # automation + script + dashboard + 9 storage helper domains +
+    # 4 template domains + 12 group domains == 28 kinds
+    assert len(OBJECT_KINDS) == 3 + len(HELPER_DOMAINS) + len(TEMPLATE_DOMAINS) + len(GROUP_DOMAINS)
     assert len(HELPER_DOMAINS) == 9
     assert len(TEMPLATE_DOMAINS) == 4
     assert len(GROUP_DOMAINS) == 12

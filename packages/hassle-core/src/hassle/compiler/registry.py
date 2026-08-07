@@ -31,7 +31,7 @@ def _empty_decorator_triggers() -> list[TriggerBuilder]:
 class RegisteredObject:
     """A function registered by ``@automation``/``@script``, awaiting compilation."""
 
-    kind: str  # "automation" | "script"
+    kind: str  # "automation" | "script" | "dashboard"
     func: Callable[..., Any]
     options: dict[str, Any]
     span: SourceSpan | None
@@ -45,6 +45,11 @@ class RegisteredObject:
     # and any `when()` calls inside the body compose after them, in order.
     # Always empty for `@script` (no `triggers` option exists there at all).
     decorator_triggers: list[TriggerBuilder] = field(default_factory=_empty_decorator_triggers)
+    # `@raw_dashboard` (docs/internals/dashboards-design.md §5.5): the body is a
+    # zero-arg function RETURNING a verbatim envelope/config dict rather than
+    # one the compiler traces inside a recorder. Only ever True for
+    # ``kind == "dashboard"``; `bundle._build_dashboard` branches on it.
+    raw: bool = False
 
 
 @dataclass
@@ -126,6 +131,37 @@ def _register(
             span=span,
             declared_id=str(declared_id),
             decorator_triggers=list(decorator_triggers) if decorator_triggers else [],
+        )
+    )
+
+
+def register_dashboard(
+    *,
+    func: Callable[..., Any],
+    identity: str,
+    options: dict[str, Any],
+    span: SourceSpan | None,
+    raw: bool,
+) -> None:
+    """Register a ``@dashboard``/``@raw_dashboard`` body (dashboards-design §6.1).
+
+    Dashboards ride the same :class:`RegisteredObject` stream automations and
+    scripts do -- one registration path, one duplicate-identity check, one span
+    map. What differs is only the identity rule: a dashboard's declared id is
+    its ``url_path`` (or the ``default`` sentinel), never the function name, so
+    it is passed in rather than derived here. This lives in ``registry.py``
+    (beside ``automation``/``script``) so the decorator module never has to
+    reach into :class:`Registry` internals.
+    """
+    check_options("dashboard", options, span)
+    current_registry().add(
+        RegisteredObject(
+            kind="dashboard",
+            func=func,
+            options=dict(options),
+            span=span,
+            declared_id=identity,
+            raw=raw,
         )
     )
 

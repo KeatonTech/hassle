@@ -421,3 +421,44 @@ def test_stop_if_armed_runs_both_actions_when_unarmed() -> None:
     sim.state_change("binary_sensor.workshop_door", "closed", "open")
     sim.assert_called("light.turn_on", entity_id="light.workshop")
     sim.assert_called("notify.mobile_app_kai", message="Workshop door opened (unarmed)")
+
+
+# 25. dashboard: heat pump list (compile-time loop over a Python list) --------
+#
+# Dashboards don't execute, so these assertions run against the COMPILED IR
+# via `sim.dashboard(...)` (dashboards-design.md §9.1), not a simulated run.
+
+
+_HEAT_PUMP_HEADS = [
+    "climate.living_room",
+    "climate.bedroom_thermostat",
+    "climate.office_thermostat",
+]
+
+
+def test_heat_pump_dashboard_gets_a_thermostat_card_for_every_head() -> None:
+    sim = _sim()
+    dash = sim.dashboard("cookbook-heat-pumps")
+    thermostats = dash.cards(type="thermostat")
+    assert [t["entity"] for t in thermostats] == _HEAT_PUMP_HEADS
+
+
+def test_heat_pump_dashboard_entities_card_lists_every_head() -> None:
+    sim = _sim()
+    dash = sim.dashboard("cookbook-heat-pumps")
+    entities_card = dash.cards(type="entities")[0]
+    assert entities_card["entities"] == _HEAT_PUMP_HEADS
+
+
+# 26. dashboard: conditional guest-mode section --------------------------------
+
+
+def test_guest_mode_banner_sits_under_a_conditional_parent() -> None:
+    sim = _sim()
+    dash = sim.dashboard("cookbook-guest-mode")
+    banner = dash.cards(type="markdown")[0]
+    assert banner.parent is not None
+    assert banner.parent["type"] == "conditional"
+    assert banner.parent["conditions"] == [
+        {"condition": "state", "entity": "input_boolean.guest_mode", "state": "on"}
+    ]

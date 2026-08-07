@@ -713,6 +713,48 @@ def _resolve_binding_module(hassle_pkg: object, name: str) -> str:
     return candidates[0]
 
 
+def generate_reexport_stub_lines(
+    module_obj: object, names: list[str], *, doc_lines: list[str]
+) -> str:
+    """Generic re-export-stub builder: one ``from <true module> import <name>
+    as <name>`` line per name in ``names``, grouped/sorted by the resolved
+    true defining module (see :func:`_resolve_binding_module`), so output is
+    deterministic and immune to the source ``__all__``'s (or a dict's)
+    iteration order. ``doc_lines`` is the complete, already-quoted module
+    docstring block the caller wants at the top of the generated file.
+
+    Used internally by :func:`generate_hassle_reexport_stub`. Also PUBLIC (no
+    leading underscore) for a specific cross-distribution reuse: `hassle_cli`
+    generates a matching ``typings/hassle/cards.pyi`` for ``hassle.cards``
+    (dashboards-design.md §10's "nothing to generate" turned out to be one
+    stub short of true -- see that generator's own docstring for why), and
+    ``hassle.registry`` may not import ``hassle.cards`` itself
+    (`tests/test_package_layering.py`: ``cards`` depends on ``registry``, not
+    the reverse) -- so the shared true-module-resolution logic lives here,
+    fully generic over ``module_obj``, and the actual ``import hassle.cards``
+    happens in `hassle_cli` instead, which sits outside this internal
+    layering rule entirely.
+    """
+    by_module: dict[str, list[str]] = {}
+    for name in names:
+        module = _resolve_binding_module(module_obj, name)
+        by_module.setdefault(module, []).append(name)
+
+    lines: list[str] = [*doc_lines, "", "from __future__ import annotations", ""]
+    for module in sorted(by_module):
+        module_names = sorted(by_module[module], key=_isort_import_sort_key)
+        for name in module_names:
+            one_line = f"from {module} import {name} as {name}"
+            if len(one_line) <= 100:
+                lines.append(one_line)
+            else:
+                lines.append(f"from {module} import (")
+                lines.append(f"    {name} as {name},")
+                lines.append(")")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def generate_hassle_reexport_stub() -> str:
     """Generate ``typings/hassle/__init__.pyi``: a re-export of every
     ``hassle.__all__`` name from its TRUE defining module (see

@@ -1,0 +1,32 @@
+{
+  "dashboard:display-extra-roundtrip": {
+    "meta": {
+      "url_path": "display-extra-roundtrip",
+      "title": "Extra roundtrip"
+    },
+    "config": {
+      "views": [
+        {
+          "type": "sections",
+          "title": "Overview",
+          "sections": [
+            {
+              "type": "grid",
+              "cards": [
+                {
+                  "type": "button",
+                  "entity": "light.kitchen",
+                  "name": "Kitchen",
+                  "grid_options": {
+                    "columns": 6,
+                    "rows": 1
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

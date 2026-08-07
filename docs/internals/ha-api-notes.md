@@ -3718,3 +3718,588 @@ milestone asks to validate, so it needed its own small walker rather than
 falling out of the existing one for free the way `_bundle_declared_keys`'s
 widening (a bundle's own group declares its produced entity, mirroring
 template) did.
+
+## 39. Dashboards (Lovelace storage-mode) — DB4 finding, then DB0's live verification (§39.1 onward)
+
+### 39.0 DB4 finding: `badge()` cannot reproduce a legacy bare-string badge — resolved via `raw_view`, not a new `raw_badge` verb
+
+> Source: implementing the dashboard decompiler (workstream DB4) against
+> the corpus fixture `fixtures/configs/dashboard_badges.json`, whose
+> PROVENANCE.md entry explicitly plants "modern object-badge shape and
+> legacy bare entity string badges in different views" — i.e. this gap was
+> deliberately exercised by the fixture, not discovered by accident.
+
+Design §2.2 item 6 and §5.2 both anticipate that HA's `badges` list can
+store a bare entity-id **string** (the legacy shape) alongside the modern
+object form (`{"type": "entity", "entity": ...}`); §5.2's own prose says
+`badge()` "records into the enclosing view's badges list (object-badge form;
+a plain dict passes through verbatim for legacy/unknown badge shapes)" —
+which reads as if the bare-string case is covered by the "plain dict"
+clause. It is not: `hassle.compiler.dashboards.structure.badge()` has
+exactly two branches — a `str` input always builds `{"type": "entity",
+"entity": str(entity_or_dict)}` (the modern object form), and a non-`str`
+input is copied through as a dict. **There is no code path in `badge()`
+that appends a bare string to the `badges` list** — `record_badge`/`view()`
+only ever store `body` (always a dict) into `node.badges`, so a stored
+badge that is a bare string is unrepresentable by *any* call to `badge()`,
+however it's invoked.
+
+This is a real design/reality gap (§5.2's prose overstates what the
+"verbatim dict" branch covers for the bare-string case specifically), but
+`compiler/dashboards/structure.py` is frozen (F5) and out of DB4's scope to
+change, and there is no `raw_badge` verb in the §5.5 ladder to fall back to
+individually. The resolution implemented in `hassle.decompiler.dashboards`:
+a view whose stored `badges` list contains ANY non-dict (bare-string) entry,
+or is present as an explicit empty list (`view()` only ever sets `badges`
+when `if node.badges:` is truthy — never to `[]`), escalates the WHOLE
+enclosing view to `raw_view` — legitimate under the existing ladder's "a
+view whose own structure `view()` cannot produce" rule (§5.5), since the
+`badges` list is exactly such an own-structure key, not a nested child card.
+Verified against the fixture: `dashboard_badges.json`'s "Modern Badges" view
+(object-form badges) decompiles fully typed; its "Legacy Badges" view (bare
+strings) decompiles as one `raw_view({...})` call, and the whole object
+still round-trips byte-identically (`compile(decompile(x)) == x` holds via
+the raw escape hatch, per DESIGN §2). No compiler-side change was made or
+proposed here — flagging this for whoever next touches `badge()`'s
+docstring/behavior, since a future `raw_badge` verb (or a `badge()` shape
+that can emit a bare string) would let such a view decompile with finer
+granularity instead of going fully raw.
+
+---
+
+### 39.1 DB0: `dashboards/update` with `icon: null` REMOVES the key — it never stores a null
+
+> Live capture: `docs/ha-api-captures/dashboards-db0.json`, sections
+> `create_with_icon` → `update_icon_null` → `list_after_icon_null`.
+> HA **2026.7.4**.
+
+Design §2.2 item 10 weighed two readings of what
+`DirectBackend._dashboard_registry_payload`'s unconditional `icon: None` does
+to the stored registry item. Reading **(a)** is the truth:
+
+```jsonc
+→ lovelace/dashboards/create {url_path:"db0-icon", title:"DB0 Icon", icon:"mdi:flask", mode:"storage"}
+← {id:"db0_icon", url_path:"db0-icon", title:"DB0 Icon", icon:"mdi:flask", mode:"storage",
+   show_in_sidebar:true, require_admin:false}
+
+→ lovelace/dashboards/update {dashboard_id:"db0_icon", title:"DB0 Icon", icon:null,
+                              show_in_sidebar:true, require_admin:false}
+← {id:"db0_icon", url_path:"db0-icon", title:"DB0 Icon", mode:"storage",     // <-- no `icon` key
+   show_in_sidebar:true, require_admin:false}
+
+→ lovelace/dashboards/list
+← [{id:"db0_icon", url_path:"db0-icon", title:"DB0 Icon", mode:"storage",    // <-- still no `icon`
+    show_in_sidebar:true, require_admin:false}]
+```
+
+Consequences, all now implemented:
+
+- `DirectBackend` is **correct as written** — sending `icon: None` really does
+  clear a deleted icon, and the update converges. No change needed there, and
+  no `storage_canonical` comparison-side rule is needed either.
+- **`FakeBackend` was not faithful** and is fixed: it stored the envelope
+  verbatim, so a cleared icon came back as `icon: None` — a shape real HA
+  cannot produce. `_dashboard_registry_stored_shape` now drops an explicitly
+  null `icon` on both create and update.
+- The DB9 BLOCK-1 decompiler fix (a modeled key present with JSON `null`
+  escalates to the raw ladder) is confirmed **unreachable from a real pull**
+  of a Hassle-written dashboard, exactly as §2.2 item 10 predicted. It stays
+  in as defence for hand-constructed / `raw_dashboard`-authored envelopes.
+
+### 39.2 DB0 (BLOCKER): HA 2026.x gives the default dashboard its own registry item at `url_path: "lovelace"` — and `url_path=null` is then an ALIAS for it
+
+> Live captures: `probe-migration-before` / `probe-migration-after` sections
+> (`seed_legacy_default_config`, `list_before_restart`, `list_after_restart`,
+> `config_null_after_restart`, `config_lovelace_after_restart`), plus the
+> `yaml_mode_*` sections. HA **2026.7.4**.
+
+Design §2.1 states, flatly, that "the default dashboard has **no registry
+item** and `url_path = null` on the wire". **On HA 2026.x that is obsolete**,
+and the consequence was a real bug in `_alist_dashboards`.
+
+`homeassistant/components/lovelace/__init__.py::_async_migrate_default_config`
+runs at every startup in storage mode: if `.storage/lovelace` holds a config,
+HA creates a real registry item at `url_path: "lovelace"` (with
+`allow_single_word: True`, bypassing its own hyphen rule — §39.3) and moves
+the config to `.storage/lovelace.lovelace`. Verified end to end by saving a
+default config, restarting, and re-reading:
+
+```jsonc
+// before the restart
+→ lovelace/config/save {url_path:null, config:{views:[{title:"Legacy Default", cards:[]}]}}
+→ lovelace/dashboards/list          ← []                       // no registry item
+
+// after the restart  (.storage/lovelace -> .storage/lovelace.lovelace)
+→ lovelace/dashboards/list
+← [{id:"lovelace", url_path:"lovelace", title:"Overview", icon:"mdi:view-dashboard",
+    mode:"storage", show_in_sidebar:true, require_admin:false}]
+→ lovelace/config {url_path:null}       ← {views:[{title:"Legacy Default", cards:[]}]}
+→ lovelace/config {url_path:"lovelace"} ← {views:[{title:"Legacy Default", cards:[]}]}   // same
+```
+
+Both reads return the **same dashboard**, because `websocket.py`'s handler is
+`dashboards.get("lovelace") or dashboards[None]` ("when url_path is None,
+prefer the 'lovelace' dashboard").
+
+**The bug.** `_alist_dashboards` listed the registry (yielding identity
+`"lovelace"`) *and then unconditionally probed `url_path=null`* (yielding
+identity `"default"`), so **one HA dashboard was adopted as two Hassle
+objects**. A pull writes two files with identical content; a push writes the
+same dashboard through two code paths; an edit to either silently changes the
+other — a direct I6 violation ("no local or UI edit is ever silently lost").
+
+**The same alias defeats the YAML-mode filter (I1).** With
+`lovelace: mode: yaml`, the default dashboard appears in `dashboards/list` as
+a `mode: "yaml"` item at `url_path: "lovelace"` (no `id` key), and
+`lovelace/config(url_path=null)` serves **ui-lovelace.yaml's content**:
+
+```jsonc
+→ lovelace/dashboards/list
+← [{url_path:"lovelace", title:"Overview", icon:"mdi:view-dashboard", mode:"yaml",
+    filename:"ui-lovelace.yaml", show_in_sidebar:true, require_admin:false},
+   {url_path:"yaml-extra", title:"YAML Extra", mode:"yaml", filename:"yaml-extra.yaml", …}]
+→ lovelace/config {url_path:null}
+← {title:"YAML Home", views:[{title:"YAML View", cards:[{type:"markdown", …}]}]}
+```
+
+`_alist_dashboards`'s `mode != "storage"` filter drops the registry item, but
+the separate default probe adopted the YAML content anyway — precisely the
+scenario design §2.2 item 8 feared. Mitigating fact, also captured: HA
+**refuses** the write, so Hassle could never actually clobber ui-lovelace.yaml
+—
+
+```jsonc
+→ lovelace/config/save {url_path:null, config:{…}}
+← {success:false, error:{code:"error", message:"Not supported"}}
+```
+
+— but adopting an unmanageable dashboard still breaks the pull→plan-noop
+invariant (§23) and fails every push with an opaque "Not supported".
+
+**How this was verified (it cannot be tested through the API — §39.11).**
+The migrated shape is not constructible by a test: `lovelace` is permanently
+uncreatable through `lovelace/dashboards/create`. So the bug was reproduced by
+hand, by driving HA into the migrated state and comparing the two code
+versions against it:
+
+1. `lovelace/config/save(url_path=null)` to seed a legacy `.storage/lovelace`;
+2. restart HA — `_async_migrate_default_config` runs, producing
+   `.storage/lovelace.lovelace` and the `url_path: "lovelace"` registry item;
+3. `DirectBackend.list_remote("dashboard")` on each version:
+
+```
+PRE-FIX  -> ['default', 'lovelace']      # same underlying config in both
+POST-FIX -> ['lovelace']
+```
+
+The standing regression is therefore the unit suite
+(`test_direct_backend_dashboards.py`), whose `_FakeClient` models HA's
+`dashboards.get("lovelace") or dashboards[None]` aliasing — all four §39.2/
+§39.3 tests fail against the pre-fix implementation.
+
+**Fix (implemented).** `_alist_dashboards` scans all items for
+`url_path == "lovelace"` **before** the mode filter and skips the default
+probe entirely when one exists; that item (already mode-filtered) *is* the
+default dashboard. A migrated default therefore adopts once, as the ordinary
+storage dashboard `"lovelace"`. With no such item — a pre-migration or older
+instance — the original §2.1 behavior is unchanged.
+
+Second-order fix: `_acreate_dashboard` for `meta is None` now checks the same
+marker and raises with a fix instruction. Without it, a bundle authored before
+the user's HA upgraded would still spell `@dashboard(default=True)`, its
+`config/save(url_path=null)` would write **through** to the `lovelace`
+dashboard, and — since `list_remote` reports that dashboard as `"lovelace"`
+and never as `"default"` — every push would re-plan the identical create
+forever.
+
+### 39.3 DB0: the `url_path` hyphen rule is real but **bypassable** — `allow_single_word: true` is a public create field
+
+> Live captures: `create_url_path_no_hyphen`,
+> `create_hyphenless_allow_single_word`, `list_after_hyphenless_create`.
+
+The hyphen rule itself is confirmed exactly as design §2.2 item 1 assumed:
+
+```jsonc
+→ lovelace/dashboards/create {url_path:"nohyphen", title:"No Hyphen", mode:"storage"}
+← {success:false, error:{code:"invalid_format",
+                         message:"Url path needs to contain a hyphen (-). Got {…}"}}
+```
+
+But `STORAGE_DASHBOARD_CREATE_FIELDS` (lovelace/const.py) also carries
+`vol.Optional(CONF_ALLOW_SINGLE_WORD): bool`, and it is honored on the public
+WS command:
+
+```jsonc
+→ lovelace/dashboards/create {url_path:"default", title:"Literally Default",
+                              mode:"storage", allow_single_word:true}
+← {id:"default", url_path:"default", title:"Literally Default", mode:"storage",
+   show_in_sidebar:true, require_admin:false}
+```
+
+So **dashboards-design.md §3.1's "the `default` sentinel is collision-free by
+construction" does not hold** — a real dashboard can sit at the literal
+`url_path: "default"` and share Hassle's reserved identity. HA's own migration
+(§39.2) uses this same flag, so it is not a theoretical path.
+
+`_alist_dashboards` now raises a clear, actionable error rather than letting
+two dashboards quietly collapse into one object key. It is deliberately *not*
+a silent rename: an identity change would move the object's manifest entry and
+its source file, which is the user's call, not Hassle's.
+
+### 39.4 DB0: the Lovelace config store is **byte-verbatim** — confirmed, including key order
+
+> Live captures: `config_save_opaque`, `config_get_opaque`,
+> `config_opacity_verdict`.
+
+Design §2.2 item 2's central assumption is confirmed. A config carrying legacy
+actions, unknown keys at every level, both badge shapes, and deliberately
+odd-ordered keys came back **deep-equal AND with `json.dumps` byte-identical
+key order**:
+
+```jsonc
+{"views":[{"title":"Opaque","path":"opaque",
+           "zzz_unknown_view_key":{"nested":[1,2,{"deep":null}]},
+           "cards":[{"type":"tile","entity":"light.kitchen",
+                     "tap_action":{"action":"call-service","service":"light.turn_on"},
+                     "zzz_unknown_card_key":"kept?"},
+                    {"type":"custom:bubble-card","b":2,"a":1,"nested":{"z":1,"a":2}}],
+           "badges":["light.kitchen",{"type":"entity","entity":"light.kitchen"}]},
+          {"title":"No type key","cards":[]}],
+ "zzz_unknown_top_key":true}
+```
+
+Therefore, as §2.2 item 2 hoped: `normalize_ha` and `storage_canonical` stay
+**no-ops** for this kind, and **no per-kind canonical table entry is needed**.
+Specifically confirmed by the same round-trip:
+
+- a card's legacy `tap_action: {action: "call-service", service: ...}` survives
+  untouched — the `service:` → `action:` rewrite must never run on dashboard
+  bodies (§3.3), and now that is pinned against real HA, not just asserted;
+- a view with **no `type:` key** stays keyless (design §2.2 item 4 / §5.2's
+  `type=None` spelling is right for the masonry default);
+- **bare-string badges round-trip fine at the wire level** — HA stores them
+  verbatim. §39.0's `raw_view` escalation remains the correct decompiler
+  answer, since the gap is in `badge()`, not in HA.
+
+### 39.5 DB0: delete semantics — the config store goes too, and a recreate is a clean slate
+
+> Live captures: `delete_dashboard`, `config_after_delete`,
+> `recreate_same_url_path`, `config_after_recreate`.
+
+Design §2.2 item 3's "believed yes" is confirmed:
+
+```jsonc
+→ lovelace/dashboards/delete {dashboard_id:"db0_icon"}   ← null
+→ lovelace/config {url_path:"db0-icon"}
+← {success:false, error:{code:"config_not_found", message:"Unknown config specified: db0-icon"}}
+
+→ lovelace/dashboards/create {url_path:"db0-icon", title:"DB0 Recreated", mode:"storage"}
+← {id:"db0_icon", …}
+→ lovelace/config {url_path:"db0-icon"}
+← {success:false, error:{code:"config_not_found", message:"No config found."}}   // clean slate
+```
+
+No resurrection. Note the registry `id` is HA's slug of the `url_path`
+(`db0-icon` → `db0_icon`, `has-slash/x` → `has_slash_x`) — the same
+"creation derives identity from a slug" rule as §17.5's storage collections.
+
+### 39.6 DB0: `config_not_found` shapes, and the never-saved-config gap
+
+> Live captures: `fresh_instance_dashboards_list`,
+> `fresh_default_config_not_found`, `list_registry_never_saved_config`,
+> `create_duplicate_url_path`, `default_config_*`.
+
+- `dashboards/list` on a fresh instance returns **`[]`**, not an error
+  (§2.2 item 7 answered).
+- A never-customized default dashboard: `lovelace/config(url_path=null)` →
+  `{code: "config_not_found", message: "No config found."}`. Hassle omitting
+  it from `list_remote` is right (§2.1).
+- **The §2.2 item 9 gap is confirmed, and it is loud.** A registry item whose
+  config was never saved is invisible to `list_remote`, and a local
+  declaration at that `url_path` hits the duplicate check immediately:
+
+  ```jsonc
+  → lovelace/dashboards/create {url_path:"db0-icon", title:"Duplicate", mode:"storage"}
+  ← {success:false, error:{code:"home_assistant_error", translation_key:"url_already_exists",
+                           message:"The URL \"db0-icon\" is already in use. …"}}
+  ```
+
+  Note the code is **`home_assistant_error`**, not `invalid_format`. It is a
+  hard failure, never a silent double-create, so no product change is needed —
+  the user gets an error naming the URL and fixes it in the UI.
+- `lovelace/config/delete(url_path=null)` **succeeds on a never-saved default**
+  (idempotent, no error), and after it the default is `config_not_found`
+  again — `_adelete_dashboard`'s revert-to-auto-generated path is safe to
+  re-run.
+
+### 39.7 DB0: `url_path` has **no charset constraint** beyond the hyphen
+
+> Live capture: `create_url_path_charset_*`, `list_after_charset_probes`.
+
+Design §2.2 item 1 asked whether `url_path` is "slug-ish", because
+`hassle_cli.bundle_ops._dashboard_module_name` maps it to a filename. It is
+not. Every one of these was **accepted and stored verbatim**:
+
+| `url_path` sent | accepted | registry `id` HA derived |
+|---|---|---|
+| `Has-Upper` | ✅ | `has_upper` |
+| `has_underscore-x` | ✅ | `has_underscore_x` |
+| `has-space x` | ✅ | `has_space_x` |
+| `has-dot.x` | ✅ | `has_dot_x` |
+| `has-slash/x` | ✅ | `has_slash_x` |
+
+So `_dashboard_module_name`'s defensive sanitizing — dropping every character
+outside `[a-z0-9_]`, which makes `../../../tmp/pwned-x` unable to escape
+`dashboards/`, and falling back to `dashboard_<sha256[:8]>` for a degenerate
+result — is **load-bearing, not paranoia**. The reviewer's DB6 should-fix that
+added it was correct on the merits; this is the behavioral evidence.
+
+Two residual wrinkles, recorded rather than fixed (neither loses data):
+uppercase is *dropped* rather than lowercased (`Has-Upper` → `as_pper`), and
+two distinct `url_path`s can therefore module-safen to the same stem. Adoption
+is safe regardless, because `adopt_write` / `_merge_adopt_batch_into_existing`
+append to an existing file rather than clobbering it (dashboards-design.md §7).
+
+### 39.8 DB0: environment note — these captures ARE from `stable` (2026.7.4)
+
+§0's caveat ("verified on HA 2026.2.3, not 2026.7") **no longer applies to the
+dashboards findings above**. `pip install homeassistant` under **Python 3.14**
+yields HA **2026.7.4**, the real `stable`, which is what every §39.x capture
+came from. The full non-dashboard integration suite was re-run against it as
+well: **46 passed, 2 skipped**, i.e. §10's corrections and the §26/§38
+config-entry flow shapes all still hold on 2026.7.
+
+### 39.9 DB0: three DSL-shape questions, answered from the shipped frontend bundle
+
+> ⚠️ **Method note.** Unlike §39.1–§39.8, these three were *not* settled by a
+> wire capture: they are questions about what the **frontend** writes and
+> accepts, and the config store is byte-verbatim (§39.4), so HA's WS API
+> cannot answer them — it stores whatever it is handed. They were read out of
+> the `hass_frontend` bundle shipped with HA **2026.7.4**
+> (`hass_frontend/frontend_latest/*.js`), which is the authority on the
+> frontend's own schemas. Recorded as source-informed, one tier weaker than
+> the captures above.
+
+**1. `cond.not_` is a real Lovelace condition — CONFIRMED.** Design §5.4 left
+this open. The conditional-card editor's condition-type list is exactly:
+
+```js
+["location","numeric_state","state","screen","time","user","and","not","or"]
+```
+
+and the `not` editor's own empty value is `{condition: "not", conditions: []}`
+— i.e. the shape is `{condition: "not", conditions: [ ...nested... ]}`, the
+same `conditions:` container as `and`/`or`. That matches what
+`hassle.compiler.dashboards.conditions` already emits, so no change.
+
+**2. `energy_sankey`'s `title=` is real — CONFIRMED.** This was flagged in
+`compiler/dashboards/cards/energy.py`'s module docstring as "this batch's one
+unverified assumption". The card's frontend struct is:
+
+```js
+{type: enums("energy-sankey" | "water-flow-sankey"),
+ title: optional(string()),
+ collection_key: optional(string()),
+ layout: optional(enums("auto" | "vertical" | "horizontal")),
+ group_by_floor: optional(boolean()),
+ group_by_area: optional(boolean())}
+```
+
+So `title=` is right. The same schema also shows **three options Hassle does
+not model** — `layout`, `group_by_floor`, `group_by_area`. They round-trip
+losslessly through `extra=` today (I3), so nothing is lost; promoting them to
+typed kwargs is an ordinary additive follow-on, noted here rather than done,
+since it is a DSL-surface change and not a DB0 correctness item.
+
+**3. View `type` materialization (design §2.2 item 4) — both shapes are
+current.** The frontend's `getViewType` is `config.type ?? (config.panel ?
+"panel" : (config.sections ? "sections" : "masonry"))` — an explicit fallback
+chain, so **an absent `type:` key is a supported, non-legacy way to spell
+masonry**, and the modern sections views the UI generates carry
+`type: "sections"` explicitly. §5.2's `type=None` spelling (no key emitted)
+is therefore correct for the masonry case and the fixtures' mix of both shapes
+is faithful. §39.4 separately confirms at the wire level that a keyless view
+survives a save/read round-trip keyless.
+
+### 39.10 DB0 acceptance run — and a Hassle bug it found (`hassle test` resolves the bundle one level too high)
+
+The design §12.1 acceptance loop was run end-to-end against the live HA
+2026.7.4. **Scope note (corrected after review):** the instance HAD been
+through the §39.2 migration earlier in the session, but its `lovelace`
+dashboard was deleted by the integration suite's `ha` fixture before this run,
+so the loop below exercised an ordinary dashboard (`db0-climate`), NOT the
+migrated-default path. The §39.2 fix was verified separately — see that
+section's "verified by hand" note — and its regression lives at the unit
+level, because §39.11 makes the migrated shape impossible to construct
+through the API from a test.
+
+| Step | Result |
+|---|---|
+| `hassle pull` (fresh bundle) | ✅ adopted `dashboard:db0-climate` into `dashboards/db0_climate.py`, fully typed — `view(type=None, ...)`, `c.thermostat`, `c.tile(..., tap_action={"action": "call-service", ...})`, entity refs resolved to `e.climate.living_room` |
+| second `hassle pull` | ✅ `pull: nothing to merge` (byte-stable) |
+| `hassle plan` | ✅ `no changes` |
+| edit in HA (`config/save`, exactly what the UI does), then `hassle pull` | ✅ `refresh dashboard:db0-climate` — the new markdown card was **spliced into** the existing Python, decorator and prior cards preserved (I6) |
+| edit the Python: a `sections` view whose tiles come from a compile-time `for` | ✅ |
+| `hassle test` | ✅ 4 assertions over **compiled IR** (I5) — but see the bug below |
+| `hassle plan` | ✅ exactly one row: `update dashboard:db0-climate` |
+| `hassle push` | ✅ `applied 1 change(s)` |
+| verify in HA | ✅ stored config carries the generated tiles, the legacy `service:` key verbatim, `type: "sections"` on the new view and **no `type` key** on the masonry one |
+| `hassle plan` / `hassle pull` after the push | ✅ both NOOP — convergence holds (§23's invariant) |
+
+**Bug found (NOT a dashboards bug — filed separately, do not fold into the
+dashboards PR).** `hassle test` could not run at all in a bundle scaffolded by
+`hassle init`:
+
+- `hassle.testing.plugin._bundle_dir_for` defaults to
+  `Path(request.config.rootpath).parent` — "one level above pytest's rootdir",
+  which is only correct when pytest's rootdir *is* the bundle's `tests/`
+  directory. `hassle test`'s docstring says exactly this and runs pytest with
+  `cwd=<bundle>/tests` to arrange it.
+- But rootdir is not the cwd: pytest walks **upward** for a config anchor, and
+  `hassle init` scaffolds a **`pyproject.toml` at the bundle root**. Current
+  pytest (9.1.1) selects it (`configfile: pyproject.toml`), so rootdir is the
+  **bundle root**, and `.parent` is the bundle's **parent directory**.
+- Consequence: `simulate()` compiles the parent directory, so `compile_bundle`
+  imports — and therefore **executes** — arbitrary sibling `.py` files that
+  have nothing to do with the bundle. Observed directly: unrelated scripts
+  sitting next to the bundle ran during `hassle test`.
+
+Workaround used for the acceptance run: the supported
+`@pytest.mark.hassle_bundle(<path>)` escape hatch. (It also emits
+`PytestUnknownMarkWarning` — the marker is never registered via
+`pytest_configure`, a second small gap.) The real fix belongs on its own
+`fix/` branch: resolve the bundle by walking up from the test file for
+`hassle.toml` (the same discovery `_bundle_root_or_fail` already does) instead
+of inferring it from pytest's rootdir, and register the marker.
+
+### 39.11 DB0 (review round): `lovelace` can never be CREATED through the public API
+
+> Live capture: reproduced against HA 2026.7.4 while writing §39.2's
+> regression — `lovelace/dashboards/create` with `url_path: "lovelace"`
+> returns `home_assistant_error` / `url_already_exists` even on an instance
+> where `dashboards/list` is empty.
+
+Found while trying to write a live regression for §39.2: the migrated shape
+cannot be constructed by a test, because **`DashboardsCollection._process_create_data`
+has two independent gates**, and the second one can never be satisfied for
+this url_path:
+
+```python
+allow_single_word = data.pop(CONF_ALLOW_SINGLE_WORD, False)
+if not allow_single_word and "-" not in url_path:
+    raise vol.Invalid("Url path needs to contain a hyphen (-)")
+if async_panel_exists(self.hass, url_path):
+    raise HomeAssistantError(translation_key="url_already_exists", ...)
+```
+
+- Gate 1 (the hyphen rule) IS bypassable with `allow_single_word: True` — that
+  is exactly how `_async_migrate_default_config` creates the item.
+- Gate 2 is not. `_async_ensure_default_panel` runs at every startup and
+  guarantees a panel is registered at `lovelace`, so `async_panel_exists` is
+  always true for it. HA's own migration only succeeds because it runs
+  **before** that call (`__init__.py`: migration at line 296,
+  `_async_ensure_default_panel` at line 299).
+
+Confirmed empirically — with `allow_single_word: True` the error simply moves
+from gate 1 to gate 2:
+
+```jsonc
+→ lovelace/dashboards/create {url_path:"lovelace", title:"Overview", mode:"storage"}
+← {code:"invalid_format", message:"Url path needs to contain a hyphen (-). …"}
+
+→ …same, plus allow_single_word:true      // on an instance with an EMPTY registry
+← {code:"home_assistant_error", translation_key:"url_already_exists",
+   message:"The URL \"lovelace\" is already in use. Please choose a different one"}
+```
+
+**Consequences, implemented:**
+
+- Hassle **can adopt and update** the `lovelace` dashboard, and **never
+  creates** it. `DirectBackend._acreate_dashboard` refuses that `url_path`
+  up-front with an explanation, rather than surfacing HA's `url_already_exists`
+  for a dashboard `list_remote` just reported absent.
+- The DSL's hyphen rule now **exempts `lovelace`**
+  (`compiler/dashboards/decorators.HA_DEFAULT_DASHBOARD_URL_PATH`). This is
+  required, not cosmetic: after §39.2's fix the `lovelace` registry item is the
+  only representation a migrated instance's default dashboard has, and the
+  decompiler emits `@dashboard(url_path="lovelace")` for it. Without the
+  exemption every migrated instance would pull a bundle that cannot compile.
+  The rule is unchanged for every other hyphen-less `url_path`.
+- **Deleting it is IRREVERSIBLE.** Nothing can put it back, so this is the one
+  object in the system whose delete cannot be undone by Hassle. The plan
+  enumerates dashboard deletes loudly and the user confirms them, so the
+  product behavior is unchanged — but the integration suite's `ha` fixture,
+  which wipes every object of every kind before and after each test, now
+  **excludes** it (`tests/integration/conftest.py::_UNDELETABLE`). Without that
+  exclusion, the first run of this suite against a non-disposable instance
+  would silently destroy the operator's real default dashboard. This was
+  observed for real during DB0, on the throwaway instance.
+- **Residual gap, recorded not fixed:** a bundle carrying an adopted
+  `lovelace` dashboard cannot be pushed onto a *different* HA that has not been
+  through the migration — there is no API to create it there. The error says
+  so and tells the user to customise that instance's default dashboard once in
+  the UI and re-pull. Making this seamless would mean writing through
+  `config/save(url_path=null)` on an instance with no `lovelace` item, which is
+  a genuinely different object; Hassle does not guess between them.
+
+### 39.12 DB0 (real-instance finding): the hyphen rule is HA's CREATE validation, not a property of a valid dashboard — enforcing it at compile time was a bug
+
+> Found by pulling a **real household** (8 storage-mode dashboards) rather than
+> a test instance. This is exactly the class of thing the hand-built fixture
+> corpus could not surface, and it is the strongest argument for the corpus
+> enrichment DB0 left open.
+
+`hassle pull` aborted outright, refusing to write any of the eight files:
+
+```
+hassle pull: the bundle content about to be written to [dashboards/…, dashboards/map.py, …]
+does not compile (DashboardUrlPathError: `@dashboard(url_path='map')` … has no hyphen in its
+`url_path`. …) -- object(s): dashboard:dashboard-climate, …, dashboard:map, …
+This is a bug in Hassle's decompiler, not a mistake in your HA configuration.
+```
+
+The instance's registry:
+
+```jsonc
+{url_path:"map",                 mode:"storage", title:"Map"}          // <-- no hyphen
+{url_path:"dashboard-home",      mode:"storage", title:"Home"}
+{url_path:"dashboard-lights",    mode:"storage", title:"Lights"}
+… five more, all hyphenated …
+```
+
+**`map` is created by HA itself**, at onboarding
+(`lovelace/__init__.py`'s `_create_map_dashboard`, registered via
+`onboarding.async_add_listener`), the same way `lovelace` is created by the
+default-dashboard migration (§39.2) — both with `allow_single_word: True`.
+So §39.11's framing was too narrow: `lovelace` is not a special case, it is
+one instance of a general rule.
+
+**The general rule.** HA's hyphen requirement lives in
+`DashboardsCollection._process_create_data` — it is **create-time validation on
+the collection**, not an invariant of stored dashboards. HA exempts itself
+whenever it wants. Any `url_path` HA actually has is legitimate.
+
+**Why enforcing it at compile time was a bug**, not merely inconvenient: the
+decompiler emitted `@dashboard(url_path="map")` and the compiler then refused
+its own output. That is a direct **I3 violation** — `compile(decompile(x)) == x`
+must hold for ANY config — and it failed closed across the whole pull, so seven
+perfectly fine dashboards were unwritable because of the eighth. The error even
+asserted "no dashboard with this `url_path` can exist to push to", which the
+instance disproves.
+
+**Fix.** The hyphen check is removed from `_check_identity` entirely (the
+`DashboardUrlPathError` "hyphen" branch and its fixture/snapshot are gone with
+it), and the earlier `lovelace`-only exemption is retired as whack-a-mole. The
+rule is enforced where HA actually applies it — CREATE, in
+`DirectBackend._acreate_dashboard` and `FakeBackend._create_dashboard`, which
+mirror HA's own rejection. `FakeBackend` no longer exempts `lovelace` either,
+since §39.11 established HA refuses to create that one too.
+
+**Accepted UX consequence, recorded deliberately:** a hand-authored NEW
+dashboard with a hyphen-less `url_path` is no longer caught offline at compile
+time; it fails at push with HA's own reason. That is the honest trade — the
+compile-time check was rejecting valid, existing configurations to catch a
+mistake the backend already catches truthfully. A tier-1 `hassle validate`
+WARNING (not an error) for a hyphen-less `url_path` that is not already present
+remotely would restore the teaching without re-breaking adoption; noted as a
+follow-on, not done here.

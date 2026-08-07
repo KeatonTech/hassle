@@ -239,7 +239,18 @@ def login(url: str, token: str) -> None:
 
 @main.command()
 @click.option("--allow-dirty", is_flag=True, default=False)
-def pull(allow_dirty: bool) -> None:
+@click.option(
+    "--skip-kind",
+    "skip_kind",
+    multiple=True,
+    help=(
+        "Exclude an object kind from THIS run (repeatable), e.g. "
+        "`--skip-kind dashboard`. Unlike hassle.toml's `ignore` globs the "
+        "object stays managed: its manifest entry is preserved and the next "
+        "run without the flag is unaffected."
+    ),
+)
+def pull(allow_dirty: bool, skip_kind: tuple[str, ...]) -> None:
     """Merge UI-side edits into the working tree (never writes to HA)."""
     from hassle.ir.keys import OBJECT_KINDS
     from hassle.sync.plan import compute_plan
@@ -426,6 +437,13 @@ def pull(allow_dirty: bool) -> None:
             ]
         }
     )
+
+    plan, skipped_keys = _apply_skip_kinds(plan, skip_kind, console, command="pull")
+    for skipped in skipped_keys:
+        console.print(
+            f"[dim]hassle pull: skipped {skipped} (--skip-kind); still managed, "
+            "manifest untouched.[/dim]"
+        )
 
     # A mixed-kind category file that used to be shared by objects of
     # different category-registry scopes may have split this pull, if
@@ -712,32 +730,79 @@ def _build_plan_with_compile_result(root: Path):
     return the_plan, compile_result
 
 
-def _build_plan(root: Path):
+def _apply_skip_kinds(the_plan, skip_kind, console, *, command: str):
+    """Drop `--skip-kind` kinds from a computed plan (hassle_cli.skip_kind).
+
+    Filters PLAN ENTRIES, never the manifest: `_advance_manifest` starts from
+    the full manifest and rewrites only keys present in the plan, so a skipped
+    object keeps its sync base by construction. An unknown kind aborts here --
+    silently skipping nothing would look like the flag worked.
+    """
+    from hassle_cli.skip_kind import drop_skipped_kinds, parse_skip_kinds
+
+    if not skip_kind:
+        return the_plan, []
+    try:
+        kinds = parse_skip_kinds(skip_kind)
+    except ValueError as exc:
+        console.print(f"[red]hassle {command}: {_esc(str(exc))}[/red]")
+        raise SystemExit(1) from exc
+    result = drop_skipped_kinds(the_plan, kinds)
+    return result.plan, result.skipped_keys
+
+
+def _build_plan(root: Path, skip_kind: tuple[str, ...] = (), console=None):
     the_plan, _compile_result = _build_plan_with_compile_result(root)
+    if skip_kind:
+        the_plan, _ = _apply_skip_kinds(
+            the_plan, skip_kind, console or get_console(), command="plan"
+        )
     return the_plan
 
 
 @main.command()
+@click.option(
+    "--skip-kind",
+    "skip_kind",
+    multiple=True,
+    help=(
+        "Exclude an object kind from THIS run (repeatable), e.g. "
+        "`--skip-kind dashboard`. Unlike hassle.toml's `ignore` globs the "
+        "object stays managed: its manifest entry is preserved and the next "
+        "run without the flag is unaffected."
+    ),
+)
 @click.pass_context
-def plan(ctx: click.Context) -> None:
+def plan(ctx: click.Context, skip_kind: tuple[str, ...]) -> None:
     """Preview the three-way sync plan (DESIGN §8.2)."""
     from hassle_cli.plan_render import render_plan
 
     root = _bundle_root_or_fail()
-    the_plan = _build_plan(root)
     console = get_console(force_plain=ctx.obj.get("plain", False))
+    the_plan = _build_plan(root, skip_kind, console)
     render_plan(console, the_plan)
 
 
 @main.command()
+@click.option(
+    "--skip-kind",
+    "skip_kind",
+    multiple=True,
+    help=(
+        "Exclude an object kind from THIS run (repeatable), e.g. "
+        "`--skip-kind dashboard`. Unlike hassle.toml's `ignore` globs the "
+        "object stays managed: its manifest entry is preserved and the next "
+        "run without the flag is unaffected."
+    ),
+)
 @click.pass_context
-def status(ctx: click.Context) -> None:
+def status(ctx: click.Context, skip_kind: tuple[str, ...]) -> None:
     """Plan preview + git status in one view (DESIGN §8.4)."""
     from hassle_cli.plan_render import render_plan
 
     root = _bundle_root_or_fail()
-    the_plan = _build_plan(root)
     console = get_console(force_plain=ctx.obj.get("plain", False))
+    the_plan = _build_plan(root, skip_kind, console)
     render_plan(console, the_plan)
     if git_support.is_git_repo(root):
         result = subprocess.run(
@@ -781,9 +846,24 @@ def _interactive() -> bool:
     multiple=True,
     help="Object key(s) to resolve using the remote version.",
 )
+@click.option(
+    "--skip-kind",
+    "skip_kind",
+    multiple=True,
+    help=(
+        "Exclude an object kind from THIS run (repeatable), e.g. "
+        "`--skip-kind dashboard`. Unlike hassle.toml's `ignore` globs the "
+        "object stays managed: its manifest entry is preserved and the next "
+        "run without the flag is unaffected."
+    ),
+)
 @click.pass_context
 def push(
-    ctx: click.Context, yes: bool, accept_local: tuple[str, ...], accept_remote: tuple[str, ...]
+    ctx: click.Context,
+    yes: bool,
+    accept_local: tuple[str, ...],
+    accept_remote: tuple[str, ...],
+    skip_kind: tuple[str, ...],
 ) -> None:
     """Plan, confirm, and apply to HA (DESIGN §8.2)."""
     from hassle.sync.apply import apply_plan
@@ -800,6 +880,12 @@ def push(
             the_plan, compile_result = _build_plan_with_compile_result(root)
     else:
         the_plan, compile_result = _build_plan_with_compile_result(root)
+    the_plan, skipped_keys = _apply_skip_kinds(the_plan, skip_kind, console, command="push")
+    for skipped in skipped_keys:
+        console.print(
+            f"[dim]hassle push: skipped {skipped} (--skip-kind); still managed, "
+            "manifest untouched.[/dim]"
+        )
     # `category_overrides` (bundle-relative source path -> exact display
     # name) from every file's `CATEGORY` global that actually
     # slugifies to its own file stem; a mismatched file's global is left out
@@ -1001,8 +1087,18 @@ def push(
     default=False,
     help="Emit findings as JSON (the VS Code extension's Problems-pane contract).",
 )
-def validate(as_json: bool) -> None:
-    """Compile + validate the bundle offline (DESIGN §9 tiers 1-3).
+@click.option(
+    "--live",
+    is_flag=True,
+    default=False,
+    help=(
+        "Also run HA's server-side validate_config for automations (DESIGN §9 tier 4); "
+        "notes that dashboards have no server-side validation tier."
+    ),
+)
+def validate(as_json: bool, live: bool) -> None:
+    """Compile + validate the bundle offline (DESIGN §9 tiers 1-3), or (--live)
+    also against real HA (tier 4).
 
     ``--json`` prints exactly one JSON object on stdout --
     ``{"findings": [{code, severity, file, line, message, fix}, ...]}`` --
@@ -1011,6 +1107,14 @@ def validate(as_json: bool) -> None:
     `hassle_cli.tests.test_cli_commands::test_validate_json_reports_findings_with_stable_schema`
     and the VS Code extension's `findingsSchema.ts` both snapshot-test --
     field-for-field, it mirrors `hassle.registry.finding.Finding`.
+
+    ``--live`` additionally connects to the bundle's configured HA instance and
+    runs HA's own `validate_config` against every automation (the one kind that
+    command actually validates, docs/internals/ha-api-notes.md §6). Dashboards
+    have no server-side validation tier at all (HA exposes no
+    `validate_config` analogue for Lovelace, docs/internals/dashboards-design.md
+    §8) -- rather than silently skipping them, `--live` prints one notice
+    saying so, once per run, never once per dashboard.
     """
     from hassle.compiler.bundle import compile_bundle
     from hassle.compiler.errors import CompileError
@@ -1046,6 +1150,24 @@ def validate(as_json: bool) -> None:
         )
         if not as_json:
             console.print(f"[yellow]{skip_notice}[/yellow]")
+
+    if live:
+        from hassle_cli import backend_factory
+        from hassle_cli.commands.validate_live_command import (
+            DASHBOARD_LIVE_TIER_NOTICE,
+            has_dashboard_objects,
+            live_validate_automations,
+        )
+
+        ha_url, token = _require_backend_config(root)
+        with backend_factory.connect(ha_url, token) as backend:
+            findings = findings + live_validate_automations(backend, result)
+        # Once per run, never once per dashboard (dashboards-design.md §8):
+        # HA has no server-side validation tier for Lovelace at all, so this
+        # is the ONE place that gets said explicitly rather than dashboards
+        # silently passing a check that never actually ran for them.
+        if not as_json and has_dashboard_objects(result):
+            console.print(f"[yellow]{DASHBOARD_LIVE_TIER_NOTICE}[/yellow]")
 
     if as_json:
         import json as _json
@@ -1141,10 +1263,11 @@ def fmt() -> None:
     help="Refresh the registry snapshot first (needs a connection).",
 )
 def stubs(refresh: bool) -> None:
-    """Generate `typings/hassle/registry/__init__.pyi` AND
-    `typings/hassle/services.pyi` from the registry snapshot (DESIGN §11).
+    """Generate `typings/hassle/registry/__init__.pyi`,
+    `typings/hassle/services.pyi`, `typings/hassle/__init__.pyi`, AND
+    `typings/hassle/cards.pyi` from the registry snapshot (DESIGN §11).
 
-    See docs/internals/cli.md for why there are three generated stub files
+    See docs/internals/cli.md for why there are multiple generated stub files
     and the path history behind where they live; and docs/internals/ha-api-notes.md.
     """
     from hassle.registry.snapshot import RegistrySnapshot
@@ -1171,6 +1294,55 @@ def stubs(refresh: bool) -> None:
     console.print(f"[green]hassle stubs: wrote {_esc(out_path.relative_to(root))}[/green]")
 
 
+def _generate_cards_reexport_stub() -> str:
+    """Generate ``typings/hassle/cards.pyi``: a re-export of every
+    ``hassle.cards.__all__`` name from its TRUE defining module (mirrors
+    ``hassle.registry.stubs.generate_hassle_reexport_stub``, same underlying
+    reason -- see that function's docstring).
+
+    ``hassle.cards`` is a fully static, already-typed module --
+    docs/internals/dashboards-design.md §10 originally read that as "nothing
+    to generate" for it. That was wrong in the same way an ABSENT
+    ``typings/hassle/__init__.pyi`` would be: once ANY stub file exists under
+    ``typings/hassle/`` (``__init__.pyi``, ``services.pyi``,
+    ``registry/__init__.pyi`` -- all three always written together), pyright
+    treats ``typings/hassle`` as a COMPLETE stub package for that dotted
+    path, so ``hassle.cards`` -- a real submodule with no stub of its own --
+    becomes an unresolvable "unknown import symbol" in any bundle file doing
+    ``from hassle import cards as c``, even though the real module is fully
+    typed and needs no generated types at all (discovered via
+    ``packages/hassle-dev/tests/test_annotation_truth_pyright_gate.py``'s
+    real pyright run over the acceptance sample bundle once it gained a
+    dashboard). Re-exporting straight through is the fix.
+
+    Lives in `hassle_cli` (not alongside `generate_hassle_reexport_stub` in
+    `hassle.registry.stubs`) because it must ``import hassle.cards`` --
+    something ``hassle.registry`` itself may never do
+    (`tests/test_package_layering.py`: ``hassle.cards`` depends on
+    ``hassle.registry``, not the reverse). The shared true-defining-module
+    resolution logic is reused from there
+    (``generate_reexport_stub_lines``, generic over any module object) so
+    this can never independently drift from how the top-level stub resolves
+    the same question.
+    """
+    import hassle.cards as cards_module
+    from hassle.registry.stubs import generate_reexport_stub_lines
+
+    return generate_reexport_stub_lines(
+        cards_module,
+        list(cards_module.__all__),
+        doc_lines=[
+            '"""Generated by `hassle stubs`. Do not edit by hand.',
+            "",
+            "`hassle.cards` is fully static/typed source (dashboards-design.md §10), but",
+            "still needs a stub HERE: once any `typings/hassle/` stub exists, pyright",
+            "treats the whole `hassle` dotted path as a complete stub package, and an",
+            'un-stubbed real submodule becomes "unknown import symbol" -- see',
+            '`_generate_cards_reexport_stub`\'s docstring (hassle_cli.cli)."""',
+        ],
+    )
+
+
 def _write_if_changed(path: Path, content: str) -> bool:
     """Write `content` to `path` only if it differs (write-if-changed, the
     same convention `_write_registry_snapshot` uses) -- returns whether the
@@ -1184,20 +1356,24 @@ def _write_if_changed(path: Path, content: str) -> bool:
 
 def _write_stub_if_changed(snapshot: object, root: Path) -> Path:
     """Generate `typings/hassle/registry/__init__.pyi` (entity stub),
-    `typings/hassle/services.pyi` (typed service namespaces), AND
+    `typings/hassle/services.pyi` (typed service namespaces),
     `typings/hassle/__init__.pyi` (a re-export of every `hassle.__all__` name
     from its true defining module -- guards against pyright treating
     `hassle` as a namespace/partial stub package once submodule stubs exist
     for it, which would otherwise hide the real package's own top-level
-    surface) from `snapshot`, each write-if-changed (the same convention
-    `_write_registry_snapshot` uses for `.hassle/registry.json`, so an
-    unchanged registry never dirties the tree / rewrites any of the files).
+    surface), AND `typings/hassle/cards.pyi` (the same re-export guard,
+    applied to `hassle.cards.__all__` -- dashboards-design.md §10's "nothing
+    to generate" turned out to be one stub short of true: see
+    `generate_cards_reexport_stub`'s docstring) from `snapshot`, each
+    write-if-changed (the same convention `_write_registry_snapshot` uses
+    for `.hassle/registry.json`, so an unchanged registry never dirties the
+    tree / rewrites any of the files).
 
     Shared by both `hassle stubs` (manual refresh) and `hassle pull`
     (automatic, every pull) so the two commands can never disagree on what
     "the stubs for this snapshot" look like. Returns the entities stub's
-    path (the caller's printed "wrote ..." message anchor) -- the other two
-    are written alongside it as a side effect. See docs/internals/cli.md.
+    path (the caller's printed "wrote ..." message anchor) -- the other
+    three are written alongside it as a side effect. See docs/internals/cli.md.
     """
     from hassle.registry.stubs import (
         generate_entities_stub,
@@ -1214,23 +1390,28 @@ def _write_stub_if_changed(snapshot: object, root: Path) -> Path:
     services_path = root / "typings" / "hassle" / "services.pyi"
     _write_if_changed(services_path, services_text)
 
-    # The re-export stub is a pure function of `hassle.__all__` (no snapshot
-    # input at all) -- but still write-if-changed, keyed to whatever this
-    # installed `hassle-core` version's surface currently is, so it stays in
-    # lockstep with the running toolchain across an upgrade.
+    # The re-export stubs are pure functions of `hassle.__all__`/
+    # `hassle.cards.__all__` (no snapshot input at all) -- but still
+    # write-if-changed, keyed to whatever this installed `hassle-core`
+    # version's surface currently is, so they stay in lockstep with the
+    # running toolchain across an upgrade.
     reexport_text = generate_hassle_reexport_stub()
     reexport_path = root / "typings" / "hassle" / "__init__.pyi"
     _write_if_changed(reexport_path, reexport_text)
+
+    cards_reexport_text = _generate_cards_reexport_stub()
+    cards_reexport_path = root / "typings" / "hassle" / "cards.pyi"
+    _write_if_changed(cards_reexport_path, cards_reexport_text)
 
     return out_path
 
 
 def _stub_changed(snapshot: object, root: Path) -> bool:
-    """Whether writing any of the three stubs (entities, services, or the
-    top-level re-export) for `snapshot` would change a file on disk (checked
-    BEFORE writing, so `pull` can print its step line only when something
-    actually changed -- matching `_write_registry_snapshot`'s write-if-changed
-    convention)."""
+    """Whether writing any of the four stubs (entities, services, the
+    top-level re-export, or the `hassle.cards` re-export) for `snapshot`
+    would change a file on disk (checked BEFORE writing, so `pull` can print
+    its step line only when something actually changed -- matching
+    `_write_registry_snapshot`'s write-if-changed convention)."""
     from hassle.registry.stubs import (
         generate_entities_stub,
         generate_hassle_reexport_stub,
@@ -1254,7 +1435,14 @@ def _stub_changed(snapshot: object, root: Path) -> bool:
     reexport_changed = not (
         reexport_path.is_file() and reexport_path.read_text(encoding="utf-8") == reexport_text
     )
-    return entities_changed or services_changed or reexport_changed
+
+    cards_reexport_text = _generate_cards_reexport_stub()
+    cards_reexport_path = root / "typings" / "hassle" / "cards.pyi"
+    cards_reexport_changed = not (
+        cards_reexport_path.is_file()
+        and cards_reexport_path.read_text(encoding="utf-8") == cards_reexport_text
+    )
+    return entities_changed or services_changed or reexport_changed or cards_reexport_changed
 
 
 def _write_registry_snapshot(backend: object, root: Path):

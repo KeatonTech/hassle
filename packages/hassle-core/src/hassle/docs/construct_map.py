@@ -185,6 +185,27 @@ NAME_TO_CASES: dict[str, list[str]] = {
     "raw_trigger": ["raw_passthrough"],
     "raw_condition": ["raw_passthrough"],
     "raw_action": ["raw_passthrough"],
+    # dashboards -- the eight STRUCTURAL names (card builders live in the
+    # `hassle.cards` namespace, not in `hassle.__all__`; see
+    # docs/internals/dashboards-design.md §5.1)
+    "dashboard": [
+        "dashboard_minimal_sections",
+        "dashboard_compile_time_loop",
+        "dashboard_default",
+        "dashboard_two_in_one_module",
+    ],
+    "raw_dashboard": ["dashboard_raw_dashboard"],
+    "view": [
+        "dashboard_minimal_sections",
+        "dashboard_masonry",
+        "dashboard_panel",
+        "dashboard_sidebar",
+    ],
+    "section": ["dashboard_minimal_sections", "dashboard_visibility"],
+    "badge": ["dashboard_badges"],
+    "raw_card": ["dashboard_raw_ladder", "dashboard_compile_time_loop"],
+    "raw_section": ["dashboard_raw_ladder"],
+    "raw_view": ["dashboard_raw_ladder"],
 }
 
 
@@ -192,3 +213,86 @@ def missing_names(all_names: list[str]) -> set[str]:
     """Names in ``all_names`` with neither a golden-case mapping nor an
     exemption -- the docs coverage gate."""
     return {name for name in all_names if name not in NAME_TO_CASES and name not in EXEMPT_NAMES}
+
+
+# ---------------------------------------------------------------------------
+# Card reference: `hassle.cards` builder (type string) -> [golden case names].
+#
+# Keyed by the stored HA `type` string (`CARD_REGISTRY`'s own key), curated by
+# hand for the same review-ability reason as `NAME_TO_CASES` above. Every card
+# builder DB3 registered (docs/internals/dashboards-design.md §6.1.1's F5
+# freeze) gets its own DSL<->compiled-JSON pair section in `docs/DSL.md`'s
+# card reference, sourced from the SAME `fixtures/dsl/dashboard_cards_*`
+# golden fixtures `hassle-dev goldens` already verifies -- never a hand-written
+# example that could drift from what the compiler actually emits.
+# ``test_card_type_to_cases_only_references_real_fixture_dirs`` pins that every
+# case here is real; ``missing_card_types`` is this table's own coverage gate,
+# mirroring ``missing_names`` above.
+# ---------------------------------------------------------------------------
+
+CARD_TYPE_TO_CASES: dict[str, list[str]] = {
+    # display family
+    "entities": ["dashboard_cards_display_entities"],
+    "glance": ["dashboard_cards_display_glance"],
+    "tile": ["dashboard_cards_display_tile"],
+    "entity": ["dashboard_cards_display_entity"],
+    "button": ["dashboard_cards_display_button", "dashboard_cards_display_extra_roundtrip"],
+    "heading": ["dashboard_cards_display_heading"],
+    # domain family (one usage of every builder in one golden case, §6.1.1)
+    "alarm-panel": ["dashboard_cards_domain"],
+    "area": ["dashboard_cards_domain"],
+    "light": ["dashboard_cards_domain", "dashboard_cards_domain_extra"],
+    "thermostat": ["dashboard_cards_domain", "dashboard_compile_time_loop"],
+    "humidifier": ["dashboard_cards_domain"],
+    "media-control": ["dashboard_cards_domain"],
+    "plant-status": ["dashboard_cards_domain"],
+    "todo-list": ["dashboard_cards_domain"],
+    "shopping-list": ["dashboard_cards_domain"],
+    "weather-forecast": ["dashboard_cards_domain"],
+    # energy family (all 12 built-in Energy cards in one golden case)
+    "energy-date-selection": ["dashboard_cards_energy"],
+    "energy-usage-graph": ["dashboard_cards_energy"],
+    "energy-solar-graph": ["dashboard_cards_energy"],
+    "energy-gas-graph": ["dashboard_cards_energy"],
+    "energy-water-graph": ["dashboard_cards_energy"],
+    "energy-distribution": ["dashboard_cards_energy"],
+    "energy-sources-table": ["dashboard_cards_energy"],
+    "energy-grid-neutrality-gauge": ["dashboard_cards_energy"],
+    "energy-solar-consumed-gauge": ["dashboard_cards_energy"],
+    "energy-carbon-consumed-gauge": ["dashboard_cards_energy"],
+    "energy-self-sufficiency-gauge": ["dashboard_cards_energy"],
+    "energy-sankey": ["dashboard_cards_energy"],
+    # layout / container family
+    "vertical-stack": ["dashboard_cards_layout_vertical_stack"],
+    "horizontal-stack": ["dashboard_cards_layout_horizontal_stack"],
+    "grid": ["dashboard_cards_layout_nested_stacks"],
+    "conditional": ["dashboard_cards_layout_conditional"],
+    "entity-filter": [
+        "dashboard_cards_layout_entity_filter_with_child",
+        "dashboard_cards_layout_entity_filter_without_child",
+    ],
+    # visual/history/text family
+    "gauge": ["dashboard_cards_visual", "dashboard_cards_visual_extra"],
+    "history-graph": ["dashboard_cards_visual"],
+    "statistics-graph": ["dashboard_cards_visual"],
+    "sensor": ["dashboard_cards_visual"],
+    "statistic": ["dashboard_cards_visual"],
+    "markdown": ["dashboard_cards_visual"],
+    "clock": ["dashboard_cards_visual"],
+    "calendar": ["dashboard_cards_visual"],
+    "logbook": ["dashboard_cards_visual"],
+    # media family
+    "iframe": ["dashboard_cards_media", "dashboard_cards_media_extra"],
+    "picture": ["dashboard_cards_media"],
+    "picture-glance": ["dashboard_cards_media"],
+    "picture-elements": ["dashboard_cards_media"],
+    "map": ["dashboard_cards_media"],
+}
+
+
+def missing_card_types(card_types: list[str]) -> set[str]:
+    """``card_types`` (normally ``list(CARD_REGISTRY)``) with no golden-case
+    mapping -- the card-reference docs coverage gate: a new built-in card
+    family registered without a `CARD_TYPE_TO_CASES` entry fails the docs
+    build instead of silently missing from `docs/DSL.md`."""
+    return {t for t in card_types if t not in CARD_TYPE_TO_CASES}

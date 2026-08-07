@@ -1,0 +1,1 @@
+A card was recorded directly in the `@dashboard` body at test_dashboard_errors.py:<line>. A dashboard stores its cards inside views, so a card at the top level has nowhere to be written. Fix: open a view first -- `with view(title="..."):` -- and record the card inside it (inside a `with section():` too, for the default `sections` view type).
