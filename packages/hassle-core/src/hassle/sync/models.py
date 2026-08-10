@@ -231,3 +231,8 @@ class ApplyResult(BaseModel):
     # surfaces the same conflict again rather than quietly resolving it.
     # Never affects `succeeded`/rollback for the object's own content update.
     category_conflicts: list[str] = []
+    # Additive (docs/internals/blueprints-design.md §4.3): the blueprint object
+    # keys an `automation.reload` was issued for, after their UPDATE, because
+    # the bundle declares live instances of them. Reported so the CLI can say
+    # so and the ordering tests can assert on it; never affects `succeeded`.
+    blueprint_reloads: list[str] = []

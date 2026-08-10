@@ -4366,3 +4366,40 @@ already-loaded instances on `blueprint/save` alone. This specific point was
 `hassle.sync.apply._reload_after_blueprint_update`; the owner will verify
 live. Either outcome is safe: if HA does re-expand on its own, the extra
 reload is redundant but harmless.
+
+### 40.5 Implementation finding: a blueprint update/delete cannot be rolled back
+
+Surfaced while implementing blueprints-design §4's "rollback must respect the
+same ordering in reverse", and **not anticipated by the design document** —
+flagged to the owner rather than worked around silently (CLAUDE.md's workflow
+rule).
+
+`hassle.sync.apply._rollback` restores each touched object from the snapshot
+`list_remote` returned before the write. For every other kind that snapshot is
+the full config body. For a blueprint it is **metadata only** (§40.2), so:
+
+- rolling back a blueprint **UPDATE** would need the document HA held *before*
+  the save — which nothing has: HA will not serve it, and the bundle file has
+  already been edited;
+- rolling back a blueprint **DELETE** would need the document outright — same
+  problem, and the local file is gone (that is why the row was a delete).
+
+Sending the metadata body back as a save is not an option either: it has no
+`yaml`, so it would fail at the wire with a confusing schema error and leave
+the same state behind.
+
+**What was implemented instead**: `_rollback` reports those two cases as
+purpose-built `ROLLBACK_FAILED` outcomes whose message names the file and the
+real fix — *recover it from git and push again* — so the loss is loud rather
+than silent (I6). A blueprint **CREATE** rolls back perfectly (delete it back
+out), which is the common case.
+
+The exposure is narrow by construction, thanks to the ordering in §4:
+blueprint deletes are the LAST rows applied, so nothing applied after one can
+fail and strand it — only a second blueprint delete failing in the same plan
+reaches the delete case. The update case is reachable whenever a blueprint
+update and a failing automation row share a plan.
+
+If stage 2 lands (blueprints authored in the DSL, §8), this stops mattering:
+the document becomes a deterministic compiled artifact, so the pre-update
+version is always reproducible from the bundle's own history.

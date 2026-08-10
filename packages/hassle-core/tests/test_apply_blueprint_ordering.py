@@ -28,7 +28,14 @@ from hassle.backend.fake import FakeBackend
 from hassle.blueprints import blueprint_body
 from hassle.ir import BLUEPRINT_KIND, sha256_hash
 from hassle.sync.apply import BlueprintStillInstantiatedError, apply_plan
-from hassle.sync.models import Manifest, ManifestEntry, Plan, PlanAction, PlanEntry
+from hassle.sync.models import (
+    ApplyOutcome,
+    Manifest,
+    ManifestEntry,
+    Plan,
+    PlanAction,
+    PlanEntry,
+)
 
 SOURCE = """\
 blueprint:
@@ -551,38 +558,46 @@ def test_rollback_undoes_in_reverse_apply_order() -> None:
     assert backend.list_remote(BLUEPRINT_KIND) == {}
 
 
-def test_rollback_restores_a_deleted_blueprint_with_its_source() -> None:
-    """A rolled-back delete must resurrect the whole document, not a metadata
-    husk -- `list_remote` deliberately cannot see the source, so a rollback
-    that round-tripped through it would silently lose the file."""
+def test_a_rolled_back_blueprint_delete_reports_that_it_could_not_be_restored() -> None:
+    """The limitation §2.1 forces, made loud instead of silent.
 
-    class _FailingLate(_RecordingBackend):
-        def __init__(self) -> None:
-            super().__init__()
-            self.fail_next_delete = False
+    A rollback restores from the snapshot `list_remote` gave -- and for a
+    blueprint that is METADATA ONLY. The previous document exists nowhere the
+    apply engine can reach: HA cannot serve it back, and the local file is
+    gone (that is why the row was a delete). So this cannot be restored, and
+    the honest behaviour is a purpose-built ROLLBACK_FAILED naming the file
+    and the real fix -- never a sourceless save that fails with a confusing
+    schema error, and never a silent success (I6).
 
+    It is a narrow case by construction: blueprint deletes sort LAST, so
+    nothing applied after one can fail and strand it; only a second blueprint
+    delete failing in the same plan gets here.
+    """
+
+    class _FailingSecondDelete(_RecordingBackend):
         def delete(self, kind: str, identity: str) -> None:
+            if kind == BLUEPRINT_KIND and identity.endswith("old.yaml"):
+                raise RuntimeError("HA refused the second blueprint delete")
             super().delete(kind, identity)
-            if kind == BLUEPRINT_KIND:
-                raise RuntimeError("boom after the blueprint delete")
 
-    backend = _FailingLate()
+    other = blueprint_body(domain="automation", path="local/old.yaml", source=SOURCE)
+    backend = _FailingSecondDelete()
     backend.create(BLUEPRINT_KIND, _local())
-    backend.create("automation", INSTANCE)
+    backend.create(BLUEPRINT_KIND, other)
     backend.log.clear()
     plan = Plan(
         entries=[
-            PlanEntry(
-                object_key="automation:office_switch",
-                kind="automation",
-                action=PlanAction.DELETE,
-                remote_hash_at_plan=backend.hash_of("automation", "office_switch"),
-            ),
             PlanEntry(
                 object_key=BLUEPRINT_KEY,
                 kind=BLUEPRINT_KIND,
                 action=PlanAction.DELETE,
                 remote_hash_at_plan=backend.hash_of(BLUEPRINT_KIND, IDENTITY),
+            ),
+            PlanEntry(
+                object_key="blueprint:automation/local/old.yaml",
+                kind=BLUEPRINT_KIND,
+                action=PlanAction.DELETE,
+                remote_hash_at_plan=backend.hash_of(BLUEPRINT_KIND, "automation/local/old.yaml"),
             ),
         ]
     )
@@ -593,7 +608,53 @@ def test_rollback_restores_a_deleted_blueprint_with_its_source() -> None:
         blueprint_instances=_instances(present=False),
     )
     assert not result.succeeded
-    assert backend.blueprint_source(IDENTITY) == SOURCE
+    assert result.failure_message is not None
+    assert "could not be restored" in result.failure_message
+    assert "from git" in result.failure_message
+
+
+def test_a_rolled_back_blueprint_update_reports_the_same_limitation() -> None:
+    """Same root cause, the case that can really happen: a blueprint update
+    lands, then an automation row fails. The blueprint's PREVIOUS content is
+    unrecoverable -- HA never had it available to read and the bundle has
+    already moved on."""
+
+    class _FailingAutomation(_RecordingBackend):
+        def create(self, kind: str, config: dict[str, Any]) -> str:
+            if kind == "automation":
+                raise RuntimeError("HA rejected the instance")
+            return super().create(kind, config)
+
+    backend = _FailingAutomation()
+    backend.create(BLUEPRINT_KIND, _local())
+    backend.log.clear()
+    plan = Plan(
+        entries=[
+            PlanEntry(
+                object_key="automation:office_switch",
+                kind="automation",
+                action=PlanAction.CREATE,
+                local=INSTANCE,
+            ),
+            PlanEntry(
+                object_key=BLUEPRINT_KEY,
+                kind=BLUEPRINT_KIND,
+                action=PlanAction.UPDATE,
+                local=_local(SOURCE.replace("restart", "single")),
+                remote_hash_at_plan=backend.hash_of(BLUEPRINT_KIND, IDENTITY),
+            ),
+        ]
+    )
+    result = apply_plan(
+        plan,
+        backend,
+        _manifest(**{BLUEPRINT_KEY: sha256_hash(_local())}),
+        blueprint_instances=_instances(),
+    )
+    assert not result.succeeded
+    assert result.outcomes[BLUEPRINT_KEY] is ApplyOutcome.ROLLBACK_FAILED
+    assert result.failure_message is not None
+    assert "overwritten" in result.failure_message
 
 
 # --- manifest bookkeeping --------------------------------------------------
