@@ -1,0 +1,60 @@
+{
+  "automation:office_switch_controls": {
+    "id": "office_switch_controls",
+    "alias": "Office switch controls",
+    "use_blueprint": {
+      "path": "local/room-switch-controls.yaml",
+      "input": {
+        "switch_entity": "sensor.office_paddle",
+        "room_light": "light.office"
+      }
+    }
+  },
+  "automation:hallway_switch_controls": {
+    "id": "hallway_switch_controls",
+    "alias": "Hallway switch controls",
+    "use_blueprint": {
+      "path": "local/room-switch-controls.yaml",
+      "input": {
+        "switch_entity": "sensor.hallway_paddle",
+        "room_light": "light.hallway"
+      }
+    }
+  },
+  "blueprint:automation/local/room-switch-controls.yaml": {
+    "domain": "automation",
+    "path": "local/room-switch-controls.yaml",
+    "source": "blueprint:\n  name: Room switch controls\n  description: One paddle switch drives one room light.\n  domain: automation\n  input:\n    switch_entity:\n      name: Switch\n      description: The paddle switch entity.\n      selector:\n        entity:\n          filter:\n            - domain: sensor\n    room_light:\n      name: Room light\n      selector:\n        entity:\n          filter:\n            - domain: light\n    dim_step_pct:\n      name: Dim step\n      default: 10\n\nmode: restart\ntriggers:\n  - trigger: state\n    entity_id: !input switch_entity\n    to: \"up\"\n    id: up\nactions:\n  - action: light.turn_on\n    target:\n      entity_id: !input room_light\n    data:\n      brightness_step_pct: !input dim_step_pct\n",
+    "inputs": {
+      "switch_entity": {
+        "name": "Switch",
+        "description": "The paddle switch entity.",
+        "selector": {
+          "entity": {
+            "filter": [
+              {
+                "domain": "sensor"
+              }
+            ]
+          }
+        }
+      },
+      "room_light": {
+        "name": "Room light",
+        "selector": {
+          "entity": {
+            "filter": [
+              {
+                "domain": "light"
+              }
+            ]
+          }
+        }
+      },
+      "dim_step_pct": {
+        "name": "Dim step",
+        "default": 10
+      }
+    }
+  }
+}

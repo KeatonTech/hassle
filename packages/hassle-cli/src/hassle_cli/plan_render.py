@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from rich.console import Console
 
+from hassle.ir.keys import BLUEPRINT_KIND
 from hassle.sync import Plan, PlanAction
 from hassle_cli.diffing import dsl_diff, is_modernization_only_diff
 
@@ -39,6 +40,22 @@ def render_plan(console: Console, plan: Plan, *, show_noop: bool = False) -> Non
         if entry.action is PlanAction.NOOP and not show_noop:
             continue
         any_shown = True
+
+        if entry.kind == BLUEPRINT_KIND:
+            # docs/internals/blueprints-design.md §3. A blueprint is authored
+            # YAML, not DSL: the decompiler has no handler for the kind, so
+            # `is_modernization_only_diff`/`dsl_diff` below would raise -- and
+            # even if they didn't, there is no remote SOURCE to diff against
+            # (§2.1), only metadata. `PlanEntry.message` is this kind's
+            # explanation, and a `warning` row is labelled as one rather than
+            # as the `adopt` it can never actually perform.
+            label = "warning" if entry.warning else entry.action.value
+            style = "yellow" if entry.warning else _ACTION_STYLES.get(entry.action, "")
+            console.print(f"[{style}]{label:>24}[/{style}]  {entry.object_key}")
+            if entry.message:
+                console.print(f"  {entry.message}", markup=False, soft_wrap=True)
+            continue
+
         modernization = entry.action is PlanAction.UPDATE and is_modernization_only_diff(
             entry.object_key, entry.kind, entry.local, entry.remote
         )
@@ -88,6 +105,12 @@ def plan_summary(plan: Plan) -> dict[str, int]:
     summary: dict[str, int] = {}
     for entry in plan.entries:
         if entry.action is PlanAction.NOOP:
+            continue
+        if entry.warning:
+            # An informational row (today: blueprints-design §3's
+            # `adopt (unmanageable)`). It is reported and never executed, so
+            # counting it would inflate "N to apply" and the confirm prompt
+            # with work that will not happen.
             continue
         summary[entry.action.value] = summary.get(entry.action.value, 0) + 1
     return summary

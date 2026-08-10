@@ -12,7 +12,7 @@ proves by skipping this helper entirely and handing the simulator raw HA JSON).
 
 ``blueprints=`` writes bundle-local blueprint sources alongside the DSL, under
 ``<bundle>/blueprints/automation/<path>`` -- the layout
-:mod:`hassle.testing.blueprints` resolves a ``use_blueprint`` path against
+:mod:`hassle.blueprints` resolves a ``use_blueprint`` path against
 (mirroring HA's own ``config/blueprints/automation/``).
 """
 

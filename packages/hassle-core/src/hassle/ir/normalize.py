@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from hassle.ir.keys import DASHBOARD_KIND
+from hassle.ir.keys import BLUEPRINT_KIND, DASHBOARD_KIND
 
 # Outer automation block keys: singular -> plural.
 _OUTER_BLOCK_RENAMES: dict[str, str] = {
@@ -58,7 +58,7 @@ def normalize_ha(config: dict[str, Any], *, kind: str) -> dict[str, Any]:
 
     The input is never mutated; a new dict is returned.
     """
-    if kind == DASHBOARD_KIND:
+    if kind in (DASHBOARD_KIND, BLUEPRINT_KIND):
         # EXEMPT: an exact identity function (docs/internals/dashboards-design.md
         # §3.3). A Lovelace card body legitimately contains `service:` keys of
         # its own -- inside `tap_action`/`hold_action`/`double_tap_action`
@@ -76,6 +76,15 @@ def normalize_ha(config: dict[str, Any], *, kind: str) -> dict[str, Any]:
         # current recursion depth, not a contract, and `IRObject` is
         # `extra="allow"` (a `@raw_dashboard` body may carry any top-level key).
         # For this kind, nothing is EVER rewritten, whatever the body's shape.
+        #
+        # `blueprint` is exempt for a stronger version of the same reason
+        # (docs/internals/blueprints-design.md §1): its body is not an HA
+        # config mapping at all. `source` is the authored YAML document as
+        # OPAQUE TEXT -- byte-preserved, because HA's `blueprint/save` stores
+        # exactly what it is handed -- and `inputs` is HA selector metadata,
+        # which legitimately contains keys spelled `service`, `platform` or
+        # `delay` inside a `select` selector's options. Rewriting either would
+        # corrupt the file the bundle author wrote.
         return _deep_copy_mapping(config)
     out: dict[str, Any] = {}
     for key, value in config.items():

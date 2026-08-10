@@ -8,7 +8,8 @@ Module: `hassle.ir` (package `hassle-core`). Public surface (`hassle.ir.__all__`
 
 ## Object kinds and keys
 
-- Kinds (`OBJECT_KINDS`, 28 total): `automation`, `script`, `dashboard`, the
+- Kinds (`OBJECT_KINDS`, 29 total): `automation`, `script`, `dashboard`,
+  `blueprint`, the
   nine storage-collection helper domains (`HELPER_DOMAINS`): `input_boolean`,
   `input_number`, `input_select`, `input_text`, `input_datetime`,
   `input_button`, `counter`, `timer`, `schedule`; and the sixteen config-entry
@@ -38,6 +39,16 @@ Module: `hassle.ir` (package `hassle-core`). Public surface (`hassle.ir.__all__`
   two dashboards share one key). Unlike every other kind, `object_key()` therefore never raises for a
   `dashboard`, and the identity segment routinely contains a hyphen — which is
   exactly why the key-opacity rule below matters.
+- **`blueprint` identity** is `"<domain>/<path>"` — HA's blueprint domain
+  (`automation` or `script`) plus **exactly** the string instances put in
+  `use_blueprint`, e.g.
+  `blueprint:automation/local/room-switch-controls.yaml`. Verbatim, never
+  re-slugified, for the same reason `dashboard`'s `url_path` is: it is HA's own
+  addressing string, and slugifying it would address a file HA does not have.
+  This is the kind whose identity segment routinely contains **slashes and
+  dots** — see the key-opacity rule immediately below. Derivation order:
+  the body's `domain` + `path` → the extrinsic `key_hint`. See
+  docs/internals/blueprints-design.md §1.
 - **Key opacity (downstream contract):** treat an object key as an opaque
   string. If a consumer must recover `(kind, identity)`, split on the **first**
   `:` only — the identity segment is not escaped and is not guaranteed
@@ -85,6 +96,38 @@ Module: `hassle.ir` (package `hassle-core`). Public surface (`hassle.ir.__all__`
     the sidebar metadata or the cards surfaces as one drifted object — refresh
     and conflict happen at dashboard granularity.
 
+- `BlueprintConfig` — a blueprint **source file**
+  (docs/internals/blueprints-design.md §1). The second Hassle-composed envelope,
+  because HA's `blueprint/save` takes `{domain, path, yaml}` — three things at
+  once — and the `yaml` half is an opaque document, not a config mapping:
+
+  ```json
+  {"domain": "automation",
+   "path": "local/room-switch-controls.yaml",
+   "source": "blueprint:\n  name: Room Switch Controls\n  ...",
+   "inputs": {"button_up": {"name": "Up paddle", "selector": {...}},
+              "room_key": null}}
+  ```
+
+  - `source` is the file's text, **byte-preserved**: stage 1's blueprint is
+    *authored*, not generated, so a push that reflowed it would lose the
+    author's comments and block scalars, and HA stores the document verbatim
+    regardless. Read via `bytes.decode("utf-8")`, never text mode, so CRLF
+    survives (`hassle.blueprints.read_blueprint_source`).
+  - `inputs` is the parsed `blueprint.input` block, **verbatim** native-JSON
+    passthrough (`Any`). A bare `room_key:` entry stays `null` — that is how
+    "declared with no `default:`" (required) stays distinguishable from
+    "declared with an empty metadata mapping". Derived from `source`, and
+    carried anyway because it is what the validator reads (blueprints-design
+    §6); nothing downstream re-parses YAML to learn a blueprint's inputs.
+  - Because the object hash covers the whole envelope, any edit to the authored
+    file surfaces as one drifted object.
+  - **This kind is push-authoritative**: HA has no command that serves a
+    blueprint's source back (blueprints-design §2.1), so there is no remote
+    body to three-way against. Its plan rows come from a dedicated table
+    (`hassle.sync.blueprint_plan`, blueprints-design §3), not the generic one,
+    and pull never materializes one (§5).
+
 ## parse / serialize (I3 — lossless round-trip)
 
 - `parse(config: dict, *, kind: str, key_hint: str | None = None) -> IRObject`
@@ -100,21 +143,27 @@ Module: `hassle.ir` (package `hassle-core`). Public surface (`hassle.ir.__all__`
   outer `trigger`/`condition`/`action` → plural (automations only), and a
   recursive `service:` → `action:` rewrite through every nested action
   container. Never mutates its input.
-- **`kind == "dashboard"` is exempt: `normalize_ha` is an exact identity
-  function** (it still returns a deep copy, so callers may mutate the result).
+- **`kind == "dashboard"` and `kind == "blueprint"` are exempt: `normalize_ha`
+  is an exact identity function** for both (it still returns a deep copy, so
+  callers may mutate the result).
   A Lovelace card body legitimately contains `service:` keys of its own,
   inside `tap_action`/`hold_action`/`double_tap_action` payloads written in
   the legacy `{"action": "call-service", "service": "..."}` form, and the
   Lovelace store saves the body verbatim — no schema validation, no
   normalization. Applying the generic rewrite would break the card *and* drift
   the hash into a phantom conflict on every subsequent plan.
+  A `blueprint` body is exempt for a stronger version of the same reason: it is
+  not an HA config mapping at all. `source` is opaque authored text, and
+  `inputs` is HA selector metadata that legitimately contains keys spelled
+  `service`, `platform` or `delay` inside a `select` selector's options.
 - The same exemption applies to `modernize_for_comparison`, whose two rewrites
   (`platform:` → `trigger:`, string/numeric `delay:` → dict-of-units) walk
   every dict in a body unconditionally and would otherwise rewrite matching
   shapes inside third-party card bodies.
-- `storage_canonical(kind, config)` has **no entries for `dashboard`**
-  (identity), for the same reason: HA materializes no defaults into a Lovelace
-  body. List order is semantically meaningful throughout a dashboard (views,
+- `storage_canonical(kind, config)` has **no entries for `dashboard` or
+  `blueprint`** (identity), for the same reason: HA materializes no defaults
+  into a Lovelace body, and a blueprint body is Hassle's own envelope around
+  text HA never rewrites. List order is semantically meaningful throughout a dashboard (views,
   sections, cards) and the canonical-JSON rules below already preserve it.
 
 ## Canonical JSON + hashing (R8 — determinism)
@@ -127,4 +176,5 @@ Module: `hassle.ir` (package `hassle-core`). Public surface (`hassle.ir.__all__`
 Acceptance tests (all green): `test_ir_roundtrip_corpus`,
 `test_ir_preserves_unknown_fields`, `test_canonical_hash_stable`,
 `test_object_key_format`, `test_ir_keys`, `test_ir_dashboard_envelope`,
-`test_ir_dashboard_normalize` (in `packages/hassle-core/tests/`).
+`test_ir_dashboard_normalize`, `test_ir_blueprint_object` (in
+`packages/hassle-core/tests/`).

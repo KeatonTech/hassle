@@ -9,5 +9,23 @@
         "room_light": "light.office"
       }
     }
+  },
+  "blueprint:automation/local/room-switch-controls.yaml": {
+    "domain": "automation",
+    "path": "local/room-switch-controls.yaml",
+    "source": "blueprint:\n  name: Room switch controls\n  description: One paddle switch drives one room light.\n  domain: automation\n  input:\n    switch_entity:\n      name: Switch\n      description: The paddle switch entity.\n    room_light:\n      name: Room light\n    dim_step_pct:\n      name: Dim step\n      default: 10\n\nmode: restart\ntriggers:\n  - trigger: state\n    entity_id: !input switch_entity\n    to: \"up\"\n    id: up\n  - trigger: state\n    entity_id: !input switch_entity\n    to: \"down\"\n    id: down\nactions:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: up\n        sequence:\n          - action: light.turn_on\n            target:\n              entity_id: !input room_light\n            data:\n              brightness_step_pct: !input dim_step_pct\n              event_note: \"{{ trigger.to_state.attributes.event_type }}\"\n      - conditions:\n          - condition: trigger\n            id: down\n        sequence:\n          - action: light.turn_on\n            target:\n              entity_id: !input room_light\n            data:\n              brightness_step_pct: -10\n              event_note: \"{{ trigger.to_state.attributes.event_type }}\"\n",
+    "inputs": {
+      "switch_entity": {
+        "name": "Switch",
+        "description": "The paddle switch entity."
+      },
+      "room_light": {
+        "name": "Room light"
+      },
+      "dim_step_pct": {
+        "name": "Dim step",
+        "default": 10
+      }
+    }
   }
 }

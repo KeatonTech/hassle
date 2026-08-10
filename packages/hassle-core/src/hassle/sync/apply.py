@@ -50,6 +50,7 @@ from typing import Any
 
 from hassle.backend.protocol import Backend
 from hassle.ir.canonical import sha256_hash, storage_canonical
+from hassle.ir.keys import BLUEPRINT_KIND
 from hassle.sync.category_move import local_category_for_source_path, sync_category_on_move
 from hassle.sync.category_writeback import (
     _SCOPE_FOR_KIND,  # pyright: ignore[reportPrivateUsage]
@@ -82,6 +83,12 @@ from hassle.sync.models import (
 # "kinds are added to `_KIND_ORDER` explicitly", not "whatever falls out of
 # the fallback is fine" (docs/internals/backend-protocol.md §3.1.1 step 6).
 _KIND_ORDER = (
+    # `blueprint` FIRST (docs/internals/blueprints-design.md §4.1): HA
+    # validates an instance against its blueprint at instance-save time, so a
+    # blueprint file has to exist before any automation that uses it is
+    # written. This is the position for a blueprint CREATE/UPDATE only -- a
+    # blueprint DELETE sorts dead last instead, see `_entry_sort_key`.
+    "blueprint",
     "input_boolean",
     "input_number",
     "input_select",
@@ -120,7 +127,66 @@ def _kind_sort_key(kind: str) -> int:
         return len(_KIND_ORDER)
 
 
+#: Kinds whose apply position depends on the ACTION as well as the kind, with
+#: DELETE sorting after every other row instead of at the kind's own rank.
+#:
+#: `blueprint` is the first and so far only member (docs/internals/
+#: blueprints-design.md §4.2): an instance of a blueprint has to be deleted
+#: BEFORE the blueprint it uses, which is the exact mirror of §4.1's "the
+#: blueprint has to exist before its instances are written". One kind, two
+#: opposite ends of the same apply -- so `_KIND_ORDER` alone cannot express it
+#: and the sort key has to see the action.
+#:
+#: Making it a named set rather than an `if entry.kind == "blueprint"` keeps
+#: the "new kinds are added explicitly" discipline `_KIND_ORDER` already
+#: follows (docs/internals/backend-protocol.md §3.1.1 step 6).
+_DELETE_LAST_KINDS = frozenset({"blueprint"})
+
+
+def _entry_sort_key(kind: str, action: PlanAction) -> int:
+    """Push-apply rank for one entry.
+
+    A pure function of `(kind, action)`, and the ONLY place apply order is
+    decided -- which is what makes `_rollback`'s reverse walk automatically
+    correct: it replays `snapshots` (recorded in this order) backwards, so
+    "blueprint deletes are undone first, blueprint creates last" holds by
+    construction rather than by a second table that could drift out of step
+    with this one.
+    """
+    if kind in _DELETE_LAST_KINDS and action is PlanAction.DELETE:
+        return len(_KIND_ORDER)
+    return _kind_sort_key(kind)
+
+
 _PUSH_ACTIONS = (PlanAction.CREATE, PlanAction.UPDATE, PlanAction.DELETE)
+
+
+class BlueprintStillInstantiatedError(Exception):
+    """A plan deletes a blueprint the bundle still declares instances of
+    (docs/internals/blueprints-design.md §4.2).
+
+    Raised BEFORE any write happens. Letting the apply run would delete the
+    blueprint and leave every surviving instance unloadable -- Home Assistant
+    rejects an instance whose blueprint is missing at its next save, and there
+    is no source read that could put the file back (§2.1).
+    """
+
+    def __init__(self, object_key: str, instances: list[str]) -> None:
+        self.object_key = object_key
+        self.instances = instances
+        identity = object_key.partition(":")[2]
+        named = ", ".join(f"`{key}`" for key in sorted(instances))
+        super().__init__(
+            f"This plan deletes the blueprint `{identity}`, but the bundle still "
+            f"declares {len(instances)} automation(s) that use it: {named}. Home "
+            f"Assistant validates an instance against its blueprint every time the "
+            f"instance is saved, so removing the blueprint would leave those "
+            f"automations unloadable -- and Home Assistant cannot serve a blueprint's "
+            f"source back, so there would be no way to restore the file from HA. "
+            f"Nothing was written. Fix: delete (or re-point) those automations in the "
+            f"bundle first and push that, then remove the blueprint file in a second "
+            f"push -- or restore `blueprints/{identity}` if deleting it was a mistake."
+        )
 
 
 def apply_plan(
@@ -132,6 +198,7 @@ def apply_plan(
     category_overrides: dict[str, str] | None = None,
     category_packages: frozenset[str] | None = None,
     on_progress: Callable[[int, int, PlanEntry], None] | None = None,
+    blueprint_instances: dict[str, list[str]] | None = None,
 ) -> ApplyResult:
     """Apply the push-side actions of ``plan`` against ``backend``.
 
@@ -157,9 +224,26 @@ def apply_plan(
     ``on_progress`` (additive): called before each push entry is
     applied with ``(index, total, entry)`` (1-based) -- the CLI's visible
     heartbeat during a long apply. Never called for an empty plan.
+
+    ``blueprint_instances`` (additive, docs/internals/blueprints-design.md §4):
+    blueprint object key -> the object keys instantiating it, built from the
+    compiled bundle by `hassle.blueprints.instances_by_blueprint`. It does two
+    jobs, and both need information a `Plan` alone does not carry (an
+    UNCHANGED instance is a `noop` row with no `local` body):
+
+    - **§4.2's refusal.** A plan deleting a blueprint the bundle still
+      instantiates raises `BlueprintStillInstantiatedError` before ANY write.
+    - **§4.3's reload.** A blueprint UPDATE triggers `automation.reload` only
+      when instances exist -- nothing to re-expand otherwise.
+
+    Omitting it reproduces pre-blueprint behaviour byte for byte.
     """
     push_entries = [entry for entry in plan.entries if entry.action in _PUSH_ACTIONS]
-    push_entries.sort(key=lambda entry: _kind_sort_key(entry.kind))
+    # Pre-flight, before the sort and before anything is written or even read:
+    # a plan that would strand live instances is refused outright rather than
+    # half-applied and rolled back (§4.2).
+    _refuse_stranding_deletes(push_entries, blueprint_instances or {})
+    push_entries.sort(key=lambda entry: _entry_sort_key(entry.kind, entry.action))
 
     outcomes: dict[str, ApplyOutcome] = {}
     # (kind, identity) -> snapshot of the pre-apply remote config (None if the
@@ -168,6 +252,7 @@ def apply_plan(
     applied: list[str] = []  # object_keys successfully applied, in apply order
     category_warnings: list[str] = []  # never fails/rolls back apply
     category_conflicts: list[str] = []  # never fails/rolls back apply
+    blueprint_reloads: list[str] = []  # blueprint keys an automation.reload followed
     # object_key -> the category slug ManifestEntry.category should
     # advance to (never touched at all for an object not in this dict --
     # `_advance_manifest` then falls back to the existing manifest entry's
@@ -268,6 +353,16 @@ def apply_plan(
                     entry.kind, entry.source_path, category_packages
                 )
 
+        elif entry.action is PlanAction.UPDATE and entry.kind == BLUEPRINT_KIND:
+            # §4.3: HA does not re-expand already-loaded instances on
+            # `blueprint/save` alone, so a bundle with live instances of this
+            # blueprint needs an `automation.reload` to pick the new file up.
+            # Only for an UPDATE (a CREATE cannot have instances expanded
+            # against a file that did not exist) and only when the bundle
+            # actually declares instances.
+            if _reload_after_blueprint_update(backend, entry.object_key, blueprint_instances):
+                blueprint_reloads.append(entry.object_key)
+
         elif entry.action is PlanAction.UPDATE:
             # Category-on-move sync -- metadata-only,
             # best-effort, never affects `outcomes`/rollback for the object's
@@ -311,7 +406,55 @@ def apply_plan(
         manifest=new_manifest,
         category_warnings=category_warnings,
         category_conflicts=category_conflicts,
+        blueprint_reloads=blueprint_reloads,
     )
+
+
+def _refuse_stranding_deletes(
+    push_entries: list[PlanEntry], blueprint_instances: dict[str, list[str]]
+) -> None:
+    """Refuse a plan that deletes a blueprint the bundle still instantiates.
+
+    docs/internals/blueprints-design.md §4.2. Structural rather than advisory:
+    it runs on the raw entry list before the sort and before the first backend
+    call, so there is no half-applied state to roll back and no window in which
+    the blueprint is gone while its instances are still live.
+    """
+    for entry in push_entries:
+        if entry.kind != BLUEPRINT_KIND or entry.action is not PlanAction.DELETE:
+            continue
+        instances = blueprint_instances.get(entry.object_key)
+        if instances:
+            raise BlueprintStillInstantiatedError(entry.object_key, instances)
+
+
+def _reload_after_blueprint_update(
+    backend: Backend,
+    object_key: str,
+    blueprint_instances: dict[str, list[str]] | None,
+) -> bool:
+    """Issue `automation.reload` after a blueprint update, if warranted.
+
+    TODO(blueprints-design §4.3 — marked for empirical confirmation): the
+    design records "HA does not re-expand live instances on `blueprint/save`
+    alone" as **believed, not probed** (the 2026-08-10 session captured every
+    other §2 shape but not this one; ha-api-notes §40.4). The stated behavior is
+    implemented here and the owner will verify live. Either outcome is safe --
+    if HA does re-expand on its own, this reload is redundant but harmless --
+    so the finding, once captured, changes at most whether this call stays.
+
+    `reload_automations` is additive and NOT part of the frozen `Backend`
+    Protocol; it is probed with `getattr`, the same pattern `entry_id_for` and
+    `fetch_registry_snapshot` use, so a backend without it simply does not
+    reload. Returns whether a reload was actually issued.
+    """
+    if not blueprint_instances or not blueprint_instances.get(object_key):
+        return False
+    reload = getattr(backend, "reload_automations", None)
+    if reload is None:
+        return False
+    reload()
+    return True
 
 
 def _identity_of(object_key: str) -> str:
@@ -332,7 +475,10 @@ def _identity_of(object_key: str) -> str:
 #: `meta.url_path` (or the `"default"` sentinel when `meta` is null), always
 #: an intrinsic part of the envelope the caller sends -- never HA-assigned,
 #: so it can never diverge the way a slugified helper name can.
-_CALLER_KEYED_KINDS = frozenset({"automation", "dashboard"})
+#: `blueprint` joins them (docs/internals/blueprints-design.md §1): identity is
+#: `domain` + `path`, both intrinsic to the body the caller sends and never
+#: HA-assigned -- the path IS the address, so it cannot diverge.
+_CALLER_KEYED_KINDS = frozenset({"automation", "dashboard", "blueprint"})
 
 
 def _create_body(kind: str, identity: str, local: dict[str, Any]) -> dict[str, Any]:
@@ -462,9 +608,28 @@ def _rollback(
     -- unchanged on a failed apply -- still records the old one. Not silent:
     the next `hassle plan` (which the failure message directs the user to
     run) re-reads entry ids from the live registry and surfaces any
-    divergence; slug-keyed kinds are unaffected (same identity, §17.5)."""
+    divergence; slug-keyed kinds are unaffected (same identity, §17.5).
+
+    **Blueprint caveat (docs/internals/blueprints-design.md §4, ha-api-notes
+    §40.5).** A blueprint UPDATE or DELETE **cannot be rolled back at all**:
+    the snapshot this function restores from is what `list_remote` returned,
+    and for a blueprint that is metadata only -- Home Assistant has no command
+    that serves a blueprint's source back (§2.1), so the previous document
+    exists nowhere the apply engine can reach. Rather than send a sourceless
+    body and let the backend fail with a confusing schema error, those two
+    cases are reported as purpose-built rollback failures naming the file and
+    the real fix (restore it from git and push again). This is loud, per I6 --
+    never silent -- and it is narrow: a blueprint CREATE rolls back perfectly
+    (delete it back out), and the apply ordering means a blueprint DELETE is
+    the last thing written, so nothing applied after one can fail and strand
+    it."""
     failures: list[tuple[str, str, str]] = []
     for kind, identity, previous, action in reversed(snapshots):
+        if kind == BLUEPRINT_KIND and previous is not None:
+            # `previous` is the metadata-only remote body; there is no source
+            # in it and no way to fetch one. See the caveat above.
+            failures.append((kind, identity, _blueprint_rollback_reason(identity, action)))
+            continue
         try:
             if previous is None:
                 # It didn't exist before (this was a CREATE) -> delete it out.
@@ -485,6 +650,17 @@ def _rollback(
         except Exception as exc:
             failures.append((kind, identity, str(exc)))
     return failures
+
+
+def _blueprint_rollback_reason(identity: str, action: PlanAction) -> str:
+    what = (
+        "its previous content was overwritten" if action is PlanAction.UPDATE else "it was deleted"
+    )
+    return (
+        f"{what} and Home Assistant cannot serve a blueprint's source back, so the "
+        f"old version of `blueprints/{identity}` could not be restored -- recover it "
+        f"from git (it is the copy of record) and push again"
+    )
 
 
 def _rollback_failure_message(failures: list[tuple[str, str, str]]) -> str | None:
@@ -516,6 +692,21 @@ def _advance_manifest(
         if current is None:
             continue
         existing = manifest.objects.get(entry.object_key)
+        if entry.kind == BLUEPRINT_KIND:
+            # docs/internals/blueprints-design.md §3: the manifest's stored
+            # hash for a blueprint is "the hash of the LOCAL file at last
+            # push", NOT of anything remote. `current` here is the
+            # metadata-only body `list_remote` can see (§2.1); recording its
+            # hash would make every subsequent plan compare an authored
+            # document against a metadata hash and report an endless update.
+            new_objects[entry.object_key] = ManifestEntry(
+                source=entry.source_path
+                if entry.source_path is not None
+                else (existing.source if existing is not None else None),
+                compiled_hash=sha256_hash(entry.local) if entry.local is not None else "",
+                kind="blueprint",
+            )
+            continue
         if entry.object_key in resolved_categories:
             category = resolved_categories[entry.object_key]
         else:

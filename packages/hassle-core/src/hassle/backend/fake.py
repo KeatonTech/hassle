@@ -98,8 +98,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from hassle.blueprints import (
+    INSTANCE_IDENTITY_FIELDS,
+    blueprint_display_path,
+    blueprint_metadata,
+    blueprint_remote_body,
+    parse_blueprint,
+)
 from hassle.ir.canonical import sha256_hash
 from hassle.ir.keys import (
+    BLUEPRINT_KIND,
     DASHBOARD_KIND,
     GROUP_DOMAINS,
     HELPER_DOMAINS,
@@ -320,6 +328,10 @@ class FakeBackend:
         self._categories: dict[str, dict[str, str]] = {}
         self._category_id_counter = 0
         self._entity_categories: dict[tuple[str, str], dict[str, str]] = {}
+        # `automation.reload` calls issued (blueprints-design §4.3). Additive
+        # and non-Protocol, like `flow_log`: the apply-ordering tests assert
+        # a blueprint UPDATE with live instances triggers exactly one.
+        self.automation_reloads = 0
 
     # -- Backend protocol ---------------------------------------------------
 
@@ -336,6 +348,22 @@ class FakeBackend:
 
     def list_remote(self, kind: str) -> dict[str, dict[str, Any]]:
         self._require_kind(kind)
+        if kind == BLUEPRINT_KIND:
+            # METADATA ONLY (docs/internals/blueprints-design.md §2.1): HA has
+            # no command that serves a blueprint's source back, so a remote
+            # body physically cannot carry one. The projection happens HERE,
+            # at the one place a caller can observe the remote side, even
+            # though the store holds the whole document -- that asymmetry is
+            # exactly real HA's, and it is what makes this kind
+            # push-authoritative.
+            return {
+                identity: blueprint_remote_body(
+                    str(stored["domain"]),
+                    str(stored["path"]),
+                    blueprint_metadata(str(stored["source"]), display_path=identity),
+                )
+                for identity, stored in self._store[kind].items()
+            }
         return {identity: dict(config) for identity, config in self._store[kind].items()}
 
     def create(self, kind: str, config: dict[str, Any]) -> str:
@@ -346,6 +374,8 @@ class FakeBackend:
             return self._create_group_via_flow(kind, config)
         if kind == DASHBOARD_KIND:
             return self._create_dashboard(config)
+        if kind == BLUEPRINT_KIND:
+            return self._create_blueprint(config)
         # normalize_ha only special-cases kind == "automation" (outer-key
         # pluralization); every other kind gets the same service:->action:
         # recursive rewrite, so passing `kind` straight through is correct.
@@ -381,6 +411,9 @@ class FakeBackend:
             # on both stable and dev).
             payload = {k: v for k, v in config.items() if k != "name"}
             self._update_group_via_options_flow(kind, identity, payload)
+            return
+        if kind == BLUEPRINT_KIND:
+            self._update_blueprint(identity, config)
             return
         if kind in HELPER_DOMAINS and identity not in self._store[kind]:
             # Fidelity with real HA: the storage-collection WS `{kind}/update`
@@ -774,6 +807,142 @@ class FakeBackend:
             if assigned.get(scope) == category_id:
                 del assigned[scope]
 
+    # -- blueprints (docs/internals/blueprints-design.md §2/§7) --------------
+    #
+    # The store holds the FULL body (`source` included); `list_remote`
+    # projects it down to metadata. That split is deliberate and is the whole
+    # fidelity point: real HA holds the file and answers `blueprint/list` with
+    # metadata only, having no command at all that serves the source back
+    # (§2.1). Modelling it as "stored fully, exposed partially" rather than
+    # "never stored" is what lets `blueprint_substitute` below answer from
+    # HA's OWN copy -- which is what makes §2.2's drift oracle a real
+    # comparison of two independently stored documents rather than a circular
+    # re-expansion of the caller's.
+    #
+    # Keeping the source inside `self._store` (rather than in a sidecar dict)
+    # also means `snapshot`/`restore` round-trip it for free, so apply's
+    # rollback restores a blueprint completely instead of resurrecting a
+    # sourceless husk.
+
+    def _create_blueprint(self, config: dict[str, Any]) -> str:
+        domain, path, source = self._blueprint_parts(config)
+        identity = f"{domain}/{path}"
+        if identity in self._store[BLUEPRINT_KIND]:
+            # `blueprint/save` with `allow_override: False` -- a CREATE was
+            # planned because nothing was there (§3's `create` row), so
+            # something being there NOW is drift, never a silent overwrite.
+            raise ValueError(
+                f"blueprint `{path}` already exists in domain `{domain}` "
+                "(blueprint/save refused: allow_override is false on a create)"
+            )
+        self._store[BLUEPRINT_KIND][identity] = {**config, "source": source}
+        self._writes += 1
+        return identity
+
+    def _update_blueprint(self, identity: str, config: dict[str, Any]) -> None:
+        if identity not in self._store[BLUEPRINT_KIND]:
+            # The same non-upserting fidelity guard the helper and dashboard
+            # branches carry: an UPDATE against a path HA does not have must
+            # raise, so apply's rollback can never quietly paper over a
+            # recreate that had to go through `create`.
+            raise ValueError(
+                f"blueprint `{identity}` does not exist -- an UPDATE must target an "
+                "existing blueprint, never a recreate"
+            )
+        _domain, _path, source = self._blueprint_parts(config)
+        self._store[BLUEPRINT_KIND][identity] = {**config, "source": source}
+        self._writes += 1
+
+    def _delete_blueprint(self, identity: str) -> None:
+        if identity not in self._store[BLUEPRINT_KIND]:
+            # §2: real HA answers `unknown_error`/ENOENT for a missing path --
+            # an error, not a silent success.
+            raise ValueError(
+                f"blueprint `{identity}` does not exist "
+                "(blueprint/delete: No such file or directory)"
+            )
+        del self._store[BLUEPRINT_KIND][identity]
+        self._writes += 1
+
+    @staticmethod
+    def _blueprint_parts(config: dict[str, Any]) -> tuple[str, str, str]:
+        domain = config.get("domain")
+        path = config.get("path")
+        source = config.get("source")
+        if not isinstance(domain, str) or not isinstance(path, str):
+            raise ValueError("a blueprint body needs a `domain` and a `path`")
+        if not isinstance(source, str):
+            # `blueprint/save` takes `yaml`; a body with no source has nothing
+            # to send, and a remote (metadata-only) body must never be
+            # mistaken for something pushable (§2.1).
+            raise ValueError(
+                f"blueprint `{domain}/{path}` has no `source` to save -- a remote "
+                "(metadata-only) body is not pushable; HA cannot serve a blueprint's "
+                "source back, so the bundle file is the only source of truth"
+            )
+        return domain, path, source
+
+    def blueprint_source(self, identity: str) -> str | None:
+        """The stored YAML for one blueprint, or ``None``.
+
+        Additive test/inspection surface, NOT part of the `Backend` Protocol
+        and deliberately not reachable through `list_remote`: real HA has no
+        equivalent (§2.1). Tests use it to assert what a save actually stored.
+        """
+        stored = self._store[BLUEPRINT_KIND].get(identity)
+        if stored is None:
+            return None
+        source = stored.get("source")
+        return source if isinstance(source, str) else None
+
+    def blueprint_substitute(
+        self, domain: str, path: str, inputs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """``blueprint/substitute``: expand this backend's OWN stored YAML.
+
+        Additive, non-Protocol, probed via `getattr` exactly as `entry_id_for`
+        is. The expansion runs through :mod:`hassle.blueprints` — the same
+        implementation the compiler, validator and simulator use (§7) — so a
+        drift check comparing this against a local expansion is comparing two
+        genuinely independent copies of the document, which is the entire
+        basis of §2.2's oracle.
+
+        Returns the **config block only**, matching the observed API shape
+        (ha-api-notes §40.7) — see the comment at the return statement.
+        """
+        identity = f"{domain}/{path}"
+        source = self.blueprint_source(identity)
+        if source is None:
+            raise ValueError(f"blueprint `{identity}` does not exist (blueprint/substitute)")
+        blueprint = parse_blueprint(
+            source, display_path=blueprint_display_path(path, domain=domain)
+        )
+        expanded = blueprint.expand(inputs)
+        # Real HA's `blueprint/substitute` returns the CONFIG BLOCK ONLY --
+        # observed keys exactly {actions, conditions, max_exceeded, mode,
+        # triggers} on 2026-08-10 (ha-api-notes §40.7). It is handed
+        # `{domain, path, input}` and NO INSTANCE, so it has no
+        # `id`/`alias`/`description` to return -- not even when the blueprint
+        # DOCUMENT declares an `alias:`/`description:` of its own, which
+        # community blueprints commonly do as a default label.
+        #
+        # Modelled here rather than special-cased in the drift check, because
+        # this is simply what the API does. A fake that returned them would
+        # keep both sides' key sets artificially identical and could never
+        # catch an asymmetry that exists only against real HA -- which is
+        # exactly how the first live run's false-positive drift got through.
+        return {
+            key: value for key, value in expanded.items() if key not in INSTANCE_IDENTITY_FIELDS
+        }
+
+    def reload_automations(self) -> None:
+        """``automation.reload`` (blueprints-design §4.3).
+
+        Additive and non-Protocol, like `blueprint_substitute`. The counter is
+        what the apply-ordering tests assert on.
+        """
+        self.automation_reloads += 1
+
     def _stored_body(self, kind: str, identity: str, normalized: dict[str, Any]) -> dict[str, Any]:
         """The exact body real HA stores for one object of ``kind`` (the
         capture-verified read-back shape, docs/ha-api-captures/rest-ws-core.json
@@ -801,6 +970,9 @@ class FakeBackend:
 
     def delete(self, kind: str, identity: str) -> None:
         self._require_kind(kind)
+        if kind == BLUEPRINT_KIND:
+            self._delete_blueprint(identity)
+            return
         self._store[kind].pop(identity, None)
         if kind in TEMPLATE_DOMAINS:
             # Config entry removal (docs/internals/ha-api-notes.md §26): the entry_id
@@ -830,7 +1002,12 @@ class FakeBackend:
         self._store[kind] = {identity: dict(config) for identity, config in snapshot.items()}
 
     def hash_of(self, kind: str, identity: str) -> str | None:
-        config = self._store[kind].get(identity)
+        # Routed through `list_remote` so it hashes what a CALLER can actually
+        # see. For `blueprint` the store holds more than the remote body does
+        # (§2.1), and hashing the store would give a value `apply_plan`'s
+        # pre-write re-verification -- which reads `list_remote` -- could
+        # never match.
+        config = self.list_remote(kind).get(identity)
         return None if config is None else sha256_hash(config)
 
     @classmethod
@@ -966,4 +1143,9 @@ class FakeBackend:
                 if meta.get("url_path") is not None:
                     return str(meta["url_path"])
             return "default"
+        if kind == BLUEPRINT_KIND:
+            # Mirrors `BlueprintConfig.identity`: `<domain>/<path>`, both
+            # verbatim. Caller-keyed like a dashboard -- HA assigns nothing
+            # here, the path IS the address.
+            return f"{normalized.get('domain')}/{normalized.get('path')}"
         raise ValueError(f"unknown object kind {kind!r}")

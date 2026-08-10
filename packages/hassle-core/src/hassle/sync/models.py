@@ -89,6 +89,24 @@ class PlanEntry(BaseModel):
     # Present only when action is CONFLICT.
     conflict: Conflict | None = None
 
+    # Additive (docs/internals/blueprints-design.md §3). A human-readable
+    # what/where/fix paragraph for rows whose ACTION alone does not say enough
+    # -- the blueprint kind's `adopt (unmanageable)` warning and its two
+    # conflict rows, where the fix genuinely differs from every other kind's
+    # (Home Assistant cannot serve a blueprint's source back, so "pull the
+    # remote version" is not on the menu). `None` for every other row, which is
+    # what every pre-existing kind produces.
+    message: str | None = None
+
+    # Additive (§3). This row is INFORMATIONAL: it is reported and never
+    # executed. Set only by the `adopt (unmanageable)` row, whose ADOPT action
+    # would otherwise look actionable to a reader. Nothing acts on it anyway
+    # (apply runs only create/update/delete; pull skips the blueprint kind
+    # entirely, §5) -- the flag exists so a renderer can say "warning" rather
+    # than "adopt", WITHOUT widening `PlanAction` past DESIGN §8.2's frozen
+    # eight to express it.
+    warning: bool = False
+
 
 class Plan(BaseModel):
     """A full plan: one `PlanEntry` per object key."""
@@ -213,3 +231,8 @@ class ApplyResult(BaseModel):
     # surfaces the same conflict again rather than quietly resolving it.
     # Never affects `succeeded`/rollback for the object's own content update.
     category_conflicts: list[str] = []
+    # Additive (docs/internals/blueprints-design.md §4.3): the blueprint object
+    # keys an `automation.reload` was issued for, after their UPDATE, because
+    # the bundle declares live instances of them. Reported so the CLI can say
+    # so and the ordering tests can assert on it; never affects `succeeded`.
+    blueprint_reloads: list[str] = []

@@ -53,6 +53,7 @@ from hassle.compiler.spans import SourceSpan
 from hassle.ir import slugify
 from hassle.ir.keys import GROUP_DOMAINS, category_shaped_stem, humanize_slug
 from hassle.ir.models import HelperConfig
+from hassle.registry.blueprint_rules import validate_blueprints
 from hassle.registry.dashboard_extract import extract_dashboard_references
 from hassle.registry.didyoumean import did_you_mean
 from hassle.registry.extract import as_dict_list, extract_references
@@ -789,4 +790,7 @@ def validate_bundle(
     findings.extend(_validate_group_entities(result, snapshot))
     findings.extend(_validate_dashboard_references(result, snapshot))
     findings.extend(_validate_category_globals(result))
+    # docs/internals/blueprints-design.md §6: instance inputs, the unmanaged-
+    # blueprint warning, and the empty-optional-entity rule.
+    findings.extend(validate_blueprints(result))
     return findings

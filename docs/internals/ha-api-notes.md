@@ -4303,3 +4303,195 @@ mistake the backend already catches truthfully. A tier-1 `hassle validate`
 WARNING (not an error) for a hyphen-less `url_path` that is not already present
 remotely would restore the teaching without re-breaking adoption; noted as a
 follow-on, not done here.
+
+---
+
+## 40. Blueprints as objects — the WS surface, probed live (2026-08-10)
+
+Probed against the owner's HA while designing
+[blueprints-design.md](blueprints-design.md) §2, on the day the first
+bundle-authored blueprint (BrandtCamp's `room-switch-controls.yaml`, 17
+instances) was deployed by a hand-run websocket script. The design's §2 table
+is reproduced here with the capture notes, per house convention.
+
+### 40.1 What exists
+
+| WS command | Exists | Payload | Notes |
+|---|---|---|---|
+| `blueprint/list` | ✅ | `{domain}` | Returns `{<path>: {"metadata": {...}}}` — name, description, input (with selectors), `source_url`. **Metadata only; no source text.** Per-domain, so both `automation` and `script` must be queried. |
+| `blueprint/save` | ✅ | `{domain, path, yaml, allow_override}` | Used live for the first deploy. `allow_override: false` refuses to clobber an existing path. |
+| `blueprint/delete` | ✅ | `{domain, path}` | A missing path errors `unknown_error` with an ENOENT-shaped message — distinguishable from `unknown_command`, which is what let the probe conclude the command exists at all. |
+| `blueprint/substitute` | ✅ | `{domain, path, input}` | Returns the expanded config **derived from HA's own copy** — the **config block only**, see §40.7. Validates required inputs; its error enumerates the missing ones. |
+| `blueprint/source` | ❌ | — | `unknown_command`. |
+| `blueprint/get` | ❌ | — | `unknown_command`. |
+| `blueprint/get_source` | ❌ | — | `unknown_command`. |
+
+### 40.2 The consequence: no source read
+
+**HA cannot serve a blueprint's source back.** Three separately-guessed
+command names all answer `unknown_command`, so this is a property of the
+integration, not a naming miss. Two things follow, and both are structural in
+the implementation rather than merely documented:
+
+1. **The kind is push-authoritative.** A three-way text merge is impossible
+   and pull cannot materialize a remote-only blueprint. `list_remote`
+   therefore returns a body with **no `source` key by construction** in both
+   backends (`hassle.blueprints.blueprint_remote_body` builds the one shape
+   they share), and pull skips the kind entirely
+   (blueprints-design §5).
+2. **`blueprint/substitute` is the drift oracle.** Content drift IS detectable
+   without source access: substitute remotely with a known input set, expand
+   the bundle's copy locally with the same inputs through
+   `hassle.blueprints.expand_blueprint`, normalize, compare. Equal expansions
+   mean the two copies agree in every way that can matter to an instance.
+   `FakeBackend.blueprint_substitute` runs the *same* expansion implementation
+   against its own stored YAML, which is what keeps the check honest in tests
+   (a fake that re-expanded the caller's copy could never detect anything).
+
+### 40.3 Instance validation happens at instance-save time
+
+The field failure that motivated the whole design: pushing an instance whose
+blueprint file is absent, or whose inputs the blueprint rejects, fails with an
+**opaque HTTP 400 at the instance's own save**, not at the blueprint's. This
+is what fixes apply ordering (blueprints-design §4): blueprint creates and
+updates must precede every automation row, and blueprint deletes must follow
+them.
+
+### 40.4 Marked for empirical confirmation: reload after `blueprint/save`
+
+`automation.reload` after a blueprint update is implemented per
+blueprints-design §4.3's stated behavior — HA is believed **not** to re-expand
+already-loaded instances on `blueprint/save` alone. This specific point was
+**not** probed on 2026-08-10 and is carried as a TODO in
+`hassle.sync.apply._reload_after_blueprint_update`; the owner will verify
+live. Either outcome is safe: if HA does re-expand on its own, the extra
+reload is redundant but harmless.
+
+### 40.5 Implementation finding: a blueprint update/delete cannot be rolled back
+
+Surfaced while implementing blueprints-design §4's "rollback must respect the
+same ordering in reverse", and **not anticipated by the design document** —
+flagged to the owner rather than worked around silently (CLAUDE.md's workflow
+rule).
+
+`hassle.sync.apply._rollback` restores each touched object from the snapshot
+`list_remote` returned before the write. For every other kind that snapshot is
+the full config body. For a blueprint it is **metadata only** (§40.2), so:
+
+- rolling back a blueprint **UPDATE** would need the document HA held *before*
+  the save — which nothing has: HA will not serve it, and the bundle file has
+  already been edited;
+- rolling back a blueprint **DELETE** would need the document outright — same
+  problem, and the local file is gone (that is why the row was a delete).
+
+Sending the metadata body back as a save is not an option either: it has no
+`yaml`, so it would fail at the wire with a confusing schema error and leave
+the same state behind.
+
+**What was implemented instead**: `_rollback` reports those two cases as
+purpose-built `ROLLBACK_FAILED` outcomes whose message names the file and the
+real fix — *recover it from git and push again* — so the loss is loud rather
+than silent (I6). A blueprint **CREATE** rolls back perfectly (delete it back
+out), which is the common case.
+
+The exposure is narrow by construction, thanks to the ordering in §4:
+blueprint deletes are the LAST rows applied, so nothing applied after one can
+fail and strand it — only a second blueprint delete failing in the same plan
+reaches the delete case. The update case is reachable whenever a blueprint
+update and a failing automation row share a plan.
+
+If stage 2 lands (blueprints authored in the DSL, §8), this stops mattering:
+the document becomes a deterministic compiled artifact, so the pre-update
+version is always reproducible from the bundle's own history.
+
+### 40.6 Implementation finding: the drift oracle cannot see the BASE version
+
+Caught by the golden fixture bundle (`fixtures/dsl/blueprint_managed_object`,
+driven end to end by `test_blueprint_golden_bundle`) while implementing
+blueprints-design §3's row 4 — a second thing the design document could not
+have known without an implementation to try.
+
+`blueprint/substitute` expands HA's copy; `hassle.blueprints.expand_blueprint`
+expands the bundle's copy **as it is now**. There is no way to expand the
+BASE (last-pushed) version: the manifest stores only its hash, and §40.2 means
+HA will not serve a source back. So a mismatch has two possible causes and the
+oracle cannot distinguish them:
+
+- **the local file is unchanged since base** — the difference can only have
+  come from the remote side. Unambiguous, and the row §3 describes.
+- **the local file was edited** — the difference is fully explained by that
+  edit and says nothing about the remote side.
+
+Taken literally, §3's row 4 escalates both. Doing so made **every ordinary
+blueprint edit a conflict** in the golden bundle's push→edit→push cycle, which
+is unusable and would train a user to click through conflict prompts — the
+exact failure I6 exists to prevent. `plan_blueprint` therefore gates the drift
+conflict on `base_hash == local_hash`; an edited local file falls through to
+row 3's `update`, which is the same exposure every other kind already carries.
+
+§3's own table agrees when read top-down: the "hash differs from manifest →
+update" row precedes the drift row.
+
+Residual exposure, documented and accepted: local edit **and** remote edit in
+the same window pushes over the remote edit without a conflict. Closing it
+needs either a source read (a future HA release) or the base document stored
+somewhere Hassle can reach — which stage 2 (§8) gets for free, since a
+DSL-authored blueprint is a deterministic compiled artifact reproducible from
+the bundle's own git history.
+
+### 40.7 `blueprint/substitute` returns the CONFIG BLOCK ONLY (observed live 2026-08-10)
+
+Found by the **first live run** of stage 1 against the owner's HA, not by the
+unit suite: the substitute-compare drift oracle reported "edited in place in
+Home Assistant" for a blueprint that had been pushed seconds earlier and was
+provably in sync — and would have kept reporting it on every plan, forever.
+
+**Observed response keys, exactly:**
+
+```
+{actions, conditions, max_exceeded, mode, triggers}
+```
+
+for BrandtCamp's `local/room-switch-controls.yaml`. Stripping `id`, `alias`
+and `description` from the local expansion and comparing sorted JSON gave a
+zero-line diff against the remote.
+
+**Why.** `blueprint/substitute` is handed `{domain, path, input}` and **no
+instance**. There is no automation on the other end of the call, so there is no
+`id`/`alias`/`description` for HA to return — the response is the blueprint's
+own config block with `!input` nodes substituted, and nothing else. This holds
+**even when the blueprint document declares a top-level `alias:` or
+`description:` of its own**, which community blueprints commonly do as a
+default label: HA's substitute output does not carry them.
+
+The local side, by contrast, keeps whatever the document declared. So the two
+sides legitimately express **different key sets**, and a whole-config equality
+check reads that superset-vs-subset difference as drift.
+
+**Why the unit suite could not catch it.** `FakeBackend.blueprint_substitute`
+answered through the same local expansion, so both sides always carried the
+same keys — the asymmetry exists only against real HA. The fake now models the
+observed shape (drops `hassle.blueprints.INSTANCE_IDENTITY_FIELDS`), which is
+simply what the API does rather than a special case, and the regression is
+covered offline by `test_blueprint_drift_oracle`.
+
+**Fix.** `hassle.sync.blueprint_drift` compares the **key intersection** of the
+two expansions. Intersection rather than a fixed strip-list because it follows
+from how HA builds the config: with no instance in hand, any key only the local
+side has is by construction something HA could not have expressed, so it
+carries no information about whether HA's copy drifted. A strip-list would need
+hand-extending every time substitute's output gained or lost a wrapper key, and
+each omission would be another permanent false positive.
+
+Accepted cost: if HA omits a key the blueprint does define, a local edit
+confined to that key is invisible to the oracle. The oracle is corroborative —
+the manifest hash is the authoritative half (blueprints-design §3) — and a
+false conflict on every correctly synced blueprint is far worse, since it makes
+the feature unusable and trains users to click through conflict prompts.
+
+**Related trap for future readers:** `hassle.blueprints` has two expansion
+entry points and only one of them is right here. `Blueprint.expand` is
+body-only and is what the oracle uses; `expand_blueprint` is the *simulator's*
+entry point and deliberately merges the instance's identity fields on top
+(`INSTANCE_IDENTITY_FIELDS`) so the simulator can run the automation. The
+oracle must never call the latter.

@@ -34,6 +34,8 @@ from __future__ import annotations
 from typing import Any
 
 from hassle.ir.canonical import sha256_hash, storage_canonical
+from hassle.ir.keys import BLUEPRINT_KIND
+from hassle.sync.blueprint_plan import plan_blueprint
 from hassle.sync.models import Conflict, ConflictKind, Manifest, Plan, PlanAction, PlanEntry
 
 # object_key -> (kind, config)
@@ -47,12 +49,29 @@ def compute_plan(
     local_objects: ObjectMap,
     remote_objects: ObjectMap,
     base_objects: BaseObjectMap | None = None,
+    blueprint_drift: frozenset[str] | None = None,
 ) -> Plan:
-    """Compute the three-way sync plan (DESIGN §8.2)."""
+    """Compute the three-way sync plan (DESIGN §8.2).
+
+    ``blueprint_drift`` (additive, docs/internals/blueprints-design.md §3): the
+    blueprint object keys whose substitute-compare check found the remote copy
+    expanding differently from the bundle's. Computed by the caller, because
+    answering it requires a `Backend` round trip and `compute_plan` is pure
+    (`hassle.sync.blueprint_drift.detect_blueprint_drift` does it). Omitting it
+    disables the corroboration -- §3's "when enabled" -- and reproduces the
+    pre-oracle rows exactly.
+    """
     base_objects = base_objects or {}
     all_keys = set(manifest.objects) | set(local_objects) | set(remote_objects)
     entries = [
-        _plan_one(key, manifest, local_objects, remote_objects, base_objects)
+        _plan_one(
+            key,
+            manifest,
+            local_objects,
+            remote_objects,
+            base_objects,
+            blueprint_drift or frozenset(),
+        )
         for key in sorted(all_keys)
     ]
     return Plan(entries=entries)
@@ -64,6 +83,7 @@ def _plan_one(
     local_objects: ObjectMap,
     remote_objects: ObjectMap,
     base_objects: BaseObjectMap,
+    blueprint_drift: frozenset[str] = frozenset(),
 ) -> PlanEntry:
     manifest_entry = manifest.objects.get(object_key)
     base_hash = manifest_entry.compiled_hash if manifest_entry is not None else None
@@ -72,6 +92,21 @@ def _plan_one(
     local_kind, local_config = local_objects.get(object_key, (None, None))
     remote_kind, remote_config = remote_objects.get(object_key, (None, None))
     kind = local_kind or remote_kind or "unknown"
+
+    if kind == BLUEPRINT_KIND:
+        # A blueprint is PUSH-AUTHORITATIVE: HA cannot serve its source back
+        # (blueprints-design §2.1), so `remote_config` is metadata while
+        # `local_config` is the authored document. The hash comparisons below
+        # would compare two deliberately different shapes and report a
+        # conflict on every plan, forever. §3's own table replaces them.
+        return plan_blueprint(
+            object_key,
+            base_hash=base_hash,
+            local_config=local_config,
+            remote_config=remote_config,
+            source_path=manifest_entry.source if manifest_entry is not None else None,
+            drifted=object_key in blueprint_drift,
+        )
 
     canon_local = None if local_config is None else storage_canonical(kind, local_config)
     canon_remote = None if remote_config is None else storage_canonical(kind, remote_config)

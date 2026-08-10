@@ -14,7 +14,7 @@ dependencies = [
     "ruff>=0.4",
     "python-slugify>=8",
     # The simulator reads bundle-local blueprint sources, which are YAML
-    # carrying HA's `!input` custom tag (`hassle.testing.blueprints`).
+    # carrying HA's `!input` custom tag (`hassle.blueprints`).
     # Read-only and offline; Hassle still never WRITES a YAML file behind
     # HA's back (DESIGN §2).
     "pyyaml>=6",

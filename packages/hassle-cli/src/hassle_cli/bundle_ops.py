@@ -13,8 +13,9 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from hassle.blueprints import BLUEPRINT_ROOT, instances_by_blueprint
 from hassle.compiler.bundle import CompileResult, compile_bundle
-from hassle.ir.keys import DASHBOARD_KIND, category_shaped_stem
+from hassle.ir.keys import BLUEPRINT_KIND, DASHBOARD_KIND, category_shaped_stem
 from hassle.ir.keys import slugify as _slugify
 from hassle.registry.snapshot import RegistrySnapshot
 from hassle.sync.category_writeback import (
@@ -220,6 +221,15 @@ def default_source_path(object_key: str, *, registry: RegistrySnapshot | None = 
     kind, _, identity = object_key.partition(":")
     if kind == DASHBOARD_KIND:
         return f"dashboards/{_dashboard_module_name(identity)}.py"
+    if kind == BLUEPRINT_KIND:
+        # docs/internals/blueprints-design.md §1: a blueprint's source of
+        # truth IS the file at `blueprints/<domain>/<path>`, and the identity
+        # is exactly `"<domain>/<path>"` -- so placement is a rename of the
+        # identity, with nothing to derive or slugify. Checked before any
+        # registry lookup for the same reason dashboards are: this kind has no
+        # HA category scope, and a `.py` category file would be the wrong
+        # place for a YAML document regardless.
+        return f"{BLUEPRINT_ROOT}/{identity}"
 
     if registry is not None:
         categorized = _category_source_path(object_key, registry)
@@ -227,6 +237,20 @@ def default_source_path(object_key: str, *, registry: RegistrySnapshot | None = 
             return categorized
 
     return "misc.py"
+
+
+def blueprint_instances_for(objects: ObjectMap) -> dict[str, list[str]]:
+    """Blueprint object key -> the object keys instantiating it.
+
+    The map `apply_plan` needs for docs/internals/blueprints-design.md §4 (the
+    still-instantiated delete refusal and the post-update `automation.reload`
+    gate). Built from the COMPILED bundle rather than from the plan, because a
+    plan cannot answer it: an unchanged instance is a `noop` row with no body.
+    A thin adapter over `hassle.blueprints.instances_by_blueprint`, which is
+    the single shared implementation the drift oracle and the validator use
+    too.
+    """
+    return instances_by_blueprint({key: config for key, (_kind, config) in objects.items()})
 
 
 def build_source_paths(

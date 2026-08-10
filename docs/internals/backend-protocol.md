@@ -121,12 +121,35 @@ class PlanEntry(BaseModel):
     remote_hash_at_plan: str | None = None
     source_path: str | None = None
     conflict: Conflict | None = None
+    message: str | None = None       # additive
+    warning: bool = False            # additive
 
 class Plan(BaseModel):
     entries: list[PlanEntry]
     def entry_for(self, object_key: str) -> PlanEntry | None: ...
     def entries_with_action(self, action: PlanAction) -> list[PlanEntry]: ...
 ```
+
+`message`/`warning` are **additive** (docs/internals/blueprints-design.md §3),
+default `None`/`False`, and are produced only by the `blueprint` kind today:
+
+- `message` — a what/where/fix paragraph for rows whose *action* alone does not
+  say enough. For a blueprint, "pull the remote version" is not on the menu at
+  all (HA cannot serve a blueprint's source back), so its conflict and
+  `adopt (unmanageable)` rows have to spell out a fix no other kind's rows do.
+- `warning` — this row is **informational: reported, never executed**. Set only
+  by the `adopt (unmanageable)` row, whose `ADOPT` action would otherwise read
+  as actionable. Nothing acts on it regardless (apply runs only
+  create/update/delete; pull skips the blueprint kind entirely), so the flag
+  exists purely so a renderer can print "warning" instead of "adopt" —
+  **without** widening `PlanAction` past its frozen eight to express it.
+
+`compute_plan` also takes an additive keyword `blueprint_drift:
+frozenset[str] | None` — the blueprint object keys whose substitute-compare
+check found the remote copy expanding differently. The caller computes it
+(`hassle.sync.blueprint_drift.detect_blueprint_drift`), because answering the
+question needs a `Backend` round trip and `compute_plan` is pure. Omitting it
+disables the corroboration and reproduces the pre-oracle rows exactly.
 
 `remote_hash_at_plan` is the canonical hash (`hassle.ir.canonical.sha256_hash`)
 of the remote object *at the moment the plan was computed* — the apply engine
@@ -542,6 +565,114 @@ built against — verified live by DB0 against HA 2026.7.4; ha-api-notes
 §39.1–§39.12) and §4 (the backend/sync design this section mirrors) for the
 full rationale.
 
+## 3.3 Blueprints addendum (`Backend` unchanged)
+
+Blueprint **source files** (`hassle.ir.keys.BLUEPRINT_KIND`,
+docs/internals/blueprints-design.md) are the fourth `Backend`-unchanged plugin
+kind: the same four methods, addressed the same `(kind, identity)` way, with
+`identity == "<domain>/<path>"`. What differs is internal to
+`FakeBackend`/`DirectBackend` — plus two additive non-Protocol methods, and one
+genuinely new property this kind has and no other does.
+
+- **The kind is push-authoritative — `list_remote` returns metadata, never
+  source.** HA has no command that serves a blueprint's source back:
+  `blueprint/source`, `blueprint/get` and `blueprint/get_source` all answer
+  `unknown_command` (ha-api-notes §40.1, probed 2026-08-10). A remote blueprint
+  body is therefore, **by construction in both backends**:
+
+  ```json
+  {"domain": "automation", "path": "local/room-switch-controls.yaml",
+   "metadata": {"name": "...", "description": "...", "input": {...}}}
+  ```
+
+  with **no `source` key** — built by the one shared constructor
+  `hassle.blueprints.blueprint_remote_body`, so the two backends' shapes cannot
+  drift apart. A *local* body (`BlueprintConfig`, ir-format.md) does carry
+  `source` and `inputs`; "has a `source`" is exactly how a consumer tells the
+  two apart, and `_blueprint_save_parts` refuses to push a body without one
+  rather than letting a metadata body reach the wire.
+- **Consequence for the plan table.** Since local and remote bodies are
+  deliberately different shapes, this kind's rows are NOT computed by the
+  generic base/local/remote hash comparison. `compute_plan` routes
+  `kind == "blueprint"` to `hassle.sync.blueprint_plan`, which implements
+  blueprints-design §3's own six-row table: existence from `list_remote`,
+  content from the manifest's stored hash of the local file at last push,
+  optionally corroborated by the substitute-compare oracle.
+- **Mapping table** (`DirectBackend`, WS-only — no REST on any write path):
+
+  | Protocol call | Wire commands |
+  |---|---|
+  | `list_remote("blueprint")` | `blueprint/list` once **per blueprint domain** (`automation`, `script`; the command's payload is `{domain}`) → one metadata body per entry, keyed `"<domain>/<path>"` |
+  | `create` | `blueprint/save {domain, path, yaml, allow_override: false}` — the plan said nothing was at that path, so HA refusing to clobber is the server-side half of §3's `conflict` row |
+  | `update` | `blueprint/save {domain, path, yaml, allow_override: true}` |
+  | `delete` | `blueprint/delete {domain, path}` — a missing path errors (`unknown_error`, ENOENT-shaped) and that error propagates |
+
+  `yaml` is the document **verbatim**, CRLF included: stage 1's blueprint is
+  authored, not generated, and HA stores exactly what it is handed.
+- **Identity splits on the FIRST slash only.** `<path>` routinely contains more
+  of them (`local/room-switch-controls.yaml`, `a/b/c.yaml`);
+  `hassle.blueprints.split_blueprint_identity` is the one place that split
+  happens, mirroring ir-format.md's key-opacity rule one level down.
+- **`_CALLER_KEYED_KINDS`** (`hassle.sync.apply`) gains `"blueprint"`: identity
+  is `domain` + `path`, both intrinsic to the body the caller sends and never
+  HA-assigned, exactly like a dashboard's `url_path`. `_create_body` needs no
+  injection branch for it.
+- **`_KIND_ORDER` is not sufficient for this kind** — see §3.3.1 below.
+- **Two additive, non-Protocol methods**, both `getattr`-probed the way
+  `entry_id_for` and `fetch_registry_snapshot` already are, so a `Backend`
+  implementer without them degrades to "skip the check" rather than breaking:
+  - `blueprint_substitute(domain, path, inputs) -> dict` — `blueprint/substitute`,
+    HA's expansion of **its own** copy. The remote half of the drift oracle
+    (blueprints-design §2.2): expand there, expand the bundle's copy here with
+    the same inputs, normalize, compare. `FakeBackend` implements it by running
+    the **shared** `hassle.blueprints` expansion against its own stored YAML —
+    one expansion implementation everywhere, which is what makes the comparison
+    a real one rather than a circular re-expansion of the caller's input.
+  - `reload_automations() -> None` — `automation.reload`, issued by
+    `apply_plan` after a blueprint UPDATE when the bundle declares instances of
+    it (§4.3; `DirectBackend` posts `/api/services/automation/reload`).
+- **`FakeBackend` stores the FULL body** (`source` included) and projects it
+  down to metadata in `list_remote`. Storing it fully is what lets
+  `blueprint_substitute` answer from the fake's own copy, and keeping it inside
+  `self._store` (rather than a sidecar dict) means `snapshot`/`restore`
+  round-trip the source for free, so apply's rollback restores a blueprint
+  completely instead of resurrecting a sourceless husk. `hash_of` is routed
+  through `list_remote` for the same reason: it must hash what a caller can
+  actually see, or apply's pre-write re-verification could never match it.
+  `create` rejects a duplicate path and `update` refuses an unknown one
+  (the same non-upserting fidelity guard the helper and dashboard branches
+  carry); `delete` of a missing path raises, mirroring HA's ENOENT.
+
+### 3.3.1 Apply ordering is action-dependent for this kind
+
+Every other kind's apply order is a pure function of its `kind`
+(`_KIND_ORDER`). `blueprint` is the first kind whose position depends on its
+**action** as well (blueprints-design §4), because HA validates an instance
+against its blueprint at *instance-save* time:
+
+- blueprint `create`/`update` must run **before** any automation row;
+- blueprint `delete` must run **after** every automation row (an instance has
+  to be gone before the blueprint it uses can be).
+
+`hassle.sync.apply._entry_sort_key` therefore takes `(kind, action)` rather
+than `kind` alone: `blueprint` sits first in `_KIND_ORDER`, and a
+`blueprint` DELETE is remapped to a rank after the tuple's last entry.
+`_rollback` walks the applied snapshots in reverse, so the reverse ordering
+holds by construction rather than by a second, separately-maintained table.
+
+Two further structural guards live in `apply_plan`, both additive:
+
+- `blueprint_instances` (additive parameter): blueprint object key → the
+  automation object keys instantiating it, supplied by the caller from the
+  compiled bundle (`hassle.blueprints.instances_by_blueprint`). A plan whose
+  blueprint DELETE row names a key still present in that map is refused
+  **before any write happens** (`BlueprintStillInstantiatedError`), per §4.2.
+  It also gates the post-update `automation.reload`: a blueprint with no
+  declared instances has nothing to reload for.
+- `ApplyResult.blueprint_reloads` (additive field): the blueprint object keys
+  an `automation.reload` was issued for, so the CLI can report it and the
+  ordering tests can assert on it.
+
 ## 4. Where things live
 
 - `hassle.backend` — `Backend` Protocol (`protocol.py`), `FakeBackend`
@@ -550,4 +681,10 @@ full rationale.
   `Manifest`/`ManifestEntry`/`ApplyResult`/`ApplyOutcome` (`models.py`),
   `SourceWriter`/`WholeFileSourceWriter`/`SplicingSourceWriter`/
   `RecordingSourceWriter` (`source_writer.py`), `compute_plan` (`plan.py`),
-  `apply_plan` (`apply.py`), `apply_pull` (`pull.py`).
+  `apply_plan` (`apply.py`), `apply_pull` (`pull.py`), `plan_blueprint`
+  (`blueprint_plan.py`), `detect_blueprint_drift` (`blueprint_drift.py`).
+- `hassle.blueprints` — blueprint parsing, `!input` substitution and expansion,
+  plus the shared shape/derivation helpers both backends and the sync engine
+  use (`blueprint_body`, `blueprint_remote_body`, `blueprint_key_for_use_path`,
+  `instances_by_blueprint`, `split_blueprint_identity`). Core, not testing:
+  the validator and the backend both need it (blueprints-design §1).

@@ -638,6 +638,13 @@ def a():
 # is fixture-corpus work (`fixtures/dsl` is explicitly out of scope for this
 # change) rather than a validator bug -- flagged, not silently worked around.
 _DELIBERATELY_NOT_CLEAN = {
+    # Demonstrates `blueprint_automation` against a blueprint the bundle does
+    # NOT contain -- a community blueprint imported into Home Assistant by
+    # hand. That is exactly what blueprints-design §6.2's
+    # `blueprint-not-in-bundle` WARNING exists to point out: correct behaviour,
+    # not a false positive. Its sibling `blueprint_local_expansion` (same
+    # construct, file present) stays clean and is not listed here.
+    "blueprint_automation",
     "purpose_trigger_renamed_key",
     "dashboard_badges",
     "dashboard_cards_display_entities",
