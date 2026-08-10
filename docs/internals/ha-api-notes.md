@@ -4303,3 +4303,66 @@ mistake the backend already catches truthfully. A tier-1 `hassle validate`
 WARNING (not an error) for a hyphen-less `url_path` that is not already present
 remotely would restore the teaching without re-breaking adoption; noted as a
 follow-on, not done here.
+
+---
+
+## 40. Blueprints as objects — the WS surface, probed live (2026-08-10)
+
+Probed against the owner's HA while designing
+[blueprints-design.md](blueprints-design.md) §2, on the day the first
+bundle-authored blueprint (BrandtCamp's `room-switch-controls.yaml`, 17
+instances) was deployed by a hand-run websocket script. The design's §2 table
+is reproduced here with the capture notes, per house convention.
+
+### 40.1 What exists
+
+| WS command | Exists | Payload | Notes |
+|---|---|---|---|
+| `blueprint/list` | ✅ | `{domain}` | Returns `{<path>: {"metadata": {...}}}` — name, description, input (with selectors), `source_url`. **Metadata only; no source text.** Per-domain, so both `automation` and `script` must be queried. |
+| `blueprint/save` | ✅ | `{domain, path, yaml, allow_override}` | Used live for the first deploy. `allow_override: false` refuses to clobber an existing path. |
+| `blueprint/delete` | ✅ | `{domain, path}` | A missing path errors `unknown_error` with an ENOENT-shaped message — distinguishable from `unknown_command`, which is what let the probe conclude the command exists at all. |
+| `blueprint/substitute` | ✅ | `{domain, path, input}` | Returns the expanded config **derived from HA's own copy**. Validates required inputs; its error enumerates the missing ones. |
+| `blueprint/source` | ❌ | — | `unknown_command`. |
+| `blueprint/get` | ❌ | — | `unknown_command`. |
+| `blueprint/get_source` | ❌ | — | `unknown_command`. |
+
+### 40.2 The consequence: no source read
+
+**HA cannot serve a blueprint's source back.** Three separately-guessed
+command names all answer `unknown_command`, so this is a property of the
+integration, not a naming miss. Two things follow, and both are structural in
+the implementation rather than merely documented:
+
+1. **The kind is push-authoritative.** A three-way text merge is impossible
+   and pull cannot materialize a remote-only blueprint. `list_remote`
+   therefore returns a body with **no `source` key by construction** in both
+   backends (`hassle.blueprints.blueprint_remote_body` builds the one shape
+   they share), and pull skips the kind entirely
+   (blueprints-design §5).
+2. **`blueprint/substitute` is the drift oracle.** Content drift IS detectable
+   without source access: substitute remotely with a known input set, expand
+   the bundle's copy locally with the same inputs through
+   `hassle.blueprints.expand_blueprint`, normalize, compare. Equal expansions
+   mean the two copies agree in every way that can matter to an instance.
+   `FakeBackend.blueprint_substitute` runs the *same* expansion implementation
+   against its own stored YAML, which is what keeps the check honest in tests
+   (a fake that re-expanded the caller's copy could never detect anything).
+
+### 40.3 Instance validation happens at instance-save time
+
+The field failure that motivated the whole design: pushing an instance whose
+blueprint file is absent, or whose inputs the blueprint rejects, fails with an
+**opaque HTTP 400 at the instance's own save**, not at the blueprint's. This
+is what fixes apply ordering (blueprints-design §4): blueprint creates and
+updates must precede every automation row, and blueprint deletes must follow
+them.
+
+### 40.4 Marked for empirical confirmation: reload after `blueprint/save`
+
+`automation.reload` after a blueprint update is implemented per
+blueprints-design §4.3's stated behavior — HA is believed **not** to re-expand
+already-loaded instances on `blueprint/save` alone. This specific point was
+**not** probed on 2026-08-10 and is carried as a TODO in
+`hassle.sync.apply._reload_after_blueprint_update`; the owner will verify
+live. Either outcome is safe: if HA does re-expand on its own, the extra
+reload is redundant but harmless.

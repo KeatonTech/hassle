@@ -142,7 +142,7 @@ def test_update_of_an_unknown_path_raises() -> None:
     apply's rollback can never quietly paper over a recreate that should have
     gone through `create`."""
     backend = FakeBackend()
-    with pytest.raises(ValueError, match="local/room-switch-controls.yaml"):
+    with pytest.raises(ValueError, match=r"local/room-switch-controls\.yaml"):
         backend.update(BLUEPRINT_KIND, IDENTITY, _body())
 
 
@@ -160,7 +160,7 @@ def test_delete_of_a_missing_path_errors() -> None:
     """§2: real HA answers `unknown_error`/ENOENT for a missing path -- an
     error, not a silent success (still distinguishable from
     `unknown_command`)."""
-    with pytest.raises(ValueError, match="local/nope.yaml"):
+    with pytest.raises(ValueError, match=r"local/nope\.yaml"):
         FakeBackend().delete(BLUEPRINT_KIND, "automation/local/nope.yaml")
 
 
@@ -203,7 +203,7 @@ def test_substitute_validates_required_inputs() -> None:
 
 
 def test_substitute_of_an_unknown_path_raises() -> None:
-    with pytest.raises(ValueError, match="local/nope.yaml"):
+    with pytest.raises(ValueError, match=r"local/nope\.yaml"):
         FakeBackend().blueprint_substitute("automation", "local/nope.yaml", {})
 
 

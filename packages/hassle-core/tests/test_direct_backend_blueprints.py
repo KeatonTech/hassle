@@ -253,9 +253,7 @@ def test_a_nested_path_survives_the_identity_round_trip(client: _FakeClient) -> 
     """`<path>` carries slashes, so splitting an identity back into
     `(domain, path)` must split on the FIRST slash only."""
     backend = _backend(_FakeClient())
-    backend.create(
-        BLUEPRINT_KIND, {"domain": "automation", "path": "a/b/c.yaml", "source": SOURCE}
-    )
+    backend.create(BLUEPRINT_KIND, {"domain": "automation", "path": "a/b/c.yaml", "source": SOURCE})
     backend.delete(BLUEPRINT_KIND, "automation/a/b/c.yaml")
     assert backend._client.calls[-1][1] == {  # type: ignore[attr-defined]
         "domain": "automation",

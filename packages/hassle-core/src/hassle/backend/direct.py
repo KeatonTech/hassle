@@ -42,7 +42,13 @@ from typing import Any, cast
 from hassle.backend.client import HaClient
 from hassle.backend.errors import HaApiError
 from hassle.backend.version import version_warning
+from hassle.blueprints import (
+    BLUEPRINT_DOMAINS,
+    blueprint_remote_body,
+    split_blueprint_identity,
+)
 from hassle.ir.keys import (
+    BLUEPRINT_KIND,
     DASHBOARD_KIND,
     GROUP_DOMAINS,
     HELPER_DOMAINS,
@@ -102,6 +108,28 @@ _DASHBOARD_FIELD_DEFAULTS: dict[str, Any] = {
     "show_in_sidebar": True,
     "require_admin": False,
 }
+
+
+def _blueprint_save_parts(config: dict[str, Any]) -> tuple[str, str, str]:
+    """`(domain, path, yaml)` from a blueprint IR body, validated.
+
+    Raises BEFORE anything reaches the wire when there is no `source`: a
+    remote (metadata-only) body is not pushable, and sending
+    `blueprint/save` with a missing `yaml` would be a confusing HA-side
+    schema error instead of a clear local one (blueprints-design §2.1).
+    """
+    domain = config.get("domain")
+    path = config.get("path")
+    source = config.get("source")
+    if not isinstance(domain, str) or not isinstance(path, str):
+        raise ValueError("a blueprint body needs a `domain` and a `path`")
+    if not isinstance(source, str):
+        raise ValueError(
+            f"blueprint `{domain}/{path}` has no `source` to save -- a remote "
+            "(metadata-only) body is not pushable; Home Assistant cannot serve a "
+            "blueprint's source back, so the bundle file is the only source of truth"
+        )
+    return domain, path, source
 
 
 def _dashboard_registry_payload(meta: dict[str, Any]) -> dict[str, Any]:
@@ -271,6 +299,8 @@ class DirectBackend:
             return self._run(self._alist_group_helpers(kind))
         if kind == DASHBOARD_KIND:
             return self._run(self._alist_dashboards())
+        if kind == BLUEPRINT_KIND:
+            return self._run(self._alist_blueprints())
         return self._run(self._alist_helpers(kind))
 
     def create(self, kind: str, config: dict[str, Any]) -> str:
@@ -285,6 +315,8 @@ class DirectBackend:
             return self._run(self._acreate_group_helper(kind, config))
         if kind == DASHBOARD_KIND:
             return self._run(self._acreate_dashboard(config))
+        if kind == BLUEPRINT_KIND:
+            return self._run(self._asave_blueprint(config, allow_override=False))
         return self._run(self._acreate_helper(kind, config))
 
     def update(self, kind: str, identity: str, config: dict[str, Any]) -> None:
@@ -299,6 +331,8 @@ class DirectBackend:
             self._run(self._aupdate_group_helper(kind, identity, config))
         elif kind == DASHBOARD_KIND:
             self._run(self._aupdate_dashboard(identity, config))
+        elif kind == BLUEPRINT_KIND:
+            self._run(self._asave_blueprint(config, allow_override=True))
         else:
             self._run(self._aupdate_helper(kind, identity, config))
 
@@ -314,6 +348,8 @@ class DirectBackend:
             self._run(self._adelete_group_helper(kind, identity))
         elif kind == DASHBOARD_KIND:
             self._run(self._adelete_dashboard(identity))
+        elif kind == BLUEPRINT_KIND:
+            self._run(self._adelete_blueprint(identity))
         else:
             self._run(self._adelete_helper(kind, identity))
 
@@ -1063,6 +1099,96 @@ class DirectBackend:
         dashboard_id = await self._aresolve_dashboard_id(identity)
         await self._client.ws_command("lovelace/dashboards/delete", dashboard_id=dashboard_id)
         self._dashboard_ids.pop(identity, None)
+
+    # -- blueprints (docs/internals/blueprints-design.md §2, ha-api-notes §40)
+    #
+    # Four WS commands, no REST anywhere -- like the dashboard family, unlike
+    # the config-entry flows. The shape that governs everything else is what
+    # is MISSING: `blueprint/source`, `blueprint/get` and
+    # `blueprint/get_source` all answer `unknown_command`, so HA cannot serve
+    # a blueprint's source back and nothing here ever asks. That makes the
+    # kind push-authoritative (§2.1) -- `list_remote` reports existence and
+    # metadata, and the bundle file is the only source of truth for content.
+
+    async def _alist_blueprints(self) -> dict[str, dict[str, Any]]:
+        """`blueprint/list` once per blueprint domain -> metadata-only bodies.
+
+        Keyed by `"<domain>/<path>"`, the object-key identity. `blueprint/list`
+        is per-domain (its payload is `{domain}`), so both of HA's blueprint
+        domains are queried; a domain with no blueprints simply contributes
+        nothing.
+        """
+        out: dict[str, dict[str, Any]] = {}
+        for domain in BLUEPRINT_DOMAINS:
+            listed: Any = await self._client.ws_command("blueprint/list", domain=domain)
+            if not isinstance(listed, dict):  # pragma: no cover - defensive
+                continue
+            for path, entry in cast("dict[str, Any]", listed).items():
+                metadata: dict[str, Any] = {}
+                if isinstance(entry, dict):
+                    raw = cast("dict[str, Any]", entry).get("metadata")
+                    if isinstance(raw, dict):
+                        metadata = cast("dict[str, Any]", raw)
+                out[f"{domain}/{path}"] = blueprint_remote_body(domain, str(path), metadata)
+        return out
+
+    async def _asave_blueprint(self, config: dict[str, Any], *, allow_override: bool) -> str:
+        """`blueprint/save {domain, path, yaml, allow_override}`.
+
+        `allow_override` is `False` for a CREATE and `True` for an UPDATE: the
+        plan said nothing was at that path, so HA refusing a create that would
+        clobber something is the server-side half of §3's `conflict` row --
+        one more guard between a stale plan and a lost blueprint.
+
+        The document goes out **verbatim** (§1's byte preservation reaching
+        the wire); HA stores exactly what it is handed.
+        """
+        domain, path, source = _blueprint_save_parts(config)
+        await self._client.ws_command(
+            "blueprint/save",
+            domain=domain,
+            path=path,
+            yaml=source,
+            allow_override=allow_override,
+        )
+        return f"{domain}/{path}"
+
+    async def _adelete_blueprint(self, identity: str) -> None:
+        """`blueprint/delete {domain, path}`.
+
+        A missing path errors (`unknown_error`, ENOENT-shaped) and that error
+        propagates: apply must fail loudly rather than record a delete that
+        did not happen.
+        """
+        domain, path = split_blueprint_identity(identity)
+        await self._client.ws_command("blueprint/delete", domain=domain, path=path)
+
+    def blueprint_substitute(
+        self, domain: str, path: str, inputs: dict[str, Any]
+    ) -> dict[str, Any]:
+        """`blueprint/substitute` — HA's expansion of ITS OWN copy (§2.2).
+
+        Additive and **not** part of the frozen `Backend` Protocol, probed via
+        `getattr` exactly like `entry_id_for`: it is the drift oracle's remote
+        half, and a backend that cannot answer it simply skips the check.
+        Since HA cannot serve a source back, this is the only way to observe
+        the remote document's *behaviour* — expand there, expand the bundle's
+        copy here with the same inputs, normalize, compare.
+        """
+        result: Any = self._run(
+            self._client.ws_command("blueprint/substitute", domain=domain, path=path, input=inputs)
+        )
+        return cast("dict[str, Any]", result) if isinstance(result, dict) else {}
+
+    def reload_automations(self) -> None:
+        """`automation.reload` (blueprints-design §4.3).
+
+        Additive, non-Protocol, `getattr`-probed like `blueprint_substitute`.
+        Issued by `apply_plan` after a blueprint UPDATE when the bundle
+        declares instances of it: HA does not re-expand live instances on
+        `blueprint/save` alone.
+        """
+        self._run(self._client.rest_post("/api/services/automation/reload", json={}))
 
     # -- registry snapshot (DESIGN §9.2) ----------------------------------
 

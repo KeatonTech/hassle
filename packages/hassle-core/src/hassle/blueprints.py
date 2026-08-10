@@ -393,6 +393,47 @@ def blueprint_body(*, domain: str, path: str, source: str) -> dict[str, Any]:
     }
 
 
+def blueprint_metadata(source: str, *, display_path: str = "<blueprint>") -> dict[str, Any]:
+    """A blueprint document's own top-level ``blueprint:`` block.
+
+    This is exactly what HA's ``blueprint/list`` returns per entry
+    (blueprints-design §2: "metadata only — name, inputs, source_url; no
+    source text"), so both backends build their remote bodies from it and the
+    two shapes cannot drift apart.
+    """
+    parsed: Any = yaml.load(source, Loader=_BlueprintLoader)
+    if not isinstance(parsed, dict):  # pragma: no cover - defensive
+        raise InvalidBlueprintError(display_path, "its top level is not a YAML mapping")
+    metadata = cast("dict[str, Any]", parsed).get("blueprint")
+    if not isinstance(metadata, dict):  # pragma: no cover - defensive
+        raise InvalidBlueprintError(display_path, "it has no top-level `blueprint:` mapping")
+    return cast("dict[str, Any]", metadata)
+
+
+def blueprint_remote_body(domain: str, path: str, metadata: dict[str, Any]) -> dict[str, Any]:
+    """The body a backend's ``list_remote("blueprint")`` returns for one entry.
+
+    **There is deliberately no ``source`` key**, in either backend
+    (blueprints-design §2.1): HA has no command that serves a blueprint's
+    source back, so a remote blueprint body physically cannot carry one. That
+    absence is a contract, not an omission — it is what makes this kind
+    push-authoritative, and what §3's plan table is built around. A consumer
+    telling a local body from a remote one asks exactly this: does it have a
+    ``source``?
+    """
+    return {"domain": domain, "path": path, "metadata": metadata}
+
+
+def split_blueprint_identity(identity: str) -> tuple[str, str]:
+    """``"automation/local/x.yaml"`` -> ``("automation", "local/x.yaml")``.
+
+    Splits on the **first** slash only: ``<path>`` routinely contains more of
+    them, and it must come back out exactly as the instance wrote it.
+    """
+    domain, _, path = identity.partition("/")
+    return domain, path
+
+
 #: File extensions discovery treats as blueprint documents. Anything else
 #: under ``blueprints/<domain>/`` (a README, a LICENSE, an editor swapfile) is
 #: somebody's own file, not a blueprint to try to parse.
