@@ -682,6 +682,7 @@ def _build_plan_with_compile_result(root: Path):
     wrapper below)."""
     from hassle.compiler.errors import CompileError
     from hassle.ir.keys import OBJECT_KINDS
+    from hassle.sync.blueprint_drift import detect_blueprint_drift
     from hassle.sync.plan import compute_plan
     from hassle_cli import backend_factory
     from hassle_cli.ignore_filter import apply_ignore_globs, migrate_manifest_for_ignores
@@ -703,6 +704,13 @@ def _build_plan_with_compile_result(root: Path):
         _report_compile_error(exc, root)
     with backend_factory.connect(ha_url, token) as backend:
         remote_objects = bundle_ops.remote_objects_from_backend(backend, list(OBJECT_KINDS))
+        # docs/internals/blueprints-design.md §2.2/§3: the substitute-compare
+        # oracle. It needs a live backend, and `compute_plan` is pure, so the
+        # verdict is computed here -- inside the same connection that just
+        # listed the remote side -- and handed in. Best-effort by design: any
+        # failure means "no drift" (the manifest hash still governs), so this
+        # can never turn a transport hiccup into a conflict.
+        blueprint_drift = detect_blueprint_drift(backend, local_objects)
     ignore_result = apply_ignore_globs(
         local_objects=local_objects, remote_objects=remote_objects, ignore_globs=config.ignore
     )
@@ -710,6 +718,7 @@ def _build_plan_with_compile_result(root: Path):
         manifest=manifest,
         local_objects=ignore_result.local_objects,
         remote_objects=ignore_result.remote_objects,
+        blueprint_drift=blueprint_drift,
     )
     # `source_path` drives category write-back on CREATE (`hassle.sync.
     # category_writeback`, via `apply_plan`) -- a CREATE always has a real
@@ -866,7 +875,7 @@ def push(
     skip_kind: tuple[str, ...],
 ) -> None:
     """Plan, confirm, and apply to HA (DESIGN §8.2)."""
-    from hassle.sync.apply import apply_plan
+    from hassle.sync.apply import BlueprintStillInstantiatedError, apply_plan
     from hassle.sync.models import PlanAction, PlanEntry
     from hassle_cli import backend_factory
     from hassle_cli.plan_render import plan_summary, render_plan
@@ -896,6 +905,16 @@ def push(
     )
     for warning in category_global_warnings:
         console.print(f"[yellow]{_esc(warning)}[/yellow]")
+
+    # docs/internals/blueprints-design.md §4: blueprint object key -> the
+    # automations instantiating it, from the COMPILED bundle. `apply_plan`
+    # cannot derive it from the plan (an unchanged instance is a `noop` row
+    # with no body), and it needs it for two things: refusing a plan that
+    # would delete a blueprint whose instances are still declared (§4.2), and
+    # deciding whether a blueprint update needs `automation.reload` (§4.3).
+    blueprint_instances = bundle_ops.blueprint_instances_for(
+        {key: (obj.kind(), obj.to_ha()) for key, obj in compile_result.objects.items()}
+    )
 
     adopts = the_plan.entries_with_action(PlanAction.ADOPT)
     if adopts:
@@ -998,13 +1017,29 @@ def push(
         console.print(f"[{index}/{total}] {entry.action.value} {_esc(entry.object_key)}")
 
     with backend_factory.connect(ha_url, token) as backend:
-        result = apply_plan(
-            resolved_plan,
-            backend,
-            manifest,
-            synced_at=manifest_io.now_iso(),
-            category_overrides=category_overrides,
-            on_progress=_progress,
+        try:
+            result = apply_plan(
+                resolved_plan,
+                backend,
+                manifest,
+                synced_at=manifest_io.now_iso(),
+                category_overrides=category_overrides,
+                on_progress=_progress,
+                blueprint_instances=blueprint_instances,
+            )
+        except BlueprintStillInstantiatedError as exc:
+            # blueprints-design §4.2, refused BEFORE any write. Reported the
+            # same clean what/where/fix way a compile error is -- exit 1, no
+            # raw traceback -- since the user's next step is a bundle edit,
+            # not a bug report.
+            console.print(f"[bold red]hassle push: {_esc(str(exc))}[/bold red]")
+            raise SystemExit(1) from None
+
+    for reloaded in result.blueprint_reloads:
+        console.print(
+            f"[dim]hassle push: reloaded automations after updating {_esc(reloaded)} "
+            "(Home Assistant does not re-expand live instances on a blueprint save "
+            "alone).[/dim]"
         )
 
     if not result.succeeded:
