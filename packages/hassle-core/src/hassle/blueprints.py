@@ -424,6 +424,56 @@ def blueprint_remote_body(domain: str, path: str, metadata: dict[str, Any]) -> d
     return {"domain": domain, "path": path, "metadata": metadata}
 
 
+def blueprint_key_for_use_path(
+    use_blueprint_path: str, *, domain: str = DEFAULT_BLUEPRINT_DOMAIN
+) -> str:
+    """The object key of the blueprint an instance's ``use_blueprint`` names.
+
+    No transformation at all — ``<path>`` IS the identity's second segment
+    (blueprints-design §1), which is exactly why the key format was chosen that
+    way. Works whether or not the bundle actually has the file: a community
+    blueprint that lives only in HA still has a derivable key, which is what
+    lets §6's rule 2 name the file that would make it managed.
+    """
+    return f"blueprint:{domain}/{use_blueprint_path}"
+
+
+def instances_by_blueprint(bodies: dict[str, dict[str, Any]]) -> dict[str, list[str]]:
+    """Blueprint object key -> the object keys instantiating it.
+
+    ``bodies`` is ``object_key -> to_ha() body`` for the bundle's compiled
+    objects; anything without a ``use_blueprint`` reference is ignored. The
+    instance lists are sorted, so every consumer sees the same deterministic
+    order (R8).
+
+    Three callers need this exact map and it must be one function, because a
+    disagreement between them would be a silent correctness bug rather than a
+    visible one: apply refuses a plan deleting a blueprint that still has
+    instances and gates its post-update ``automation.reload`` on the same map
+    (§4), the drift oracle picks an instance to substitute with (§3), and the
+    validator checks each instance's inputs (§6).
+    """
+    found: dict[str, list[str]] = {}
+    for object_key, body in bodies.items():
+        reference = body.get("use_blueprint")
+        if not isinstance(reference, dict):
+            continue
+        path = cast("dict[str, Any]", reference).get("path")
+        if not isinstance(path, str) or not path:
+            continue
+        found.setdefault(blueprint_key_for_use_path(path), []).append(object_key)
+    return {key: sorted(instances) for key, instances in sorted(found.items())}
+
+
+def instance_inputs(body: dict[str, Any]) -> dict[str, Any]:
+    """One instance's supplied ``use_blueprint.input`` mapping (never ``None``)."""
+    reference = body.get("use_blueprint")
+    if not isinstance(reference, dict):
+        return {}
+    supplied = cast("dict[str, Any]", reference).get("input")
+    return dict(cast("dict[str, Any]", supplied)) if isinstance(supplied, dict) else {}
+
+
 def split_blueprint_identity(identity: str) -> tuple[str, str]:
     """``"automation/local/x.yaml"`` -> ``("automation", "local/x.yaml")``.
 

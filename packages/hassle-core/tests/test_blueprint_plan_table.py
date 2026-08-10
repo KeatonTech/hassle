@@ -142,9 +142,7 @@ def test_an_update_carries_the_remote_hash_for_reverification() -> None:
 
 
 def test_substitute_compare_mismatch_is_a_conflict() -> None:
-    entry = _plan(
-        local=_local(), remote=_remote(), manifest_source=SOURCE, drift=frozenset({KEY})
-    )
+    entry = _plan(local=_local(), remote=_remote(), manifest_source=SOURCE, drift=frozenset({KEY}))
     assert entry is not None
     assert entry.action is PlanAction.CONFLICT
 
@@ -162,9 +160,7 @@ def test_drift_beats_a_clean_hash_and_a_dirty_one_alike() -> None:
 
 
 def test_the_drift_conflict_says_the_remote_was_edited_in_place() -> None:
-    entry = _plan(
-        local=_local(), remote=_remote(), manifest_source=SOURCE, drift=frozenset({KEY})
-    )
+    entry = _plan(local=_local(), remote=_remote(), manifest_source=SOURCE, drift=frozenset({KEY}))
     assert entry is not None and entry.message is not None
     assert "edited in place" in entry.message
     assert "--accept-local" in entry.message

@@ -121,12 +121,35 @@ class PlanEntry(BaseModel):
     remote_hash_at_plan: str | None = None
     source_path: str | None = None
     conflict: Conflict | None = None
+    message: str | None = None       # additive
+    warning: bool = False            # additive
 
 class Plan(BaseModel):
     entries: list[PlanEntry]
     def entry_for(self, object_key: str) -> PlanEntry | None: ...
     def entries_with_action(self, action: PlanAction) -> list[PlanEntry]: ...
 ```
+
+`message`/`warning` are **additive** (docs/internals/blueprints-design.md §3),
+default `None`/`False`, and are produced only by the `blueprint` kind today:
+
+- `message` — a what/where/fix paragraph for rows whose *action* alone does not
+  say enough. For a blueprint, "pull the remote version" is not on the menu at
+  all (HA cannot serve a blueprint's source back), so its conflict and
+  `adopt (unmanageable)` rows have to spell out a fix no other kind's rows do.
+- `warning` — this row is **informational: reported, never executed**. Set only
+  by the `adopt (unmanageable)` row, whose `ADOPT` action would otherwise read
+  as actionable. Nothing acts on it regardless (apply runs only
+  create/update/delete; pull skips the blueprint kind entirely), so the flag
+  exists purely so a renderer can print "warning" instead of "adopt" —
+  **without** widening `PlanAction` past its frozen eight to express it.
+
+`compute_plan` also takes an additive keyword `blueprint_drift:
+frozenset[str] | None` — the blueprint object keys whose substitute-compare
+check found the remote copy expanding differently. The caller computes it
+(`hassle.sync.blueprint_drift.detect_blueprint_drift`), because answering the
+question needs a `Backend` round trip and `compute_plan` is pure. Omitting it
+disables the corroboration and reproduces the pre-oracle rows exactly.
 
 `remote_hash_at_plan` is the canonical hash (`hassle.ir.canonical.sha256_hash`)
 of the remote object *at the moment the plan was computed* — the apply engine
@@ -658,4 +681,10 @@ Two further structural guards live in `apply_plan`, both additive:
   `Manifest`/`ManifestEntry`/`ApplyResult`/`ApplyOutcome` (`models.py`),
   `SourceWriter`/`WholeFileSourceWriter`/`SplicingSourceWriter`/
   `RecordingSourceWriter` (`source_writer.py`), `compute_plan` (`plan.py`),
-  `apply_plan` (`apply.py`), `apply_pull` (`pull.py`).
+  `apply_plan` (`apply.py`), `apply_pull` (`pull.py`), `plan_blueprint`
+  (`blueprint_plan.py`), `detect_blueprint_drift` (`blueprint_drift.py`).
+- `hassle.blueprints` — blueprint parsing, `!input` substitution and expansion,
+  plus the shared shape/derivation helpers both backends and the sync engine
+  use (`blueprint_body`, `blueprint_remote_body`, `blueprint_key_for_use_path`,
+  `instances_by_blueprint`, `split_blueprint_identity`). Core, not testing:
+  the validator and the backend both need it (blueprints-design §1).
