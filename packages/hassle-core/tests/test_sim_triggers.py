@@ -549,3 +549,74 @@ def test_zone_trigger_ignores_leave_when_configured_for_enter(tmp_path: Path) ->
     sim.set_state("person.kai", "zone.home")
     sim.state_change("person.kai", "zone.home", "not_home")
     sim.assert_not_called("notify.mobile_app")
+
+
+# ---------------------------------------------------------------------------
+# state trigger: `not_from:` / `not_to:` (regression -- these filters were
+# silently IGNORED, so a trigger that exists precisely to exclude a
+# transition fired on it anyway)
+# ---------------------------------------------------------------------------
+
+
+_NOT_FROM_BUNDLE = """
+    from hassle import raw_automation
+
+    @raw_automation(id="a")
+    def a():
+        return {
+            "alias": "a",
+            "triggers": [
+                {
+                    "trigger": "state",
+                    "entity_id": "event.paddle_up",
+                    "not_from": ["unknown", "unavailable"],
+                }
+            ],
+            "actions": [
+                {"action": "light.turn_on", "data": {"entity_id": "light.hallway"}}
+            ],
+        }
+    """
+
+
+def test_state_trigger_not_from_excludes_the_listed_prior_states(tmp_path: Path) -> None:
+    # The HA-restart replay (`unknown` -> a real value) is exactly what
+    # `not_from:` exists to exclude; it must not read as a real transition.
+    sim = build_sim(tmp_path, _NOT_FROM_BUNDLE)
+    sim.state_change("event.paddle_up", "unknown", "2026-08-09T10:00:00+00:00")
+    sim.assert_not_called("light.turn_on")
+
+
+def test_state_trigger_not_from_still_fires_for_other_prior_states(tmp_path: Path) -> None:
+    sim = build_sim(tmp_path, _NOT_FROM_BUNDLE)
+    sim.state_change("event.paddle_up", "2026-08-09T09:00:00+00:00", "2026-08-09T10:00:00+00:00")
+    sim.assert_called("light.turn_on", entity_id="light.hallway")
+
+
+def test_state_trigger_not_to_excludes_the_listed_new_states(tmp_path: Path) -> None:
+    sim = build_sim(
+        tmp_path,
+        """
+        from hassle import raw_automation
+
+        @raw_automation(id="a")
+        def a():
+            return {
+                "alias": "a",
+                "triggers": [
+                    {
+                        "trigger": "state",
+                        "entity_id": "binary_sensor.motion",
+                        "not_to": "unavailable",
+                    }
+                ],
+                "actions": [
+                {"action": "light.turn_on", "data": {"entity_id": "light.hallway"}}
+            ],
+            }
+        """,
+    )
+    sim.state_change("binary_sensor.motion", "on", "unavailable")
+    sim.assert_not_called("light.turn_on")
+    sim.state_change("binary_sensor.motion", "off", "on")
+    sim.assert_called("light.turn_on", entity_id="light.hallway")
