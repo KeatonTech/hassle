@@ -24,6 +24,7 @@ from hassle_cli.render import get_console
 
 if TYPE_CHECKING:
     from hassle.compiler.errors import CompileError
+    from hassle.registry.finding import Finding
 
 
 def _esc(value: object) -> str:
@@ -1221,7 +1222,7 @@ def validate(as_json: bool, live: bool) -> None:
             ]
         }
         click.echo(_json.dumps(payload))
-        if findings:
+        if _has_errors(findings):
             raise SystemExit(1)
         return
 
@@ -1230,8 +1231,34 @@ def validate(as_json: bool, live: bool) -> None:
         return
 
     for finding in findings:
-        console.print(f"[red]{_esc(finding.code)}[/red]: {_esc(finding)}")
-    raise SystemExit(1)
+        style = "yellow" if finding.severity == "warning" else "red"
+        console.print(
+            f"[{style}]{finding.severity}[/{style}] {_esc(finding.code)}: {_esc(finding)}"
+        )
+    if _has_errors(findings):
+        raise SystemExit(1)
+    console.print(
+        "[green]hassle validate: no errors "
+        f"({len(findings)} warning(s) above -- nothing is broken)[/green]"
+    )
+
+
+def _has_errors(findings: list[Finding]) -> bool:
+    """Whether `hassle validate` should exit non-zero.
+
+    **Severity is honoured, not decorative.** Every Finding was severity
+    `"error"` until docs/internals/blueprints-design.md §6.2 introduced the
+    first genuine WARNING: an automation referencing a community blueprint
+    that lives only in Home Assistant is legitimate (BrandtCamp does it five
+    times), and Hassle simply cannot manage it -- there is nothing for the
+    author to fix. Failing on it would break the `hassle validate && hassle
+    test` loop (DESIGN §8.4) for a perfectly correct bundle, and would teach
+    users to stop reading validate's output.
+
+    Warnings are still PRINTED, in yellow, and still appear in `--json` --
+    they are information, not noise. They just do not fail the command.
+    """
+    return any(finding.severity != "warning" for finding in findings)
 
 
 # ---------------------------------------------------------------------------

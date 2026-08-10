@@ -190,3 +190,102 @@ def test_a_warning_row_is_not_counted_as_a_change() -> None:
         message="...",
     )
     assert plan_summary(Plan(entries=[entry])) == {}
+
+
+# --- `hassle validate` must honor severity ---------------------------------
+#
+# blueprints-design §6.2 makes the unmanaged-blueprint finding a WARNING on
+# purpose: referencing a community blueprint that lives only in Home Assistant
+# is legitimate, and BrandtCamp does it five times. Before this change every
+# Finding was severity "error" and the CLI treated them identically -- red,
+# exit 1 -- so a correct bundle's `hassle validate && hassle test` loop
+# (DESIGN §8.4) would start failing the moment it referenced one.
+
+
+def _validate(tmp_path: Path, dsl: str, *, blueprint: str | None = None) -> tuple[int, str]:
+    from click.testing import CliRunner
+
+    from hassle_cli.cli import main
+
+    root = tmp_path / "bundle"
+    root.mkdir(exist_ok=True)
+    (root / "misc.py").write_text(dsl, encoding="utf-8")
+    (root / "hassle.toml").write_text('ha_url = "http://localhost:8123"\n', encoding="utf-8")
+    # Tier-2/3 checks (and therefore every Finding) are skipped entirely
+    # without a registry snapshot -- an empty one is enough here, since the
+    # blueprint rules are offline and read nothing from it.
+    hassle_dir = root / ".hassle"
+    hassle_dir.mkdir(exist_ok=True)
+    (hassle_dir / "registry.json").write_text("{}", encoding="utf-8")
+    if blueprint is not None:
+        target = root / "blueprints" / "automation" / PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(blueprint, encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, ["validate"], catch_exceptions=False)
+    return result.exit_code, result.output
+
+
+_COMMUNITY_INSTANCE = (
+    "from hassle import blueprint_automation\n"
+    "blueprint_automation(\n"
+    '    id="tap_sequences",\n'
+    '    use_blueprint="jay-kub/taps.yaml",\n'
+    "    inputs={},\n"
+    ")\n"
+)
+
+_MISSING_INPUT_INSTANCE = (
+    "from hassle import blueprint_automation\n"
+    "blueprint_automation(\n"
+    '    id="office_switch",\n'
+    f'    use_blueprint="{PATH}",\n'
+    "    inputs={},\n"
+    ")\n"
+)
+
+
+def test_warnings_alone_do_not_fail_validate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The five BrandtCamp community-blueprint instances must not turn a
+    correct bundle's `hassle validate && hassle test` loop red."""
+    root = tmp_path / "bundle"
+    root.mkdir()
+    monkeypatch.chdir(root)
+    code, output = _validate(tmp_path, _COMMUNITY_INSTANCE)
+    assert "blueprint-not-in-bundle" in output
+    assert code == 0
+
+
+def test_a_warning_is_labelled_as_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "bundle"
+    root.mkdir()
+    monkeypatch.chdir(root)
+    _code, output = _validate(tmp_path, _COMMUNITY_INSTANCE)
+    assert "warning" in output.lower()
+
+
+def test_an_error_still_fails_validate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Severity is honoured, not ignored: an error-severity finding keeps its
+    exit-1 behaviour exactly as before."""
+    root = tmp_path / "bundle"
+    root.mkdir()
+    monkeypatch.chdir(root)
+    code, output = _validate(tmp_path, _MISSING_INPUT_INSTANCE, blueprint=SOURCE)
+    assert code == 1
+    assert "blueprint-missing-input" in output
+
+
+def test_an_error_and_a_warning_together_fail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "bundle"
+    root.mkdir()
+    monkeypatch.chdir(root)
+    code, output = _validate(
+        tmp_path, _MISSING_INPUT_INSTANCE + _COMMUNITY_INSTANCE, blueprint=SOURCE
+    )
+    assert code == 1
+    assert "blueprint-missing-input" in output
+    assert "blueprint-not-in-bundle" in output
