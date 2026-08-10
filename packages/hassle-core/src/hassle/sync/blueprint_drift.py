@@ -25,6 +25,14 @@ Three deliberate conservatisms, each pinned by a test in
   schema (`trigger:`/`service:`) expands to the same automation as its plural
   twin. Comparing raw expansions would report permanent, unfixable drift for
   every legacy blueprint in existence.
+- **A post-save stale read is not drift** (ha-api-notes §40.8, a field
+  false-positive from the first live run). `blueprint/substitute` serves the
+  PRIOR document for several seconds after a `blueprint/save`, so a plan run
+  straight after a push reported drift that healed a minute later, prescribing
+  an `--accept-local` the user should never run. On a mismatch the oracle waits
+  and asks again, bounded, and believes the later answer -- a real remote edit
+  stays a mismatch on every retry.
+
 - **A failure is not drift.** This oracle *corroborates*; it must never
   manufacture a conflict out of a transport hiccup, a backend that doesn't
   implement `blueprint_substitute`, or an input set HA rejects. "Unknown" falls
@@ -58,6 +66,8 @@ Three deliberate conservatisms, each pinned by a test in
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from typing import Any, cast
 
 from hassle.blueprints import (
@@ -69,10 +79,22 @@ from hassle.blueprints import (
 from hassle.ir.keys import BLUEPRINT_KIND
 from hassle.ir.modernize import modernize_for_comparison
 
+#: Bounded settle for a substitute MISMATCH (ha-api-notes §40.8), shaped after
+#: `DirectBackend`'s `reload_timeout`/`reload_interval` pair -- the repo's
+#: existing precedent for "the write landed, the read hasn't caught up yet".
+#: Only ever paid when a mismatch is seen, which is rare and is exactly the
+#: moment before telling a user their blueprint conflicts.
+SETTLE_TIMEOUT: float = 5.0
+SETTLE_INTERVAL: float = 1.0
+
 
 def detect_blueprint_drift(
     backend: object,
     local_objects: dict[str, tuple[str, dict[str, Any]]],
+    *,
+    settle_timeout: float = SETTLE_TIMEOUT,
+    settle_interval: float = SETTLE_INTERVAL,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> frozenset[str]:
     """Blueprint object keys whose remote copy expands differently.
 
@@ -81,6 +103,11 @@ def detect_blueprint_drift(
     same defensive pattern `entry_id_for` and `fetch_registry_snapshot` use, so
     a `Backend` implementer without it degrades to "no corroboration" rather
     than an AttributeError.
+
+    ``settle_timeout``/``settle_interval`` bound the post-save re-check (see
+    the module docstring's staleness bullet); ``settle_timeout=0`` disables it.
+    ``sleep`` is injectable purely so the unit tests exercise the retry without
+    actually waiting — nothing else should pass it.
 
     Returns a frozenset so it can be handed straight to `compute_plan`'s
     ``blueprint_drift`` argument.
@@ -104,9 +131,57 @@ def detect_blueprint_drift(
         if not instance_keys:
             continue  # §3: no instances, nothing drift could affect.
         inputs = instance_inputs(bodies[instance_keys[0]])
-        if _expansions_differ(substitute, key, local_body, inputs):
+        if _differs_after_settle(
+            substitute,
+            key,
+            local_body,
+            inputs,
+            settle_timeout=settle_timeout,
+            settle_interval=settle_interval,
+            sleep=sleep,
+        ):
             drifted.add(key)
     return frozenset(drifted)
+
+
+def _differs_after_settle(
+    substitute: Any,
+    object_key: str,
+    local_body: dict[str, Any],
+    inputs: dict[str, Any],
+    *,
+    settle_timeout: float,
+    settle_interval: float,
+    sleep: Callable[[float], None],
+) -> bool:
+    """A mismatch, re-checked once the post-save stale window has passed.
+
+    docs/internals/ha-api-notes.md §40.8: `blueprint/substitute` serves the
+    PRIOR document for several seconds after a `blueprint/save`, so a plan run
+    straight after a push saw drift that healed itself a minute later — and
+    prescribed an `--accept-local` the user should never run. (The
+    `automation.reload` §4.3 issues after the save does NOT prevent it; the
+    blueprint cache and automation expansion are separate.)
+
+    So: on a mismatch, wait and ask again, and believe the later answer. A real
+    remote edit stays a mismatch on every retry; the stale window heals
+    invisibly. Bounded, and best-effort in the same sense as
+    `DirectBackend._await_config_entity` — this is an I/O settle in the
+    backend/drift seam, not core-logic wall-clock (R8 is about compiler and
+    simulator determinism), and it never runs at all unless the first answer
+    already said "conflict".
+
+    Retry COUNT is derived from the two knobs rather than read off a clock, so
+    the loop is deterministic and the tests need no fake time source.
+    """
+    if not _expansions_differ(substitute, object_key, local_body, inputs):
+        return False
+    retries = 0 if settle_interval <= 0 else max(0, int(settle_timeout // settle_interval))
+    for _ in range(retries):
+        sleep(settle_interval)
+        if not _expansions_differ(substitute, object_key, local_body, inputs):
+            return False
+    return True
 
 
 def _remote_blueprint_keys(backend: object) -> frozenset[str]:

@@ -4495,3 +4495,54 @@ body-only and is what the oracle uses; `expand_blueprint` is the *simulator's*
 entry point and deliberately merges the instance's identity fields on top
 (`INSTANCE_IDENTITY_FIELDS`) so the simulator can run the automation. The
 oracle must never call the latter.
+
+### 40.8 `blueprint/substitute` serves a STALE copy briefly after a save (observed live 2026-08-10)
+
+The second field false-positive from stage 1's first live run, and the root
+cause of the one §40.7 was originally blamed for. Sequence observed against the
+owner's real HA:
+
+1. `blueprint/save` (a normal `hassle push` of an edited blueprint);
+2. `hassle plan` **within seconds** → the substitute-compare oracle reported
+   drift, i.e. "the blueprint was edited in place in Home Assistant";
+3. a hand comparison **~a minute later** → **zero** difference;
+4. a fresh `hassle plan` now, with content unchanged on both sides → **no
+   drift**.
+
+So `blueprint/substitute` kept expanding the **previous** document for a short
+window after the save. Nothing was wrong with either copy: the oracle was
+reading a cache that had not caught up, and telling the user their blueprint
+conflicted — prescribing an `--accept-local` they should never run.
+
+**The `automation.reload` issued after the save did NOT prevent it** (§4.3,
+§40.4). The blueprint cache and automation expansion are evidently separate
+concerns inside HA: reloading automations re-expands live instances, but does
+not appear to invalidate whatever `blueprint/substitute` reads from. Do not
+assume a reload settles this.
+
+**Mitigation** (`hassle.sync.blueprint_drift`): on a mismatch — and *only* on a
+mismatch — wait a bounded interval, re-substitute, and believe the later
+answer. A genuine remote edit stays a mismatch on every retry; the stale window
+heals invisibly. Defaults are `SETTLE_TIMEOUT = 5.0s` / `SETTLE_INTERVAL =
+1.0s`, i.e. up to five re-asks, shaped after `DirectBackend`'s existing
+`reload_timeout`/`reload_interval` pair — the repo's established precedent for
+"the write landed, the read hasn't caught up yet" (§2), and bounded polling in
+the transport/oracle seam rather than core-logic wall-clock (R8 governs
+compiler and simulator determinism, not I/O waits).
+
+The retry costs nothing on the common path: the overwhelming majority of plans
+see no mismatch and never sleep at all.
+
+**Modelled offline** by `FakeBackend.blueprint_stale_reads`: while positive,
+each `blueprint_substitute` call serves the document as it was before the most
+recent save and decrements the counter. That is what makes the regression
+reproducible in the unit suite (`test_blueprint_drift_oracle`) — without it,
+the fake's reads were always instantly fresh and this class of bug could only
+ever be found in the field, which is exactly what happened twice.
+
+Still unknown, and worth a capture if it ever matters: the true length of the
+window (only "seconds, less than a minute" was observed) and whether it scales
+with blueprint size or instance count. The five-second bound was chosen to
+cover the observed case with margin while keeping a real conflict's plan
+responsive; if a stale read ever outlives it, the result is the old behaviour —
+a self-healing false conflict — not a hang.
