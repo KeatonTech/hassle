@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from hassle.ir.keys import BLUEPRINT_KIND
 from hassle.sync.models import Conflict, Plan, PlanAction, PlanEntry
 from hassle.sync.source_writer import SourceWriter, adopt_write
 
@@ -32,6 +33,22 @@ def apply_pull(plan: Plan, source_writer: SourceWriter) -> PullResult:
     """Apply the bundle-side actions of ``plan`` via ``source_writer``."""
     conflicts: list[Conflict] = []
     for entry in plan.entries:
+        if entry.kind == BLUEPRINT_KIND:
+            # docs/internals/blueprints-design.md §5: blueprints are excluded
+            # from pull's WRITES. HA has no command that serves a blueprint's
+            # source back (§2.1), so there is nothing to materialize -- an
+            # `adopt` would write a file with no content and a `refresh` would
+            # splice a metadata body over an authored document. A remote-only
+            # blueprint is still visible: `compute_plan` gives it the
+            # `adopt (unmanageable)` warning row (§3), whose message says what
+            # a human has to do by hand.
+            #
+            # Excluded from writes, NOT from the report: a conflict still has
+            # to reach the user, so the CONFLICT branch's `conflicts.append`
+            # below is deliberately reproduced here.
+            if entry.action is PlanAction.CONFLICT and entry.conflict is not None:
+                conflicts.append(entry.conflict)
+            continue
         if entry.action is PlanAction.REFRESH:
             _refresh(entry, source_writer)
         elif entry.action is PlanAction.ADOPT:
