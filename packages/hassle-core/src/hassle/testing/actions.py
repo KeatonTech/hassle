@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from hassle.testing.calls import ServiceCall
 from hassle.testing.errors import ScriptRecursionError, UnsupportedTemplateError
-from hassle.testing.state import StateChange
+from hassle.testing.state import EntityState, StateChange
 from hassle.testing.triggers import (
     is_event_trigger,
     is_numeric_state_trigger,
@@ -166,6 +166,68 @@ class _AttrDict(dict[str, Any]):
 
 class _TriggerNamespace(_AttrDict):
     pass
+
+
+def _state_namespace(state: EntityState | None) -> _AttrDict | None:
+    """An :class:`~hassle.testing.state.EntityState` as HA's `State`-shaped
+    template object: ``.state``, ``.attributes`` (itself attribute-accessible,
+    so ``trigger.to_state.attributes.event_type`` renders), ``.entity_id``.
+
+    Nested attribute access works because every level is an
+    :class:`_AttrDict` — jinja2 tries ``getattr`` first and falls back to
+    subscripting, so a plain dict would only ever resolve one level.
+    """
+    if state is None:
+        return None
+    return _AttrDict(
+        {
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "attributes": _AttrDict(dict(state.attributes)),
+        }
+    )
+
+
+def trigger_id_of(trigger: dict[str, Any], index: int) -> Any:
+    """A trigger's ``trigger.id``: its explicit ``id:`` else ``str(index)``.
+
+    Mirrors HA (`homeassistant/helpers/trigger.py`), which falls back to the
+    trigger's positional index rendered as a string — so ``trigger.id ==
+    '0'`` matches an un-`id`'d first trigger — and otherwise passes the
+    authored value through unchanged (an author who writes ``id: 3`` keeps an
+    int).
+    """
+    declared = trigger.get("id")
+    return str(index) if declared is None else declared
+
+
+def base_trigger_context(trigger: dict[str, Any], index: int, platform: str) -> dict[str, Any]:
+    """The `id`/`idx`/`platform` every trigger type carries in HA."""
+    return {
+        "id": trigger_id_of(trigger, index),
+        "idx": str(index),
+        "platform": platform,
+    }
+
+
+def state_change_trigger_context(
+    trigger: dict[str, Any], index: int, platform: str, change: StateChange
+) -> dict[str, Any]:
+    """The `trigger.*` namespace for a state-change-driven trigger.
+
+    Shared by the `state`, `numeric_state`, `zone` and `template` trigger
+    types, all of which HA drives from an entity state change and all of
+    which therefore expose `entity_id` plus `from_state`/`to_state`. Built
+    once, at MATCH time, so a `for:`-held trigger fires with the context of
+    the change that started the hold rather than of whatever the entity looks
+    like when the hold expires.
+    """
+    return {
+        **base_trigger_context(trigger, index, platform),
+        "entity_id": change.entity_id,
+        "from_state": _state_namespace(change.old),
+        "to_state": _state_namespace(change.new),
+    }
 
 
 def evaluate_condition(condition: dict[str, Any], ctx: ActionContext) -> bool:
