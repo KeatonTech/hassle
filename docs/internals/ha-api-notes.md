@@ -4403,3 +4403,38 @@ update and a failing automation row share a plan.
 If stage 2 lands (blueprints authored in the DSL, §8), this stops mattering:
 the document becomes a deterministic compiled artifact, so the pre-update
 version is always reproducible from the bundle's own history.
+
+### 40.6 Implementation finding: the drift oracle cannot see the BASE version
+
+Caught by the golden fixture bundle (`fixtures/dsl/blueprint_managed_object`,
+driven end to end by `test_blueprint_golden_bundle`) while implementing
+blueprints-design §3's row 4 — a second thing the design document could not
+have known without an implementation to try.
+
+`blueprint/substitute` expands HA's copy; `hassle.blueprints.expand_blueprint`
+expands the bundle's copy **as it is now**. There is no way to expand the
+BASE (last-pushed) version: the manifest stores only its hash, and §40.2 means
+HA will not serve a source back. So a mismatch has two possible causes and the
+oracle cannot distinguish them:
+
+- **the local file is unchanged since base** — the difference can only have
+  come from the remote side. Unambiguous, and the row §3 describes.
+- **the local file was edited** — the difference is fully explained by that
+  edit and says nothing about the remote side.
+
+Taken literally, §3's row 4 escalates both. Doing so made **every ordinary
+blueprint edit a conflict** in the golden bundle's push→edit→push cycle, which
+is unusable and would train a user to click through conflict prompts — the
+exact failure I6 exists to prevent. `plan_blueprint` therefore gates the drift
+conflict on `base_hash == local_hash`; an edited local file falls through to
+row 3's `update`, which is the same exposure every other kind already carries.
+
+§3's own table agrees when read top-down: the "hash differs from manifest →
+update" row precedes the drift row.
+
+Residual exposure, documented and accepted: local edit **and** remote edit in
+the same window pushes over the remote edit without a conflict. Closing it
+needs either a source read (a future HA release) or the base document stored
+somewhere Hassle can reach — which stage 2 (§8) gets for free, since a
+DSL-authored blueprint is a deterministic compiled artifact reproducible from
+the bundle's own git history.

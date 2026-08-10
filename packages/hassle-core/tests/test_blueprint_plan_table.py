@@ -147,16 +147,24 @@ def test_substitute_compare_mismatch_is_a_conflict() -> None:
     assert entry.action is PlanAction.CONFLICT
 
 
-def test_drift_beats_a_clean_hash_and_a_dirty_one_alike() -> None:
-    """A mismatch means the REMOTE copy was edited in place; whether the local
-    file also changed is beside the point -- either way, overwriting blind
-    would lose the UI edit (I6)."""
+def test_drift_on_an_EDITED_local_file_is_an_update_not_a_conflict() -> None:
+    """Regression (R4), caught by the golden bundle: escalating here would
+    make EVERY ordinary blueprint edit a conflict.
+
+    `blueprint/substitute` compares HA's copy against the bundle's copy AS IT
+    IS NOW -- the BASE version cannot be expanded (the manifest stores only its
+    hash, and HA will not serve a source back). So when the local file has
+    changed, the mismatch is fully explained by that change and says nothing
+    about the remote side. The drift row therefore applies only when the local
+    file is UNCHANGED since base, where the difference can have come from
+    nowhere else.
+    """
     edited = SOURCE.replace("restart", "single")
     entry = _plan(
         local=_local(edited), remote=_remote(), manifest_source=SOURCE, drift=frozenset({KEY})
     )
     assert entry is not None
-    assert entry.action is PlanAction.CONFLICT
+    assert entry.action is PlanAction.UPDATE
 
 
 def test_the_drift_conflict_says_the_remote_was_edited_in_place() -> None:

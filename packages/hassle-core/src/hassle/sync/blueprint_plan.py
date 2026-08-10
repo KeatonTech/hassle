@@ -16,9 +16,16 @@ corroborated by the **substitute-compare oracle** (`hassle.sync.blueprint_drift`
 | yes | no  | no  | `create` |
 | yes | no  | yes | `conflict` — remote has a same-path blueprint Hassle didn't put there |
 | yes | yes | yes, hash differs from manifest | `update` |
-| yes | yes | yes, substitute-compare mismatch | `conflict` — the remote copy was edited in place |
+| yes | yes | mismatch, local unchanged | `conflict` — the remote copy was edited in place |
 | no  | yes | yes | `delete` (ordered, §4) |
 | no  | no  | yes | `adopt (unmanageable)` — warning row only |
+
+One qualification to row 4, forced by what the oracle can observe (see the
+DEVIATION comment at the check itself): the substitute-compare conflict fires
+only when the LOCAL file is unchanged since base. `blueprint/substitute`
+compares HA's copy against the bundle's copy as it is now, and the base version
+cannot be expanded, so a mismatch on an edited local file is fully explained by
+that edit and says nothing about the remote side.
 
 Two combinations the table leaves implicit, decided here and pinned by
 `test_blueprint_plan_table`:
@@ -113,11 +120,30 @@ def plan_blueprint(
             message=_unexpected_remote_message(remote_config),
         )
 
-    if drifted:
-        # Row 4. Checked BEFORE the hash comparison on purpose: a mismatch
-        # means the remote copy was edited in place, and that is true whether
-        # or not the local file also changed. Either way, overwriting blind
-        # would lose the UI edit (I6).
+    if drifted and base_hash == local_hash:
+        # Row 4, gated on the local file being UNCHANGED since base.
+        #
+        # DEVIATION from a literal reading of §3's row 4, forced by what the
+        # oracle can actually observe and caught by the golden bundle
+        # (`test_blueprint_golden_bundle`). `blueprint/substitute` compares
+        # HA's copy against the bundle's copy AS IT IS NOW -- there is no way
+        # to expand the BASE version, because the manifest stores only its
+        # hash and HA will not serve a source back. So a mismatch has two
+        # possible causes and the oracle cannot tell them apart:
+        #
+        #   - the local file is unchanged since base -> the difference can
+        #     only come from the remote side. Unambiguous: CONFLICT.
+        #   - the local file was edited -> the difference is fully explained
+        #     by that edit. Escalating here would make EVERY ordinary
+        #     blueprint edit a conflict, which is unusable and would train
+        #     users to click through conflict prompts (the failure mode I6
+        #     exists to prevent).
+        #
+        # So the drift row applies only to the first case, and an edited local
+        # file falls through to row 3's `update` -- the same exposure every
+        # other kind already carries, no worse. §3's table agrees when read
+        # top-down: its "hash differs from manifest -> update" row precedes
+        # the drift row.
         return entry(
             PlanAction.CONFLICT,
             local=local_config,
