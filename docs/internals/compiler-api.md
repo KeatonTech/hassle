@@ -139,6 +139,20 @@ raise a what/where/fix error if not (snapshot-test it — see §5).
   except inside a user's `raw_*` body (which `normalize_ha` handles).
 - **`CompileResult.objects` / `spans_for` signatures** — downstream (validation,
   simulator) depends on them.
+
+  `CompileResult` may still gain new **sidecar** accessors (additive only), the
+  way `category_globals` / `category_packages` / `node_spans_for` already did.
+  The current set, beyond `objects` / `spans_for` / `span_at` /
+  `node_spans_for` / `node_span` / `decl_span_for`: `category_globals` +
+  `category_global_for`, `category_packages`, and **`bundle_path`** — the
+  directory the result was compiled from, `None` when there wasn't one
+  (`compile_registered`, or IR parsed straight from HA JSON). A sidecar never
+  appears in `to_ha()`, so the IR the sync/push layer consumes is untouched by
+  it. `bundle_path` exists so a consumer can find files that sit *beside* the
+  DSL in the bundle; today's one consumer is the simulator, resolving a
+  blueprint automation's `use_blueprint` path against
+  `<bundle>/blueprints/automation/` (`hassle.testing.blueprints`, golden pair
+  `fixtures/dsl/blueprint_local_expansion/`).
 - **The recording context-var mechanism** — a `ContextVar` stack holds the active
   `Recorder`. Use `when`/`only_if`/`record_action`/`push_actions`; do not reach into
   `_CONTEXT_STACK` directly.

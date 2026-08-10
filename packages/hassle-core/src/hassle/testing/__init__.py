@@ -36,6 +36,14 @@ Public surface (this module + :mod:`hassle.testing.plugin`):
   compiled bundle.
 - :class:`ServiceCall` -- one recorded (never executed) service-call action.
 - :class:`UnsupportedTemplateError` -- an out-of-subset Jinja construct.
+- :func:`~hassle.testing.blueprints.expand_blueprint` plus
+  :class:`~hassle.testing.blueprints.BlueprintError` and its two subclasses
+  :class:`~hassle.testing.blueprints.MissingBlueprintInputError` /
+  :class:`~hassle.testing.blueprints.InvalidBlueprintError` -- blueprint
+  expansion (DESIGN §5.8). A ``@blueprint_automation`` stores only
+  ``use_blueprint``, so the simulator expands it against the bundle-local
+  blueprint file at ``<bundle>/blueprints/automation/<path>`` before running
+  it; a blueprint with no such file stays inert, exactly as before.
 - :class:`~hassle.testing.dashboard_query.DashboardQuery` /
   :class:`~hassle.testing.dashboard_query.DashboardNode` -- the read-only
   dashboard-IR query surface (dashboards-design.md §9.1); also reachable
@@ -56,6 +64,12 @@ from typing import Any
 from hassle.compiler import compile_bundle
 from hassle.compiler.bundle import CompileResult
 from hassle.ir.models import AutomationConfig, DashboardConfig
+from hassle.testing.blueprints import (
+    BlueprintError,
+    InvalidBlueprintError,
+    MissingBlueprintInputError,
+    expand_blueprint,
+)
 from hassle.testing.calls import ServiceCall
 from hassle.testing.clock import FakeClock, parse_datetime
 from hassle.testing.dashboard_query import DashboardNode, DashboardQuery
@@ -65,11 +79,15 @@ from hassle.testing.state import StateStore
 from hassle.testing.templates import TemplateEngine
 
 __all__ = [
+    "BlueprintError",
     "DashboardNode",
     "DashboardQuery",
+    "InvalidBlueprintError",
+    "MissingBlueprintInputError",
     "ServiceCall",
     "Simulator",
     "UnsupportedTemplateError",
+    "expand_blueprint",
     "simulate",
 ]
 
@@ -104,7 +122,7 @@ class Simulator:
                 continue
             engine = AutomationEngine(
                 key,
-                obj.to_ha(),
+                self._simulated_config(key, obj),
                 states=self._states,
                 templates=self._templates,
                 calls=self._calls,
@@ -115,6 +133,24 @@ class Simulator:
             self._engines.append(engine)
             self._engines_by_key[key] = engine
         self._states.on_change(self._on_state_change)
+
+    def _simulated_config(self, key: str, obj: AutomationConfig) -> dict[str, Any]:
+        """The config one automation is simulated from.
+
+        Ordinarily the object's own ``to_ha()`` body. A blueprint automation
+        (DESIGN §5.8) stores only ``use_blueprint`` and would otherwise be
+        inert, so when the referenced blueprint source is a file inside this
+        bundle it is expanded into the concrete automation HA would run
+        (:mod:`hassle.testing.blueprints`). This is a read: the IR itself is
+        untouched, so the payload sync/push builds is identical either way. A
+        blueprint with no bundle-local file (an imported community blueprint
+        that only exists inside HA) is left unexpanded and stays inert.
+        """
+        body = obj.to_ha()
+        span = self._compiled.decl_span_for(key)
+        where = f"{span.file}:{span.line}" if span is not None else None
+        expanded = expand_blueprint(body, bundle_root=self._compiled.bundle_path, where=where)
+        return expanded if expanded is not None else body
 
     # -- clock -----------------------------------------------------------------
 

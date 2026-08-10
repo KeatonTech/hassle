@@ -129,24 +129,34 @@ def state_trigger_matches(trigger: dict[str, Any], change: StateChange) -> bool:
 
     `for:` durations are handled by the engine (a match here starts the hold
     timer; the engine re-checks the state still holds when it expires).
+
+    ``not_from:``/``not_to:`` are HA's negated siblings of ``from:``/``to:``
+    and take the same scalar-or-list shape. They matter most for an entity
+    whose state is not an enum: an `event` entity's state is the *timestamp*
+    of the last press, so ``not_from: [unknown, unavailable]`` is how such a
+    trigger says "a real press, not the restore every HA restart replays".
     """
     entities = _entity_ids(trigger)
     if change.entity_id not in entities:
         return False
+    old_state = change.old.state if change.old is not None else None
     to_filter = trigger.get("to")
     from_filter = trigger.get("from")
     if to_filter is not None and not _state_filter_matches(to_filter, change.new.state):
         return False
-    if from_filter is not None:
-        old_state = change.old.state if change.old is not None else None
-        if not _state_filter_matches(from_filter, old_state):
-            return False
-    if to_filter is None and from_filter is None:
-        # No filters at all: HA fires on any actual state-string change.
-        old_state = change.old.state if change.old is not None else None
-        if old_state == change.new.state:
-            return False
-    return True
+    if from_filter is not None and not _state_filter_matches(from_filter, old_state):
+        return False
+    not_to_filter = trigger.get("not_to")
+    not_from_filter = trigger.get("not_from")
+    if not_to_filter is not None and _state_filter_matches(not_to_filter, change.new.state):
+        return False
+    if not_from_filter is not None and _state_filter_matches(not_from_filter, old_state):
+        return False
+    # No positive state filter: HA fires on any actual state-string change.
+    # (A `not_*`-only trigger keeps this rule -- it narrows which transitions
+    # count, it does not turn attribute-only churn into one.)
+    no_positive_filter = to_filter is None and from_filter is None
+    return not (no_positive_filter and old_state == change.new.state)
 
 
 def numeric_state_crosses(trigger: dict[str, Any], change: StateChange) -> bool:

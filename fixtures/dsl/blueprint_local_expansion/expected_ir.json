@@ -1,0 +1,13 @@
+{
+  "automation:office_switch_controls": {
+    "id": "office_switch_controls",
+    "alias": "Office switch controls",
+    "use_blueprint": {
+      "path": "local/room-switch-controls.yaml",
+      "input": {
+        "switch_entity": "sensor.office_paddle",
+        "room_light": "light.office"
+      }
+    }
+  }
+}

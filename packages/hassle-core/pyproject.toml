@@ -13,6 +13,11 @@ dependencies = [
     # generated file by shelling out to the ruff binary (codegen._format_with_ruff).
     "ruff>=0.4",
     "python-slugify>=8",
+    # The simulator reads bundle-local blueprint sources, which are YAML
+    # carrying HA's `!input` custom tag (`hassle.testing.blueprints`).
+    # Read-only and offline; Hassle still never WRITES a YAML file behind
+    # HA's back (DESIGN §2).
+    "pyyaml>=6",
 ]
 
 [project.entry-points.pytest11]

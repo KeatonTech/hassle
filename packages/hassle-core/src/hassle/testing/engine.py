@@ -36,9 +36,11 @@ from hassle.testing.actions import (
     SuspendWaitForTrigger,
     SuspendWaitTemplate,
     WaitResumeValue,
+    base_trigger_context,
     evaluate_condition,
     no_sun_times,
     run_actions,
+    state_change_trigger_context,
 )
 from hassle.testing.calls import ServiceCall
 from hassle.testing.state import StateChange, StateStore
@@ -117,8 +119,11 @@ class AutomationEngine:
         self.max_exceeded = config.get("max_exceeded", default_max_exceeded)
         self._active: list[_Run] = []
         self._queue: list[_Run] = []
-        # Per-trigger `for:` hold state: trigger index -> (deadline, expected StateChange).
-        self._pending_for: dict[int, tuple[datetime, StateChange]] = {}
+        # Per-trigger `for:` hold state: trigger index -> (deadline, expected
+        # StateChange, the trigger context captured when the hold STARTED --
+        # a held trigger must fire with the context of the change that began
+        # the hold, not one rebuilt at expiry).
+        self._pending_for: dict[int, tuple[datetime, StateChange, dict[str, Any]]] = {}
         # Template-trigger previous-truth cache, by trigger index.
         self._template_truth: dict[int, bool] = {}
         # Sun-trigger previous-past cache (offset-adjusted), by trigger index.
@@ -143,21 +148,28 @@ class AutomationEngine:
                 self._handle_state_match(index, trigger, change)
             elif is_numeric_state_trigger(trigger):
                 if numeric_state_crosses(trigger, change):
-                    self._start_or_queue(trigger_ctx={})
+                    self._start_or_queue(
+                        trigger_ctx=state_change_trigger_context(
+                            trigger, index, "numeric_state", change
+                        )
+                    )
             elif is_zone_trigger(trigger):
                 if zone_trigger_matches(trigger, change):
-                    self._start_or_queue(trigger_ctx={})
+                    self._start_or_queue(
+                        trigger_ctx=state_change_trigger_context(trigger, index, "zone", change)
+                    )
             elif is_template_trigger(trigger):
                 self._evaluate_template_trigger(index, trigger, change)
 
     def _handle_state_match(self, index: int, trigger: dict[str, Any], change: StateChange) -> None:
+        trigger_ctx = state_change_trigger_context(trigger, index, "state", change)
         for_duration: ForDuration | None = for_duration_of(trigger)
         if for_duration is None:
             self._pending_for.pop(index, None)
-            self._start_or_queue(trigger_ctx={})
+            self._start_or_queue(trigger_ctx=trigger_ctx)
             return
         deadline = self._clock_now() + timedelta(seconds=for_duration.total_seconds())
-        self._pending_for[index] = (deadline, change)
+        self._pending_for[index] = (deadline, change, trigger_ctx)
 
     def _evaluate_template_trigger(
         self, index: int, trigger: dict[str, Any], change: StateChange
@@ -192,7 +204,9 @@ class AutomationEngine:
         was_true = self._template_truth[index]
         self._template_truth[index] = is_true
         if template_trigger_edge(trigger, was_true, is_true):
-            self._start_or_queue(trigger_ctx={})
+            self._start_or_queue(
+                trigger_ctx=state_change_trigger_context(trigger, index, "template", change)
+            )
 
     def on_event(self, event_type: str, event_data: dict[str, Any]) -> None:
         # First, resume any run waiting on a matching wait_for_trigger (task
@@ -203,19 +217,27 @@ class AutomationEngine:
         # resume-then-start-fresh order).
         self._resume_waits_on_event(EventOccurrence(event_type, event_data))
         # Then, evaluate this automation's own triggers for a fresh start.
-        for trigger in self.config.get("triggers", []):
+        for index, trigger in enumerate(self.config.get("triggers", [])):
             if is_event_trigger(trigger) and trigger.get("event_type") == event_type:
-                self._start_or_queue(trigger_ctx={"event": {"data": event_data}})
+                self._start_or_queue(
+                    trigger_ctx={
+                        **base_trigger_context(trigger, index, "event"),
+                        # `trigger.event.data.*` is long-standing behavior and
+                        # keeps its exact shape; `event_type` is additive.
+                        "event": {"event_type": event_type, "data": event_data},
+                    }
+                )
 
     def on_time(self, moment: datetime, *, patterns: bool = True) -> None:
-        for trigger in self.config.get("triggers", []):
+        for index, trigger in enumerate(self.config.get("triggers", [])):
             is_due_time = is_time_trigger(trigger) and time_matches(
                 trigger, moment, resolve_entity=self._entity_state
             )
             is_pattern_trigger = patterns and is_time_pattern_trigger(trigger)
             is_due_pattern = is_pattern_trigger and time_pattern_matches(trigger, moment)
             if is_due_time or is_due_pattern:
-                self._start_or_queue(trigger_ctx={})
+                platform = "time" if is_due_time else "time_pattern"
+                self._start_or_queue(trigger_ctx=base_trigger_context(trigger, index, platform))
 
     def check_sun(self, sun_times: dict[str, datetime]) -> None:
         """Evaluate every ``sun`` trigger's own offset against today's configured
@@ -229,11 +251,14 @@ class AutomationEngine:
         if not sun_times:
             return
         now = self._clock_now()
+        triggers: list[dict[str, Any]] = self.config.get("triggers", [])
         for index, is_past in self._sun_past_states(sun_times, now):
             was_past = self._sun_past.get(index, False)
             self._sun_past[index] = is_past
             if is_past and not was_past:
-                self._start_or_queue(trigger_ctx={})
+                self._start_or_queue(
+                    trigger_ctx=base_trigger_context(triggers[index], index, "sun")
+                )
 
     def prime_sun_baseline(self, sun_times: dict[str, datetime]) -> None:
         """Silently establish each sun trigger's past/future baseline (no fire)."""
@@ -361,14 +386,15 @@ class AutomationEngine:
     # -- clock -------------------------------------------------------------------
 
     def check_due(self, now: datetime) -> None:
-        # `for:` holds: fire if the deadline passed and the state still holds.
-        for index, (deadline, change) in list(self._pending_for.items()):
+        # `for:` holds: fire if the deadline passed and the state still holds,
+        # carrying the context captured when the hold started.
+        for index, (deadline, change, trigger_ctx) in list(self._pending_for.items()):
             if now >= deadline:
                 current = self._states.get(change.entity_id)
                 still_holds = current is not None and current.state == change.new.state
                 del self._pending_for[index]
                 if still_holds:
-                    self._start_or_queue(trigger_ctx={})
+                    self._start_or_queue(trigger_ctx=trigger_ctx)
         # Delays and wait timeouts.
         for run in list(self._active):
             waitable_types = SuspendDelay | SuspendWaitForTrigger | SuspendWaitTemplate
