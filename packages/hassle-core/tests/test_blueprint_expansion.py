@@ -30,15 +30,15 @@ import pytest
 from _dsl_cases import dsl_dir
 from _sim_helpers import write_blueprints
 
-from hassle.compiler import compile_bundle
-from hassle.ir.models import AutomationConfig
-from hassle.testing.blueprints import (
+from hassle.blueprints import (
     BLUEPRINT_SUBDIR,
     InvalidBlueprintError,
     MissingBlueprintInputError,
     blueprint_file,
     expand_blueprint,
 )
+from hassle.compiler import compile_bundle
+from hassle.ir.models import AutomationConfig
 
 FIXTURE_BUNDLE = dsl_dir() / "blueprint_local_expansion" / "bundle"
 

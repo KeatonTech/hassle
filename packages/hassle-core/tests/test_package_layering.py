@@ -24,12 +24,21 @@ SRC = Path(hassle.__file__).resolve().parent
 ALLOWED: dict[str, set[str]] = {
     "_markers": set(),
     "ir": set(),
-    "compiler": {"ir"},
+    # `hassle.blueprints` is a near-leaf beside `ir`: it parses blueprint YAML
+    # and substitutes `!input` nodes, and reaches no further than
+    # `normalize_ha` (docs/internals/blueprints-design.md §1). Deliberately
+    # BELOW `compiler`/`registry`/`backend` so the compiler (file discovery),
+    # the validator (§6), the backend (`FakeBackend.blueprint_substitute`) and
+    # the simulator can all share ONE expansion implementation -- which is
+    # what makes the substitute-compare drift oracle (§2.2) a real comparison
+    # of two independently stored copies rather than a circular one.
+    "blueprints": {"ir"},
+    "compiler": {"ir", "blueprints"},
     "decompiler": {"ir", "compiler", "registry"},
-    "registry": {"ir", "compiler"},
-    "backend": {"ir", "registry"},
-    "sync": {"ir", "compiler", "decompiler", "registry", "backend"},
-    "testing": {"ir", "compiler"},
+    "registry": {"ir", "compiler", "blueprints"},
+    "backend": {"ir", "registry", "blueprints"},
+    "sync": {"ir", "compiler", "decompiler", "registry", "backend", "blueprints"},
+    "testing": {"ir", "compiler", "blueprints"},
     "docs": {"ir", "compiler", "registry", "testing"},
     "services": {"ir", "compiler", "registry"},
     # `hassle.cards` is the public card-builder namespace (dashboards-design

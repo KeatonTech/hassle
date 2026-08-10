@@ -216,7 +216,7 @@ class CompileResult:
         a consumer can find files that sit BESIDE the DSL in the bundle —
         today, the simulator resolving a blueprint automation's
         ``use_blueprint`` path against ``<bundle>/blueprints/automation/``
-        (:mod:`hassle.testing.blueprints`).
+        (:mod:`hassle.blueprints`).
         """
         return self._bundle_path
 

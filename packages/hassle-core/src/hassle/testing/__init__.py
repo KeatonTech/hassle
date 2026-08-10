@@ -36,10 +36,10 @@ Public surface (this module + :mod:`hassle.testing.plugin`):
   compiled bundle.
 - :class:`ServiceCall` -- one recorded (never executed) service-call action.
 - :class:`UnsupportedTemplateError` -- an out-of-subset Jinja construct.
-- :func:`~hassle.testing.blueprints.expand_blueprint` plus
-  :class:`~hassle.testing.blueprints.BlueprintError` and its two subclasses
-  :class:`~hassle.testing.blueprints.MissingBlueprintInputError` /
-  :class:`~hassle.testing.blueprints.InvalidBlueprintError` -- blueprint
+- :func:`~hassle.blueprints.expand_blueprint` plus
+  :class:`~hassle.blueprints.BlueprintError` and its two subclasses
+  :class:`~hassle.blueprints.MissingBlueprintInputError` /
+  :class:`~hassle.blueprints.InvalidBlueprintError` -- blueprint
   expansion (DESIGN §5.8). A ``@blueprint_automation`` stores only
   ``use_blueprint``, so the simulator expands it against the bundle-local
   blueprint file at ``<bundle>/blueprints/automation/<path>`` before running
@@ -61,15 +61,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from hassle.compiler import compile_bundle
-from hassle.compiler.bundle import CompileResult
-from hassle.ir.models import AutomationConfig, DashboardConfig
-from hassle.testing.blueprints import (
+from hassle.blueprints import (
     BlueprintError,
     InvalidBlueprintError,
     MissingBlueprintInputError,
     expand_blueprint,
 )
+from hassle.compiler import compile_bundle
+from hassle.compiler.bundle import CompileResult
+from hassle.ir.models import AutomationConfig, DashboardConfig
 from hassle.testing.calls import ServiceCall
 from hassle.testing.clock import FakeClock, parse_datetime
 from hassle.testing.dashboard_query import DashboardNode, DashboardQuery
@@ -141,7 +141,7 @@ class Simulator:
         (DESIGN §5.8) stores only ``use_blueprint`` and would otherwise be
         inert, so when the referenced blueprint source is a file inside this
         bundle it is expanded into the concrete automation HA would run
-        (:mod:`hassle.testing.blueprints`). This is a read: the IR itself is
+        (:mod:`hassle.blueprints`). This is a read: the IR itself is
         untouched, so the payload sync/push builds is identical either way. A
         blueprint with no bundle-local file (an imported community blueprint
         that only exists inside HA) is left unexpanded and stays inert.

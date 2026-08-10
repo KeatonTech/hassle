@@ -24,8 +24,8 @@ import pytest
 from _dsl_cases import dsl_dir
 from _sim_helpers import build_sim, compile_source
 
+from hassle.blueprints import MissingBlueprintInputError
 from hassle.testing import Simulator, simulate
-from hassle.testing.blueprints import MissingBlueprintInputError
 from hassle_dev.snapshots import check_snapshot, normalize_error
 
 SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
