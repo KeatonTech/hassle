@@ -26,6 +26,13 @@ from hassle.sync.blueprint_drift import detect_blueprint_drift
 from hassle.sync.models import Manifest, PlanAction
 from hassle.sync.plan import compute_plan
 
+
+def _NO_WAIT(_seconds: float) -> None:
+    """A no-op settle for tests that are not about the settle itself
+    (ha-api-notes §40.8). The retry only fires on a MISMATCH, so without this
+    every real-drift assertion would spend the full SETTLE_TIMEOUT sleeping."""
+
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 BUNDLE = REPO_ROOT / "fixtures" / "dsl" / "blueprint_managed_object" / "bundle"
 
@@ -77,7 +84,7 @@ def _plan_and_apply(backend: _Recording, manifest: Manifest, local: dict[str, An
         manifest=manifest,
         local_objects=local,  # type: ignore[arg-type]
         remote_objects=_remote_objects(backend),
-        blueprint_drift=detect_blueprint_drift(backend, local),  # type: ignore[arg-type]
+        blueprint_drift=detect_blueprint_drift(backend, local, sleep=_NO_WAIT),  # type: ignore[arg-type]
     )
     instances = instances_by_blueprint({key: body for key, (_k, body) in local.items()})
     result = apply_plan(plan, backend, manifest, blueprint_instances=instances)
@@ -127,7 +134,7 @@ def test_after_the_first_push_everything_replans_as_a_noop() -> None:
         manifest=result.manifest,
         local_objects=local,  # type: ignore[arg-type]
         remote_objects=_remote_objects(backend),
-        blueprint_drift=detect_blueprint_drift(backend, local),  # type: ignore[arg-type]
+        blueprint_drift=detect_blueprint_drift(backend, local, sleep=_NO_WAIT),  # type: ignore[arg-type]
     )
     assert [e.action for e in replanned.entries] == [PlanAction.NOOP] * 3
 
@@ -241,7 +248,7 @@ def test_a_remote_edit_to_the_blueprint_surfaces_as_a_conflict() -> None:
         manifest=first.manifest,
         local_objects=local,  # type: ignore[arg-type]
         remote_objects=_remote_objects(backend),
-        blueprint_drift=detect_blueprint_drift(backend, local),  # type: ignore[arg-type]
+        blueprint_drift=detect_blueprint_drift(backend, local, sleep=_NO_WAIT),  # type: ignore[arg-type]
     )
     entry = plan.entry_for(BLUEPRINT_KEY)
     assert entry is not None

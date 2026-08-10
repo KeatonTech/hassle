@@ -21,6 +21,13 @@ from hassle.blueprints import blueprint_body, instances_by_blueprint
 from hassle.ir import BLUEPRINT_KIND
 from hassle.sync.blueprint_drift import detect_blueprint_drift
 
+
+def _NO_WAIT(_seconds: float) -> None:
+    """A no-op settle for tests that are not about the settle itself
+    (ha-api-notes §40.8). The retry only fires on a MISMATCH, so without this
+    every real-drift assertion would spend the full SETTLE_TIMEOUT sleeping."""
+
+
 SOURCE = """\
 blueprint:
   name: Room Switch Controls
@@ -113,7 +120,7 @@ def test_a_remotely_edited_blueprint_is_detected() -> None:
         f"automation/{PATH}",
         _local(SOURCE.replace("light.turn_on", "light.toggle")),
     )
-    assert detect_blueprint_drift(backend, _objects()) == frozenset({KEY})
+    assert detect_blueprint_drift(backend, _objects(), sleep=_NO_WAIT) == frozenset({KEY})
 
 
 def test_a_blueprint_with_no_instances_is_skipped() -> None:
@@ -242,7 +249,9 @@ def test_real_drift_is_still_caught_on_a_labelled_blueprint() -> None:
         f"automation/{PATH}",
         _local(LABELLED_SOURCE.replace("light.turn_on", "light.toggle")),
     )
-    assert detect_blueprint_drift(backend, _objects(source=LABELLED_SOURCE)) == frozenset({KEY})
+    assert detect_blueprint_drift(
+        backend, _objects(source=LABELLED_SOURCE), sleep=_NO_WAIT
+    ) == frozenset({KEY})
 
 
 def test_a_remote_that_drops_a_whole_key_is_not_drift() -> None:
@@ -260,3 +269,94 @@ def test_a_remote_that_drops_a_whole_key_is_not_drift() -> None:
     backend = _Truncating()
     backend.create(BLUEPRINT_KIND, _local(LABELLED_SOURCE))
     assert detect_blueprint_drift(backend, _objects(source=LABELLED_SOURCE)) == frozenset()
+
+
+# --- post-save staleness (ha-api-notes §40.8) -------------------------------
+#
+# Second field false-positive, root-caused live: `blueprint/save`, then a plan
+# within seconds reported drift; a hand comparison a minute later showed zero
+# difference; a fresh plan now shows none. `blueprint/substitute` served a
+# STALE copy of the blueprint briefly after the save -- so the oracle told the
+# user their blueprint conflicted and prescribed an `--accept-local` they
+# should never have run. The `automation.reload` §4.3 issues after the save did
+# NOT prevent it.
+
+
+def _stale_backend(stale_reads: int) -> FakeBackend:
+    """In sync, but the next `stale_reads` substitutes serve the old document
+    -- exactly the window a plan run right after a push falls into."""
+    backend = FakeBackend()
+    backend.create(BLUEPRINT_KIND, _local(SOURCE.replace("light.turn_on", "light.toggle")))
+    backend.update(BLUEPRINT_KIND, f"automation/{PATH}", _local())
+    backend.blueprint_stale_reads = stale_reads
+    return backend
+
+
+def _calls() -> tuple[list[float], Any]:
+    waited: list[float] = []
+    return waited, waited.append
+
+
+def test_without_the_settle_a_stale_read_reads_as_drift() -> None:
+    """The bug itself, reproduced offline: this is what shipped."""
+    assert detect_blueprint_drift(_stale_backend(1), _objects(), settle_timeout=0) == frozenset(
+        {KEY}
+    )
+
+
+def test_the_settle_absorbs_a_stale_read() -> None:
+    waited, sleep = _calls()
+    assert detect_blueprint_drift(_stale_backend(1), _objects(), sleep=sleep) == frozenset()
+    # Exactly one re-ask: it agreed on the first retry, so the loop stopped.
+    assert waited == [1.0]
+
+
+def test_the_settle_absorbs_a_longer_stale_window() -> None:
+    waited, sleep = _calls()
+    assert detect_blueprint_drift(_stale_backend(3), _objects(), sleep=sleep) == frozenset()
+    assert waited == [1.0, 1.0, 1.0]
+
+
+def test_a_real_remote_edit_survives_every_retry() -> None:
+    """The mitigation must not become a blanket "retry until it agrees": a
+    genuinely edited remote never agrees, so it stays a conflict."""
+    backend = _backend()
+    backend.update(
+        BLUEPRINT_KIND,
+        f"automation/{PATH}",
+        _local(SOURCE.replace("light.turn_on", "light.toggle")),
+    )
+    waited, sleep = _calls()
+    assert detect_blueprint_drift(backend, _objects(), sleep=sleep) == frozenset({KEY})
+    # Bounded: it gave up rather than retrying forever.
+    assert len(waited) == 5
+
+
+def test_a_never_healing_stale_read_is_still_reported() -> None:
+    """Bounded, not infinite -- a plan must never hang on a stuck backend."""
+    waited, sleep = _calls()
+    assert detect_blueprint_drift(_stale_backend(99), _objects(), sleep=sleep) == frozenset({KEY})
+    assert len(waited) == 5
+
+
+def test_an_agreeing_first_answer_never_waits() -> None:
+    """The settle costs nothing on the overwhelmingly common path."""
+    waited, sleep = _calls()
+    assert detect_blueprint_drift(_backend(), _objects(), sleep=sleep) == frozenset()
+    assert waited == []
+
+
+def test_the_settle_knobs_bound_the_retry_count() -> None:
+    waited, sleep = _calls()
+    detect_blueprint_drift(
+        _stale_backend(99), _objects(), settle_timeout=2, settle_interval=0.5, sleep=sleep
+    )
+    assert waited == [0.5, 0.5, 0.5, 0.5]
+
+
+def test_a_zero_interval_disables_the_retry() -> None:
+    waited, sleep = _calls()
+    assert detect_blueprint_drift(
+        _stale_backend(1), _objects(), settle_interval=0, sleep=sleep
+    ) == frozenset({KEY})
+    assert waited == []

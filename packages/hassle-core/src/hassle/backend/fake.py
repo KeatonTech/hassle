@@ -332,6 +332,14 @@ class FakeBackend:
         # and non-Protocol, like `flow_log`: the apply-ordering tests assert
         # a blueprint UPDATE with live instances triggers exactly one.
         self.automation_reloads = 0
+        # Post-save blueprint staleness (ha-api-notes §40.8). While positive,
+        # each `blueprint_substitute` call serves the document as it was
+        # BEFORE the most recent save and decrements this -- modelling the
+        # real HA window a plan run seconds after a push falls into. Zero (the
+        # default) means every read is fresh, so no existing test changes.
+        self.blueprint_stale_reads = 0
+        # identity -> the source this blueprint had before its last update.
+        self._blueprint_previous: dict[str, str] = {}
 
     # -- Backend protocol ---------------------------------------------------
 
@@ -850,6 +858,12 @@ class FakeBackend:
                 "existing blueprint, never a recreate"
             )
         _domain, _path, source = self._blueprint_parts(config)
+        # Remember what this blueprint said BEFORE the save, so
+        # `blueprint_stale_reads` can model real HA serving the prior document
+        # for a moment afterwards (ha-api-notes §40.8).
+        previous = self.blueprint_source(identity)
+        if previous is not None:
+            self._blueprint_previous[identity] = previous
         self._store[BLUEPRINT_KIND][identity] = {**config, "source": source}
         self._writes += 1
 
@@ -914,6 +928,14 @@ class FakeBackend:
         source = self.blueprint_source(identity)
         if source is None:
             raise ValueError(f"blueprint `{identity}` does not exist (blueprint/substitute)")
+        if self.blueprint_stale_reads > 0 and identity in self._blueprint_previous:
+            # Post-save staleness, modelled (ha-api-notes §40.8): real HA's
+            # `blueprint/substitute` served the PRIOR document for several
+            # seconds after a `blueprint/save`, which made a plan run straight
+            # after a push report drift that then self-healed. Setting this
+            # counter is how a test reproduces that window offline.
+            self.blueprint_stale_reads -= 1
+            source = self._blueprint_previous[identity]
         blueprint = parse_blueprint(
             source, display_path=blueprint_display_path(path, domain=domain)
         )
