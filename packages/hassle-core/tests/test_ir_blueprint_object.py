@@ -173,9 +173,9 @@ def test_canonical_hash_is_stable_and_key_order_invariant() -> None:
     body = _body()
     reordered = dict(reversed(list(body.items())))
     assert canonical_json(body) == canonical_json(reordered)
-    assert parse(body, kind=BLUEPRINT_KIND).sha256() == parse(
-        reordered, kind=BLUEPRINT_KIND
-    ).sha256()
+    assert (
+        parse(body, kind=BLUEPRINT_KIND).sha256() == parse(reordered, kind=BLUEPRINT_KIND).sha256()
+    )
 
 
 def test_hash_changes_when_the_yaml_changes() -> None:

@@ -62,7 +62,7 @@ a blueprint file present.
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
 
@@ -180,6 +180,12 @@ class Blueprint:
     inputs: dict[str, BlueprintInput]
     #: The automation body, `blueprint:` block removed, `!input` nodes intact.
     body: dict[str, Any]
+    #: The ``blueprint.input`` block exactly as written — every entry's full
+    #: metadata mapping, or ``None`` for a bare ``room_key:`` with none at all.
+    #: This is what rides in the IR body (`BlueprintConfig.inputs`) and what
+    #: §6's rules read: `inputs` above answers "required or defaulted", while
+    #: this answers "and what selector was it declared with".
+    raw_inputs: dict[str, Any] = field(default_factory=lambda: cast("dict[str, Any]", {}))
 
     def resolve_inputs(
         self, supplied: dict[str, Any], *, where: str | None = None
@@ -301,6 +307,17 @@ def blueprint_display_path(
     return "/".join((*blueprint_subdir(domain), use_blueprint_path))
 
 
+def read_blueprint_source(path: Path) -> str:
+    """One blueprint file's text, **byte-preserved**.
+
+    Decoded from bytes rather than read in text mode on purpose: text mode
+    applies universal-newline translation, so a CRLF-authored blueprint would
+    silently become LF on the way to `blueprint/save` — and HA stores the
+    document exactly as handed (blueprints-design §1, "byte-preserved").
+    """
+    return path.read_bytes().decode("utf-8")
+
+
 def load_blueprint(path: Path, *, display_path: str, where: str | None = None) -> Blueprint:
     """Parse one automation blueprint file (``!input`` tag included).
 
@@ -308,15 +325,29 @@ def load_blueprint(path: Path, *, display_path: str, where: str | None = None) -
     document, or a document with no top-level ``blueprint:`` block.
     """
     try:
-        raw: Any = yaml.load(path.read_text(encoding="utf-8"), Loader=_BlueprintLoader)
+        source = read_blueprint_source(path)
+    except OSError as exc:  # pragma: no cover - defensive
+        raise InvalidBlueprintError(
+            display_path, f"it could not be read ({exc})", where=where
+        ) from exc
+    return parse_blueprint(source, display_path=display_path, where=where)
+
+
+def parse_blueprint(source: str, *, display_path: str, where: str | None = None) -> Blueprint:
+    """Parse blueprint YAML **text** (``!input`` tag included).
+
+    The text-shaped sibling of :func:`load_blueprint`, for the two callers that
+    hold a document rather than a file: the IR body builder
+    (:func:`blueprint_body`) and ``FakeBackend.blueprint_substitute``, which
+    expands its own stored YAML (blueprints-design §7 — one expansion
+    implementation everywhere).
+    """
+    try:
+        raw: Any = yaml.load(source, Loader=_BlueprintLoader)
     except yaml.YAMLError as exc:
         detail = str(exc).strip().splitlines()[0] if str(exc).strip() else "invalid YAML"
         raise InvalidBlueprintError(
             display_path, f"its YAML is invalid ({detail})", where=where
-        ) from exc
-    except OSError as exc:  # pragma: no cover - defensive
-        raise InvalidBlueprintError(
-            display_path, f"it could not be read ({exc})", where=where
         ) from exc
     if not isinstance(raw, dict):
         raise InvalidBlueprintError(
@@ -329,9 +360,37 @@ def load_blueprint(path: Path, *, display_path: str, where: str | None = None) -
             display_path, "it has no top-level `blueprint:` mapping", where=where
         )
     typed_metadata = cast("dict[str, Any]", metadata)
-    inputs = _parse_inputs(typed_metadata.get("input"))
+    raw_input_block = typed_metadata.get("input")
+    inputs = _parse_inputs(raw_input_block)
+    raw_inputs: dict[str, Any] = (
+        {str(name): spec for name, spec in cast("dict[Any, Any]", raw_input_block).items()}
+        if isinstance(raw_input_block, dict)
+        else {}
+    )
     body = {key: value for key, value in document.items() if key != "blueprint"}
-    return Blueprint(display_path=display_path, inputs=inputs, body=body)
+    return Blueprint(display_path=display_path, inputs=inputs, body=body, raw_inputs=raw_inputs)
+
+
+def blueprint_body(*, domain: str, path: str, source: str) -> dict[str, Any]:
+    """The IR body for one blueprint source file (blueprints-design §1).
+
+    ``{"domain", "path", "source", "inputs"}`` — see
+    :class:`hassle.ir.models.BlueprintConfig` for what each half is and why.
+    ``source`` rides through **verbatim**; ``inputs`` is the parsed
+    ``blueprint.input`` block, also verbatim (a bare ``room_key:`` stays
+    ``None``, which is what keeps "required" distinguishable from "declared
+    with an empty metadata mapping").
+
+    Raises :class:`InvalidBlueprintError` if the document is not a usable
+    blueprint — a bundle cannot manage a file HA would reject.
+    """
+    parsed = parse_blueprint(source, display_path=blueprint_display_path(path, domain=domain))
+    return {
+        "domain": domain,
+        "path": path,
+        "source": source,
+        "inputs": parsed.raw_inputs,
+    }
 
 
 def _parse_inputs(raw: Any) -> dict[str, BlueprintInput]:

@@ -23,11 +23,14 @@ from hassle.blueprints import (
     BlueprintInput,
     InvalidBlueprintError,
     MissingBlueprintInputError,
+    blueprint_body,
     blueprint_display_path,
     blueprint_file,
     blueprint_subdir,
     expand_blueprint,
     load_blueprint,
+    parse_blueprint,
+    read_blueprint_source,
 )
 
 __all__ = [
@@ -40,9 +43,12 @@ __all__ = [
     "BlueprintInput",
     "InvalidBlueprintError",
     "MissingBlueprintInputError",
+    "blueprint_body",
     "blueprint_display_path",
     "blueprint_file",
     "blueprint_subdir",
     "expand_blueprint",
     "load_blueprint",
+    "parse_blueprint",
+    "read_blueprint_source",
 ]

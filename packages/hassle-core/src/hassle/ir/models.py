@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from hassle.ir.canonical import canonical_json, sha256_hash
 from hassle.ir.keys import (
+    BLUEPRINT_KIND,
     DASHBOARD_KIND,
     GROUP_DOMAINS,
     HELPER_DOMAINS,
@@ -307,6 +308,58 @@ class DashboardConfig(IRObject):
         return "default"
 
 
+class BlueprintConfig(IRObject):
+    """A blueprint SOURCE FILE (docs/internals/blueprints-design.md §1).
+
+    The body is a Hassle-composed envelope, like :class:`DashboardConfig`'s and
+    for a related reason: what HA's ``blueprint/save`` takes is
+    ``{domain, path, yaml}`` — three things at once — and the ``yaml`` half is
+    an opaque document rather than a config mapping::
+
+        {"domain": "automation",
+         "path": "local/room-switch-controls.yaml",
+         "source": "blueprint:\\n  name: ...\\n",
+         "inputs": {"button_up": {...}, "room_key": None}}
+
+    - ``source`` is the file's text, **byte-preserved**. In stage 1 a blueprint
+      is AUTHORED, not generated (stage 2, §8, makes it a compiled artifact),
+      so a push that reflowed it would lose the author's comments, block
+      scalars and blank lines — and HA stores the document verbatim anyway.
+      :func:`hassle.blueprints.blueprint_body` reads it via
+      ``bytes.decode("utf-8")`` rather than text mode, so even CRLF survives.
+    - ``inputs`` is the parsed ``blueprint.input`` block, **verbatim** (a bare
+      ``room_key:`` entry stays ``None``, which is how "declared with no
+      ``default:``" — i.e. required — stays distinguishable from ``{}``). It is
+      derived from ``source``, and stored anyway on purpose: it is what the
+      validator (§6) reads, so nothing downstream has to re-parse YAML to
+      answer "which inputs does this blueprint declare".
+
+    Identity is ``"<domain>/<path>"``, verbatim (see ``BLUEPRINT_KIND`` in
+    :mod:`hassle.ir.keys`): ``<path>`` is exactly the string instances put in
+    ``use_blueprint``, so an instance's own reference derives its blueprint's
+    object key with no transformation at all.
+    """
+
+    # `inputs` is passthrough `Any` for the same reason `DashboardConfig.config`
+    # is: it is third-party-shaped data (HA selector schemas), and the IR's job
+    # is to carry it losslessly, not to model it. `None` defaults keep a
+    # partial/hand-written body parseable, and `exclude_unset=True` means an
+    # absent key stays absent.
+    domain: str | None = None
+    path: str | None = None
+    source: str | None = None
+    inputs: Any = None
+
+    def kind(self) -> str:
+        return BLUEPRINT_KIND
+
+    @property
+    def identity(self) -> str | None:
+        if self.domain and self.path:
+            return f"{self.domain}/{self.path}"
+        return self._key_id
+
+
 def parse(config: dict[str, Any], *, kind: str, key_hint: str | None = None) -> IRObject:
     """Parse an HA config body into the IR model for ``kind``.
 
@@ -332,6 +385,8 @@ def parse(config: dict[str, Any], *, kind: str, key_hint: str | None = None) -> 
         obj = group_helper
     elif kind == DASHBOARD_KIND:
         obj = DashboardConfig.model_validate(config)
+    elif kind == BLUEPRINT_KIND:
+        obj = BlueprintConfig.model_validate(config)
     else:
         raise ValueError(f"unknown object kind {kind!r}")
     if key_hint is not None:
