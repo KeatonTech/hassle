@@ -393,6 +393,85 @@ def blueprint_body(*, domain: str, path: str, source: str) -> dict[str, Any]:
     }
 
 
+#: File extensions discovery treats as blueprint documents. Anything else
+#: under ``blueprints/<domain>/`` (a README, a LICENSE, an editor swapfile) is
+#: somebody's own file, not a blueprint to try to parse.
+BLUEPRINT_SUFFIXES: tuple[str, ...] = (".yaml", ".yml")
+
+
+@dataclass(frozen=True)
+class DiscoveredBlueprint:
+    """One blueprint file found in a bundle (`discover_blueprints`)."""
+
+    #: HA's blueprint domain — the object key's ``<domain>`` segment.
+    domain: str
+    #: Exactly the string an instance puts in ``use_blueprint`` — the object
+    #: key's ``<path>`` segment. POSIX separators on every platform.
+    path: str
+    #: Bundle-relative POSIX path of the file itself, ``blueprints/<domain>/<path>``.
+    source_path: str
+    #: The IR body (:func:`blueprint_body`).
+    body: dict[str, Any]
+
+
+def discover_blueprints(bundle_root: Path) -> list[DiscoveredBlueprint]:
+    """Every blueprint source file in ``bundle_root``, in deterministic order.
+
+    Scans ``blueprints/<domain>/`` for each domain in
+    :data:`BLUEPRINT_DOMAINS` — HA ships exactly those two, and a directory
+    under ``blueprints/`` naming anything else is somebody's own directory, not
+    a blueprint tree to guess at.
+
+    **Symlinks are skipped**, files and directories alike: the same sandbox
+    rule the bundle module walk and :func:`expand_blueprint` apply, so a
+    compile can never be made to read outside the bundle (DESIGN §14).
+
+    A discovered file that is not a usable blueprint raises
+    :class:`InvalidBlueprintError` rather than being skipped. A file living
+    under ``blueprints/<domain>/`` is one the bundle means to manage, and HA
+    would reject it at push time with an opaque 400 — surfacing it at compile
+    time is exactly blueprints-design §0's third failure mode being closed.
+    """
+    found: list[DiscoveredBlueprint] = []
+    for domain in BLUEPRINT_DOMAINS:
+        domain_root = bundle_root.joinpath(*blueprint_subdir(domain))
+        if domain_root.is_symlink() or not domain_root.is_dir():
+            continue
+        for file in sorted(domain_root.rglob("*")):
+            if file.suffix not in BLUEPRINT_SUFFIXES:
+                continue
+            # `is_file()` follows symlinks, so the explicit check has to come
+            # first -- and any symlinked PARENT directory is excluded the same
+            # way (a link cannot smuggle a tree in either).
+            if not file.is_file() or _has_symlink_component(file, domain_root):
+                continue
+            relative = file.relative_to(domain_root).as_posix()
+            found.append(
+                DiscoveredBlueprint(
+                    domain=domain,
+                    path=relative,
+                    source_path="/".join((*blueprint_subdir(domain), relative)),
+                    body=blueprint_body(
+                        domain=domain, path=relative, source=read_blueprint_source(file)
+                    ),
+                )
+            )
+    return found
+
+
+def _has_symlink_component(file: Path, stop_at: Path) -> bool:
+    """True if ``file`` or any directory between it and ``stop_at`` is a link."""
+    current = file
+    while current != stop_at:
+        if current.is_symlink():
+            return True
+        parent = current.parent
+        if parent == current:  # pragma: no cover - defensive
+            return False
+        current = parent
+    return False
+
+
 def _parse_inputs(raw: Any) -> dict[str, BlueprintInput]:
     """The ``blueprint.input`` block -> declared inputs, in declaration order.
 

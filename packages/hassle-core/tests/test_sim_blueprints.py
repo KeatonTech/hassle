@@ -267,16 +267,36 @@ def test_blueprint_file_for_a_different_path_leaves_it_inert(tmp_path: Path) -> 
 # ---------------------------------------------------------------------------
 
 
-def test_compiled_ir_is_identical_with_and_without_a_blueprint_file(tmp_path: Path) -> None:
+def test_the_instance_payload_is_identical_with_and_without_a_blueprint_file(
+    tmp_path: Path,
+) -> None:
+    """Expansion is a simulator-side READ: it must never inline anything into
+    the automation Hassle pushes.
+
+    Amended for blueprints-design §1: the bundle now compiles one MORE object
+    when the file is present -- the blueprint itself, which is the whole point
+    of stage 1 (the file becomes managed rather than uploaded by hand). What
+    must stay byte-identical is the INSTANCE's own payload, which is what this
+    test was always really about; `test_blueprint_discovery` pins the new
+    object's own presence and shape.
+    """
     with_file = compile_source(
         tmp_path / "a",
         INSTANCE,
         blueprints={"local/room-switch-controls.yaml": ROOM_SWITCH},
     )
     without_file = compile_source(tmp_path / "b", INSTANCE)
-    assert {k: o.to_ha() for k, o in with_file.objects.items()} == {
-        k: o.to_ha() for k, o in without_file.objects.items()
+
+    non_blueprint = {
+        key: obj.to_ha()
+        for key, obj in with_file.objects.items()
+        if not key.startswith("blueprint:")
     }
+    assert non_blueprint == {k: o.to_ha() for k, o in without_file.objects.items()}
+    assert set(with_file.objects) - set(without_file.objects) == {
+        "blueprint:automation/local/room-switch-controls.yaml"
+    }
+
     body = with_file.objects["automation:office_switch"].to_ha()
     assert set(body) == {"id", "alias", "use_blueprint"}
 
