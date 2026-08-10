@@ -250,6 +250,17 @@ def _construct_input(loader: yaml.SafeLoader, node: yaml.Node) -> _InputRef:
 _BlueprintLoader.add_constructor("!input", _construct_input)
 
 
+def input_ref_name(node: Any) -> str | None:
+    """The input name of a parsed ``!input`` node, or ``None``.
+
+    The public predicate over the loader's private ``_InputRef``: §6's rule 3
+    has to ask "is this `entity_id:` value a LITERAL `!input`, or a template?",
+    and asking it by class name from another module would be a
+    quietly-breakable coupling.
+    """
+    return node.name if isinstance(node, _InputRef) else None
+
+
 def _substitute(node: Any, values: dict[str, Any], display_path: str, where: str | None) -> Any:
     """Replace every :class:`_InputRef` in ``node`` with its resolved value.
 
