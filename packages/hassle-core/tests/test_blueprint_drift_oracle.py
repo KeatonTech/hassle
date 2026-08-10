@@ -170,3 +170,93 @@ def test_a_failing_substitute_is_not_reported_as_drift() -> None:
     backend = _Exploding()
     backend.create(BLUEPRINT_KIND, _local())
     assert detect_blueprint_drift(backend, _objects()) == frozenset()
+
+
+# --- the field false-positive (ha-api-notes §40.7) --------------------------
+#
+# First live run of stage 1 against the owner's HA: the oracle reported "edited
+# in place in Home Assistant" for a blueprint pushed seconds earlier and
+# provably in sync. Root cause: `blueprint/substitute` is handed
+# `{domain, path, input}` and NO INSTANCE, so it returns the CONFIG BLOCK ONLY
+# and can never carry `id`/`alias`/`description` -- not even when the blueprint
+# DOCUMENT declares an `alias:`/`description:` of its own, which community
+# blueprints commonly do as a default label. The local expansion keeps whatever
+# the document declared, so the two sides expressed different KEY SETS and the
+# comparison read a superset-vs-subset difference as drift, permanently, for
+# every correctly-synced blueprint of that shape.
+
+LABELLED_SOURCE = """\
+blueprint:
+  name: Room Switch Controls
+  domain: automation
+  input:
+    switch_entity:
+    room_light:
+alias: Room switch controls
+description: The blueprint's own default label.
+mode: restart
+triggers:
+  - trigger: state
+    entity_id: !input switch_entity
+actions:
+  - action: light.turn_on
+    target:
+      entity_id: !input room_light
+"""
+
+
+def _labelled_backend() -> FakeBackend:
+    backend = FakeBackend()
+    backend.create(BLUEPRINT_KIND, _local(LABELLED_SOURCE))
+    return backend
+
+
+def test_substitute_returns_the_config_block_only() -> None:
+    """The observed API shape (§40.7): no instance means no instance identity.
+
+    Pinned on the fake because it is what real HA does, not a special case --
+    a fake that returned these keys would keep both sides' key sets
+    artificially identical and could never catch this class of bug.
+    """
+    expanded = _labelled_backend().blueprint_substitute(
+        "automation", PATH, {"switch_entity": "event.office", "room_light": "light.office"}
+    )
+    assert "alias" not in expanded
+    assert "description" not in expanded
+    assert "id" not in expanded
+    assert set(expanded) == {"mode", "triggers", "actions"}
+
+
+def test_an_in_sync_blueprint_with_its_own_alias_reports_no_drift() -> None:
+    """The regression itself: identical documents, differing key sets."""
+    backend = _labelled_backend()
+    assert detect_blueprint_drift(backend, _objects(source=LABELLED_SOURCE)) == frozenset()
+
+
+def test_real_drift_is_still_caught_on_a_labelled_blueprint() -> None:
+    """The fix must not be a blanket "ignore differences": a genuine remote
+    edit to a key BOTH sides express is still drift."""
+    backend = _labelled_backend()
+    backend.update(
+        BLUEPRINT_KIND,
+        f"automation/{PATH}",
+        _local(LABELLED_SOURCE.replace("light.turn_on", "light.toggle")),
+    )
+    assert detect_blueprint_drift(backend, _objects(source=LABELLED_SOURCE)) == frozenset({KEY})
+
+
+def test_a_remote_that_drops_a_whole_key_is_not_drift() -> None:
+    """Generalizing the same rule: any key only ONE side can express carries
+    no information about whether HA's copy drifted, because substitute's
+    output is built without an instance. Compared on the key intersection."""
+
+    class _Truncating(FakeBackend):
+        def blueprint_substitute(
+            self, domain: str, path: str, inputs: dict[str, Any]
+        ) -> dict[str, Any]:
+            expanded = super().blueprint_substitute(domain, path, inputs)
+            return {k: v for k, v in expanded.items() if k != "mode"}
+
+    backend = _Truncating()
+    backend.create(BLUEPRINT_KIND, _local(LABELLED_SOURCE))
+    assert detect_blueprint_drift(backend, _objects(source=LABELLED_SOURCE)) == frozenset()

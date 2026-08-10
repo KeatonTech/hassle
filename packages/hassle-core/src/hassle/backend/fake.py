@@ -99,6 +99,7 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from hassle.blueprints import (
+    INSTANCE_IDENTITY_FIELDS,
     blueprint_display_path,
     blueprint_metadata,
     blueprint_remote_body,
@@ -905,6 +906,9 @@ class FakeBackend:
         drift check comparing this against a local expansion is comparing two
         genuinely independent copies of the document, which is the entire
         basis of §2.2's oracle.
+
+        Returns the **config block only**, matching the observed API shape
+        (ha-api-notes §40.7) — see the comment at the return statement.
         """
         identity = f"{domain}/{path}"
         source = self.blueprint_source(identity)
@@ -913,7 +917,23 @@ class FakeBackend:
         blueprint = parse_blueprint(
             source, display_path=blueprint_display_path(path, domain=domain)
         )
-        return blueprint.expand(inputs)
+        expanded = blueprint.expand(inputs)
+        # Real HA's `blueprint/substitute` returns the CONFIG BLOCK ONLY --
+        # observed keys exactly {actions, conditions, max_exceeded, mode,
+        # triggers} on 2026-08-10 (ha-api-notes §40.7). It is handed
+        # `{domain, path, input}` and NO INSTANCE, so it has no
+        # `id`/`alias`/`description` to return -- not even when the blueprint
+        # DOCUMENT declares an `alias:`/`description:` of its own, which
+        # community blueprints commonly do as a default label.
+        #
+        # Modelled here rather than special-cased in the drift check, because
+        # this is simply what the API does. A fake that returned them would
+        # keep both sides' key sets artificially identical and could never
+        # catch an asymmetry that exists only against real HA -- which is
+        # exactly how the first live run's false-positive drift got through.
+        return {
+            key: value for key, value in expanded.items() if key not in INSTANCE_IDENTITY_FIELDS
+        }
 
     def reload_automations(self) -> None:
         """``automation.reload`` (blueprints-design §4.3).

@@ -106,10 +106,25 @@ def blueprint_subdir(domain: str = DEFAULT_BLUEPRINT_DOMAIN) -> tuple[str, ...]:
 #: :func:`blueprint_subdir` in new code, which takes the domain.
 BLUEPRINT_SUBDIR: tuple[str, ...] = blueprint_subdir(DEFAULT_BLUEPRINT_DOMAIN)
 
-#: Instance top-level fields that survive expansion, overriding anything the
-#: blueprint body declares under the same name. HA keeps the automation's own
-#: identity/labelling rather than the blueprint's.
-_CARRIED_FIELDS: tuple[str, ...] = ("id", "alias", "description")
+#: The automation's own identity/labelling fields — the ones that belong to an
+#: INSTANCE, never to the blueprint.
+#:
+#: Two callers, pulling in opposite directions, which is why this is one shared
+#: constant rather than two literals:
+#:
+#: - :func:`expand_blueprint` (the simulator) merges these IN from the
+#:   instance, overriding anything the blueprint body declares under the same
+#:   name — HA keeps the automation's own identity, not the blueprint's.
+#: - ``blueprint/substitute`` is handed ``{domain, path, input}`` and **no
+#:   instance at all**, so Home Assistant has none of these to return and its
+#:   output never carries them (ha-api-notes §40.7, observed live 2026-08-10).
+#:   `FakeBackend.blueprint_substitute` models that by dropping them, and
+#:   `hassle.sync.blueprint_drift` must never let their presence on one side
+#:   only read as drift.
+INSTANCE_IDENTITY_FIELDS: tuple[str, ...] = ("id", "alias", "description")
+
+#: Backwards-compatible private alias for the constant's original name.
+_CARRIED_FIELDS: tuple[str, ...] = INSTANCE_IDENTITY_FIELDS
 
 
 class BlueprintError(Exception):
