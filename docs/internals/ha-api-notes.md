@@ -4321,7 +4321,7 @@ is reproduced here with the capture notes, per house convention.
 | `blueprint/list` | ✅ | `{domain}` | Returns `{<path>: {"metadata": {...}}}` — name, description, input (with selectors), `source_url`. **Metadata only; no source text.** Per-domain, so both `automation` and `script` must be queried. |
 | `blueprint/save` | ✅ | `{domain, path, yaml, allow_override}` | Used live for the first deploy. `allow_override: false` refuses to clobber an existing path. |
 | `blueprint/delete` | ✅ | `{domain, path}` | A missing path errors `unknown_error` with an ENOENT-shaped message — distinguishable from `unknown_command`, which is what let the probe conclude the command exists at all. |
-| `blueprint/substitute` | ✅ | `{domain, path, input}` | Returns the expanded config **derived from HA's own copy**. Validates required inputs; its error enumerates the missing ones. |
+| `blueprint/substitute` | ✅ | `{domain, path, input}` | Returns the expanded config **derived from HA's own copy** — the **config block only**, see §40.7. Validates required inputs; its error enumerates the missing ones. |
 | `blueprint/source` | ❌ | — | `unknown_command`. |
 | `blueprint/get` | ❌ | — | `unknown_command`. |
 | `blueprint/get_source` | ❌ | — | `unknown_command`. |
@@ -4438,3 +4438,60 @@ needs either a source read (a future HA release) or the base document stored
 somewhere Hassle can reach — which stage 2 (§8) gets for free, since a
 DSL-authored blueprint is a deterministic compiled artifact reproducible from
 the bundle's own git history.
+
+### 40.7 `blueprint/substitute` returns the CONFIG BLOCK ONLY (observed live 2026-08-10)
+
+Found by the **first live run** of stage 1 against the owner's HA, not by the
+unit suite: the substitute-compare drift oracle reported "edited in place in
+Home Assistant" for a blueprint that had been pushed seconds earlier and was
+provably in sync — and would have kept reporting it on every plan, forever.
+
+**Observed response keys, exactly:**
+
+```
+{actions, conditions, max_exceeded, mode, triggers}
+```
+
+for BrandtCamp's `local/room-switch-controls.yaml`. Stripping `id`, `alias`
+and `description` from the local expansion and comparing sorted JSON gave a
+zero-line diff against the remote.
+
+**Why.** `blueprint/substitute` is handed `{domain, path, input}` and **no
+instance**. There is no automation on the other end of the call, so there is no
+`id`/`alias`/`description` for HA to return — the response is the blueprint's
+own config block with `!input` nodes substituted, and nothing else. This holds
+**even when the blueprint document declares a top-level `alias:` or
+`description:` of its own**, which community blueprints commonly do as a
+default label: HA's substitute output does not carry them.
+
+The local side, by contrast, keeps whatever the document declared. So the two
+sides legitimately express **different key sets**, and a whole-config equality
+check reads that superset-vs-subset difference as drift.
+
+**Why the unit suite could not catch it.** `FakeBackend.blueprint_substitute`
+answered through the same local expansion, so both sides always carried the
+same keys — the asymmetry exists only against real HA. The fake now models the
+observed shape (drops `hassle.blueprints.INSTANCE_IDENTITY_FIELDS`), which is
+simply what the API does rather than a special case, and the regression is
+covered offline by `test_blueprint_drift_oracle`.
+
+**Fix.** `hassle.sync.blueprint_drift` compares the **key intersection** of the
+two expansions. Intersection rather than a fixed strip-list because it follows
+from how HA builds the config: with no instance in hand, any key only the local
+side has is by construction something HA could not have expressed, so it
+carries no information about whether HA's copy drifted. A strip-list would need
+hand-extending every time substitute's output gained or lost a wrapper key, and
+each omission would be another permanent false positive.
+
+Accepted cost: if HA omits a key the blueprint does define, a local edit
+confined to that key is invisible to the oracle. The oracle is corroborative —
+the manifest hash is the authoritative half (blueprints-design §3) — and a
+false conflict on every correctly synced blueprint is far worse, since it makes
+the feature unusable and trains users to click through conflict prompts.
+
+**Related trap for future readers:** `hassle.blueprints` has two expansion
+entry points and only one of them is right here. `Blueprint.expand` is
+body-only and is what the oracle uses; `expand_blueprint` is the *simulator's*
+entry point and deliberately merges the instance's identity fields on top
+(`INSTANCE_IDENTITY_FIELDS`) so the simulator can run the automation. The
+oracle must never call the latter.
