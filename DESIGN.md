@@ -815,6 +815,22 @@ fake clock + trigger evaluator + action executor.
   `sim.fire(automation, trigger_ctx={...})`. So *no automation is untestable*, some just skip
   trigger evaluation. (Mapping the most common purpose triggers onto state-trigger semantics is
   a designed-for v2 simulator extension.)
+- **Trigger context:** an evaluated trigger populates the `trigger.*` namespace HA gives it —
+  `id` (the trigger's own `id:`, else its index as a string), `idx`, `platform`, and for the
+  state-change-driven types (state/numeric_state/zone/template) `entity_id` plus
+  `from_state`/`to_state` (each exposing `.state`, `.attributes`, `.entity_id`). So
+  `condition: trigger` and `{{ trigger.to_state.attributes.x }}` work, and a `for_`-held
+  trigger fires with the context of the change that started the hold.
+- **Blueprint automations (§5.8):** a `@blueprint_automation` stores only `use_blueprint`, so
+  the simulator expands it against a **bundle-local** blueprint file at
+  `<bundle>/blueprints/automation/<use_blueprint path>` (HA's own layout) and simulates the
+  resulting concrete config: parse the YAML incl. `!input`, validate inputs against
+  `blueprint.input` (missing required = error, absent optional takes its `default`), substitute
+  by tree-walk. Local and offline — never fetching a remote blueprint — so bundle tests stay
+  deterministic and network-free (R2). A blueprint with no bundle-local file (an imported
+  community blueprint that lives only inside HA) is not expanded and stays inert. **The
+  compiled IR is unchanged either way**: expansion is a simulator-side read, so push/plan
+  payloads never move.
 - **Templates:** real jinja2 plus reimplementations of the most-used HA extensions (`states()`,
   `is_state()`, `state_attr()`, `now()`, `today_at()`, `as_timestamp`, `float/int/round`,
   timedelta arithmetic, `iif`) **and HA's math set** (sin/cos/tan/asin/acos/atan/atan2/sqrt/

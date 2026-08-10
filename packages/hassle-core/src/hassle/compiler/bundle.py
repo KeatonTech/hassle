@@ -117,6 +117,14 @@ class CompileResult:
     # kinds whose body is a tree (dashboards): `_spans`' per-section positional
     # lists cannot address a card nested three containers deep.
     _node_spans: dict[str, _NodeSpans] = field(default_factory=_empty_node_spans)
+    # The bundle directory this result was compiled from, when there is one.
+    # A sidecar exactly like `_spans` -- never part of the frozen IR schema,
+    # never in `to_ha()`. Consumers that need to read a file living BESIDE the
+    # DSL (the simulator, resolving a `use_blueprint` path against
+    # `<bundle>/blueprints/automation/`) resolve it against this. `None` for a
+    # result assembled without a directory (`compile_registered`, or IR parsed
+    # straight from HA JSON).
+    _bundle_path: Path | None = None
 
     def add(
         self,
@@ -192,6 +200,25 @@ class CompileResult:
         trigger/condition/action line within it.
         """
         return self._decl_spans.get(object_key)
+
+    def set_bundle_path(self, bundle_path: Path) -> None:
+        """Record the directory this result was compiled from. Internal to the
+        pipeline (called by :func:`compile_bundle`); consumers read
+        :attr:`bundle_path`."""
+        self._bundle_path = bundle_path
+
+    @property
+    def bundle_path(self) -> Path | None:
+        """The bundle directory this result was compiled from, or ``None``.
+
+        Purely additive sidecar metadata: it never appears in ``to_ha()``, so
+        the IR the sync/push layer consumes is unaffected by it. It exists so
+        a consumer can find files that sit BESIDE the DSL in the bundle —
+        today, the simulator resolving a blueprint automation's
+        ``use_blueprint`` path against ``<bundle>/blueprints/automation/``
+        (:mod:`hassle.testing.blueprints`).
+        """
+        return self._bundle_path
 
     def set_category_packages(self, packages: frozenset[str]) -> None:
         """Record the bundle's category packages (see
@@ -410,6 +437,7 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
     for source_path, category in category_globals.items():
         result.set_category_global(source_path, category)
     result.set_category_packages(category_packages)
+    result.set_bundle_path(bundle_path)
     return result
 
 

@@ -43,7 +43,7 @@ def compile_source(
 ) -> CompileResult:
     """Write ``source`` (dedented) to a fresh bundle dir and compile it."""
     bundle_dir = tmp_path / "bundle"
-    bundle_dir.mkdir(exist_ok=True)
+    bundle_dir.mkdir(parents=True, exist_ok=True)
     (bundle_dir / filename).write_text(textwrap.dedent(source), encoding="utf-8")
     if blueprints:
         write_blueprints(bundle_dir, blueprints)

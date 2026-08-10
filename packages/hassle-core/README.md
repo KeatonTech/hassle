@@ -25,7 +25,7 @@ Dependencies flow strictly downward — a lower layer never imports an upper one
 | `hassle.backend` | Talking to Home Assistant: the real REST/WebSocket backend (`direct`), an in-memory `FakeBackend` with the same observable behavior for unit tests, and version checks. |
 | `hassle.registry` | The registry snapshot (entities/services/areas/labels/devices), reference validation with did-you-mean findings, and generated `.pyi` stubs for editor autocompletion. |
 | `hassle.sync` | The three-way plan (bundle ↔ manifest ↔ live HA), the push apply engine with rollback, the decompiler-backed pull engine (`pull_apply`), and the `SourceWriter` seam that keeps file writing pluggable. |
-| `hassle.testing` | The public simulator surface bundles use in their `tests/` (a pytest plugin provides the `sim` fixture): fake clock, trigger firing, service-call capture. Tests execute compiled IR, never DSL Python directly. |
+| `hassle.testing` | The public simulator surface bundles use in their `tests/` (a pytest plugin provides the `sim` fixture): fake clock, trigger firing, service-call capture, and blueprint expansion (a `use_blueprint` automation is simulated via its bundle-local blueprint source under `<bundle>/blueprints/automation/`). Tests execute compiled IR, never DSL Python directly. |
 | `hassle.docs` | Generators for the agent-facing docs a bundle carries (`AGENTS.md`, `docs/DSL.md`, `docs/COOKBOOK.md`). |
 
 Two deliberate wrinkles in the layering:
