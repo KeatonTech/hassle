@@ -1,0 +1,46 @@
+blueprint:
+  name: Room switch controls
+  description: One paddle switch drives one room light.
+  domain: automation
+  input:
+    switch_entity:
+      name: Switch
+      description: The paddle switch entity.
+    room_light:
+      name: Room light
+    dim_step_pct:
+      name: Dim step
+      default: 10
+
+mode: restart
+triggers:
+  - trigger: state
+    entity_id: !input switch_entity
+    to: "up"
+    id: up
+  - trigger: state
+    entity_id: !input switch_entity
+    to: "down"
+    id: down
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: up
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: !input room_light
+            data:
+              brightness_step_pct: !input dim_step_pct
+              event_note: "{{ trigger.to_state.attributes.event_type }}"
+      - conditions:
+          - condition: trigger
+            id: down
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: !input room_light
+            data:
+              brightness_step_pct: -10
+              event_note: "{{ trigger.to_state.attributes.event_type }}"
