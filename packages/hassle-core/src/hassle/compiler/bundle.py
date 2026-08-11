@@ -39,8 +39,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from hassle.blueprints import blueprint_body, discover_blueprints
+from hassle.blueprints import BLUEPRINT_ROOT, blueprint_body, discover_blueprints
 from hassle.compiler.blueprint_dsl import (
+    BlueprintDefinedTwiceError,
     InputRef,
     check_no_embedded_refs,
     collecting_inputs,
@@ -547,6 +548,18 @@ def _register_blueprints(result: CompileResult, bundle_path: Path) -> None:
     """
     for discovered in discover_blueprints(bundle_path):
         obj = parse(discovered.body, kind=BLUEPRINT_KIND)
+        key = obj.object_key()
+        if key in result.objects:
+            # §8.7: stage 2 makes this reachable for the first time. Before it,
+            # the docstring above was right that only two files could collide,
+            # which the filesystem already prevents; now a `@blueprint` may have
+            # claimed the same identity, and neither silent winner is safe.
+            identity = key.split(":", 1)[1]
+            raise BlueprintDefinedTwiceError(
+                identity,
+                "/".join((BLUEPRINT_ROOT, identity)),
+                result.decl_span_for(key),
+            )
         result.add(obj, {}, None, None)
 
 

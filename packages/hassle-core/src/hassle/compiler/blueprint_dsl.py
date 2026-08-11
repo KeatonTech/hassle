@@ -164,6 +164,22 @@ class OptionalEntityInputAsTriggerError(CompileError):
         )
 
 
+class BlueprintDefinedTwiceError(CompileError):
+    """One domain/path declared both in the DSL and as an on-disk file (§8.7)."""
+
+    def __init__(self, identity: str, file: str, span: SourceSpan | None) -> None:
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        super().__init__(
+            f"The blueprint `{identity}` is declared twice: by a `@blueprint(...)` in the "
+            f"DSL{where}, and by the bundle file `{file}`. Hassle will not pick a winner -- "
+            f"preferring the file would discard whatever the Python says, and preferring the "
+            f"DSL would make compiled output depend on a file's mere existence. Fix: delete "
+            f"whichever one is no longer the source of truth. If you are migrating this "
+            f"blueprint into the DSL, delete the file -- a DSL blueprint needs no file, "
+            f"because the compiled object is what gets pushed."
+        )
+
+
 class BlueprintInputOutsideBodyError(CompileError):
     """``bp_input`` was called outside a ``@blueprint`` body."""
 

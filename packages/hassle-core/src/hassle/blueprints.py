@@ -616,6 +616,7 @@ def expand_blueprint(
     *,
     bundle_root: Path | None,
     where: str | None = None,
+    compiled_sources: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
     """The concrete automation config for ``body``, or ``None`` if there is none.
 
@@ -628,13 +629,32 @@ def expand_blueprint(
 
     ``where`` is the instance's declaration site (``file:line``), used only in
     error messages.
+
+    ``compiled_sources`` maps a blueprint object key to its source text, for
+    blueprints AUTHORED IN THE DSL (blueprints-design §8.8). It is consulted
+    FIRST: a DSL blueprint is never written to
+    ``blueprints/<domain>/<path>``, so the file lookup below would not find it,
+    and where both exist the compiled object is the source of truth. Expansion
+    itself is unchanged either way -- the same
+    :meth:`Blueprint.expand`, per §7's "one expansion implementation
+    everywhere".
     """
     reference = body.get("use_blueprint")
-    if not isinstance(reference, dict) or bundle_root is None:
+    if not isinstance(reference, dict):
         return None
     typed_reference = cast("dict[str, Any]", reference)
     raw_path = typed_reference.get("path")
     if not isinstance(raw_path, str) or not raw_path:
+        return None
+    compiled = (compiled_sources or {}).get(blueprint_key_for_use_path(raw_path))
+    if compiled is not None:
+        return _expanded_config(
+            body,
+            parse_blueprint(compiled, display_path=blueprint_display_path(raw_path), where=where),
+            typed_reference,
+            where,
+        )
+    if bundle_root is None:
         return None
     path = blueprint_file(bundle_root, raw_path)
     root = bundle_root.resolve()
@@ -645,7 +665,21 @@ def expand_blueprint(
         return None
     display_path = blueprint_display_path(raw_path)
     blueprint = load_blueprint(path, display_path=display_path, where=where)
-    supplied_raw = typed_reference.get("input")
+    return _expanded_config(body, blueprint, typed_reference, where)
+
+
+def _expanded_config(
+    body: dict[str, Any],
+    blueprint: Blueprint,
+    reference: dict[str, Any],
+    where: str | None,
+) -> dict[str, Any]:
+    """Expand ``blueprint`` with the instance's inputs and carry its identity.
+
+    Shared by both lookup paths (compiled object and bundle file) so the two
+    can never drift apart.
+    """
+    supplied_raw = reference.get("input")
     supplied: dict[str, Any] = (
         dict(cast("dict[str, Any]", supplied_raw)) if isinstance(supplied_raw, dict) else {}
     )

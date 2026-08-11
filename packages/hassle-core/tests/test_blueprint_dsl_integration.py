@@ -17,7 +17,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from hassle_dev.snapshots import check_snapshot, normalize_error
 
 from hassle.compiler.blueprint_dsl import BlueprintDefinedTwiceError
 from hassle.compiler.bundle import compile_bundle
@@ -25,6 +24,7 @@ from hassle.registry.finding import Finding
 from hassle.registry.snapshot import RegistrySnapshot
 from hassle.registry.validate import validate_bundle
 from hassle.testing import Simulator
+from hassle_dev.snapshots import check_snapshot, normalize_error
 
 FIXTURE = Path(__file__).resolve().parents[3] / "fixtures" / "registry" / "home.json"
 SNAP_DIR_ERRORS = Path(__file__).resolve().parent / "snapshots" / "errors"
@@ -136,11 +136,19 @@ GOOD_INPUTS = '{"switch_entity": "binary_sensor.office_paddle", "room_light": "l
 def test_the_simulator_expands_an_instance_of_a_never_written_blueprint(
     tmp_path: Path,
 ) -> None:
-    """There is no file on disk at all — only the compiled object."""
+    """There is no file on disk at all — only the compiled object.
+
+    Asserted by RUNNING the instance, not by its mere presence: an unexpanded
+    instance still appears in `automation_keys()` (it is a registered
+    automation either way), so only firing its trigger and seeing the
+    blueprint's own action distinguishes expansion from inertness.
+    """
     compiled = compile_bundle(_bundle(tmp_path, instance=_instance(GOOD_INPUTS)))
     assert not (tmp_path / "bundle" / "blueprints").exists()
     sim = Simulator(compiled)
     assert "automation:office_switch" in sim.automation_keys()
+    sim.state_change("binary_sensor.office_paddle", "off", "on")
+    sim.assert_called("light.turn_on", entity_id="light.office")
 
 
 def test_an_instance_of_an_absent_blueprint_stays_inert(tmp_path: Path) -> None:

@@ -479,10 +479,27 @@ reference a community blueprint that lives only in HA, §6.2).
 Stage 1's §6 checks (missing required inputs, unknown input names) upgrade to
 read DSL declarations wherever a DSL blueprint provides them, and gain one the
 declaration makes newly answerable: an **entity-selector input receiving a
-non-entity-id value**. Stage 1 could not check that — a parsed YAML selector is
-just a mapping — but a DSL blueprint's `selector=` is right there at the
-declaration site, so an instance passing `"kitchen"` where an `entity` selector
-is declared is a finding rather than another opaque 400.
+non-entity-id value** (`blueprint-input-not-an-entity-id`). An instance passing
+`"kitchen"` where an `entity` selector is declared is a finding rather than a
+silent misfire.
+
+> ⚠️ **CORRECTED 2026-08-10 (`hassle.registry.blueprint_rules`).** Two claims
+> above needed narrowing once implemented. **First**, the new rule is not
+> DSL-only. This section said stage 1 "could not check that — a parsed YAML
+> selector is just a mapping", but a hand-written blueprint's `selector: entity:`
+> parses into `BlueprintConfig.inputs` exactly as a DSL one does, so the rule
+> applies to both and is implemented for both. What stage 2 changed is not the
+> rule's *feasibility* but its *worth*: with the declaration at a Python line the
+> mistake became worth telling the author about. **Second**, unlike §6's other
+> rules this one is NOT motivated by a real HA rejection — HA accepts the save
+> and then silently never matches the entity. §6.4's bar ("each new rule
+> motivated by a real rejection, captured like this one") is therefore bent here,
+> deliberately: a silent no-op is worse than a rejection, not better, and it is
+> the one failure mode `hassle validate` is uniquely placed to catch. The rule is
+> kept deliberately narrow for that reason — only a plain string is judged, and
+> only against `<domain>.<object_id>`; lists, device/area ids and templated
+> values are all left alone rather than have the rule grow into a
+> re-implementation of HA's selector schema.
 
 Note this cannot regress the `sections` limitation boxed in §6: a DSL blueprint
 declares its inputs flat by construction, so the parser's blind side is simply

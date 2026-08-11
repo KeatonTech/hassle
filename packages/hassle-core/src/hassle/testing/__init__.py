@@ -69,6 +69,7 @@ from hassle.blueprints import (
 )
 from hassle.compiler import compile_bundle
 from hassle.compiler.bundle import CompileResult
+from hassle.ir.keys import BLUEPRINT_KIND
 from hassle.ir.models import AutomationConfig, DashboardConfig
 from hassle.testing.calls import ServiceCall
 from hassle.testing.clock import FakeClock, parse_datetime
@@ -145,12 +146,38 @@ class Simulator:
         untouched, so the payload sync/push builds is identical either way. A
         blueprint with no bundle-local file (an imported community blueprint
         that only exists inside HA) is left unexpanded and stays inert.
+
+        A blueprint AUTHORED IN THE DSL (blueprints-design §8.8) is preferred
+        over the file lookup: it is never written to ``blueprints/``, so the
+        file lookup alone would leave every instance of one inert.
         """
         body = obj.to_ha()
         span = self._compiled.decl_span_for(key)
         where = f"{span.file}:{span.line}" if span is not None else None
-        expanded = expand_blueprint(body, bundle_root=self._compiled.bundle_path, where=where)
+        expanded = expand_blueprint(
+            body,
+            bundle_root=self._compiled.bundle_path,
+            where=where,
+            compiled_sources=self._compiled_blueprint_sources(),
+        )
         return expanded if expanded is not None else body
+
+    def _compiled_blueprint_sources(self) -> dict[str, str]:
+        """Object key -> source text, for every blueprint in this compile.
+
+        Covers DSL-authored blueprints (§8.8) and file-discovered ones alike —
+        both are ``BlueprintConfig`` objects carrying their own ``source``, so
+        preferring this map costs nothing for the stage-1 case and reads the
+        same bytes the file would have.
+        """
+        sources: dict[str, str] = {}
+        for key, obj in self._compiled.objects.items():
+            if obj.kind() != BLUEPRINT_KIND:
+                continue
+            source = obj.to_ha().get("source")
+            if isinstance(source, str):
+                sources[key] = source
+        return sources
 
     # -- clock -----------------------------------------------------------------
 
