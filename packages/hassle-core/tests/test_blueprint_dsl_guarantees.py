@@ -36,7 +36,7 @@ SNAP_DIR = Path(__file__).resolve().parent / "snapshots" / "errors"
 PATH = "local/lights-pause.yaml"
 KEY = f"blueprint:automation/{PATH}"
 
-_HEAD = '''\
+_HEAD = """\
 from hassle import blueprint, bp_input, service, when, state, variables
 
 
@@ -46,7 +46,7 @@ from hassle import blueprint, bp_input, service, when, state, variables
     name="Lights pause",
 )
 def lights_pause():
-'''
+"""
 
 
 def _bundle(tmp_path: Path, body: str) -> Path:
