@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Callable, Generator, Iterator
-from typing import Any, Final
+from typing import Any, Final, cast
 
 import yaml
 
@@ -145,6 +145,22 @@ class BlueprintInputInTemplateError(CompileError):
             f"and never resolve. Fix: bind the input to a variable first with "
             f"`variables({name}={name})`, then reference the variable in the template as "
             f"`{{{{ {name} }}}}`."
+        )
+
+
+class OptionalEntityInputAsTriggerError(CompileError):
+    """An optional entity input was used as a literal trigger ``entity_id`` (§8.5)."""
+
+    def __init__(self, name: str, span: SourceSpan | None) -> None:
+        where = f" at {span.file}:{span.line}" if span is not None else ""
+        super().__init__(
+            f"The blueprint input `{name}`{where} is an OPTIONAL entity selector used as a "
+            f"trigger's `entity_id`. Left empty it expands to an empty entity id, which "
+            f"Home Assistant rejects when it validates the expanded automation -- and "
+            f"unlike a service target there is no templated form to fall back on, because "
+            f"HA does not template trigger entity ids. Fix: make the input required by "
+            f"removing its `default=`, or trigger on something else and use `{name}` only "
+            f"as a service target, where the compiler emits the templated form for you."
         )
 
 
@@ -299,6 +315,80 @@ def check_no_embedded_refs(node: Any, span: SourceSpan | None) -> None:
             continue
         name = text.split(_MARK)[1] if text.count(_MARK) >= 2 else "?"
         raise BlueprintInputInTemplateError(name, span)
+
+
+# --- §8.5: the structural guarantee -----------------------------------------
+#
+# The emitter distinguishes four cases, and between them they leave no code
+# path that writes a literal empty entity id -- which is what "unwritable"
+# means for the field 400 of §0.
+
+#: The key an entity id lands under, in a trigger, a condition or a service
+#: target alike (`target: {entity_id: ...}` and a bare `entity_id:` both).
+_ENTITY_KEY: Final = "entity_id"
+
+
+def _is_optional_entity(value: Any) -> bool:
+    return isinstance(value, InputRef) and value.is_entity_selector and not value.is_required
+
+
+def reject_optional_entity_triggers(node: Any, span: SourceSpan | None) -> None:
+    """Raise if an optional entity input is a trigger's ``entity_id`` (§8.5).
+
+    There is no templated escape here the way there is for a service target:
+    HA does not template trigger entity ids, so the only fixes are the two the
+    error names.
+    """
+    if isinstance(node, dict):
+        typed = cast("dict[str, Any]", node)
+        for key, value in typed.items():
+            if key == _ENTITY_KEY:
+                candidates: list[Any] = (
+                    cast("list[Any]", value) if isinstance(value, list) else [value]
+                )
+                for candidate in candidates:
+                    if _is_optional_entity(candidate):
+                        raise OptionalEntityInputAsTriggerError(
+                            cast("InputRef", candidate).input_name, span
+                        )
+            reject_optional_entity_triggers(value, span)
+    elif isinstance(node, list):
+        for item in cast("list[Any]", node):
+            reject_optional_entity_triggers(item, span)
+
+
+def _template_entity_value(value: Any, bindings: dict[str, InputRef]) -> Any:
+    if _is_optional_entity(value):
+        ref = cast("InputRef", value)
+        bindings[ref.input_name] = ref
+        return f"{{{{ {ref.input_name} }}}}"
+    if isinstance(value, list):
+        return [_template_entity_value(item, bindings) for item in cast("list[Any]", value)]
+    return value
+
+
+def template_optional_entity_targets(node: Any, bindings: dict[str, InputRef]) -> Any:
+    """Rewrite optional entity inputs used as targets into the templated form.
+
+    This IS §6.3's prescribed fix, applied automatically and unconditionally: a
+    template is opaque to HA's static validation, so the empty case passes
+    schema and resolves to "no targets" at run time.
+    """
+    if isinstance(node, dict):
+        typed = cast("dict[str, Any]", node)
+        return {
+            key: (
+                _template_entity_value(value, bindings)
+                if key == _ENTITY_KEY
+                else template_optional_entity_targets(value, bindings)
+            )
+            for key, value in typed.items()
+        }
+    if isinstance(node, list):
+        return [
+            template_optional_entity_targets(item, bindings) for item in cast("list[Any]", node)
+        ]
+    return node
 
 
 #: §8.6 rule 5 -- body sections in canonical HA order.

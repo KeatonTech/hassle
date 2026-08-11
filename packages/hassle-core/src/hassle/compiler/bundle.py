@@ -41,9 +41,12 @@ from typing import Any
 
 from hassle.blueprints import blueprint_body, discover_blueprints
 from hassle.compiler.blueprint_dsl import (
+    InputRef,
     check_no_embedded_refs,
     collecting_inputs,
     emit_blueprint_yaml,
+    reject_optional_entity_triggers,
+    template_optional_entity_targets,
 )
 from hassle.compiler.errors import (
     AmbiguousCategorySourceError,
@@ -329,6 +332,17 @@ def _build_blueprint(reg: RegisteredObject) -> tuple[IRObject, _SectionSpans]:
     body["conditions"] = [n.body for n in rec.conditions]
     body["actions"] = [n.body for n in rec.actions]
     check_no_embedded_refs(body, reg.span)
+
+    # §8.5, in the order the two rules can fire: a trigger has no templated
+    # escape, so it is rejected outright; a target gets the escape applied.
+    reject_optional_entity_triggers(body["triggers"], reg.span)
+    bindings: dict[str, InputRef] = {}
+    for section in ("conditions", "actions"):
+        body[section] = template_optional_entity_targets(body[section], bindings)
+    if bindings:
+        # Emitted as the first body section (§8.6 rule 5) so the binding is in
+        # scope everywhere the template that reads it can appear.
+        body["variables"] = dict(bindings)
 
     source = emit_blueprint_yaml(
         name=str(meta["name"]),

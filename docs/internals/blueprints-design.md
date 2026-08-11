@@ -385,16 +385,31 @@ that. Stage 2 makes it unwritable:
   blueprint-level variable and emits the target as `entity_id: "{{ <name> }}"`.
   A template is opaque to HA's static validation, so the empty case passes
   schema and resolves to "no targets" at runtime — the hand-written fix §6.3
-  prescribes, applied automatically and unconditionally. If the author already
-  bound that ref via `variables()`, the emitter **reuses that binding's name**
-  rather than creating a second one (no duplicate binding, and the author's
-  chosen name wins).
+  prescribes, applied automatically and unconditionally. The binding is emitted
+  as a top-level `variables:` entry named exactly the input name.
 - **Optional → trigger `entity_id`.** There is no templated escape here: HA
   does not template trigger entity ids. So this is a compile error whose
   message says to make the input required (drop the `default`) or to trigger
   on something else — the two real fixes.
 - **Required entity inputs** may be used literally anywhere; they can never be
   empty, so §6.3's failure mode cannot arise.
+
+> ⚠️ **CORRECTED 2026-08-10 (`hassle.compiler.blueprint_dsl`, pinned by
+> `test_blueprint_dsl_guarantees`).** This section originally said that when the
+> author had already bound the ref via `variables()`, the emitter "reuses that
+> binding's name rather than creating a second one". That rule turned out not to
+> be well-defined, and the reason is a scope difference the design text had
+> flattened: in this DSL `variables()` is an *action* (`action_verbs.py` records
+> `{"variables": {...}}` into the action list), so an author's binding is
+> action-scoped and applies only to the actions after it, whereas the
+> auto-binding must be a **top-level** blueprint variable to be in scope for
+> every target that might read it. "Reusing" an action-scoped name for a
+> top-level binding would silently change where the name is visible. What ships
+> instead: the emitter **always** emits the top-level binding under the input's
+> own name. If the author also binds the same ref in a `variables()` action, the
+> value is identical, so the shadowing rebind is a no-op — which is why the
+> simpler rule costs nothing. It is also the more deterministic of the two (§8.6
+> rule 4 no longer depends on what the author happened to name a variable).
 
 The result: the emitter has no code path that writes a literal empty entity id,
 which is what "unwritable" means here — stage 1's §6.3 *rule* remains, but for
