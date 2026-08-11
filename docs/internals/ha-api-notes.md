@@ -4546,3 +4546,35 @@ with blueprint size or instance count. The five-second bound was chosen to
 cover the observed case with margin while keeping a real conflict's plan
 responsive; if a stale read ever outlives it, the result is the old behaviour —
 a self-healing false conflict — not a hang.
+
+**The second implication (added 2026-08-10): the post-update reload races the
+same window.** If the cache write races the WS response, then the
+`automation.reload` that `apply_plan` issues right after a blueprint UPDATE
+(blueprints-design §4.3) can fire while `blueprint/substitute` — and therefore
+presumably the same cache the reload's re-expansion reads — still holds the
+PRIOR document. HA would then re-expand every live instance against the OLD
+blueprint and leave them stale until some future, unrelated reload: a silently
+wrong house, under a push that reported success. Until this was closed, §4.3's
+reload was "reload and hope".
+
+**Sequencing fix** (`hassle.sync.apply._reload_after_blueprint_update` →
+`blueprint_drift.await_blueprint_settled`): settle first, reload second — the
+exact settle shape, knobs and comparison as the drift oracle above, probing
+with one bundle instance's inputs (`apply_plan(blueprint_instance_inputs=)`,
+additive; omitting it reproduces the pre-settle sequence byte for byte). On
+settle timeout the reload still fires — the old behaviour is the fallback,
+never a hang — and the apply surfaces a warning (`ApplyResult.
+blueprint_warnings`, metadata-only like `category_warnings`) naming the file,
+this section, and the operator remediation: reload automations once more, by
+hand, after the window has passed.
+
+**Operator note for pushes made by pre-settle versions**: the remediation is
+one manual `automation.reload` any time after the window (Developer Tools →
+YAML → Reload Automations). This was applied to the owner's live house on
+2026-08-10 for the adoption push that predated the fix.
+
+Pinned by `test_apply_blueprint_settle`: the reload lands only after a fresh
+substitute answer, the agreeing path never sleeps (the fake's
+`blueprint_settle_sleep` records waits instead of taking them, so the exact
+sequence is asserted), and a never-healing window still reloads plus the
+warning.

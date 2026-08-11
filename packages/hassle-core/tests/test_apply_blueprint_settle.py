@@ -73,7 +73,9 @@ class _SettleRecordingBackend(FakeBackend):
         super().update(kind, identity, config)
         self.log.append(("update", identity))
 
-    def blueprint_substitute(self, domain: str, path: str, inputs: dict[str, Any]) -> dict[str, Any]:
+    def blueprint_substitute(
+        self, domain: str, path: str, inputs: dict[str, Any]
+    ) -> dict[str, Any]:
         # Mirror the fake's own staleness condition BEFORE super() decrements.
         stale = self.blueprint_stale_reads > 0 and f"{domain}/{path}" in self._blueprint_previous
         result = super().blueprint_substitute(domain, path, inputs)
@@ -92,7 +94,7 @@ def _seeded_backend(*, stale_reads: int = 0) -> _SettleRecordingBackend:
     return backend
 
 
-def _update_plan() -> Plan:
+def _update_plan(backend: FakeBackend) -> Plan:
     return Plan(
         entries=[
             PlanEntry(
@@ -100,6 +102,7 @@ def _update_plan() -> Plan:
                 kind=BLUEPRINT_KIND,
                 action=PlanAction.UPDATE,
                 local=_body(NEW_SOURCE),
+                remote_hash_at_plan=backend.hash_of(BLUEPRINT_KIND, IDENTITY),
             )
         ]
     )
@@ -133,7 +136,7 @@ def _apply(backend: _SettleRecordingBackend, **overrides: Any):
         "blueprint_instance_inputs": _inputs(),
     }
     kwargs.update(overrides)
-    return apply_plan(_update_plan(), backend, _manifest(), **kwargs)
+    return apply_plan(_update_plan(backend), backend, _manifest(), **kwargs)
 
 
 def test_the_reload_waits_out_the_stale_window() -> None:

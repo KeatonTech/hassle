@@ -144,6 +144,49 @@ def detect_blueprint_drift(
     return frozenset(drifted)
 
 
+def await_blueprint_settled(
+    backend: object,
+    object_key: str,
+    local_body: dict[str, Any],
+    inputs: dict[str, Any],
+    *,
+    settle_timeout: float = SETTLE_TIMEOUT,
+    settle_interval: float = SETTLE_INTERVAL,
+    sleep: Callable[[float], None] = time.sleep,
+) -> bool:
+    """Wait until HA's substitute reflects the just-saved blueprint.
+
+    The exact complement of the drift check, sharing its loop, its knobs and
+    its comparison — one settle shape, two callers (ha-api-notes §40.8).
+
+    This exists because of the implication §40.8 opened up: if
+    ``blueprint/save``'s cache write races the WS response, then the
+    ``automation.reload`` `apply_plan` issues right after a blueprint UPDATE
+    (blueprints-design §4.3) races **the same window**. HA would then re-expand
+    the live instances against the **OLD** blueprint and leave them stale until
+    some future, unrelated reload — a silently wrong house, with the plan
+    reporting success. §4.3's reload was, until this, "reload and hope".
+
+    So: settle first, reload second. Returns ``True`` once HA's copy matches
+    (or immediately, if the backend cannot be probed — that is the
+    pre-existing behaviour and must not become a hang), ``False`` on timeout,
+    which the caller turns into a reload-anyway plus a warning.
+    """
+    substitute = getattr(backend, "blueprint_substitute", None)
+    if substitute is None:
+        # Nothing to probe with. Reload immediately, exactly as before.
+        return True
+    return not _differs_after_settle(
+        substitute,
+        object_key,
+        local_body,
+        inputs,
+        settle_timeout=settle_timeout,
+        settle_interval=settle_interval,
+        sleep=sleep,
+    )
+
+
 def _differs_after_settle(
     substitute: Any,
     object_key: str,

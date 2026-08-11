@@ -340,6 +340,12 @@ class FakeBackend:
         self.blueprint_stale_reads = 0
         # identity -> the source this blueprint had before its last update.
         self._blueprint_previous: dict[str, str] = {}
+        # Every settle wait `apply_plan` asked for before a post-update
+        # `automation.reload` (ha-api-notes §40.8), in order. The fake NEVER
+        # actually sleeps -- R2's "no network in unit tests" applied to the
+        # clock -- so a test can assert the exact wait sequence, and the
+        # common path (HA already fresh) provably costs nothing.
+        self.blueprint_settle_waits: list[float] = []
 
     # -- Backend protocol ---------------------------------------------------
 
@@ -956,6 +962,16 @@ class FakeBackend:
         return {
             key: value for key, value in expanded.items() if key not in INSTANCE_IDENTITY_FIELDS
         }
+
+    def blueprint_settle_sleep(self, seconds: float) -> None:
+        """Record a settle wait instead of taking it (ha-api-notes §40.8).
+
+        Additive and non-Protocol, `getattr`-probed by
+        `hassle.sync.apply._reload_after_blueprint_update` exactly as
+        `reload_automations` is. `DirectBackend` deliberately does NOT define
+        it, so live pushes get a real `time.sleep`.
+        """
+        self.blueprint_settle_waits.append(seconds)
 
     def reload_automations(self) -> None:
         """``automation.reload`` (blueprints-design §4.3).
