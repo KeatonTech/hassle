@@ -196,3 +196,40 @@ def test_the_emitted_yaml_expands_like_the_hand_written_equivalent(tmp_path: Pat
     assert expanded["actions"][0]["target"]["entity_id"] == "light.office"
     # The optional input's declared default fills in.
     assert expanded["actions"][0]["data"]["brightness_step_pct"] == 10
+
+
+# --- trigger ids ------------------------------------------------------------
+
+
+TRIGGER_IDS_DSL = """\
+from hassle import blueprint, bp_input, choose, service, state, when
+
+
+@blueprint(domain="automation", path="local/taps.yaml", name="Taps")
+def taps():
+    paddle = bp_input("paddle", selector={"entity": {"domain": "sensor"}})
+    light = bp_input("light", selector={"entity": {"domain": "light"}})
+    when(state(paddle).to("up").with_options(id="tap_up"))
+    when(state(paddle).to("down").with_options(id="tap_down"))
+    with choose() as c:
+        with c.when_(state("sensor.trigger").is_("tap_up")):
+            service("light.turn_on", target={"entity_id": light})
+        with c.when_(state("sensor.trigger").is_("tap_down")):
+            service("light.turn_off", target={"entity_id": light})
+"""
+
+
+def test_trigger_ids_survive_into_the_emitted_blueprint(tmp_path: Path) -> None:
+    """Contract item 3: no new surface — the existing `id=` option carries through.
+
+    Worth pinning anyway, because trigger ids are how a blueprint's `choose`
+    arms tell its triggers apart, and that is the shape real blueprints take.
+    """
+    root = tmp_path / "bundle"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "taps.py").write_text(TRIGGER_IDS_DSL, encoding="utf-8")
+    obj = compile_bundle(root).objects["blueprint:automation/local/taps.yaml"]
+    assert isinstance(obj, BlueprintConfig)
+    assert obj.source is not None
+    assert "id: tap_up" in obj.source
+    assert "id: tap_down" in obj.source

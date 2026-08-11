@@ -2,8 +2,9 @@
 
 Status: **stage 1 implemented**, on `feat/blueprint-objects` (21 commits,
 `ae06bc3..HEAD`; reconciled against the code below on 2026-08-09); **stage 2
-(§8) in progress** on `feat/blueprint-dsl`, branched off `a7ce338`, where the
-former sketch is now the full design section it builds to. Everything
+(§8) implemented** on `feat/blueprint-dsl` (branched off `a7ce338`), where the
+former sketch is now the full design section it was built to; §8 carries two
+dated corrections of its own, and §6 a third from stage 2's new rule. Everything
 HA-behavioral here was probed live on
 2026-08-10 against the owner's HA (see §2) and folded into
 `docs/internals/ha-api-notes.md` §40.1–§40.6 with raw captures, per house
