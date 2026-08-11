@@ -39,7 +39,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from hassle.blueprints import discover_blueprints
+from hassle.blueprints import blueprint_body, discover_blueprints
+from hassle.compiler.blueprint_dsl import (
+    check_no_embedded_refs,
+    collecting_inputs,
+    emit_blueprint_yaml,
+)
 from hassle.compiler.errors import (
     AmbiguousCategorySourceError,
     DuplicateObjectError,
@@ -298,6 +303,53 @@ def _build_script(reg: RegisteredObject, rec: Recorder) -> tuple[ScriptConfig, _
     return obj, spans
 
 
+def _build_blueprint(reg: RegisteredObject) -> tuple[IRObject, _SectionSpans]:
+    """Compile one ``@blueprint`` into a stage-1 ``BlueprintConfig``
+    (docs/internals/blueprints-design.md §8).
+
+    The body runs inside the ordinary ``recording(kind="automation")`` context —
+    the same recorder, the same verbs, the same spans — wrapped in an input
+    collector so ``bp_input`` calls land in declaration order (§8.6 rule 3).
+    What differs is only the last step: instead of validating the recorded body
+    as an ``AutomationConfig``, it is rendered to a deterministic YAML document
+    (§8.6) and handed to stage 1's own ``blueprint_body``, which re-parses the
+    text we just emitted — a free self-check that the artifact is a blueprint HA
+    can read, on every compile.
+
+    Unlike stage 1's file-discovered blueprints, this one carries real spans:
+    the body has a DSL declaration site, so §6's findings can point at a Python
+    line instead of a bare filename.
+    """
+    meta = reg.blueprint_meta or {}
+    with collecting_inputs() as collector, recording(kind="automation", **reg.options) as rec:
+        reg.func()
+
+    body: dict[str, Any] = dict(reg.options)
+    body["triggers"] = [n.body for n in rec.triggers]
+    body["conditions"] = [n.body for n in rec.conditions]
+    body["actions"] = [n.body for n in rec.actions]
+    check_no_embedded_refs(body, reg.span)
+
+    source = emit_blueprint_yaml(
+        name=str(meta["name"]),
+        description=meta.get("description"),
+        domain=str(meta["domain"]),
+        inputs=collector.declared,
+        body=body,
+        source_file=Path(reg.span.file).name if reg.span is not None else "<unknown>",
+    )
+    obj = parse(
+        blueprint_body(domain=str(meta["domain"]), path=str(meta["path"]), source=source),
+        kind=BLUEPRINT_KIND,
+    )
+    spans: _SectionSpans = {
+        "triggers": _flatten_spans(rec.triggers),
+        "conditions": _flatten_spans(rec.conditions),
+        "actions": _flatten_spans(rec.actions),
+    }
+    return obj, spans
+
+
 def _build_dashboard(reg: RegisteredObject) -> tuple[DashboardConfig, _NodeSpans]:
     """Compile one ``@dashboard``/``@raw_dashboard`` into the §3.2 envelope.
 
@@ -364,6 +416,18 @@ def compile_registered(
                 decl_span=reg.span,
                 duplicate_of=reg.span,
                 node_spans=dashboard_spans,
+            )
+            continue
+        if reg.kind == BLUEPRINT_KIND:
+            # A blueprint traces the ordinary automation recorder (its body IS
+            # an automation body, with holes), but compiles to a YAML document
+            # rather than an AutomationConfig -- blueprints-design §8.
+            blueprint_obj, blueprint_spans = _build_blueprint(reg)
+            result.add(
+                blueprint_obj,
+                spans=blueprint_spans,
+                decl_span=reg.span,
+                duplicate_of=reg.span,
             )
             continue
         with recording(kind=reg.kind, **reg.options) as rec:

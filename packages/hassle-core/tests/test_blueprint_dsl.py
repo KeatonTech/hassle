@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from hassle.blueprints import parse_blueprint
+from hassle.blueprints import blueprint_metadata, parse_blueprint
 from hassle.compiler.bundle import compile_bundle
 from hassle.ir.models import BlueprintConfig
 
@@ -69,7 +69,7 @@ def room_switch_controls():
 
 def _bundle(tmp_path: Path, *, dsl: str = BLUEPRINT_DSL) -> Path:
     root = tmp_path / "bundle"
-    root.mkdir(exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
     (root / "switches.py").write_text(dsl, encoding="utf-8")
     return root
 
@@ -108,8 +108,8 @@ def test_no_file_is_written_into_the_bundles_blueprints_directory(tmp_path: Path
 def test_the_emitted_source_parses_as_a_blueprint(tmp_path: Path) -> None:
     obj = _compiled(tmp_path)
     parsed = parse_blueprint(obj.source, display_path=PATH)
-    assert parsed.name == "Room switch controls"
     assert set(parsed.inputs) == {"switch_entity", "room_light", "dim_step_pct"}
+    assert blueprint_metadata(obj.source)["name"] == "Room switch controls"
 
 
 def test_inputs_keep_declaration_order_not_alphabetical_order(tmp_path: Path) -> None:
@@ -188,12 +188,9 @@ def test_compiling_the_same_bundle_twice_emits_identical_bytes(tmp_path: Path) -
 
 def test_the_emitted_yaml_expands_like_the_hand_written_equivalent(tmp_path: Path) -> None:
     """The artifact is not merely stable, it is the blueprint it claims to be."""
-    from hassle.blueprints import expand_blueprint
-
     obj = _compiled(tmp_path)
-    expanded = expand_blueprint(
-        parse_blueprint(obj.source, display_path=PATH),
-        {"switch_entity": "sensor.office_paddle", "room_light": "light.office"},
+    expanded = parse_blueprint(obj.source, display_path=PATH).expand(
+        {"switch_entity": "sensor.office_paddle", "room_light": "light.office"}
     )
     assert expanded["triggers"][0]["entity_id"] == "sensor.office_paddle"
     assert expanded["actions"][0]["target"]["entity_id"] == "light.office"

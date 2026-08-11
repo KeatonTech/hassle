@@ -69,6 +69,8 @@ NAME_TO_CASES: dict[str, list[str]] = {
     "macro": ["macro_two_callers", "macro_with_args"],
     "raw_automation": ["raw_automation_legacy"],
     "blueprint_automation": ["blueprint_automation"],
+    "blueprint": ["blueprint_dsl_authored"],
+    "bp_input": ["blueprint_dsl_authored"],
     "input_boolean": ["helper_declarations"],
     "input_number": ["helper_declarations"],
     "input_select": ["helper_declarations"],

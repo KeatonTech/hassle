@@ -20,6 +20,12 @@ from __future__ import annotations
 
 from hassle.compiler.action_verbs import fire_event, stop, variables
 from hassle.compiler.actions import delay, service
+from hassle.compiler.blueprint_dsl import (
+    UNSET,
+    InputRef,
+    blueprint,
+    bp_input,
+)
 from hassle.compiler.builders import (
     DelayAction,
     ServiceAction,
@@ -263,6 +269,7 @@ __all__ = [
     "E_",
     "PI",
     "TAU",
+    "UNSET",
     "ActionBuilder",
     "AreaTarget",
     "CalendarTrigger",
@@ -291,6 +298,7 @@ __all__ = [
     "HomeAssistantTrigger",
     "InOperatorTrapError",
     "InclusiveNumericBoundError",
+    "InputRef",
     "LabelTarget",
     "MaxExceeded",
     "MissingTemplateHelperWriteTargetError",
@@ -347,7 +355,9 @@ __all__ = [
     "atan2",
     "automation",
     "badge",
+    "blueprint",
     "blueprint_automation",
+    "bp_input",
     "build_raw_automation",
     "calendar",
     "capture_actions",
