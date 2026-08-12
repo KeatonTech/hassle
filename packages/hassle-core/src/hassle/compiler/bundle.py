@@ -326,6 +326,12 @@ def _build_blueprint(reg: RegisteredObject) -> tuple[IRObject, _SectionSpans]:
     """
     meta = reg.blueprint_meta or {}
     with collecting_inputs() as collector, recording(kind="automation", **reg.options) as rec:
+        # `@blueprint(triggers=[...])` (§8.11), the same list and the same
+        # composition rule `@automation` uses: the decorator's triggers were
+        # built at decoration time, so record them before running the body and
+        # any `when()`/`raw_trigger` calls append after them, in call order.
+        for trig in reg.decorator_triggers:
+            record_trigger(trig, span=reg.span)
         reg.func()
 
     body: dict[str, Any] = dict(reg.options)

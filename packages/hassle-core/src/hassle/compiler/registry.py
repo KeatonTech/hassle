@@ -151,6 +151,7 @@ def register_blueprint(
     description: str | None,
     options: dict[str, Any],
     span: SourceSpan | None,
+    triggers: Sequence[TriggerBuilder] | None = None,
 ) -> None:
     """Register a ``@blueprint`` body (blueprints-design §8.1).
 
@@ -166,6 +167,11 @@ def register_blueprint(
     blueprint body is an automation body with holes in it. The blueprint's own
     metadata (``domain``/``path``/``name``/``description``) is not an HA
     automation option and travels beside them.
+
+    ``triggers`` rides the same :attr:`RegisteredObject.decorator_triggers` list
+    ``@automation(triggers=...)`` uses, and is drained by the same
+    ``record_trigger`` loop in ``bundle.py`` -- one mechanism, one composition
+    rule (blueprints-design §8.11).
     """
     check_options("automation", options, span)
     current_registry().add(
@@ -175,6 +181,7 @@ def register_blueprint(
             options=dict(options),
             span=span,
             declared_id=f"{domain}/{path}",
+            decorator_triggers=list(triggers) if triggers else [],
             blueprint_meta={
                 "domain": domain,
                 "path": path,

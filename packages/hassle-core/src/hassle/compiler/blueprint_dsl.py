@@ -28,12 +28,13 @@ overriding ``__str__``/``__format__`` to raise and hoping no path escapes.
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable, Generator, Iterator
+from collections.abc import Callable, Generator, Iterator, Sequence
 from typing import Any, Final, cast
 
 import yaml
 
 from hassle.compiler.errors import CompileError
+from hassle.compiler.protocols import TriggerBuilder
 from hassle.compiler.spans import SourceSpan, capture_span
 
 # A marker no real config string can contain (NUL is illegal in YAML plain
@@ -471,6 +472,7 @@ def blueprint(
     path: str,
     name: str,
     description: str | None = None,
+    triggers: Sequence[TriggerBuilder] | None = None,
     **options: Any,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Declare a blueprint whose body is the recorder DSL (§8.1).
@@ -480,6 +482,23 @@ def blueprint(
     compiles to (``blueprint:<domain>/<path>``) is the one every object-layer
     consumer already looks up. Remaining ``**options`` are the automation
     options the blueprint body carries (``mode``, ``max``).
+
+    ``triggers=`` (§8.11) is ``@automation``'s, with the same semantics and the
+    same precedence: a sequence of ``TriggerBuilder`` objects -- the same objects
+    ``when()`` accepts -- built at DECORATION time and recorded before the body
+    runs, so they land first and any ``when()``/``raw_trigger`` calls inside the
+    body append after them in call order. Compile parity with the ``when()``
+    form is exact.
+
+    A trigger declared by a call inside the body is metadata masquerading as
+    step zero: an action call corresponds 1:1 to a runtime step, a trigger call
+    corresponds to nothing in the sequence. ``@blueprint`` lacked ``triggers=``
+    only because ``bp_input`` used to be body-scoped, which left a
+    decoration-time trigger with no way to name an input. Module-scope
+    declarations (§8.2) removed that constraint; a decorator trigger may now
+    reference an ``InputRef`` freely, and the emitter's existing sentinel walk
+    converts it to an ``!input`` node in trigger position exactly as it does in
+    the body.
 
     The undecorated function is returned unchanged, exactly as ``@automation``
     does, so a bundle can still call it.
@@ -497,6 +516,7 @@ def blueprint(
             description=description,
             options=dict(options),
             span=span,
+            triggers=triggers,
         )
         return func
 
