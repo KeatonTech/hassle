@@ -298,13 +298,26 @@ def reset_declared_blueprint_inputs() -> None:
     _DECLARATIONS.clear()
 
 
-def module_scope_declarations() -> list[InputRef]:
+def drain_module_scope_declarations() -> list[InputRef]:
     """Declarations made OUTSIDE any blueprint body, in declaration order.
 
     The only ones that can turn out to be dead: a body-scoped declaration is a
     member of its own blueprint by construction.
+
+    **Self-cleaning** -- the declaration list is emptied on the way out, in a
+    ``finally``, exactly as
+    ``template_helpers.check_no_dangling_template_helper_declarations`` empties
+    its pending list, and for the same reason. ``compile_bundle`` resets at the
+    START of every compile, so the CLI path was always safe; a DIRECT
+    ``compile_registered`` caller has no such protection, and since a
+    blueprint-less compile reaches none of a previous compile's declarations it
+    would report every one of them as dead -- against a file its own bundle does
+    not contain. Draining here means no future direct caller has to remember.
     """
-    return [ref for ref in _DECLARATIONS if not ref.declared_in_body]
+    try:
+        return [ref for ref in _DECLARATIONS if not ref.declared_in_body]
+    finally:
+        _DECLARATIONS.clear()
 
 
 @contextlib.contextmanager

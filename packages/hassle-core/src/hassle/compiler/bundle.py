@@ -45,9 +45,10 @@ from hassle.compiler.blueprint_dsl import (
     InputRef,
     check_no_embedded_refs,
     collecting_inputs,
+    drain_module_scope_declarations,
     emit_blueprint_yaml,
-    module_scope_declarations,
     reject_optional_entity_triggers,
+    reset_declared_blueprint_inputs,
     resolve_inputs,
     template_optional_entity_targets,
 )
@@ -521,8 +522,15 @@ def compile_registered(
     from hassle.compiler.template_helpers import check_no_dangling_template_helper_declarations
 
     check_no_dangling_template_helper_declarations()
+    # Self-cleaning, like the sweep above (see `drain_module_scope_declarations`):
+    # a direct `compile_registered` caller must not inherit a previous compile's
+    # declarations and report every one of them as dead.
     result.set_unused_blueprint_inputs(
-        [ref for ref in module_scope_declarations() if ref.sequence not in used_input_sequences]
+        [
+            ref
+            for ref in drain_module_scope_declarations()
+            if ref.sequence not in used_input_sequences
+        ]
     )
     return result
 
@@ -542,7 +550,6 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
     # bundle import in the same process) never bleeds objects into this one.
     # These modules track declarations in module globals in addition to the
     # per-compile registry, so both must be cleared.
-    from hassle.compiler.blueprint_dsl import reset_declared_blueprint_inputs
     from hassle.compiler.dashboards.decorators import reset_declared_dashboards
     from hassle.compiler.group_helpers import reset_declared_group_helpers
     from hassle.compiler.helpers import reset_declared_helpers
@@ -552,8 +559,9 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
     # Blueprint input declarations are per-compile state too: the sequence
     # numbers that order every emitted `input:` block are assigned from this
     # list's length, so a leftover entry would shift a later compile's
-    # numbering and, worse, report a dead declaration against a file the
-    # second bundle does not contain.
+    # numbering. `compile_registered` also drains the list on its way out, so
+    # this is belt-and-braces -- it also covers a compile that RAISED partway
+    # through and never reached the drain.
     reset_declared_blueprint_inputs()
     reset_declared_helpers()
     reset_declared_template_helpers()
