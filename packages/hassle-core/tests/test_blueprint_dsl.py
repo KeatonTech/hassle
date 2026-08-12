@@ -1,11 +1,11 @@
-"""Stage 2: blueprints AUTHORED IN THE DSL (docs/internals/blueprints-design.md §8).
+"""Blueprints AUTHORED IN THE DSL (docs/internals/blueprints-design.md §8).
 
 Slice 1 — the authoring surface and the emitter:
 
 - ``@blueprint(...)`` registers a whole object, the same seam
   ``@blueprint_automation`` uses (``raw_automation.py``'s Registration note), so
-  it lands in ``CompileResult.objects`` under stage 1's own
-  ``blueprint:<domain>/<path>`` key and every stage-1 consumer keeps working.
+  it lands in ``CompileResult.objects`` under the object layer's own
+  ``blueprint:<domain>/<path>`` key and every object-layer consumer keeps working.
 - ``bp_input(...)`` returns an ``InputRef`` placeholder that compiles to an
   ``!input <name>`` YAML node.
 - The emitted ``source`` is a DETERMINISTIC artifact (§8.6): byte-stable across
@@ -81,7 +81,7 @@ def _compiled(tmp_path: Path, *, dsl: str = BLUEPRINT_DSL) -> BlueprintConfig:
     return obj
 
 
-# --- registration: a DSL blueprint is a stage-1 object ----------------------
+# --- registration: a DSL blueprint is an ordinary managed object ----------------------
 
 
 def test_a_dsl_blueprint_registers_under_the_stage_1_object_key(tmp_path: Path) -> None:
@@ -119,7 +119,7 @@ def test_inputs_keep_declaration_order_not_alphabetical_order(tmp_path: Path) ->
 
 
 def test_a_required_input_is_distinguishable_from_an_optional_one(tmp_path: Path) -> None:
-    """§8.2 — `UNSET`, not `None`, marks required (stage 1 relies on this)."""
+    """§8.2 — `UNSET`, not `None`, marks required (the object layer relies on this)."""
     obj = _compiled(tmp_path)
     assert "default" not in obj.inputs["switch_entity"]
     assert obj.inputs["dim_step_pct"]["default"] == 10

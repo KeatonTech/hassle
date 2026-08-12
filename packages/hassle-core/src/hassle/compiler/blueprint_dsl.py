@@ -1,10 +1,10 @@
 """``@blueprint`` / ``bp_input`` -- blueprints AUTHORED IN THE DSL
 (docs/internals/blueprints-design.md §8).
 
-Stage 1 made a blueprint FILE a managed object. Stage 2 makes the file itself a
-compiled artifact: the body is recorded by the same recorder ``@automation``
+The blueprint object kind made a blueprint FILE a managed object. This module
+makes the file itself a compiled artifact: the body is recorded by the same recorder ``@automation``
 uses, declared inputs become ``!input`` nodes, and the emitted YAML is
-deterministic (§8.6) so stage 1's object machinery can push it unchanged. No
+deterministic (§8.6) so the object layer's sync machinery can push it unchanged. No
 file is written into ``blueprints/`` -- the compiled object IS the source of
 truth.
 
@@ -45,7 +45,7 @@ _MARK: Final = "\x00hassle-blueprint-input\x00"
 class UnsetType:
     """The 'no default declared' sentinel.
 
-    Not ``None``: ``None`` is a legitimate YAML default, and stage 1 already
+    Not ``None``: ``None`` is a legitimate YAML default, and the object layer already
     depends on telling the two apart -- ``BlueprintConfig.inputs`` keeps a bare
     ``room_key:`` entry as ``None`` precisely so "declared with no ``default:``"
     stays distinguishable (blueprints-design §1).
@@ -280,7 +280,7 @@ class _BlueprintDumper(yaml.SafeDumper):
         PyYAML writes a sequence flush with its parent key by default. HA reads
         both, but every hand-written blueprint (and HA's own docs) indents, and
         a compiled artifact that diffs noisily against the hand-written one it
-        replaces is a bad first impression for stage 2. Cosmetic only, and
+        replaces is a bad first impression for a DSL-authored blueprint. Cosmetic only, and
         applied unconditionally, so it costs nothing in determinism.
         """
         super().increase_indent(flow, False)
@@ -475,9 +475,9 @@ def blueprint(
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Declare a blueprint whose body is the recorder DSL (§8.1).
 
-    ``domain``/``path`` are stage 1's identity, verbatim: ``path`` is exactly
+    ``domain``/``path`` are the object kind's identity, verbatim: ``path`` is exactly
     the string instances put in ``use_blueprint``, so the object key this
-    compiles to (``blueprint:<domain>/<path>``) is the one every stage-1
+    compiles to (``blueprint:<domain>/<path>``) is the one every object-layer
     consumer already looks up. Remaining ``**options`` are the automation
     options the blueprint body carries (``mode``, ``max``).
 

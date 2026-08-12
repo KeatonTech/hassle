@@ -167,7 +167,7 @@ class Simulator:
 
         Covers DSL-authored blueprints (§8.8) and file-discovered ones alike —
         both are ``BlueprintConfig`` objects carrying their own ``source``, so
-        preferring this map costs nothing for the stage-1 case and reads the
+        preferring this map costs nothing for the file-authored case and reads the
         same bytes the file would have.
         """
         sources: dict[str, str] = {}

@@ -308,7 +308,7 @@ def _build_script(reg: RegisteredObject, rec: Recorder) -> tuple[ScriptConfig, _
 
 
 def _build_blueprint(reg: RegisteredObject) -> tuple[IRObject, _SectionSpans]:
-    """Compile one ``@blueprint`` into a stage-1 ``BlueprintConfig``
+    """Compile one ``@blueprint`` into an ordinary managed ``BlueprintConfig``
     (docs/internals/blueprints-design.md §8).
 
     The body runs inside the ordinary ``recording(kind="automation")`` context —
@@ -316,11 +316,11 @@ def _build_blueprint(reg: RegisteredObject) -> tuple[IRObject, _SectionSpans]:
     collector so ``bp_input`` calls land in declaration order (§8.6 rule 3).
     What differs is only the last step: instead of validating the recorded body
     as an ``AutomationConfig``, it is rendered to a deterministic YAML document
-    (§8.6) and handed to stage 1's own ``blueprint_body``, which re-parses the
+    (§8.6) and handed to the object layer's own ``blueprint_body``, which re-parses the
     text we just emitted — a free self-check that the artifact is a blueprint HA
     can read, on every compile.
 
-    Unlike stage 1's file-discovered blueprints, this one carries real spans:
+    Unlike file-discovered blueprints, this one carries real spans:
     the body has a DSL declaration site, so §6's findings can point at a Python
     line instead of a bare filename.
     """
@@ -526,7 +526,7 @@ def _register_blueprints(result: CompileResult, bundle_path: Path) -> None:
     """Register one ``BlueprintConfig`` per blueprint source file
     (docs/internals/blueprints-design.md §1).
 
-    The one managed object kind with **no DSL declaration** in stage 1: a
+    The one managed object kind that may carry **no DSL declaration**: a
     blueprint's source of truth is the bundle FILE at
     ``blueprints/<domain>/<path>``, authored rather than generated, so
     discovery is a filesystem scan (`hassle.blueprints.discover_blueprints`)
@@ -550,7 +550,7 @@ def _register_blueprints(result: CompileResult, bundle_path: Path) -> None:
         obj = parse(discovered.body, kind=BLUEPRINT_KIND)
         key = obj.object_key()
         if key in result.objects:
-            # §8.7: stage 2 makes this reachable for the first time. Before it,
+            # §8.7: DSL authoring makes this reachable for the first time. Before it,
             # the docstring above was right that only two files could collide,
             # which the filesystem already prevents; now a `@blueprint` may have
             # claimed the same identity, and neither silent winner is safe.

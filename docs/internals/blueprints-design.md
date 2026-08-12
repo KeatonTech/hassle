@@ -1,10 +1,11 @@
 # Blueprints as first-class objects — design
 
-Status: **stage 1 implemented**, on `feat/blueprint-objects` (21 commits,
-`ae06bc3..HEAD`; reconciled against the code below on 2026-08-09); **stage 2
-(§8) implemented** on `feat/blueprint-dsl` (branched off `a7ce338`), where the
-former sketch is now the full design section it was built to; §8 carries two
-dated corrections of its own, and §6 a third from stage 2's new rule. Everything
+Status: **implemented** — the managed object kind on `feat/blueprint-objects`
+(21 commits, `ae06bc3..HEAD`; reconciled against the code below on
+2026-08-09), and DSL authoring (§8) on `feat/blueprint-dsl` (branched off
+`a7ce338`), where the former sketch is now the full design section it was
+built to; §8 carries two dated corrections of its own, and §6 a third from
+the DSL's new rule. Everything
 HA-behavioral here was probed live on
 2026-08-10 against the owner's HA (see §2) and folded into
 `docs/internals/ha-api-notes.md` §40.1–§40.6 with raw captures, per house
@@ -39,8 +40,8 @@ HTTP 400 forty minutes into a transactional push instead of as a
 `hassle validate` finding. All three failure modes are sync-layer gaps this
 design closes.
 
-Stage 1 (this design): the blueprint file as a managed object.
-Stage 2 (sketch, §8): blueprints authored in the DSL, YAML as a compiled
+Part one (§1–§7): the blueprint file as a managed object.
+Part two (§8): blueprints authored in the DSL, YAML as a compiled
 artifact.
 
 ## 1. Object model
@@ -54,8 +55,8 @@ artifact.
   HA itself uses under `config/blueprints/`. (That constant currently pins
   `automation`; generalizing it to per-domain is part of this work and
   additive.)
-- **IR object**: the raw YAML text (byte-preserved; the file is authored,
-  not generated, in stage 1) plus the parsed `blueprint.input` metadata for
+- **IR object**: the raw YAML text (byte-preserved; a discovered file is
+  authored, not generated — §8's DSL blueprints generate theirs) plus the parsed `blueprint.input` metadata for
   validation. Parsing reuses the loader in `hassle.testing.blueprints`,
   which is **promoted to `hassle.blueprints`** (core) and re-exported from
   its current name for compatibility — the validator (§6) must not import
@@ -133,7 +134,7 @@ substitute-compare oracle (§2.2).
 > exposure every other kind already carries, no worse. **Residual exposure,
 > documented and accepted**: a local edit and a remote edit landing in the
 > same window pushes the local edit over the remote one with no conflict
-> raised. Closing it needs either a future HA source-read command or stage 2's
+> raised. Closing it needs either a future HA source-read command or the DSL's
 > deterministic compiled artifact (§8). Full account: ha-api-notes §40.6.
 
 > ⚠️ **CORRECTED 2026-08-09 (DESIGN §8.2, `hassle.sync.models.PlanEntry`).**
@@ -200,7 +201,7 @@ reverse.
 > blueprint deletes last, so nothing applied afterward can strand one — only a
 > *second* blueprint delete failing in the same plan reaches the `DELETE`
 > case, while the `UPDATE` case is reachable whenever a blueprint update
-> shares a plan with a failing automation row. Stage 2 (§8) removes this
+> shares a plan with a failing automation row. DSL authoring (§8) removes this
 > entirely: a DSL-compiled blueprint is reproducible from the bundle's own git
 > history, so a "previous version" always exists somewhere Hassle can reach.
 
@@ -249,7 +250,7 @@ command turns that row into a real adopt with no schema change here.
    new rule should be motivated by a real rejection, captured like this
    one.
 
-> ⚠️ **KNOWN LIMITATION 2026-08-09 (stage 1; a code-level finding, not an HA
+> ⚠️ **KNOWN LIMITATION 2026-08-09 (the input parser; a code-level finding, not an HA
 > probe).** `hassle.blueprints._parse_inputs` reads `blueprint.input` as a
 > flat mapping of input name → spec. HA's blueprint schema also allows
 > **grouped inputs** — an `input:` entry whose value is itself
@@ -262,7 +263,7 @@ command turns that row into a real adopt with no schema change here.
 > misses it entirely), and an instance that *does* correctly supply one trips
 > a false `blueprint-unknown-input` instead — reproducing, from the parser's
 > blind side, the exact class of opaque rejection §0 exists to close. **Stated
-> non-goal of stage 1**: flattening `sections` is out of scope for now — no
+> accepted non-goal**: flattening `sections` is out of scope for now — no
 > real HA rejection has motivated it yet (item 4's own bar for a new rule),
 > and neither BrandtCamp's blueprint nor the golden fixture uses sections.
 > Revisit when one does.
@@ -281,7 +282,7 @@ command turns that row into a real adopt with no schema change here.
   consumer smoke test and first adopter — its scratchpad upload script
   retires the day this lands.
 
-## 8. Stage 2: blueprints authored in the DSL
+## 8. Blueprints authored in the DSL
 
 The payoffs, in the order the field demanded them: instance validation for
 free (the declaration is right there), §6.3 becomes impossible to *write*
@@ -293,7 +294,7 @@ from the bundle's own git history, so the "previous version" that apply's
 `_rollback` cannot reach for an authored file always exists for a generated
 one.
 
-> ⚠️ **SUPERSEDED 2026-08-10 (this section).** The stage-1 sketch this
+> ⚠️ **SUPERSEDED 2026-08-10 (this section).** The original sketch this
 > replaces proposed `@blueprint(domain=..., path=..., inputs={...})` — inputs
 > as a dict argument on the decorator. What ships instead is §8.2's
 > `bp_input(...)` called in the decorated body, for one reason the sketch had
@@ -328,7 +329,7 @@ decorator is a whole-object registration, the same seam `@blueprint_automation`
 uses (`raw_automation.py`'s Registration note): it builds a `BlueprintConfig`
 and hands it to `Registry.add_object`, which `compile_bundle` drains into
 `CompileResult.objects` under `blueprint:<domain>/<path>`. That key is
-stage-1's identity, unchanged (§1), so **every stage-1 consumer — plan, apply,
+the object kind's identity, unchanged (§1), so **every consumer — plan, apply,
 ordering, drift — works on a DSL blueprint with no change at all**: the object
 it receives is indistinguishable from one read off disk except in provenance.
 
@@ -336,7 +337,7 @@ it receives is indistinguishable from one read off disk except in provenance.
 
 `bp_input(name, *, selector: dict, default=UNSET, description=None)` returns an
 `InputRef` placeholder. `UNSET` (not `None`) marks "required", because `None`
-is a legitimate YAML default and stage 1 already relies on that distinction —
+is a legitimate YAML default and the object layer already relies on that distinction —
 `BlueprintConfig.inputs` keeps a bare `room_key:` entry as `None` precisely so
 "declared with no `default:`" stays distinguishable from `{}` (§1's model).
 
@@ -368,14 +369,14 @@ No new surface: the existing trigger builders' `id=` option carries through
 unchanged. Recording a trigger inside a `@blueprint` body records its `id`
 exactly as it does inside `@automation`, and `choose` arms keyed on trigger id
 work the same way. This is called out only because it is the one piece of the
-stage-2 authoring story that required nothing.
+DSL authoring story that required nothing.
 
 ### 8.5 The structural §6.3 guarantee
 
 §6.3 exists because HA validates the **static** expanded config: a literal
 empty `entity_id` is rejected even inside a runtime-guarded branch, which is
-the field HTTP-400 that motivated this whole design. Stage 1 can only *detect*
-that. Stage 2 makes it unwritable:
+the field HTTP-400 that motivated this whole design. Validation can only *detect*
+that in a hand-written file. The DSL makes it unwritable:
 
 | Input kind | Use as service target | Use as trigger `entity_id` |
 |---|---|---|
@@ -413,16 +414,16 @@ that. Stage 2 makes it unwritable:
 > rule 4 no longer depends on what the author happened to name a variable).
 
 The result: the emitter has no code path that writes a literal empty entity id,
-which is what "unwritable" means here — stage 1's §6.3 *rule* remains, but for
+which is what "unwritable" means here — §6.3's *rule* remains, but for
 DSL blueprints it becomes a check that can no longer fire.
 
 ### 8.6 Emission and byte-stability
 
-A DSL blueprint compiles to a stage-1 `BlueprintConfig` whose `source` is
-generated YAML and whose `inputs` is the same parsed block stage 1 stores,
+A DSL blueprint compiles to an ordinary managed `BlueprintConfig` whose `source` is
+generated YAML and whose `inputs` is the same parsed block the object layer stores,
 derived from that generated source (so the two cannot disagree). **No file is
 written into `blueprints/`** — the compiled object is the source of truth, and
-stage-1 sync pushes it unchanged. This is the point at which stage 1's
+the object layer's sync pushes it unchanged. This is the point at which its
 "byte-preserved, because authored" note (§1, `ir/models.py`) flips meaning for
 generated blueprints: byte-stability now comes from the emitter being a
 function, not from preserving an author's bytes.
@@ -468,16 +469,16 @@ author can make in a second once told which two things collided.
 ### 8.8 Simulator
 
 Instance expansion prefers compiled blueprint objects from the same
-`CompileResult` over the on-disk lookup. Stage 1 resolves a `use_blueprint`
+`CompileResult` over the on-disk lookup. The file lookup resolves a `use_blueprint`
 path against the bundle directory via `CompileResult`'s bundle-dir sidecar;
-stage 2 checks `CompileResult.objects` for `blueprint:<domain>/<path>` first,
+the simulator now checks `CompileResult.objects` for `blueprint:<domain>/<path>` first,
 falls back to that file lookup, and — absent both — stays **inert exactly as
 today** (an unresolvable instance is not a simulator error; it may legitimately
 reference a community blueprint that lives only in HA, §6.2).
 
 ### 8.9 Instance validation
 
-Stage 1's §6 checks (missing required inputs, unknown input names) upgrade to
+The §6 checks (missing required inputs, unknown input names) upgrade to
 read DSL declarations wherever a DSL blueprint provides them, and gain one the
 declaration makes newly answerable: an **entity-selector input receiving a
 non-entity-id value** (`blueprint-input-not-an-entity-id`). An instance passing
@@ -486,10 +487,10 @@ silent misfire.
 
 > ⚠️ **CORRECTED 2026-08-10 (`hassle.registry.blueprint_rules`).** Two claims
 > above needed narrowing once implemented. **First**, the new rule is not
-> DSL-only. This section said stage 1 "could not check that — a parsed YAML
+> DSL-only. This section said a file-authored blueprint "could not check that — a parsed YAML
 > selector is just a mapping", but a hand-written blueprint's `selector: entity:`
 > parses into `BlueprintConfig.inputs` exactly as a DSL one does, so the rule
-> applies to both and is implemented for both. What stage 2 changed is not the
+> applies to both and is implemented for both. What the DSL changed is not the
 > rule's *feasibility* but its *worth*: with the declaration at a Python line the
 > mistake became worth telling the author about. **Second**, unlike §6's other
 > rules this one is NOT motivated by a real HA rejection — HA accepts the save
@@ -504,10 +505,10 @@ silent misfire.
 
 Note this cannot regress the `sections` limitation boxed in §6: a DSL blueprint
 declares its inputs flat by construction, so the parser's blind side is simply
-not reachable for them. On-disk blueprints keep stage 1's behavior exactly.
+not reachable for them. On-disk blueprints keep their existing behavior exactly.
 
 ### 8.10 Out of scope
 
-Round-tripping UI-edited blueprints to DSL. They stay stage-1 raw-YAML objects
+Round-tripping UI-edited blueprints to DSL. They stay raw-YAML file objects
 and promotion is a human act — the same asymmetry the decompiler already
 accepts elsewhere.

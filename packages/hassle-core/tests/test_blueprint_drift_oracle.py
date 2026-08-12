@@ -181,7 +181,7 @@ def test_a_failing_substitute_is_not_reported_as_drift() -> None:
 
 # --- the field false-positive (ha-api-notes §40.7) --------------------------
 #
-# First live run of stage 1 against the owner's HA: the oracle reported "edited
+# First live run of the blueprint object kind against the owner's HA: the oracle reported "edited
 # in place in Home Assistant" for a blueprint pushed seconds earlier and
 # provably in sync. Root cause: `blueprint/substitute` is handed
 # `{domain, path, input}` and NO INSTANCE, so it returns the CONFIG BLOCK ONLY

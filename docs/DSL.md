@@ -1015,9 +1015,9 @@ Golden case: `fixtures/dsl/blueprint_dsl_authored/`.
 ```python
 """Golden case: blueprint_dsl_authored (docs/internals/blueprints-design.md §8).
 
-A blueprint AUTHORED IN THE DSL. Stage 1's golden (`blueprint_managed_object`)
+A blueprint AUTHORED IN THE DSL. The file-authored golden (`blueprint_managed_object`)
 pins a hand-written blueprint FILE becoming a managed object; this one pins the
-stage-2 inversion — there is no file, and `BlueprintConfig.source` in
+DSL inversion — there is no file, and `BlueprintConfig.source` in
 `expected_ir.json` is the emitted YAML, byte for byte.
 
 That makes this fixture the determinism gate (§8.6): declaration order for the
@@ -1112,9 +1112,9 @@ Golden case: `fixtures/dsl/blueprint_dsl_authored/`.
 ```python
 """Golden case: blueprint_dsl_authored (docs/internals/blueprints-design.md §8).
 
-A blueprint AUTHORED IN THE DSL. Stage 1's golden (`blueprint_managed_object`)
+A blueprint AUTHORED IN THE DSL. The file-authored golden (`blueprint_managed_object`)
 pins a hand-written blueprint FILE becoming a managed object; this one pins the
-stage-2 inversion — there is no file, and `BlueprintConfig.source` in
+DSL inversion — there is no file, and `BlueprintConfig.source` in
 `expected_ir.json` is the emitted YAML, byte for byte.
 
 That makes this fixture the determinism gate (§8.6): declaration order for the

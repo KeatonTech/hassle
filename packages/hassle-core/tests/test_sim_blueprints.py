@@ -275,7 +275,7 @@ def test_the_instance_payload_is_identical_with_and_without_a_blueprint_file(
 
     Amended for blueprints-design §1: the bundle now compiles one MORE object
     when the file is present -- the blueprint itself, which is the whole point
-    of stage 1 (the file becomes managed rather than uploaded by hand). What
+    of the object layer (the file becomes managed rather than uploaded by hand). What
     must stay byte-identical is the INSTANCE's own payload, which is what this
     test was always really about; `test_blueprint_discovery` pins the new
     object's own presence and shape.

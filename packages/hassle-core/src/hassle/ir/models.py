@@ -321,8 +321,8 @@ class BlueprintConfig(IRObject):
          "source": "blueprint:\\n  name: ...\\n",
          "inputs": {"button_up": {...}, "room_key": None}}
 
-    - ``source`` is the file's text, **byte-preserved**. In stage 1 a blueprint
-      is AUTHORED, not generated (stage 2, §8, makes it a compiled artifact),
+    - ``source`` is the file's text, **byte-preserved**. A file-authored blueprint
+      is AUTHORED, not generated (a DSL-authored one, §8, is a compiled artifact),
       so a push that reflowed it would lose the author's comments, block
       scalars and blank lines — and HA stores the document verbatim anyway.
       :func:`hassle.blueprints.blueprint_body` reads it via

@@ -4400,7 +4400,7 @@ fail and strand it — only a second blueprint delete failing in the same plan
 reaches the delete case. The update case is reachable whenever a blueprint
 update and a failing automation row share a plan.
 
-If stage 2 lands (blueprints authored in the DSL, §8), this stops mattering:
+With DSL-authored blueprints (§8), this stops mattering:
 the document becomes a deterministic compiled artifact, so the pre-update
 version is always reproducible from the bundle's own history.
 
@@ -4435,13 +4435,13 @@ update" row precedes the drift row.
 Residual exposure, documented and accepted: local edit **and** remote edit in
 the same window pushes over the remote edit without a conflict. Closing it
 needs either a source read (a future HA release) or the base document stored
-somewhere Hassle can reach — which stage 2 (§8) gets for free, since a
+somewhere Hassle can reach — which DSL authoring (§8) gets for free, since a
 DSL-authored blueprint is a deterministic compiled artifact reproducible from
 the bundle's own git history.
 
 ### 40.7 `blueprint/substitute` returns the CONFIG BLOCK ONLY (observed live 2026-08-10)
 
-Found by the **first live run** of stage 1 against the owner's HA, not by the
+Found by the **first live run** of the blueprint object kind against the owner's HA, not by the
 unit suite: the substitute-compare drift oracle reported "edited in place in
 Home Assistant" for a blueprint that had been pushed seconds earlier and was
 provably in sync — and would have kept reporting it on every plan, forever.
@@ -4498,7 +4498,7 @@ oracle must never call the latter.
 
 ### 40.8 `blueprint/substitute` serves a STALE copy briefly after a save (observed live 2026-08-10)
 
-The second field false-positive from stage 1's first live run, and the root
+The second field false-positive from the object kind's first live run, and the root
 cause of the one §40.7 was originally blamed for. Sequence observed against the
 owner's real HA:
 

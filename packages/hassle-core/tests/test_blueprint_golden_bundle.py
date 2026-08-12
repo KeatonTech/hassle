@@ -1,7 +1,7 @@
 """The golden fixture bundle, end to end (blueprints-design §7).
 
 `fixtures/dsl/blueprint_managed_object/` is a bundle with ONE blueprint and
-TWO instances of it. This drives it through the whole stage-1 lifecycle
+TWO instances of it. This drives it through the whole managed-object lifecycle
 against `FakeBackend` — first push, re-plan, edit, delete — and pins the
 ordering §4 requires at each step.
 

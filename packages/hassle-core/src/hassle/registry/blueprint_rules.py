@@ -90,7 +90,7 @@ def _validate_instances(
         where_line = span.line if span is not None else None
         # An instance is always an AUTOMATION blueprint instance: that is what
         # `@blueprint_automation` declares (a `script` blueprint has no DSL
-        # instance form in stage 1), so the key derives with no guessing.
+        # instance form for file-authored blueprints), so the key derives with no guessing.
         blueprint = blueprints.get(blueprint_key_for_use_path(path))
         if blueprint is None:
             findings.append(_not_in_bundle(key, path, where_file, where_line))
@@ -199,9 +199,9 @@ def _check_entity_selectors(
 ) -> list[Finding]:
     """An entity-selector input handed something that is not an entity id (§8.9).
 
-    Stage 1 could not ask this question usefully of a hand-written blueprint and
-    stage 2 does not change that -- a declared `selector: entity:` is equally
-    readable in both -- but stage 2 is what made it worth asking: a DSL
+    This question was never worth asking of a hand-written blueprint alone, and
+    the DSL does not change its mechanics -- a declared `selector: entity:` is
+    equally readable in both -- but DSL authoring is what made it worth asking: a DSL
     blueprint's `selector=` sits at the declaration site, so the mistake it
     catches ("kitchen" where a light entity was meant) is now a typo the author
     can be told about instead of another opaque HTTP 400 at push time.

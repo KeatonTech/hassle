@@ -2,7 +2,7 @@
 
 **Core, not testing** (docs/internals/blueprints-design.md §1). This module
 started life as ``hassle.testing.blueprints``, serving only the simulator;
-stage 1 of the blueprints design makes a blueprint *file* a managed object, so
+the blueprints design makes a blueprint *file* a managed object, so
 three more callers need the very same parse/expand logic and none of them may
 import a testing module (`tests/test_package_layering.py` pins the direction):
 

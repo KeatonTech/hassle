@@ -157,7 +157,7 @@ def register_blueprint(
     Rides the same :class:`RegisteredObject` stream as automations, scripts and
     dashboards -- one registration path, one duplicate-identity check, one span
     map. Like a dashboard's, the identity is passed in rather than derived from
-    the function name: a blueprint's identity is ``<domain>/<path>``, stage 1's
+    the function name: a blueprint's identity is ``<domain>/<path>``, the object kind's
     key verbatim (§1), so the object this compiles to is the one instances
     already reference.
 

@@ -719,7 +719,7 @@ def test_a_pushed_blueprint_plans_as_a_noop_next_time() -> None:
 
 def test_the_manifest_kind_is_blueprint() -> None:
     """DESIGN §8.1's `kind` field already enumerates `dsl | raw | blueprint` --
-    stage 1 is what finally uses the third value."""
+    the blueprint kind is what finally uses the third value."""
     backend = _RecordingBackend()
     plan = Plan(
         entries=[

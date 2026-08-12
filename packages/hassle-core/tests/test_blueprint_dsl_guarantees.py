@@ -1,10 +1,10 @@
-"""Stage 2's two structural guarantees (docs/internals/blueprints-design.md §8.3, §8.5).
+"""The blueprint DSL's two structural guarantees (docs/internals/blueprints-design.md §8.3, §8.5).
 
 §8.5 is the point of the whole design. The field HTTP-400 that motivated
 blueprints-as-objects (§0) was an OPTIONAL entity-selector input used as a
 literal service target: HA validates the *static* expanded config, so a literal
-empty entity id is rejected even inside a runtime-guarded branch. Stage 1 can
-only DETECT that after the fact (§6.3). Stage 2 makes it unwritable — the
+empty entity id is rejected even inside a runtime-guarded branch. A file-authored blueprint can
+only have that DETECTED after the fact (§6.3). The DSL makes it unwritable — the
 emitter has no code path that produces a literal empty entity id:
 
 - optional entity input as a service target -> automatically templated via a

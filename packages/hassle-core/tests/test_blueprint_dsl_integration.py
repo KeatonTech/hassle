@@ -1,4 +1,4 @@
-"""Stage 2 against the rest of the system (blueprints-design §8.7, §8.8, §8.9).
+"""The blueprint DSL against the rest of the system (blueprints-design §8.7, §8.8, §8.9).
 
 Three seams a DSL-authored blueprint has to meet:
 
@@ -7,7 +7,7 @@ Three seams a DSL-authored blueprint has to meet:
 - **§8.8** the simulator prefers a compiled blueprint object from the same
   ``CompileResult`` over the on-disk lookup, so an instance of a blueprint that
   was never written to disk still expands;
-- **§8.9** stage 1's instance checks work against a DSL declaration, and gain
+- **§8.9** the object layer's instance checks work against a DSL declaration, and gain
   the one the declaration makes newly answerable — an entity-selector input
   handed something that is not an entity id.
 """
