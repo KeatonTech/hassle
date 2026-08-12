@@ -1008,6 +1008,200 @@ Compiles to (canonical IR / stored HA shape):
 }
 ```
 
+### `blueprint`
+
+Golden case: `fixtures/dsl/blueprint_dsl_authored/`.
+
+```python
+"""Golden case: blueprint_dsl_authored (docs/internals/blueprints-design.md §8).
+
+A blueprint AUTHORED IN THE DSL. The file-authored golden (`blueprint_managed_object`)
+pins a hand-written blueprint FILE becoming a managed object; this one pins the
+DSL inversion — there is no file, and `BlueprintConfig.source` in
+`expected_ir.json` is the emitted YAML, byte for byte.
+
+That makes this fixture the determinism gate (§8.6): declaration order for the
+inputs, the fixed metadata and section order, the `!input` tags in plain style,
+and the header naming the Python source. Any drift in the emitter shows up here
+as a golden diff rather than as a surprise in somebody's Home Assistant.
+"""
+
+from hassle import blueprint, bp_input, service, state, when
+
+
+@blueprint(
+    domain="automation",
+    path="local/room-switch-controls.yaml",
+    name="Room switch controls",
+    description="Tap a wall switch to drive a room's light.",
+    mode="restart",
+)
+def room_switch_controls():
+    switch_entity = bp_input(
+        "switch_entity",
+        selector={"entity": {"filter": [{"domain": "sensor"}]}},
+        description="The wall switch that drives this room.",
+    )
+    room_light = bp_input(
+        "room_light",
+        selector={"entity": {"filter": [{"domain": "light"}]}},
+    )
+    dim_step_pct = bp_input(
+        "dim_step_pct",
+        selector={"number": {"min": 1, "max": 100}},
+        default=10,
+    )
+    when(state(switch_entity).to("on"))
+    service(
+        "light.turn_on",
+        target={"entity_id": room_light},
+        brightness_step_pct=dim_step_pct,
+    )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "blueprint:automation/local/room-switch-controls.yaml": {
+    "domain": "automation",
+    "inputs": {
+      "dim_step_pct": {
+        "default": 10,
+        "selector": {
+          "number": {
+            "max": 100,
+            "min": 1
+          }
+        }
+      },
+      "room_light": {
+        "selector": {
+          "entity": {
+            "filter": [
+              {
+                "domain": "light"
+              }
+            ]
+          }
+        }
+      },
+      "switch_entity": {
+        "description": "The wall switch that drives this room.",
+        "selector": {
+          "entity": {
+            "filter": [
+              {
+                "domain": "sensor"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "path": "local/room-switch-controls.yaml",
+    "source": "# Compiled from Python by Hassle. Do not edit -- edit the source and recompile.\n# Source: switches.py\nblueprint:\n  name: Room switch controls\n  description: Tap a wall switch to drive a room's light.\n  domain: automation\n  input:\n    switch_entity:\n      description: The wall switch that drives this room.\n      selector:\n        entity:\n          filter:\n            - domain: sensor\n    room_light:\n      selector:\n        entity:\n          filter:\n            - domain: light\n    dim_step_pct:\n      selector:\n        number:\n          min: 1\n          max: 100\n      default: 10\ntriggers:\n  - trigger: state\n    entity_id: !input switch_entity\n    to: 'on'\nactions:\n  - action: light.turn_on\n    target:\n      entity_id: !input room_light\n    data:\n      brightness_step_pct: !input dim_step_pct\nmode: restart\n"
+  }
+}
+```
+
+### `bp_input`
+
+Golden case: `fixtures/dsl/blueprint_dsl_authored/`.
+
+```python
+"""Golden case: blueprint_dsl_authored (docs/internals/blueprints-design.md §8).
+
+A blueprint AUTHORED IN THE DSL. The file-authored golden (`blueprint_managed_object`)
+pins a hand-written blueprint FILE becoming a managed object; this one pins the
+DSL inversion — there is no file, and `BlueprintConfig.source` in
+`expected_ir.json` is the emitted YAML, byte for byte.
+
+That makes this fixture the determinism gate (§8.6): declaration order for the
+inputs, the fixed metadata and section order, the `!input` tags in plain style,
+and the header naming the Python source. Any drift in the emitter shows up here
+as a golden diff rather than as a surprise in somebody's Home Assistant.
+"""
+
+from hassle import blueprint, bp_input, service, state, when
+
+
+@blueprint(
+    domain="automation",
+    path="local/room-switch-controls.yaml",
+    name="Room switch controls",
+    description="Tap a wall switch to drive a room's light.",
+    mode="restart",
+)
+def room_switch_controls():
+    switch_entity = bp_input(
+        "switch_entity",
+        selector={"entity": {"filter": [{"domain": "sensor"}]}},
+        description="The wall switch that drives this room.",
+    )
+    room_light = bp_input(
+        "room_light",
+        selector={"entity": {"filter": [{"domain": "light"}]}},
+    )
+    dim_step_pct = bp_input(
+        "dim_step_pct",
+        selector={"number": {"min": 1, "max": 100}},
+        default=10,
+    )
+    when(state(switch_entity).to("on"))
+    service(
+        "light.turn_on",
+        target={"entity_id": room_light},
+        brightness_step_pct=dim_step_pct,
+    )
+```
+
+Compiles to (canonical IR / stored HA shape):
+
+```json
+{
+  "blueprint:automation/local/room-switch-controls.yaml": {
+    "domain": "automation",
+    "inputs": {
+      "dim_step_pct": {
+        "default": 10,
+        "selector": {
+          "number": {
+            "max": 100,
+            "min": 1
+          }
+        }
+      },
+      "room_light": {
+        "selector": {
+          "entity": {
+            "filter": [
+              {
+                "domain": "light"
+              }
+            ]
+          }
+        }
+      },
+      "switch_entity": {
+        "description": "The wall switch that drives this room.",
+        "selector": {
+          "entity": {
+            "filter": [
+              {
+                "domain": "sensor"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "path": "local/room-switch-controls.yaml",
+    "source": "# Compiled from Python by Hassle. Do not edit -- edit the source and recompile.\n# Source: switches.py\nblueprint:\n  name: Room switch controls\n  description: Tap a wall switch to drive a room's light.\n  domain: automation\n  input:\n    switch_entity:\n      description: The wall switch that drives this room.\n      selector:\n        entity:\n          filter:\n            - domain: sensor\n    room_light:\n      selector:\n        entity:\n          filter:\n            - domain: light\n    dim_step_pct:\n      selector:\n        number:\n          min: 1\n          max: 100\n      default: 10\ntriggers:\n  - trigger: state\n    entity_id: !input switch_entity\n    to: 'on'\nactions:\n  - action: light.turn_on\n    target:\n      entity_id: !input room_light\n    data:\n      brightness_step_pct: !input dim_step_pct\nmode: restart\n"
+  }
+}
+```
+
 ### `input_boolean`
 
 Golden case: `fixtures/dsl/helper_declarations/`.

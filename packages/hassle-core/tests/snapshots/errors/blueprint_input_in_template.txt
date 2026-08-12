@@ -1,0 +1,1 @@
+The blueprint input `lights` at misc.py:<line> was built into a template string. Home Assistant substitutes `!input` into YAML nodes, not into the text inside a template, so the reference would reach HA as literal characters and never resolve. Fix: bind the input to a variable first with `variables(lights=lights)`, then reference the variable in the template as `{{ lights }}`.

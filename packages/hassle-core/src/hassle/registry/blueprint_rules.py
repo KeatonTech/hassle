@@ -35,6 +35,7 @@ worked example, which is clean):
 
 from __future__ import annotations
 
+import re
 from typing import Any, cast
 
 from hassle.blueprints import (
@@ -89,7 +90,7 @@ def _validate_instances(
         where_line = span.line if span is not None else None
         # An instance is always an AUTOMATION blueprint instance: that is what
         # `@blueprint_automation` declares (a `script` blueprint has no DSL
-        # instance form in stage 1), so the key derives with no guessing.
+        # instance form for file-authored blueprints), so the key derives with no guessing.
         blueprint = blueprints.get(blueprint_key_for_use_path(path))
         if blueprint is None:
             findings.append(_not_in_bundle(key, path, where_file, where_line))
@@ -176,6 +177,68 @@ def _check_inputs(
                     f"remove `{name}` from this automation's `inputs=` dict, or add it to "
                     f"the blueprint's `blueprint.input` block.{hint} Home Assistant "
                     f"rejects an unknown input the same way at save time."
+                ),
+            )
+        )
+
+    findings.extend(_check_entity_selectors(object_key, display, typed, supplied, file, line))
+    return findings
+
+
+#: An HA entity id is exactly ``<domain>.<object_id>``, both non-empty.
+_ENTITY_ID = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
+
+
+def _check_entity_selectors(
+    object_key: str,
+    display: str,
+    declared: dict[str, Any],
+    supplied: dict[str, Any],
+    file: str | None,
+    line: int | None,
+) -> list[Finding]:
+    """An entity-selector input handed something that is not an entity id (§8.9).
+
+    This question was never worth asking of a hand-written blueprint alone, and
+    the DSL does not change its mechanics -- a declared `selector: entity:` is
+    equally readable in both -- but DSL authoring is what made it worth asking: a DSL
+    blueprint's `selector=` sits at the declaration site, so the mistake it
+    catches ("kitchen" where a light entity was meant) is now a typo the author
+    can be told about instead of another opaque HTTP 400 at push time.
+
+    Deliberately narrow: only a plain string is judged, and only against the
+    shape of an entity id. A list (entity selectors may accept several), a
+    device/area id, or a templated value is left alone -- the rule exists to
+    catch the obvious typo, not to re-implement HA's selector schema (§6.4's
+    bar: each new rule motivated by a real rejection).
+    """
+    findings: list[Finding] = []
+    for name in sorted(set(supplied) & set(declared)):
+        spec = declared.get(name)
+        if not isinstance(spec, dict) or "entity" not in cast("dict[str, Any]", spec).get(
+            "selector", {}
+        ):
+            continue
+        value = supplied[name]
+        if not isinstance(value, str) or _ENTITY_ID.match(value) or "{" in value:
+            continue
+        findings.append(
+            Finding(
+                code="blueprint-input-not-an-entity-id",
+                severity="error",
+                file=file,
+                line=line,
+                message=(
+                    f"`{object_key}` supplies `{value}` for the blueprint input `{name}`, "
+                    f"which `{display}` declares as an entity selector, but that is not an "
+                    f"entity id (Home Assistant entity ids are `<domain>.<object_id>`, "
+                    f"e.g. `light.kitchen`)"
+                ),
+                fix=(
+                    f'replace it with the full entity id, e.g. `"{name}": "light.{value}"` '
+                    f"if that is the entity you meant. Home Assistant accepts the save and "
+                    f"then silently never matches the entity, so this one does not even "
+                    f"fail loudly at push time."
                 ),
             )
         )

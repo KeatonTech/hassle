@@ -1,6 +1,6 @@
 """`hassle.blueprints` is CORE, not a testing module (blueprints-design §1).
 
-Stage 1 makes a blueprint file a managed object, so the *validator*
+Making a blueprint file a managed object means the *validator*
 (`hassle.registry.validate`, §6) and the *backend* (`FakeBackend.
 blueprint_substitute`, §2/§7) both have to parse and expand blueprints --
 and neither may import from `hassle.testing`, which sits beside them in the

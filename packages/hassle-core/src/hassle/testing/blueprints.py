@@ -1,6 +1,6 @@
 """Compatibility re-export of :mod:`hassle.blueprints`.
 
-The blueprint loader/expander was **promoted to core** in stage 1 of
+The blueprint loader/expander was **promoted to core** by
 docs/internals/blueprints-design.md (§1): the validator and the backend both
 need it, and neither may import from `hassle.testing` (which sits beside them
 in the layering, not below — `tests/test_package_layering.py`).

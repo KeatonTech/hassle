@@ -236,3 +236,11 @@ class ApplyResult(BaseModel):
     # the bundle declares live instances of them. Reported so the CLI can say
     # so and the ordering tests can assert on it; never affects `succeeded`.
     blueprint_reloads: list[str] = []
+    # Additive (ha-api-notes §40.8): a blueprint whose post-update
+    # `automation.reload` had to fire before Home Assistant's own
+    # `blueprint/substitute` caught up with the save, so its instances may
+    # still be running the OLD expansion. Metadata-only, exactly like
+    # `category_warnings`: never affects `succeeded` (the blueprint file
+    # itself pushed correctly), and the message names the operator's
+    # remediation -- one more manual reload.
+    blueprint_warnings: list[str] = []

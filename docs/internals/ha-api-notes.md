@@ -4400,7 +4400,7 @@ fail and strand it — only a second blueprint delete failing in the same plan
 reaches the delete case. The update case is reachable whenever a blueprint
 update and a failing automation row share a plan.
 
-If stage 2 lands (blueprints authored in the DSL, §8), this stops mattering:
+With DSL-authored blueprints (§8), this stops mattering:
 the document becomes a deterministic compiled artifact, so the pre-update
 version is always reproducible from the bundle's own history.
 
@@ -4435,13 +4435,13 @@ update" row precedes the drift row.
 Residual exposure, documented and accepted: local edit **and** remote edit in
 the same window pushes over the remote edit without a conflict. Closing it
 needs either a source read (a future HA release) or the base document stored
-somewhere Hassle can reach — which stage 2 (§8) gets for free, since a
+somewhere Hassle can reach — which DSL authoring (§8) gets for free, since a
 DSL-authored blueprint is a deterministic compiled artifact reproducible from
 the bundle's own git history.
 
 ### 40.7 `blueprint/substitute` returns the CONFIG BLOCK ONLY (observed live 2026-08-10)
 
-Found by the **first live run** of stage 1 against the owner's HA, not by the
+Found by the **first live run** of the blueprint object kind against the owner's HA, not by the
 unit suite: the substitute-compare drift oracle reported "edited in place in
 Home Assistant" for a blueprint that had been pushed seconds earlier and was
 provably in sync — and would have kept reporting it on every plan, forever.
@@ -4495,3 +4495,86 @@ body-only and is what the oracle uses; `expand_blueprint` is the *simulator's*
 entry point and deliberately merges the instance's identity fields on top
 (`INSTANCE_IDENTITY_FIELDS`) so the simulator can run the automation. The
 oracle must never call the latter.
+
+### 40.8 `blueprint/substitute` serves a STALE copy briefly after a save (observed live 2026-08-10)
+
+The second field false-positive from the object kind's first live run, and the root
+cause of the one §40.7 was originally blamed for. Sequence observed against the
+owner's real HA:
+
+1. `blueprint/save` (a normal `hassle push` of an edited blueprint);
+2. `hassle plan` **within seconds** → the substitute-compare oracle reported
+   drift, i.e. "the blueprint was edited in place in Home Assistant";
+3. a hand comparison **~a minute later** → **zero** difference;
+4. a fresh `hassle plan` now, with content unchanged on both sides → **no
+   drift**.
+
+So `blueprint/substitute` kept expanding the **previous** document for a short
+window after the save. Nothing was wrong with either copy: the oracle was
+reading a cache that had not caught up, and telling the user their blueprint
+conflicted — prescribing an `--accept-local` they should never run.
+
+**The `automation.reload` issued after the save did NOT prevent it** (§4.3,
+§40.4). The blueprint cache and automation expansion are evidently separate
+concerns inside HA: reloading automations re-expands live instances, but does
+not appear to invalidate whatever `blueprint/substitute` reads from. Do not
+assume a reload settles this.
+
+**Mitigation** (`hassle.sync.blueprint_drift`): on a mismatch — and *only* on a
+mismatch — wait a bounded interval, re-substitute, and believe the later
+answer. A genuine remote edit stays a mismatch on every retry; the stale window
+heals invisibly. Defaults are `SETTLE_TIMEOUT = 5.0s` / `SETTLE_INTERVAL =
+1.0s`, i.e. up to five re-asks, shaped after `DirectBackend`'s existing
+`reload_timeout`/`reload_interval` pair — the repo's established precedent for
+"the write landed, the read hasn't caught up yet" (§2), and bounded polling in
+the transport/oracle seam rather than core-logic wall-clock (R8 governs
+compiler and simulator determinism, not I/O waits).
+
+The retry costs nothing on the common path: the overwhelming majority of plans
+see no mismatch and never sleep at all.
+
+**Modelled offline** by `FakeBackend.blueprint_stale_reads`: while positive,
+each `blueprint_substitute` call serves the document as it was before the most
+recent save and decrements the counter. That is what makes the regression
+reproducible in the unit suite (`test_blueprint_drift_oracle`) — without it,
+the fake's reads were always instantly fresh and this class of bug could only
+ever be found in the field, which is exactly what happened twice.
+
+Still unknown, and worth a capture if it ever matters: the true length of the
+window (only "seconds, less than a minute" was observed) and whether it scales
+with blueprint size or instance count. The five-second bound was chosen to
+cover the observed case with margin while keeping a real conflict's plan
+responsive; if a stale read ever outlives it, the result is the old behaviour —
+a self-healing false conflict — not a hang.
+
+**The second implication (added 2026-08-10): the post-update reload races the
+same window.** If the cache write races the WS response, then the
+`automation.reload` that `apply_plan` issues right after a blueprint UPDATE
+(blueprints-design §4.3) can fire while `blueprint/substitute` — and therefore
+presumably the same cache the reload's re-expansion reads — still holds the
+PRIOR document. HA would then re-expand every live instance against the OLD
+blueprint and leave them stale until some future, unrelated reload: a silently
+wrong house, under a push that reported success. Until this was closed, §4.3's
+reload was "reload and hope".
+
+**Sequencing fix** (`hassle.sync.apply._reload_after_blueprint_update` →
+`blueprint_drift.await_blueprint_settled`): settle first, reload second — the
+exact settle shape, knobs and comparison as the drift oracle above, probing
+with one bundle instance's inputs (`apply_plan(blueprint_instance_inputs=)`,
+additive; omitting it reproduces the pre-settle sequence byte for byte). On
+settle timeout the reload still fires — the old behaviour is the fallback,
+never a hang — and the apply surfaces a warning (`ApplyResult.
+blueprint_warnings`, metadata-only like `category_warnings`) naming the file,
+this section, and the operator remediation: reload automations once more, by
+hand, after the window has passed.
+
+**Operator note for pushes made by pre-settle versions**: the remediation is
+one manual `automation.reload` any time after the window (Developer Tools →
+YAML → Reload Automations). This was applied to the owner's live house on
+2026-08-10 for the adoption push that predated the fix.
+
+Pinned by `test_apply_blueprint_settle`: the reload lands only after a fresh
+substitute answer, the agreeing path never sleeps (the fake's
+`blueprint_settle_sleep` records waits instead of taking them, so the exact
+sequence is asserted), and a never-healing window still reloads plus the
+warning.

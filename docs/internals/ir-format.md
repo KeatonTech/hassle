@@ -109,7 +109,7 @@ Module: `hassle.ir` (package `hassle-core`). Public surface (`hassle.ir.__all__`
               "room_key": null}}
   ```
 
-  - `source` is the file's text, **byte-preserved**: stage 1's blueprint is
+  - `source` is the file's text, **byte-preserved**: a file-authored blueprint is
     *authored*, not generated, so a push that reflowed it would lose the
     author's comments and block scalars, and HA stores the document verbatim
     regardless. Read via `bytes.decode("utf-8")`, never text mode, so CRLF

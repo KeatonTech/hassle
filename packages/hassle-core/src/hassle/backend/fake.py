@@ -332,6 +332,20 @@ class FakeBackend:
         # and non-Protocol, like `flow_log`: the apply-ordering tests assert
         # a blueprint UPDATE with live instances triggers exactly one.
         self.automation_reloads = 0
+        # Post-save blueprint staleness (ha-api-notes §40.8). While positive,
+        # each `blueprint_substitute` call serves the document as it was
+        # BEFORE the most recent save and decrements this -- modelling the
+        # real HA window a plan run seconds after a push falls into. Zero (the
+        # default) means every read is fresh, so no existing test changes.
+        self.blueprint_stale_reads = 0
+        # identity -> the source this blueprint had before its last update.
+        self._blueprint_previous: dict[str, str] = {}
+        # Every settle wait `apply_plan` asked for before a post-update
+        # `automation.reload` (ha-api-notes §40.8), in order. The fake NEVER
+        # actually sleeps -- R2's "no network in unit tests" applied to the
+        # clock -- so a test can assert the exact wait sequence, and the
+        # common path (HA already fresh) provably costs nothing.
+        self.blueprint_settle_waits: list[float] = []
 
     # -- Backend protocol ---------------------------------------------------
 
@@ -850,6 +864,12 @@ class FakeBackend:
                 "existing blueprint, never a recreate"
             )
         _domain, _path, source = self._blueprint_parts(config)
+        # Remember what this blueprint said BEFORE the save, so
+        # `blueprint_stale_reads` can model real HA serving the prior document
+        # for a moment afterwards (ha-api-notes §40.8).
+        previous = self.blueprint_source(identity)
+        if previous is not None:
+            self._blueprint_previous[identity] = previous
         self._store[BLUEPRINT_KIND][identity] = {**config, "source": source}
         self._writes += 1
 
@@ -914,6 +934,14 @@ class FakeBackend:
         source = self.blueprint_source(identity)
         if source is None:
             raise ValueError(f"blueprint `{identity}` does not exist (blueprint/substitute)")
+        if self.blueprint_stale_reads > 0 and identity in self._blueprint_previous:
+            # Post-save staleness, modelled (ha-api-notes §40.8): real HA's
+            # `blueprint/substitute` served the PRIOR document for several
+            # seconds after a `blueprint/save`, which made a plan run straight
+            # after a push report drift that then self-healed. Setting this
+            # counter is how a test reproduces that window offline.
+            self.blueprint_stale_reads -= 1
+            source = self._blueprint_previous[identity]
         blueprint = parse_blueprint(
             source, display_path=blueprint_display_path(path, domain=domain)
         )
@@ -934,6 +962,16 @@ class FakeBackend:
         return {
             key: value for key, value in expanded.items() if key not in INSTANCE_IDENTITY_FIELDS
         }
+
+    def blueprint_settle_sleep(self, seconds: float) -> None:
+        """Record a settle wait instead of taking it (ha-api-notes §40.8).
+
+        Additive and non-Protocol, `getattr`-probed by
+        `hassle.sync.apply._reload_after_blueprint_update` exactly as
+        `reload_automations` is. `DirectBackend` deliberately does NOT define
+        it, so live pushes get a real `time.sleep`.
+        """
+        self.blueprint_settle_waits.append(seconds)
 
     def reload_automations(self) -> None:
         """``automation.reload`` (blueprints-design §4.3).

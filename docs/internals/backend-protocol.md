@@ -607,7 +607,7 @@ genuinely new property this kind has and no other does.
   | `update` | `blueprint/save {domain, path, yaml, allow_override: true}` |
   | `delete` | `blueprint/delete {domain, path}` — a missing path errors (`unknown_error`, ENOENT-shaped) and that error propagates |
 
-  `yaml` is the document **verbatim**, CRLF included: stage 1's blueprint is
+  `yaml` is the document **verbatim**, CRLF included: a file-authored blueprint is
   authored, not generated, and HA stores exactly what it is handed.
 - **Identity splits on the FIRST slash only.** `<path>` routinely contains more
   of them (`local/room-switch-controls.yaml`, `a/b/c.yaml`);

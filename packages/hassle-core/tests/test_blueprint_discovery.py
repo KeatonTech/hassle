@@ -1,6 +1,6 @@
 """`compile_bundle` discovers blueprint files as objects (blueprints-design §1).
 
-A blueprint is the one managed object with no DSL declaration in stage 1: its
+A blueprint is the one managed object that may have no DSL declaration: its
 source of truth is the bundle FILE at ``blueprints/<domain>/<path>``, so
 discovery is a filesystem scan rather than a decorator registration. That scan
 is what makes the file plannable, pushable and orderable like everything else —

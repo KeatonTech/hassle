@@ -20,6 +20,7 @@ from typing import Any
 from hassle.compiler.protocols import TriggerBuilder
 from hassle.compiler.recording import check_options
 from hassle.compiler.spans import SourceSpan, capture_span
+from hassle.ir.keys import BLUEPRINT_KIND
 from hassle.ir.models import IRObject
 
 
@@ -50,6 +51,12 @@ class RegisteredObject:
     # one the compiler traces inside a recorder. Only ever True for
     # ``kind == "dashboard"``; `bundle._build_dashboard` branches on it.
     raw: bool = False
+    # `@blueprint` (blueprints-design §8.1): the blueprint's own metadata --
+    # `domain`, `path`, `name`, `description`. None for every other kind. These
+    # are not HA automation options (they describe the blueprint, not the
+    # automation its body becomes), so they travel beside `options` rather than
+    # inside it; `bundle._build_blueprint` reads them.
+    blueprint_meta: dict[str, Any] | None = None
 
 
 @dataclass
@@ -131,6 +138,49 @@ def _register(
             span=span,
             declared_id=str(declared_id),
             decorator_triggers=list(decorator_triggers) if decorator_triggers else [],
+        )
+    )
+
+
+def register_blueprint(
+    *,
+    func: Callable[..., Any],
+    domain: str,
+    path: str,
+    name: str,
+    description: str | None,
+    options: dict[str, Any],
+    span: SourceSpan | None,
+) -> None:
+    """Register a ``@blueprint`` body (blueprints-design §8.1).
+
+    Rides the same :class:`RegisteredObject` stream as automations, scripts and
+    dashboards -- one registration path, one duplicate-identity check, one span
+    map. Like a dashboard's, the identity is passed in rather than derived from
+    the function name: a blueprint's identity is ``<domain>/<path>``, the object kind's
+    key verbatim (§1), so the object this compiles to is the one instances
+    already reference.
+
+    ``options`` are the automation options the blueprint BODY carries (``mode``,
+    ``max``), so they are checked against the automation allow-list -- a
+    blueprint body is an automation body with holes in it. The blueprint's own
+    metadata (``domain``/``path``/``name``/``description``) is not an HA
+    automation option and travels beside them.
+    """
+    check_options("automation", options, span)
+    current_registry().add(
+        RegisteredObject(
+            kind=BLUEPRINT_KIND,
+            func=func,
+            options=dict(options),
+            span=span,
+            declared_id=f"{domain}/{path}",
+            blueprint_meta={
+                "domain": domain,
+                "path": path,
+                "name": name,
+                "description": description,
+            },
         )
     )
 

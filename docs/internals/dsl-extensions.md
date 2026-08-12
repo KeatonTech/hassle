@@ -284,6 +284,19 @@ keyword conventions, implemented once
   author-qualified path (docs/internals/ha-api-notes.md §10.5). `alias=`/`description=`
   are real blueprint-automation top-level fields alongside `use_blueprint`
   (docs/internals/ha-api-notes.md §10.5).
+- `blueprint` — `@blueprint(domain=, path=, name=, description=, **options)` over
+  a function whose body is the recorder DSL, exactly as `@automation`'s is
+  (docs/internals/blueprints-design.md §8.1). Compiles to a `BlueprintConfig`
+  whose `source` is deterministically generated YAML (§8.6); no file is written
+  into `blueprints/`. `**options` are the automation options the blueprint BODY
+  carries (`mode`, `max`), checked against the automation allow-list.
+- `bp_input` — `bp_input(name, selector=, default=, description=)` inside a
+  `@blueprint` body, returning an `InputRef` placeholder that compiles to an
+  `!input <name>` node (§8.2). Valid wherever the DSL accepts an entity id or a
+  scalar; inside a Jinja template string it must be bound via `variables()`
+  first, which the compiler enforces (§8.3). An `InputRef` subclasses `str`, the
+  same technique `EntityRef` and `TemplateExpr` use, so every builder accepts one
+  with no signature change.
 - Helper declarations (DESIGN §5.7), one per storage-collection domain, each
   returning an `EntityRef` usable as an entity id elsewhere:
   `input_boolean`, `input_number`, `input_select`, `input_text`,

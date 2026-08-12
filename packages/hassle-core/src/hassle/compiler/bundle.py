@@ -39,7 +39,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from hassle.blueprints import discover_blueprints
+from hassle.blueprints import BLUEPRINT_ROOT, blueprint_body, discover_blueprints
+from hassle.compiler.blueprint_dsl import (
+    BlueprintDefinedTwiceError,
+    InputRef,
+    check_no_embedded_refs,
+    collecting_inputs,
+    emit_blueprint_yaml,
+    reject_optional_entity_triggers,
+    template_optional_entity_targets,
+)
 from hassle.compiler.errors import (
     AmbiguousCategorySourceError,
     DuplicateObjectError,
@@ -298,6 +307,64 @@ def _build_script(reg: RegisteredObject, rec: Recorder) -> tuple[ScriptConfig, _
     return obj, spans
 
 
+def _build_blueprint(reg: RegisteredObject) -> tuple[IRObject, _SectionSpans]:
+    """Compile one ``@blueprint`` into an ordinary managed ``BlueprintConfig``
+    (docs/internals/blueprints-design.md §8).
+
+    The body runs inside the ordinary ``recording(kind="automation")`` context —
+    the same recorder, the same verbs, the same spans — wrapped in an input
+    collector so ``bp_input`` calls land in declaration order (§8.6 rule 3).
+    What differs is only the last step: instead of validating the recorded body
+    as an ``AutomationConfig``, it is rendered to a deterministic YAML document
+    (§8.6) and handed to the object layer's own ``blueprint_body``, which re-parses the
+    text we just emitted — a free self-check that the artifact is a blueprint HA
+    can read, on every compile.
+
+    Unlike file-discovered blueprints, this one carries real spans:
+    the body has a DSL declaration site, so §6's findings can point at a Python
+    line instead of a bare filename.
+    """
+    meta = reg.blueprint_meta or {}
+    with collecting_inputs() as collector, recording(kind="automation", **reg.options) as rec:
+        reg.func()
+
+    body: dict[str, Any] = dict(reg.options)
+    body["triggers"] = [n.body for n in rec.triggers]
+    body["conditions"] = [n.body for n in rec.conditions]
+    body["actions"] = [n.body for n in rec.actions]
+    check_no_embedded_refs(body, reg.span)
+
+    # §8.5, in the order the two rules can fire: a trigger has no templated
+    # escape, so it is rejected outright; a target gets the escape applied.
+    reject_optional_entity_triggers(body["triggers"], reg.span)
+    bindings: dict[str, InputRef] = {}
+    for section in ("conditions", "actions"):
+        body[section] = template_optional_entity_targets(body[section], bindings)
+    if bindings:
+        # Emitted as the first body section (§8.6 rule 5) so the binding is in
+        # scope everywhere the template that reads it can appear.
+        body["variables"] = dict(bindings)
+
+    source = emit_blueprint_yaml(
+        name=str(meta["name"]),
+        description=meta.get("description"),
+        domain=str(meta["domain"]),
+        inputs=collector.declared,
+        body=body,
+        source_file=Path(reg.span.file).name if reg.span is not None else "<unknown>",
+    )
+    obj = parse(
+        blueprint_body(domain=str(meta["domain"]), path=str(meta["path"]), source=source),
+        kind=BLUEPRINT_KIND,
+    )
+    spans: _SectionSpans = {
+        "triggers": _flatten_spans(rec.triggers),
+        "conditions": _flatten_spans(rec.conditions),
+        "actions": _flatten_spans(rec.actions),
+    }
+    return obj, spans
+
+
 def _build_dashboard(reg: RegisteredObject) -> tuple[DashboardConfig, _NodeSpans]:
     """Compile one ``@dashboard``/``@raw_dashboard`` into the §3.2 envelope.
 
@@ -364,6 +431,18 @@ def compile_registered(
                 decl_span=reg.span,
                 duplicate_of=reg.span,
                 node_spans=dashboard_spans,
+            )
+            continue
+        if reg.kind == BLUEPRINT_KIND:
+            # A blueprint traces the ordinary automation recorder (its body IS
+            # an automation body, with holes), but compiles to a YAML document
+            # rather than an AutomationConfig -- blueprints-design §8.
+            blueprint_obj, blueprint_spans = _build_blueprint(reg)
+            result.add(
+                blueprint_obj,
+                spans=blueprint_spans,
+                decl_span=reg.span,
+                duplicate_of=reg.span,
             )
             continue
         with recording(kind=reg.kind, **reg.options) as rec:
@@ -447,7 +526,7 @@ def _register_blueprints(result: CompileResult, bundle_path: Path) -> None:
     """Register one ``BlueprintConfig`` per blueprint source file
     (docs/internals/blueprints-design.md §1).
 
-    The one managed object kind with **no DSL declaration** in stage 1: a
+    The one managed object kind that may carry **no DSL declaration**: a
     blueprint's source of truth is the bundle FILE at
     ``blueprints/<domain>/<path>``, authored rather than generated, so
     discovery is a filesystem scan (`hassle.blueprints.discover_blueprints`)
@@ -469,6 +548,18 @@ def _register_blueprints(result: CompileResult, bundle_path: Path) -> None:
     """
     for discovered in discover_blueprints(bundle_path):
         obj = parse(discovered.body, kind=BLUEPRINT_KIND)
+        key = obj.object_key()
+        if key in result.objects:
+            # §8.7: DSL authoring makes this reachable for the first time. Before it,
+            # the docstring above was right that only two files could collide,
+            # which the filesystem already prevents; now a `@blueprint` may have
+            # claimed the same identity, and neither silent winner is safe.
+            identity = key.split(":", 1)[1]
+            raise BlueprintDefinedTwiceError(
+                identity,
+                "/".join((BLUEPRINT_ROOT, identity)),
+                result.decl_span_for(key),
+            )
         result.add(obj, {}, None, None)
 
 

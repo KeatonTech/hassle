@@ -51,6 +51,7 @@ from typing import Any
 from hassle.backend.protocol import Backend
 from hassle.ir.canonical import sha256_hash, storage_canonical
 from hassle.ir.keys import BLUEPRINT_KIND
+from hassle.sync.blueprint_drift import await_blueprint_settled
 from hassle.sync.category_move import local_category_for_source_path, sync_category_on_move
 from hassle.sync.category_writeback import (
     _SCOPE_FOR_KIND,  # pyright: ignore[reportPrivateUsage]
@@ -199,6 +200,7 @@ def apply_plan(
     category_packages: frozenset[str] | None = None,
     on_progress: Callable[[int, int, PlanEntry], None] | None = None,
     blueprint_instances: dict[str, list[str]] | None = None,
+    blueprint_instance_inputs: dict[str, dict[str, Any]] | None = None,
 ) -> ApplyResult:
     """Apply the push-side actions of ``plan`` against ``backend``.
 
@@ -237,6 +239,13 @@ def apply_plan(
       when instances exist -- nothing to re-expand otherwise.
 
     Omitting it reproduces pre-blueprint behaviour byte for byte.
+
+    ``blueprint_instance_inputs`` (additive, ha-api-notes §40.8): blueprint
+    object key -> one of its instances' ``use_blueprint.input`` mapping. Used
+    only to probe `blueprint/substitute` before the post-update reload, so the
+    reload cannot race the post-save stale window and re-expand every instance
+    against the OLD blueprint. Omitting it skips the probe and reloads
+    immediately -- the pre-settle behaviour, preserved exactly.
     """
     push_entries = [entry for entry in plan.entries if entry.action in _PUSH_ACTIONS]
     # Pre-flight, before the sort and before anything is written or even read:
@@ -253,6 +262,7 @@ def apply_plan(
     category_warnings: list[str] = []  # never fails/rolls back apply
     category_conflicts: list[str] = []  # never fails/rolls back apply
     blueprint_reloads: list[str] = []  # blueprint keys an automation.reload followed
+    blueprint_warnings: list[str] = []  # never fails/rolls back apply (§40.8)
     # object_key -> the category slug ManifestEntry.category should
     # advance to (never touched at all for an object not in this dict --
     # `_advance_manifest` then falls back to the existing manifest entry's
@@ -360,7 +370,14 @@ def apply_plan(
             # Only for an UPDATE (a CREATE cannot have instances expanded
             # against a file that did not exist) and only when the bundle
             # actually declares instances.
-            if _reload_after_blueprint_update(backend, entry.object_key, blueprint_instances):
+            if _reload_after_blueprint_update(
+                backend,
+                entry.object_key,
+                blueprint_instances,
+                entry.local,
+                blueprint_instance_inputs,
+                blueprint_warnings,
+            ):
                 blueprint_reloads.append(entry.object_key)
 
         elif entry.action is PlanAction.UPDATE:
@@ -407,6 +424,7 @@ def apply_plan(
         category_warnings=category_warnings,
         category_conflicts=category_conflicts,
         blueprint_reloads=blueprint_reloads,
+        blueprint_warnings=blueprint_warnings,
     )
 
 
@@ -432,8 +450,11 @@ def _reload_after_blueprint_update(
     backend: Backend,
     object_key: str,
     blueprint_instances: dict[str, list[str]] | None,
+    local_body: dict[str, Any] | None,
+    instance_inputs: dict[str, dict[str, Any]] | None,
+    warnings: list[str],
 ) -> bool:
-    """Issue `automation.reload` after a blueprint update, if warranted.
+    """**Settle, then** issue `automation.reload` after a blueprint update.
 
     TODO(blueprints-design §4.3 — marked for empirical confirmation): the
     design records "HA does not re-expand live instances on `blueprint/save`
@@ -443,16 +464,64 @@ def _reload_after_blueprint_update(
     if HA does re-expand on its own, this reload is redundant but harmless --
     so the finding, once captured, changes at most whether this call stays.
 
+    **Sequencing (ha-api-notes §40.8).** `blueprint/save`'s cache write races
+    its own WS response: for several seconds afterwards `blueprint/substitute`
+    still serves the PRIOR document. A reload fired into that window makes HA
+    re-expand every live instance against the **OLD** blueprint, leaving them
+    stale until some future unrelated reload -- a silently wrong house, with
+    the push reporting success. So the reload waits until HA's own substitute
+    output matches the content just saved (`await_blueprint_settled`, which
+    shares the drift oracle's settle shape and knobs exactly).
+
+    On settle timeout the reload still fires -- the pre-existing behaviour is
+    the fallback, never a hang -- and a warning naming the file and the window
+    is surfaced, because the instances may then be stale.
+
     `reload_automations` is additive and NOT part of the frozen `Backend`
     Protocol; it is probed with `getattr`, the same pattern `entry_id_for` and
     `fetch_registry_snapshot` use, so a backend without it simply does not
     reload. Returns whether a reload was actually issued.
     """
     if not blueprint_instances or not blueprint_instances.get(object_key):
+        # No declared instances: nothing to re-expand, so neither the probe
+        # nor the reload has anything to do (§4.3). This skip predates the
+        # settle and is what keeps both free for an uninstantiated blueprint.
         return False
     reload = getattr(backend, "reload_automations", None)
     if reload is None:
         return False
+
+    inputs = (instance_inputs or {}).get(object_key)
+    if local_body is not None and inputs is not None:
+        # The wait itself is a backend concern, probed with `getattr` like
+        # every other additive non-Protocol extra here (`reload_automations`
+        # above, `blueprint_substitute`, `entry_id_for`). `DirectBackend`
+        # supplies nothing, so it gets a real `time.sleep`; `FakeBackend`
+        # supplies a RECORDING NO-OP, which is what keeps the unit suite
+        # instant and lets a test assert the exact wait sequence -- R2's "no
+        # network in unit tests" applied to the clock.
+        settle_sleep = getattr(backend, "blueprint_settle_sleep", None)
+        settled = await_blueprint_settled(
+            backend,
+            object_key,
+            local_body,
+            inputs,
+            **({"sleep": settle_sleep} if settle_sleep is not None else {}),
+        )
+        if not settled:
+            identity = object_key.partition(":")[2]
+            warnings.append(
+                f"Home Assistant was still serving the previous copy of "
+                f"`blueprints/{identity}` when the automations were reloaded, so its "
+                f"{len(blueprint_instances[object_key])} instance(s) may still be "
+                f"running the OLD version (docs/internals/ha-api-notes.md §40.8: "
+                f"`blueprint/save` updates the blueprint cache asynchronously, and "
+                f"the reload can race that window). The blueprint file itself pushed "
+                f"correctly and the next plan will show no drift. Fix: reload "
+                f"automations once more from Home Assistant (Developer Tools -> "
+                f"YAML -> Reload Automations, or call the `automation.reload` "
+                f"service) to re-expand them against the new blueprint."
+            )
     reload()
     return True
 

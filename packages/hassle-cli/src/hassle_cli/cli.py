@@ -1097,6 +1097,13 @@ def push(
     for warning in result.category_warnings:
         console.print(f"[yellow]{_esc(warning)}[/yellow]")
 
+    # A blueprint whose post-update reload had to fire before Home
+    # Assistant's substitute caught up with the save (ha-api-notes §40.8):
+    # metadata-only, never fatal -- the file itself pushed correctly, and
+    # the message carries the operator remediation.
+    for warning in result.blueprint_warnings:
+        console.print(f"[yellow]{_esc(warning)}[/yellow]")
+
     # Category-on-move conflicts (never silently resolved in either
     # direction) are printed too, never fatal for a push that otherwise
     # succeeded -- the object's own content update already applied; only its

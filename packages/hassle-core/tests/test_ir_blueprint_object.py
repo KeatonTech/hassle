@@ -8,7 +8,7 @@ with no re-slugification (the same "identity is HA's own string, verbatim"
 rule `dashboard` established for `url_path`).
 
 The IR body is the raw YAML text, **byte-preserved** (the file is authored,
-not generated, in stage 1), plus the parsed ``blueprint.input`` metadata the
+not generated, when file-authored), plus the parsed ``blueprint.input`` metadata the
 validator (§6) reads. Anything else would make a push lose the author's
 comments and formatting — and the whole document is what HA's
 ``blueprint/save`` takes.
@@ -119,7 +119,7 @@ def test_source_is_byte_preserved() -> None:
 
 
 def test_source_preserves_comments_and_blank_lines() -> None:
-    """Stage 1's file is AUTHORED, not generated: a push that dropped the
+    """A file-authored blueprint is AUTHORED, not generated: a push that dropped the
     author's comments would be a lossy round trip through Hassle."""
     source = obj_source = parse(_body(), kind=BLUEPRINT_KIND).to_ha()["source"]
     assert "# A bare input with no metadata at all is REQUIRED" in source
