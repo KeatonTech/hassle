@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from hassle.blueprints import discover_blueprints
 from hassle.compiler.errors import (
     AmbiguousCategorySourceError,
     DuplicateObjectError,
@@ -48,8 +49,8 @@ from hassle.compiler.recording import RecordedNode, Recorder, record_trigger, re
 from hassle.compiler.registry import PrebuiltObject, RegisteredObject, fresh
 from hassle.compiler.spans import SourceSpan
 from hassle.ir import normalize_ha
-from hassle.ir.keys import DASHBOARD_KIND, category_shaped_stem
-from hassle.ir.models import AutomationConfig, DashboardConfig, IRObject, ScriptConfig
+from hassle.ir.keys import BLUEPRINT_KIND, DASHBOARD_KIND, category_shaped_stem
+from hassle.ir.models import AutomationConfig, DashboardConfig, IRObject, ScriptConfig, parse
 
 # object_key -> {"triggers"|"conditions"|"actions": [SourceSpan | None, ...]}
 _SectionSpans = dict[str, list["SourceSpan | None"]]
@@ -216,7 +217,7 @@ class CompileResult:
         a consumer can find files that sit BESIDE the DSL in the bundle —
         today, the simulator resolving a blueprint automation's
         ``use_blueprint`` path against ``<bundle>/blueprints/automation/``
-        (:mod:`hassle.testing.blueprints`).
+        (:mod:`hassle.blueprints`).
         """
         return self._bundle_path
 
@@ -434,11 +435,41 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
     # see leftover registrations). Pre-built objects (helpers / raw / blueprint)
     # ride the `prebuilt` stream; function-shaped registrations ride `objects`.
     result = compile_registered(list(reg.objects), list(reg.prebuilt))
+    _register_blueprints(result, bundle_path)
     for source_path, category in category_globals.items():
         result.set_category_global(source_path, category)
     result.set_category_packages(category_packages)
     result.set_bundle_path(bundle_path)
     return result
+
+
+def _register_blueprints(result: CompileResult, bundle_path: Path) -> None:
+    """Register one ``BlueprintConfig`` per blueprint source file
+    (docs/internals/blueprints-design.md §1).
+
+    The one managed object kind with **no DSL declaration** in stage 1: a
+    blueprint's source of truth is the bundle FILE at
+    ``blueprints/<domain>/<path>``, authored rather than generated, so
+    discovery is a filesystem scan (`hassle.blueprints.discover_blueprints`)
+    instead of a decorator registration riding `reg.objects`/`reg.prebuilt`.
+    Registering it here is what makes the file plannable, pushable and
+    *ordered* like every other object — closing §0's first two failure modes
+    (a hand-run upload script, and instances pushed before the file exists).
+
+    Runs OUTSIDE `_sandboxed_import`: nothing here imports bundle code, it only
+    reads files. It runs after `compile_registered` so a blueprint object can
+    never mask a duplicate-key error among the declared objects — the keyspaces
+    are disjoint anyway (`blueprint:` prefixes nothing else), so `result.add`'s
+    duplicate check here can only fire for two files that resolve to the same
+    ``<domain>/<path>``, which the filesystem already makes impossible.
+
+    Spans are empty: a blueprint object has no DSL declaration site to point a
+    finding at. §6's findings are reported against the *instance's* span, or
+    against the blueprint's own file path with no line.
+    """
+    for discovered in discover_blueprints(bundle_path):
+        obj = parse(discovered.body, kind=BLUEPRINT_KIND)
+        result.add(obj, {}, None, None)
 
 
 def discover_category_packages(bundle_path: Path) -> frozenset[str]:

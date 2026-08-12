@@ -33,6 +33,7 @@ import libcst as cst
 from hassle.compiler.bundle import compile_bundle
 from hassle.decompiler.codegen import ScriptRef, decompile_bundle
 from hassle.ir.canonical import sha256_hash
+from hassle.ir.keys import BLUEPRINT_KIND
 from hassle.ir.models import IRObject, parse
 from hassle.ir.modernize import modernize_for_comparison
 from hassle.sync.models import Conflict, Plan, PlanAction, PlanEntry
@@ -468,6 +469,15 @@ def apply_pull_with_decompiler(
     adopts_by_path: dict[Path, list[PlanEntry]] = {}
     conflict_blocks_by_path: dict[Path, list[str]] = {}
     for entry in plan.entries:
+        if entry.kind == BLUEPRINT_KIND:
+            # docs/internals/blueprints-design.md §5, exactly as in
+            # `hassle.sync.pull.apply_pull`: excluded from pull's WRITES (HA
+            # cannot serve a blueprint's source back, and this engine has no
+            # decompiler for the kind either -- a blueprint is authored YAML,
+            # not generated DSL), but a conflict is still reported.
+            if entry.action is PlanAction.CONFLICT and entry.conflict is not None:
+                conflicts.append(entry.conflict)
+            continue
         if entry.action is PlanAction.REFRESH:
             _refresh(entry, source_writer, snapshot=snapshot)
         elif entry.action is PlanAction.ADOPT:

@@ -117,11 +117,36 @@ CONFIG_ENTRY_DOMAINS: frozenset[str] = TEMPLATE_DOMAINS | GROUP_DOMAINS
 # `{"meta": ..., "config": ...}` envelope so one plan row diffs both.
 DASHBOARD_KIND: str = "dashboard"
 
-# Every object kind Hassle syncs: automation, script, dashboard, the nine
-# storage-collection helpers, and the config-entry template-helper +
+# Blueprint SOURCE FILES (docs/internals/blueprints-design.md §1).
+#
+# Identity is `"<domain>/<path>"` -- HA's blueprint domain (`automation` or
+# `script`) plus EXACTLY the string an instance puts in `use_blueprint`. Used
+# verbatim, never re-slugified, for the same reason a dashboard's `url_path`
+# is: it is HA's own addressing string, and `slugify` would turn
+# `local/room-switch-controls.yaml` into `local_room_switch_controls_yaml`,
+# addressing a file HA does not have. The identity segment therefore routinely
+# contains SLASHES and DOTS -- one more reason downstream code must honor
+# ir-format.md's key-opacity rule (split on the FIRST colon only).
+#
+# The bundle-side source of truth is the file `blueprints/<domain>/<path>`,
+# mirroring HA's own `config/blueprints/` layout, so a bundle-authored
+# blueprint sits in the same relative place on both sides
+# (`hassle.blueprints.blueprint_subdir`).
+#
+# Unlike every other kind, this object is PUSH-AUTHORITATIVE: HA has no
+# command that serves a blueprint's source back (§2.1, probed 2026-08-10), so
+# there is no remote body to three-way against and no pull-side materialization
+# -- see `hassle.sync.blueprint_plan` for the plan table that replaces the
+# generic one, and blueprints-design §5 for pull.
+BLUEPRINT_KIND: str = "blueprint"
+
+# Every object kind Hassle syncs: automation, script, dashboard, blueprint, the
+# nine storage-collection helpers, and the config-entry template-helper +
 # group-helper domains.
 OBJECT_KINDS: frozenset[str] = (
-    frozenset({"automation", "script", DASHBOARD_KIND}) | HELPER_DOMAINS | CONFIG_ENTRY_DOMAINS
+    frozenset({"automation", "script", DASHBOARD_KIND, BLUEPRINT_KIND})
+    | HELPER_DOMAINS
+    | CONFIG_ENTRY_DOMAINS
 )
 
 

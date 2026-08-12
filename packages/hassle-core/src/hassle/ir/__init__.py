@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from hassle.ir.canonical import canonical_json, sha256_hash
 from hassle.ir.keys import (
+    BLUEPRINT_KIND,
     CONFIG_ENTRY_DOMAINS,
     DASHBOARD_KIND,
     GROUP_DOMAINS,
@@ -21,6 +22,7 @@ from hassle.ir.keys import (
 )
 from hassle.ir.models import (
     AutomationConfig,
+    BlueprintConfig,
     DashboardConfig,
     GroupHelperConfig,
     HelperConfig,
@@ -33,6 +35,7 @@ from hassle.ir.models import (
 from hassle.ir.normalize import normalize_ha
 
 __all__ = [
+    "BLUEPRINT_KIND",
     "CONFIG_ENTRY_DOMAINS",
     "DASHBOARD_KIND",
     "GROUP_DOMAINS",
@@ -40,6 +43,7 @@ __all__ = [
     "OBJECT_KINDS",
     "TEMPLATE_DOMAINS",
     "AutomationConfig",
+    "BlueprintConfig",
     "DashboardConfig",
     "GroupHelperConfig",
     "HelperConfig",

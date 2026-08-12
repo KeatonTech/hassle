@@ -33,7 +33,7 @@ from __future__ import annotations
 import copy
 from typing import Any, cast
 
-from hassle.ir.keys import DASHBOARD_KIND
+from hassle.ir.keys import BLUEPRINT_KIND, DASHBOARD_KIND
 from hassle.ir.normalize import normalize_ha
 
 _DELAY_DURATION_UNITS: tuple[str, ...] = ("hours", "minutes", "seconds", "milliseconds")
@@ -122,8 +122,14 @@ def modernize_for_comparison(config: dict[str, Any], *, kind: str) -> dict[str, 
     `wait_for_trigger` block would be silently rewritten -- and since the
     decompiler applies no such modernization to card bodies, a perfectly
     faithful round-trip would then compare as drifted forever.
+
+    **Exempt kind: ``blueprint``** -- likewise identity, and likewise
+    load-bearing (docs/internals/blueprints-design.md §1): the body's ``source``
+    is an opaque, byte-preserved YAML document and its ``inputs`` are HA
+    selector schemas, neither of which is an HA config mapping this module's
+    rewrites have any business walking.
     """
-    if kind == DASHBOARD_KIND:
+    if kind in (DASHBOARD_KIND, BLUEPRINT_KIND):
         return copy.deepcopy(config)
     normalized = normalize_ha(config, kind=kind)
     out = copy.deepcopy(normalized)
