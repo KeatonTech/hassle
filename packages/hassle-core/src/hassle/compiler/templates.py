@@ -78,6 +78,7 @@ from typing import Any
 # `builders._NoBool`, override `_branch_repr`"): pyright's cross-module
 # private-access check is silenced here for that one documented reason.
 from hassle.compiler.builders import StateExpr, _NoBool  # pyright: ignore[reportPrivateUsage]
+from hassle.compiler.durations import normalize_duration
 from hassle.compiler.errors import CompileError
 from hassle.compiler.spans import capture_span
 
@@ -218,9 +219,15 @@ class TemplateExpr(_NoBool, str):
     _inner: str
     _compound: bool
     _prec: int | None
+    _trigger_for: dict[str, int] | None
 
     def __new__(
-        cls, inner: str, *, compound: bool = False, prec: int | None = None
+        cls,
+        inner: str,
+        *,
+        compound: bool = False,
+        prec: int | None = None,
+        trigger_for: dict[str, int] | None = None,
     ) -> TemplateExpr:
         obj = str.__new__(cls, f"{{{{ {inner} }}}}")
         obj._inner = inner
@@ -237,6 +244,12 @@ class TemplateExpr(_NoBool, str):
         # `shade_tracks_sun` golden pins (`state_attr(...) * pi / 180`, no
         # redundant parens).
         obj._prec = prec
+        # `for_=` on the TRIGGER serialization only (see `to_trigger`). Set by
+        # `template(raw, for_=...)` and by nothing else -- an operator builds a
+        # NEW TemplateExpr, which starts with no trigger options, so a shared
+        # module-level constant can never smuggle its `for` into an expression
+        # derived from it.
+        obj._trigger_for = trigger_for
         return obj
 
     def _branch_repr(self) -> str:
@@ -250,8 +263,14 @@ class TemplateExpr(_NoBool, str):
     # (DESIGN §5.4 lists ``template()`` among the trigger builders). One name, one
     # object: inside ``when``/``only_if`` it serializes to the template block; as a
     # bare value it IS the ``{{ ... }}`` string.
-    def to_trigger(self) -> dict[str, str]:
-        return {"trigger": "template", "value_template": self.to_template()}
+    def to_trigger(self) -> dict[str, Any]:
+        body: dict[str, Any] = {"trigger": "template", "value_template": self.to_template()}
+        # `for:` is a TRIGGER field. HA's template CONDITION has no such key, and
+        # the bare value is still just the Jinja string -- one object, three
+        # readings, and the duration belongs to exactly one of them.
+        if self._trigger_for is not None:
+            body["for"] = dict(self._trigger_for)
+        return body
 
     def to_condition(self) -> dict[str, str]:
         return {"condition": "template", "value_template": self.to_template()}
@@ -532,18 +551,39 @@ def state_of(entity: Any) -> TemplateExpr:
     return TemplateExpr(f"states({entity_id!r})")
 
 
-def template(raw: str) -> TemplateExpr:
+def template(raw: str, *, for_: Any = None) -> TemplateExpr:
     """Raw Jinja passthrough (DESIGN §5.4): ``template("{{ ... }}")``.
 
     Strips one layer of ``{{ }}`` if present (so the stored inner text matches
     any other ``TemplateExpr``, and re-wrapping via
     :meth:`TemplateExpr.to_template` reproduces the input verbatim); otherwise
     the given text is used as-is as the inner expression.
+
+    ``for_=`` (blueprints-design §8.11) is the template TRIGGER's hold time --
+    "this expression has been true for N" -- and takes the same three forms
+    every other builder's ``for_=`` does (a ``timedelta``, an ``"HH:MM:SS"``
+    string, or an ``hours()``/``minutes()``/``seconds()`` dict), normalized by
+    the one shared :func:`~hassle.compiler.durations.normalize_duration`. It was
+    the template trigger's one missing common option, and its absence was the
+    second reason real bundles reached for ``raw_trigger`` -- which inside a
+    recorder body is metadata masquerading as step zero.
+
+    It is a parameter here rather than a chained ``.with_options(for_=...)``
+    because a ``TemplateExpr`` is a value: bundles bind them to module-level
+    constants and reuse them, so a chained setter would have to mutate a shared
+    object (silently attaching a hold time to every other use of that constant)
+    or return a copy that the ``str`` subclass makes ambiguous. ``for_`` on the
+    call that BUILDS the trigger has neither problem. An operator applied to the
+    result starts a fresh expression with no ``for``.
     """
     text = raw.strip()
     is_wrapped = text.startswith("{{") and text.endswith("}}")
     inner = text[2:-2].strip() if is_wrapped else text
-    return TemplateExpr(inner, compound=True)
+    return TemplateExpr(
+        inner,
+        compound=True,
+        trigger_for=normalize_duration(for_) if for_ is not None else None,
+    )
 
 
 def _state_value(state_expr: StateExpr) -> TemplateExpr:

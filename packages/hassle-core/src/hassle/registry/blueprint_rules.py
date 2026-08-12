@@ -1,8 +1,9 @@
 """`hassle validate`'s blueprint rules — docs/internals/blueprints-design.md §6.
 
-Offline, like every other tier-2 check. Three rules, each motivated by a **real
-Home Assistant rejection** rather than by a schema guess — §6.4 makes that the
-standing bar for adding a fourth:
+Offline, like every other tier-2 check. Rules 1-3 are each motivated by a
+**real Home Assistant rejection** rather than by a schema guess — §6.4 makes
+that the standing bar, and rules 4 and (in §8.9) `blueprint-input-not-an-entity-id`
+are the two documented, deliberate exceptions to it:
 
 1. **Instance inputs** (`blueprint-missing-input` / `blueprint-unknown-input`).
    An instance whose `use_blueprint` path matches a bundle-local blueprint is
@@ -18,6 +19,14 @@ standing bar for adding a fourth:
    `target.entity_id` / `entity_id` anywhere in the blueprint body. HA
    validates the **static** expanded config and rejects a literal empty id even
    inside a branch a runtime guard makes unreachable.
+4. **Dead input declaration** (`blueprint-input-never-used`, severity
+   `warning`, §8.2). A module-scope `bp_input(...)` no blueprint references.
+   Not an HA rejection at all — the declaration reaches no HA document — but
+   §8.2's membership-by-use model makes "declared and forgotten" a state the
+   compiler can see and nothing else can: it is the offline counterpart of that
+   model's one accepted cost (deleting the last reference silently drops the
+   input). A warning, because it is also what a half-finished refactor looks
+   like.
 
 Rule 3's exemptions are as load-bearing as its trigger, and all three come from
 the same real blueprint (BrandtCamp's `room-switch-controls.yaml`, the design's
@@ -67,6 +76,54 @@ def validate_blueprints(result: CompileResult) -> list[Finding]:
     findings: list[Finding] = []
     findings.extend(_validate_instances(result, blueprints))
     findings.extend(_validate_empty_optional_entities(blueprints))
+    findings.extend(_validate_dead_input_declarations(result))
+    return findings
+
+
+# --- rule 4: a module-scope declaration nothing uses ------------------------
+
+
+def _validate_dead_input_declarations(result: CompileResult) -> list[Finding]:
+    """Module-scope ``bp_input`` declarations no blueprint references (§8.2).
+
+    A **warning**, not an error, and the asymmetry is deliberate. Under §8.2's
+    revised model a module-scope declaration joins a blueprint's schema by being
+    USED, so one nothing uses is inert -- it reaches no Home Assistant document
+    and cannot break anything. It is also exactly the intermediate state of a
+    real refactor (declare the input, wire it up next), and failing the compile
+    would make that state unbuildable. So it is reported, at the declaration
+    site, and left to the author.
+
+    This is the offline counterpart of the cost §8.2 accepts: membership-by-use
+    means deleting the last branch that referenced an input silently drops it
+    from the schema. This warning is what makes "silently" untrue in practice --
+    the declaration outlives its last use, and says so.
+    """
+    findings: list[Finding] = []
+    for ref in result.unused_blueprint_inputs:
+        span = ref.declaration_span
+        findings.append(
+            Finding(
+                code="blueprint-input-never-used",
+                severity="warning",
+                file=span.file if span is not None else None,
+                line=span.line if span is not None else None,
+                message=(
+                    f"The blueprint input `{ref.input_name}` is declared at module scope but "
+                    f"no blueprint references it. A module-scope `bp_input(...)` joins a "
+                    f"blueprint's input schema by being USED in its triggers, conditions or "
+                    f"actions ({_DESIGN_DOC} §8.2), so a declaration nothing references is "
+                    f"emitted into no blueprint document at all -- it is dead code rather "
+                    f"than a bundle-wide default"
+                ),
+                fix=(
+                    f"reference `{ref.input_name}` from a blueprint's triggers or actions, or "
+                    f"delete the declaration. If you meant a constant shared across the "
+                    f"bundle rather than a blueprint input, a plain Python value is the right "
+                    f"tool -- an input only exists to be filled in per instance."
+                ),
+            )
+        )
     return findings
 
 

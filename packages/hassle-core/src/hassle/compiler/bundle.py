@@ -45,8 +45,11 @@ from hassle.compiler.blueprint_dsl import (
     InputRef,
     check_no_embedded_refs,
     collecting_inputs,
+    drain_module_scope_declarations,
     emit_blueprint_yaml,
     reject_optional_entity_triggers,
+    reset_declared_blueprint_inputs,
+    resolve_inputs,
     template_optional_entity_targets,
 )
 from hassle.compiler.errors import (
@@ -104,6 +107,10 @@ def _empty_category_globals() -> dict[str, CategoryGlobal]:
     return {}
 
 
+def _empty_input_refs() -> list[InputRef]:
+    return []
+
+
 @dataclass
 class CompileResult:
     """The output of compiling a bundle: IR objects + their source spans."""
@@ -135,6 +142,12 @@ class CompileResult:
     # result assembled without a directory (`compile_registered`, or IR parsed
     # straight from HA JSON).
     _bundle_path: Path | None = None
+    # Module-scope `bp_input` declarations no blueprint referenced
+    # (blueprints-design §8.2). A sidecar exactly like `_spans` -- never part of
+    # the frozen IR schema. The validator turns each into a dead-declaration
+    # warning; it lives on the result because only the compiler knows both the
+    # declarations and which of them any blueprint reached.
+    _unused_blueprint_inputs: list[InputRef] = field(default_factory=_empty_input_refs)
 
     def add(
         self,
@@ -262,6 +275,19 @@ class CompileResult:
         validator (:mod:`hassle.registry.validate`)."""
         return dict(self._category_globals)
 
+    def set_unused_blueprint_inputs(self, refs: list[InputRef]) -> None:
+        """Record module-scope ``bp_input`` declarations nothing referenced
+        (blueprints-design §8.2). Internal to the pipeline (called from
+        :func:`compile_registered` once every blueprint has been built);
+        the validator reads :attr:`unused_blueprint_inputs`."""
+        self._unused_blueprint_inputs = list(refs)
+
+    @property
+    def unused_blueprint_inputs(self) -> list[InputRef]:
+        """Module-scope input declarations no blueprint uses -- read-only view
+        for the validator's dead-declaration warning."""
+        return list(self._unused_blueprint_inputs)
+
 
 def _flatten_spans(nodes: list[RecordedNode]) -> list[SourceSpan | None]:
     return [n.span for n in nodes]
@@ -307,7 +333,7 @@ def _build_script(reg: RegisteredObject, rec: Recorder) -> tuple[ScriptConfig, _
     return obj, spans
 
 
-def _build_blueprint(reg: RegisteredObject) -> tuple[IRObject, _SectionSpans]:
+def _build_blueprint(reg: RegisteredObject) -> tuple[IRObject, _SectionSpans, set[int]]:
     """Compile one ``@blueprint`` into an ordinary managed ``BlueprintConfig``
     (docs/internals/blueprints-design.md §8).
 
@@ -326,6 +352,12 @@ def _build_blueprint(reg: RegisteredObject) -> tuple[IRObject, _SectionSpans]:
     """
     meta = reg.blueprint_meta or {}
     with collecting_inputs() as collector, recording(kind="automation", **reg.options) as rec:
+        # `@blueprint(triggers=[...])` (§8.11), the same list and the same
+        # composition rule `@automation` uses: the decorator's triggers were
+        # built at decoration time, so record them before running the body and
+        # any `when()`/`raw_trigger` calls append after them, in call order.
+        for trig in reg.decorator_triggers:
+            record_trigger(trig, span=reg.span)
         reg.func()
 
     body: dict[str, Any] = dict(reg.options)
@@ -333,6 +365,14 @@ def _build_blueprint(reg: RegisteredObject) -> tuple[IRObject, _SectionSpans]:
     body["conditions"] = [n.body for n in rec.conditions]
     body["actions"] = [n.body for n in rec.actions]
     check_no_embedded_refs(body, reg.span)
+
+    # §8.2: use determines membership, declaration determines order. Runs
+    # BEFORE the §8.5 rewrite below, which moves optional-entity refs out of
+    # the tree and into a variable binding -- they are members either way, and
+    # asking first means one walk answers the question for both shapes.
+    inputs = resolve_inputs(
+        declared_in_body=collector.declared, body=body, identity=str(reg.declared_id)
+    )
 
     # §8.5, in the order the two rules can fire: a trigger has no templated
     # escape, so it is rejected outright; a target gets the escape applied.
@@ -349,7 +389,7 @@ def _build_blueprint(reg: RegisteredObject) -> tuple[IRObject, _SectionSpans]:
         name=str(meta["name"]),
         description=meta.get("description"),
         domain=str(meta["domain"]),
-        inputs=collector.declared,
+        inputs=inputs,
         body=body,
         source_file=Path(reg.span.file).name if reg.span is not None else "<unknown>",
     )
@@ -362,7 +402,7 @@ def _build_blueprint(reg: RegisteredObject) -> tuple[IRObject, _SectionSpans]:
         "conditions": _flatten_spans(rec.conditions),
         "actions": _flatten_spans(rec.actions),
     }
-    return obj, spans
+    return obj, spans, {ref.sequence for ref in inputs.values()}
 
 
 def _build_dashboard(reg: RegisteredObject) -> tuple[DashboardConfig, _NodeSpans]:
@@ -419,6 +459,12 @@ def compile_registered(
     order.
     """
     result = CompileResult()
+    # §8.2's membership set, accumulated across every blueprint: a module-scope
+    # `bp_input` no blueprint references reaches no HA document at all, and the
+    # validator says so (`blueprint-input-never-used`). Only knowable once every
+    # blueprint has been built, which is why it is collected here rather than in
+    # `_build_blueprint`.
+    used_input_sequences: set[int] = set()
     for pre in prebuilt_objects or []:
         result.add(pre.obj, spans={}, decl_span=pre.span, duplicate_of=pre.span)
     for reg in registry_objects:
@@ -437,7 +483,8 @@ def compile_registered(
             # A blueprint traces the ordinary automation recorder (its body IS
             # an automation body, with holes), but compiles to a YAML document
             # rather than an AutomationConfig -- blueprints-design §8.
-            blueprint_obj, blueprint_spans = _build_blueprint(reg)
+            blueprint_obj, blueprint_spans, used = _build_blueprint(reg)
+            used_input_sequences |= used
             result.add(
                 blueprint_obj,
                 spans=blueprint_spans,
@@ -475,6 +522,16 @@ def compile_registered(
     from hassle.compiler.template_helpers import check_no_dangling_template_helper_declarations
 
     check_no_dangling_template_helper_declarations()
+    # Self-cleaning, like the sweep above (see `drain_module_scope_declarations`):
+    # a direct `compile_registered` caller must not inherit a previous compile's
+    # declarations and report every one of them as dead.
+    result.set_unused_blueprint_inputs(
+        [
+            ref
+            for ref in drain_module_scope_declarations()
+            if ref.sequence not in used_input_sequences
+        ]
+    )
     return result
 
 
@@ -499,6 +556,13 @@ def compile_bundle(bundle_dir: str | Path) -> CompileResult:
     from hassle.compiler.raw_automation import reset_declared_raw_automations
     from hassle.compiler.template_helpers import reset_declared_template_helpers
 
+    # Blueprint input declarations are per-compile state too: the sequence
+    # numbers that order every emitted `input:` block are assigned from this
+    # list's length, so a leftover entry would shift a later compile's
+    # numbering. `compile_registered` also drains the list on its way out, so
+    # this is belt-and-braces -- it also covers a compile that RAISED partway
+    # through and never reached the drain.
+    reset_declared_blueprint_inputs()
     reset_declared_helpers()
     reset_declared_template_helpers()
     reset_declared_group_helpers()

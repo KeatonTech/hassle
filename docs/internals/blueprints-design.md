@@ -14,8 +14,11 @@ convention.
 Where implementation found reality — or an underspecified corner of this
 document itself — diverging from the text below, the statement is corrected
 **in place** with a dated, boxed note naming the finding; §3 (three notes),
-§4 (two notes) and §6 (two notes) each carry one or more. Read those before
-trusting a claim below from memory.
+§4 (two notes), §6 (two notes) and §8 (four notes) each carry one or more. Read
+those before trusting a claim below from memory. §8.11 (2026-08-11) is an
+*addition* rather than a correction: decorator triggers on blueprints, the
+module-scope declaration model they required, and the two builder sugar gaps
+that closed with them.
 
 Companion documents: [DESIGN.md](../../DESIGN.md), [CONTRIBUTING.md](../../CONTRIBUTING.md),
 and the contracts this extends additively: [ir-format.md](ir-format.md),
@@ -345,6 +348,63 @@ An `InputRef` is valid **wherever the DSL accepts an entity id or a scalar**:
 service targets, trigger `entity_id`, condition entities, service `data`
 values, and `variables()` values. It compiles to an `!input <name>` node.
 
+`bp_input` may be called **inside a `@blueprint` body or at module scope**. The
+declaration model has two halves, and they answer deliberately different
+questions:
+
+- **Use determines membership.** A blueprint's input schema is the set of
+  declarations whose refs appear anywhere in its compiled triggers, conditions
+  or actions — found by the same sentinel tree-walk §8.3's template check
+  already runs, asked a different question. Declaring inside a body also counts
+  as using, so a body may declare an input it does not yet reference (and every
+  pre-existing bundle keeps compiling unchanged). **Sharing one declaration
+  across several blueprints is legal and intended**: HA's `!input` namespace is
+  per-document, so each emitted document simply gets its own entry carrying the
+  shared metadata.
+- **Declaration determines order.** Each document's `input:` block is its used
+  declarations sorted by a **global declaration sequence number**, assigned at
+  `bp_input` call time from a counter reset at the start of every compile. Not
+  first-use order — see §8.6 rule 3.
+
+Determinism (R8) rests on compile order being fixed, which it is in both
+halves: bundle modules are imported in sorted path order, and blueprint bodies
+run in registration order, so the same bundle numbers its declarations the same
+way on every machine.
+
+> ⚠️ **REVISED 2026-08-11 (`hassle.compiler.blueprint_dsl`, pinned by
+> `test_blueprint_module_scope_inputs` and the `blueprint_dsl_shared_inputs`
+> golden).** This section originally made a module-scope `bp_input(...)` a
+> compile error (`BlueprintInputOutsideBodyError`: "an input only means
+> something to the blueprint that declares it, so there is nowhere to record
+> this one"). That error is **retired**, and the reasoning above replaces it.
+>
+> The constraint was never really about inputs. It was about the declaration
+> SITE being the only place a blueprint's membership could be read from — and
+> that made a body-scoped ref the only kind that could exist, which in turn made
+> `triggers=` on `@blueprint` impossible to build (§8.11): a trigger evaluated
+> at decoration time runs before any body, so it could never name an input.
+> Reading membership from USE instead makes a free-floating declaration
+> perfectly well-defined, and the walk that reads it already existed.
+>
+> **The costs, stated plainly, because they were accepted rather than
+> avoided.** First, membership-by-use means deleting the last branch that
+> referenced an input **silently drops it from the schema** — the emitted
+> document simply stops declaring it, and any instance still supplying it is
+> now passing an unknown input. That is not silent in practice: §6's existing
+> unknown-input check on instances catches it offline, and the new
+> `blueprint-input-never-used` warning catches the declaration that outlived its
+> last use. Second, a shared declaration is genuinely shared: **editing it moves
+> every user's form at once**, across every blueprint that references it. That
+> is the point of sharing and also its hazard, and it is why the emitted YAML
+> repeats the full metadata per document rather than pretending to a reference —
+> what HA receives is unambiguous even when the Python is terse.
+>
+> Two distinct declarations of one name both reachable from a **single**
+> blueprint remain an error (`DuplicateBlueprintInputError`, now naming both
+> declaration sites and the blueprint that can see both): HA's `blueprint.input`
+> block is a mapping, so one would silently replace the other. Across separate
+> blueprints the same name is fine — separate documents, separate namespaces.
+
 `!input` is a YAML *tag*, not a string, so it is emitted through a representer
 registered on the emitter's own dumper (§8.6) rather than by string splicing —
 splicing would quote it and HA would read the literal text `!input button`.
@@ -436,10 +496,31 @@ R8 determinism is a gate, so the emitter pins every degree of freedom:
    catch them, but the rule is stated so nobody adds one on purpose.
 2. **`blueprint:` metadata in fixed order**: `name`, `description`, `domain`,
    `input`. Absent optional keys are omitted, never emitted as `null`.
-3. **Inputs in declaration order** — `bp_input` call order, not sorted.
-   Declaration order is what the HA UI shows the user, so sorting would
-   reorder a real user-visible surface; call order also makes a diff of the
-   emitted YAML track the diff of the Python.
+3. **Inputs in declaration-sequence order, filtered by use** — the
+   declarations this blueprint reaches (§8.2), ordered by `bp_input` call
+   sequence, never sorted and never ordered by first use. Declaration order is
+   what the HA UI shows the user, so sorting would reorder a real user-visible
+   surface; call order also makes a diff of the emitted YAML track the diff of
+   the Python.
+
+   > ⚠️ **AMENDED 2026-08-11 (`hassle.compiler.blueprint_dsl.resolve_inputs`,
+   > pinned by the `blueprint_dsl_shared_inputs` golden).** This rule said
+   > simply "`bp_input` call order", which was complete while every declaration
+   > lived inside the one body that used it. With module-scope declarations
+   > (§8.2) the rule needs both halves stated, and the second one is the
+   > load-bearing choice: order comes from the **global declaration sequence**,
+   > not from the order refs first appear in the compiled body. First-use order
+   > was the tempting alternative — it needs no counter and reads off the walk
+   > for free — and it is wrong for exactly the reason this rule exists: moving
+   > a service call, or adding a condition that happens to mention an input
+   > earlier, would reorder the form Home Assistant renders for every user of
+   > the blueprint, for a reason invisible in the Python diff. Sequence order
+   > makes the emitted block a function of the declarations alone, so a body
+   > refactor can never move it.
+   >
+   > For a bundle written the old way this is a no-op: in-body declaration
+   > order *is* sequence order, so the pre-existing `blueprint_dsl_authored`
+   > golden is byte-identical across this change.
 4. **Auto-bound variables (§8.5) before author-declared ones**, themselves in
    input declaration order; author-declared `variables()` keep call order.
 5. **Body sections in canonical HA order**: `variables`, `triggers`,
@@ -512,3 +593,71 @@ not reachable for them. On-disk blueprints keep their existing behavior exactly.
 Round-tripping UI-edited blueprints to DSL. They stay raw-YAML file objects
 and promotion is a human act — the same asymmetry the decompiler already
 accepts elsewhere.
+
+### 8.11 Triggers belong in the decorator (added 2026-08-11)
+
+> Appended rather than inserted next to §8.4, deliberately: §8.1–§8.10 are
+> cited by section number from code comments, tests and error messages
+> throughout, and renumbering them to make this read in narrative order would
+> invalidate every one of those references to save one scroll.
+
+**The problem.** A trigger declared by a call inside a recorder body is
+metadata masquerading as step zero. Every other statement in a `@blueprint` (or
+`@automation`) body corresponds 1:1 to a step the automation will run; a
+`when(...)` or `raw_trigger(...)` call corresponds to nothing in the sequence —
+it describes when the sequence starts. `@automation` has carried `triggers=` in
+the decorator since DESIGN §5.3 for exactly this reason, and it is the
+canonical form the decompiler emits. Bodies should be pure action sequences.
+
+**`@blueprint` gains `triggers=`**, with `@automation`'s semantics verbatim:
+a sequence of `TriggerBuilder` objects built at decoration time, recorded
+first, with any `when()`/`raw_trigger` calls in the body appending after them
+in call order. It rides the same `RegisteredObject.decorator_triggers` list and
+the same `record_trigger` loop — one mechanism, one composition rule, no second
+implementation. Compile parity with the `when()` form is exact.
+
+Trigger builders in the decorator may reference `InputRef`s freely. They are
+`str` subclasses, so no builder signature changes, and the emitter's existing
+sentinel machinery converts them to `!input` nodes in trigger position exactly
+as it does in the body. This is what §8.2's module-scope declarations were
+needed for: a decoration-time trigger runs before any body, so with body-scoped
+declarations there was no ref for it to name. `@blueprint` lacked `triggers=`
+for that accidental reason and no other.
+
+**Two builder sugar gaps closed**, because a decorator trigger cannot be a
+`raw_trigger` — and, more to the point, an audit of the consumer bundle found
+that *every* `raw_trigger` in it exists because a typed builder could not
+express one field:
+
+- **`state(...).with_options(not_from=, not_to=)`** — HA's negated siblings of
+  `from:`/`to:`, list-or-scalar exactly as HA's schema takes them, carried into
+  `to_trigger()` verbatim (a singleton list stays a list; `compile(decompile(x))
+  == x`). They are state-trigger *fields*, emitted beside `from`/`to` and ahead
+  of the common options, and they are **trigger-only**: HA's `state` condition
+  schema has no such keys. This is the one shape a button automation needs and
+  could not write — an event entity's state is the timestamp of its last press,
+  so a real press is "any change except the `unavailable`/`unknown` shuffle the
+  platform replays after a restart", which is `not_from`/`not_to` and nothing
+  else. The simulator has honored both since the `not_from` fix.
+- **`template(raw, for_=...)`** — the template trigger's hold time, taking the
+  same three duration forms every other builder's `for_=` does, through the
+  same `normalize_duration`. It is a parameter on the call that *builds* the
+  trigger rather than a chained `.with_options(for_=...)` because a
+  `TemplateExpr` is a **value**: bundles bind them to module-level constants and
+  reuse them, so a chained setter would either mutate a shared object (silently
+  attaching a hold time to every other use of that constant) or return a copy
+  whose identity the `str` subclass makes ambiguous. An operator applied to the
+  result starts a fresh expression with no `for`, so nothing inherits it.
+
+Both are additive to the frozen DSL surface (dsl-extensions.md), and both are
+pinned against the raw dict they replace: sugar and `raw_trigger` must compile
+to byte-identical IR, or migrating a bundle would be a behavior change rather
+than a rewrite.
+
+**What is deliberately NOT here.** HA rejects a state trigger carrying both
+`from` and `not_from` (likewise `to`/`not_to`), and the DSL does not check for
+it. §6.4's standing bar is that each new rule be motivated by a real, captured
+rejection; that one has not been captured against this HA, and guessing a
+schema rule is how a validator starts flagging correct configs. It is a
+candidate for `hassle validate` the day someone hits it and captures it into
+`ha-api-notes.md`.

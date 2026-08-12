@@ -1105,6 +1105,8 @@ Compiles to (canonical IR / stored HA shape):
 }
 ```
 
+See also: `fixtures/dsl/blueprint_dsl_shared_inputs/`
+
 ### `bp_input`
 
 Golden case: `fixtures/dsl/blueprint_dsl_authored/`.
@@ -1201,6 +1203,8 @@ Compiles to (canonical IR / stored HA shape):
   }
 }
 ```
+
+See also: `fixtures/dsl/blueprint_dsl_shared_inputs/`
 
 ### `input_boolean`
 
