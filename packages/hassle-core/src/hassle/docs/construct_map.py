@@ -69,8 +69,13 @@ NAME_TO_CASES: dict[str, list[str]] = {
     "macro": ["macro_two_callers", "macro_with_args"],
     "raw_automation": ["raw_automation_legacy"],
     "blueprint_automation": ["blueprint_automation"],
-    "blueprint": ["blueprint_dsl_authored"],
-    "bp_input": ["blueprint_dsl_authored"],
+    # `blueprint_dsl_authored` stays primary (the simplest complete shape);
+    # `blueprint_dsl_shared_inputs` is the "see also" showing what the simple
+    # shape cannot: `triggers=` on the decorator, module-scope declarations
+    # shared by two documents, and membership-by-use ordering
+    # (blueprints-design §8.2/§8.11).
+    "blueprint": ["blueprint_dsl_authored", "blueprint_dsl_shared_inputs"],
+    "bp_input": ["blueprint_dsl_authored", "blueprint_dsl_shared_inputs"],
     "input_boolean": ["helper_declarations"],
     "input_number": ["helper_declarations"],
     "input_select": ["helper_declarations"],

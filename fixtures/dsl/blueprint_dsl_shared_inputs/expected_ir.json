@@ -1,0 +1,84 @@
+{
+  "blueprint:automation/local/tap-up-brighter.yaml": {
+    "domain": "automation",
+    "path": "local/tap-up-brighter.yaml",
+    "source": "# Compiled from Python by Hassle. Do not edit -- edit the source and recompile.\n# Source: switches.py\nblueprint:\n  name: 'Tap up: brighter'\n  description: One tap of the upper paddle steps this room's light up.\n  domain: automation\n  input:\n    room_light:\n      description: The light this switch owns.\n      selector:\n        entity:\n          filter:\n            - domain: light\n    step_up_pct:\n      description: How far one tap of the upper paddle brightens.\n      selector:\n        number:\n          min: 1\n          max: 100\n      default: 10\n    button_up:\n      description: The switch's upper paddle.\n      selector:\n        entity:\n          filter:\n            - domain: event\ntriggers:\n  - trigger: state\n    entity_id: !input button_up\n    not_from:\n      - unavailable\n    not_to:\n      - unknown\n      - unavailable\nactions:\n  - action: light.turn_on\n    target:\n      entity_id: !input room_light\n    data:\n      brightness_step_pct: !input step_up_pct\nmode: restart\n",
+    "inputs": {
+      "room_light": {
+        "description": "The light this switch owns.",
+        "selector": {
+          "entity": {
+            "filter": [
+              {
+                "domain": "light"
+              }
+            ]
+          }
+        }
+      },
+      "step_up_pct": {
+        "description": "How far one tap of the upper paddle brightens.",
+        "selector": {
+          "number": {
+            "min": 1,
+            "max": 100
+          }
+        },
+        "default": 10
+      },
+      "button_up": {
+        "description": "The switch's upper paddle.",
+        "selector": {
+          "entity": {
+            "filter": [
+              {
+                "domain": "event"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "blueprint:automation/local/tap-down-dimmer.yaml": {
+    "domain": "automation",
+    "path": "local/tap-down-dimmer.yaml",
+    "source": "# Compiled from Python by Hassle. Do not edit -- edit the source and recompile.\n# Source: switches.py\nblueprint:\n  name: 'Tap down: dimmer'\n  description: One tap of the lower paddle steps this room's light down.\n  domain: automation\n  input:\n    room_light:\n      description: The light this switch owns.\n      selector:\n        entity:\n          filter:\n            - domain: light\n    step_down_pct:\n      description: How far one tap of the lower paddle dims.\n      selector:\n        number:\n          min: -100\n          max: -1\n      default: -10\n    button_down:\n      description: The switch's lower paddle.\n      selector:\n        entity:\n          filter:\n            - domain: event\ntriggers:\n  - trigger: state\n    entity_id: !input button_down\n    not_from:\n      - unavailable\n    not_to:\n      - unknown\n      - unavailable\n  - trigger: template\n    value_template: '{{ states(''sensor.room_lux'') | float(-1) < 0 }}'\n    for:\n      hours: 0\n      minutes: 2\n      seconds: 0\nactions:\n  - action: light.turn_on\n    target:\n      entity_id: !input room_light\n    data:\n      brightness_step_pct: !input step_down_pct\nmode: restart\n",
+    "inputs": {
+      "room_light": {
+        "description": "The light this switch owns.",
+        "selector": {
+          "entity": {
+            "filter": [
+              {
+                "domain": "light"
+              }
+            ]
+          }
+        }
+      },
+      "step_down_pct": {
+        "description": "How far one tap of the lower paddle dims.",
+        "selector": {
+          "number": {
+            "min": -100,
+            "max": -1
+          }
+        },
+        "default": -10
+      },
+      "button_down": {
+        "description": "The switch's lower paddle.",
+        "selector": {
+          "entity": {
+            "filter": [
+              {
+                "domain": "event"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

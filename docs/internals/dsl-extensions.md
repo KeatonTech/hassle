@@ -284,19 +284,35 @@ keyword conventions, implemented once
   author-qualified path (docs/internals/ha-api-notes.md §10.5). `alias=`/`description=`
   are real blueprint-automation top-level fields alongside `use_blueprint`
   (docs/internals/ha-api-notes.md §10.5).
-- `blueprint` — `@blueprint(domain=, path=, name=, description=, **options)` over
+- `blueprint` — `@blueprint(domain=, path=, name=, description=, triggers=,
+  **options)` over
   a function whose body is the recorder DSL, exactly as `@automation`'s is
   (docs/internals/blueprints-design.md §8.1). Compiles to a `BlueprintConfig`
   whose `source` is deterministically generated YAML (§8.6); no file is written
   into `blueprints/`. `**options` are the automation options the blueprint BODY
   carries (`mode`, `max`), checked against the automation allow-list.
-- `bp_input` — `bp_input(name, selector=, default=, description=)` inside a
-  `@blueprint` body, returning an `InputRef` placeholder that compiles to an
-  `!input <name>` node (§8.2). Valid wherever the DSL accepts an entity id or a
-  scalar; inside a Jinja template string it must be bound via `variables()`
-  first, which the compiler enforces (§8.3). An `InputRef` subclasses `str`, the
-  same technique `EntityRef` and `TemplateExpr` use, so every builder accepts one
-  with no signature change.
+  `triggers=` (additive, §8.11) is `@automation`'s, with the same semantics and
+  the same precedence: a `Sequence[TriggerBuilder]` built at decoration time and
+  recorded before the body runs, so any `when()`/`raw_trigger` calls in the body
+  append after it, in call order. Compile parity with the `when()` form is
+  exact. Trigger builders here may reference `InputRef`s — which requires a
+  module-scope declaration, since the decorator runs before any body.
+- `bp_input` — `bp_input(name, selector=, default=, description=)`, returning an
+  `InputRef` placeholder that compiles to an `!input <name>` node (§8.2). Valid
+  wherever the DSL accepts an entity id or a scalar; inside a Jinja template
+  string it must be bound via `variables()` first, which the compiler enforces
+  (§8.3). An `InputRef` subclasses `str`, the same technique `EntityRef` and
+  `TemplateExpr` use, so every builder accepts one with no signature change.
+  Callable **inside a `@blueprint` body or at module scope** (additive; §8.2 as
+  revised 2026-08-11 — module scope used to raise
+  `BlueprintInputOutsideBodyError`, which is retired). A blueprint's input
+  schema is the set of declarations its own triggers/conditions/actions
+  REFERENCE (declaring inside a body also counts as using), ordered by global
+  declaration sequence rather than by first use — so one declaration may be
+  shared by several blueprints, and a body refactor never reorders the emitted
+  `input:` block. Two distinct declarations of one name reachable from a single
+  blueprint is a compile error; a module-scope declaration nothing references is
+  a `blueprint-input-never-used` validate warning.
 - Helper declarations (DESIGN §5.7), one per storage-collection domain, each
   returning an `EntityRef` usable as an entity id elsewhere:
   `input_boolean`, `input_number`, `input_select`, `input_text`,
@@ -456,12 +472,26 @@ Python's own `TypeError` from `bind_partial`, at compile time.
 - Dual-purpose builders (`state`, `numeric_state`, `time`, `sun`, `zone`,
   `template`) serialize as a trigger inside `when(...)` and as a condition
   inside `only_if(...)`.
-- `template(raw)` is **one** builder: as a bare value it *is* the `{{ … }}`
-  Jinja string (a `str` subclass with operator overloading); inside
-  `when`/`only_if` it serializes to a `template` trigger/condition.
+- `template(raw, for_=)` is **one** builder: as a bare value it *is* the
+  `{{ … }}` Jinja string (a `str` subclass with operator overloading); inside
+  `when`/`only_if` it serializes to a `template` trigger/condition. `for_=`
+  (additive, blueprints-design §8.11) is the TRIGGER's hold time only — it never
+  appears on the condition, and never in the bare value — and takes the same
+  three duration forms every other `for_=` does. It is a parameter on the
+  builder rather than a chained `.with_options(for_=...)` because a
+  `TemplateExpr` is a value bundles bind to module-level constants: a chained
+  setter would attach the hold time to every other use of that constant. An
+  operator applied to the result starts a fresh expression carrying no `for`.
 - Common trigger options are set on the builder — for `state` via
   `.to(v, id=, enabled=, variables=, for_=)` / `.is_(...)` / `.with_options(...)`;
   for the classic-builder family via `.with_options(...)`.
+- `state(...).with_options(not_from=, not_to=)` (additive, blueprints-design
+  §8.11): HA's negated siblings of `from:`/`to:` on the state **trigger**,
+  list-or-scalar exactly as HA's schema takes them and carried through verbatim
+  (a singleton list stays a list). Emitted beside `from`/`to`, ahead of the
+  common options, since they are state-trigger fields rather than options no
+  other trigger type has. Trigger-only: HA's `state` *condition* schema has no
+  such keys, so `to_condition()` never emits them.
 - `state(entity_id)`'s `entity_id` (and `.to()`/`.is_()`'s `value`) and
   `numeric_state(entity_id, ...)`'s `entity_id` accept `str | Sequence[str]`
   (`Sequence` rather than `list` so a decompiled bundle's
