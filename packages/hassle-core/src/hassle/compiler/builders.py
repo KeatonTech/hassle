@@ -50,7 +50,9 @@ class StateExpr(_NoBool):
 
     The common trigger options (``id=`` / ``enabled=`` / ``variables=`` / ``for_=``,
     DESIGN §5.4) are accepted directly on ``.to()`` / ``.is_()`` / ``.with_options()``
-    — there is no separate ``with_trigger_options`` wrapper.
+    — there is no separate ``with_trigger_options`` wrapper. ``with_options`` also
+    carries the state trigger's own ``not_from=`` / ``not_to=`` negations
+    (blueprints-design §8.11); see its docstring.
 
     ``entity_id`` (and ``.to()``/``.is_()``'s ``value``) accept
     ``str | Sequence[str]`` (real-world smoke-test addition; widened from
@@ -73,6 +75,8 @@ class StateExpr(_NoBool):
         self._entity_id = entity_id
         self._from: Any = _UNSET
         self._to: Any = _UNSET
+        self._not_from: Any = _UNSET
+        self._not_to: Any = _UNSET
         self._state: Any = _UNSET
         self._options: dict[str, Any] = {}
 
@@ -88,8 +92,30 @@ class StateExpr(_NoBool):
         enabled: bool | None = None,
         variables: dict[str, Any] | None = None,
         for_: Any = None,
+        not_from: Any = None,
+        not_to: Any = None,
     ) -> StateExpr:
-        """Attach common trigger options (DESIGN §5.4). Returns ``self`` for chaining."""
+        """Attach common trigger options (DESIGN §5.4). Returns ``self`` for chaining.
+
+        ``not_from=``/``not_to=`` are HA's negated siblings of ``from:``/``to:``
+        on the state TRIGGER (blueprints-design §8.11): "any prior state except
+        these". They take a list or a bare scalar, exactly as HA's schema does,
+        and are carried through verbatim -- a singleton list stays a list
+        (``compile(decompile(x)) == x``), a scalar stays a scalar.
+
+        They exist because without them a whole class of real trigger is
+        unwritable in the typed DSL and had to be a ``raw_trigger`` dict: an
+        event entity's state is the timestamp of the last press, so a *press*
+        is "any change except the ``unavailable``/``unknown`` shuffle the
+        platform replays after a restart", which is precisely
+        ``not_from``/``not_to`` and nothing else. A ``raw_trigger`` inside a
+        recorder body is metadata masquerading as step zero, so closing this
+        gap is what lets such an automation declare its triggers in the
+        decorator and keep its body a pure action sequence.
+
+        Trigger-only, deliberately: HA's ``state`` CONDITION schema has no
+        ``not_from``/``not_to``, so :meth:`to_condition` never emits them.
+        """
         if id is not None:
             self._options["id"] = id
         if enabled is not None:
@@ -98,6 +124,10 @@ class StateExpr(_NoBool):
             self._options["variables"] = variables
         if for_ is not None:
             self._options["for"] = normalize_duration(for_)
+        if not_from is not None:
+            self._not_from = not_from
+        if not_to is not None:
+            self._not_to = not_to
         return self
 
     def to(
@@ -145,6 +175,13 @@ class StateExpr(_NoBool):
             body["from"] = self._from
         if self._to is not _UNSET:
             body["to"] = self._to
+        # Beside `from`/`to`, ahead of the common options: these are state-trigger
+        # FIELDS (no other trigger type has them), and HA's own schema documents
+        # them in this order.
+        if self._not_from is not _UNSET:
+            body["not_from"] = self._not_from
+        if self._not_to is not _UNSET:
+            body["not_to"] = self._not_to
         body.update(self._options)
         return body
 
