@@ -72,13 +72,23 @@ UNSET: Final = UnsetType()
 class InputRef(str):
     """A declared blueprint input, usable anywhere the DSL takes a scalar."""
 
-    __slots__ = ("_bp_name", "_default", "_description", "_selector", "_span")
+    __slots__ = (
+        "_bp_name",
+        "_default",
+        "_description",
+        "_in_body",
+        "_selector",
+        "_sequence",
+        "_span",
+    )
 
     _bp_name: str
     _selector: dict[str, Any]
     _default: Any
     _description: str | None
     _span: SourceSpan | None
+    _sequence: int
+    _in_body: bool
 
     def __new__(
         cls,
@@ -88,6 +98,8 @@ class InputRef(str):
         default: Any = UNSET,
         description: str | None = None,
         span: SourceSpan | None = None,
+        sequence: int = 0,
+        in_body: bool = True,
     ) -> InputRef:
         self = super().__new__(cls, f"{_MARK}{name}{_MARK}")
         self._bp_name = name
@@ -95,6 +107,8 @@ class InputRef(str):
         self._default = default
         self._description = description
         self._span = span
+        self._sequence = sequence
+        self._in_body = in_body
         return self
 
     # `EntityRef` does the same: a deep-copied option dict would otherwise die
@@ -111,6 +125,33 @@ class InputRef(str):
     @property
     def input_name(self) -> str:
         return self._bp_name
+
+    @property
+    def declaration_span(self) -> SourceSpan | None:
+        """The ``bp_input(...)`` call site (public accessor for diagnostics)."""
+        return self._span
+
+    @property
+    def sequence(self) -> int:
+        """This declaration's global sequence number (§8.2).
+
+        Assigned at ``bp_input`` call time, monotonically, from a counter reset
+        at the start of every compile. It is the *only* thing that orders a
+        blueprint's emitted ``input:`` block, which is why it must not depend on
+        where a ref is later used: a body refactor that moves a reference must
+        not reorder the form the HA UI renders for a user.
+        """
+        return self._sequence
+
+    @property
+    def declared_in_body(self) -> bool:
+        """True when the ``bp_input`` call ran inside a ``@blueprint`` body.
+
+        A body-scoped declaration is a member of that body's blueprint by the
+        act of declaring (§8.2), so it can never be dead; only a module-scope
+        declaration can end up referenced by nothing.
+        """
+        return self._in_body
 
     @property
     def is_required(self) -> bool:
@@ -181,31 +222,40 @@ class BlueprintDefinedTwiceError(CompileError):
         )
 
 
-class BlueprintInputOutsideBodyError(CompileError):
-    """``bp_input`` was called outside a ``@blueprint`` body."""
+# `BlueprintInputOutsideBodyError` used to live here: a `bp_input(...)` call
+# outside a `@blueprint` body was an error, because "an input only means
+# something to the blueprint that declares it". §8.2's revision retired it --
+# see that section's dated note. The short version: the constraint was never
+# about inputs, it was about the DECLARATION SITE being the only place a
+# blueprint's membership could be read from, and once membership is read from
+# USE instead (the sentinel walk), a free-floating declaration is perfectly
+# well-defined and is what lets a decoration-time trigger name an input at all.
 
-    def __init__(self, name: str, span: SourceSpan | None) -> None:
-        where = f" at {span.file}:{span.line}" if span is not None else ""
-        super().__init__(
-            f"`bp_input({name!r})`{where} was called outside a `@blueprint` body. An "
-            f"input only means something to the blueprint that declares it, so there is "
-            f"nowhere to record this one. Fix: move the call inside a function decorated "
-            f"with `@blueprint(...)`, or use a plain Python value if you meant a constant "
-            f"shared by the bundle."
-        )
+
+def _at(span: SourceSpan | None) -> str:
+    return f"{span.file}:{span.line}" if span is not None else "an unknown location"
 
 
 class DuplicateBlueprintInputError(CompileError):
-    """Two ``bp_input`` calls in one blueprint declared the same name."""
+    """Two declarations of one input name are reachable from one blueprint (§8.2)."""
 
-    def __init__(self, name: str, span: SourceSpan | None) -> None:
-        where = f" at {span.file}:{span.line}" if span is not None else ""
+    def __init__(
+        self,
+        name: str,
+        identity: str,
+        first: SourceSpan | None,
+        second: SourceSpan | None,
+    ) -> None:
         super().__init__(
-            f"The blueprint input `{name}` is declared twice{where}. HA's "
-            f"`blueprint.input` block is a mapping, so the second declaration would "
-            f"silently replace the first along with its selector and default. Fix: give "
-            f"this input a different name, or reuse the `InputRef` the first "
-            f"`bp_input({name!r})` call returned."
+            f"Two different `bp_input({name!r})` declarations are both reachable from the "
+            f"blueprint `{identity}` -- one at {_at(first)}, the other at {_at(second)}. "
+            f"HA's `blueprint.input` block is a mapping, so one would silently replace the "
+            f"other along with its selector and default, and which one survived would "
+            f"depend on declaration order rather than on anything you wrote. Fix: delete "
+            f"one of them and reference the surviving `InputRef` from both places, or give "
+            f"one of them a different name. Two declarations sharing a name is only a "
+            f"problem when a single blueprint can see both -- separate blueprints each get "
+            f"their own `input:` namespace and may reuse the name freely."
         )
 
 
@@ -213,18 +263,48 @@ class DuplicateBlueprintInputError(CompileError):
 
 
 class _InputCollector:
-    """Collects one blueprint body's inputs, in declaration order (§8.6 rule 3)."""
+    """Collects the declarations made INSIDE one blueprint body.
+
+    Body-scoped declarations are the one case where declaring is also using
+    (§8.2), so this list seeds the blueprint's membership set before the
+    use-walk runs. It no longer checks for duplicates: with two declaration
+    sites the question "are these two the same input?" is only answerable once
+    a blueprint's whole reachable set is known, which is where
+    :func:`resolve_inputs` asks it -- and where both spans are available to put
+    in the error.
+    """
 
     def __init__(self) -> None:
-        self.declared: dict[str, InputRef] = {}
+        self.declared: list[InputRef] = []
 
-    def declare(self, ref: InputRef, span: SourceSpan | None) -> None:
-        if ref.input_name in self.declared:
-            raise DuplicateBlueprintInputError(ref.input_name, span)
-        self.declared[ref.input_name] = ref
+    def declare(self, ref: InputRef) -> None:
+        self.declared.append(ref)
 
 
 _COLLECTOR: list[_InputCollector] = []
+
+#: Every ``bp_input`` call of the CURRENT compile, in call order. An entry's
+#: index is its global declaration sequence number (§8.2): assignment is at call
+#: time, and both halves of compile order are deterministic -- bundle modules
+#: are imported in sorted path order, and blueprint bodies run in registration
+#: order -- so the numbering is reproducible across runs and machines (R8).
+#: Reset by :func:`reset_declared_blueprint_inputs`, exactly like the other
+#: declarative builders' module-level lists, so one compile never sees another's.
+_DECLARATIONS: list[InputRef] = []
+
+
+def reset_declared_blueprint_inputs() -> None:
+    """Clear the declaration list + sequence counter (called per compile)."""
+    _DECLARATIONS.clear()
+
+
+def module_scope_declarations() -> list[InputRef]:
+    """Declarations made OUTSIDE any blueprint body, in declaration order.
+
+    The only ones that can turn out to be dead: a body-scoped declaration is a
+    member of its own blueprint by construction.
+    """
+    return [ref for ref in _DECLARATIONS if not ref.declared_in_body]
 
 
 @contextlib.contextmanager
@@ -244,12 +324,29 @@ def bp_input(
     default: Any = UNSET,
     description: str | None = None,
 ) -> InputRef:
-    """Declare a blueprint input and return its placeholder (§8.2)."""
+    """Declare a blueprint input and return its placeholder (§8.2).
+
+    Legal both inside a ``@blueprint`` body and at module scope. The two sites
+    differ in exactly one way, and it is not the declaration: a body-scoped
+    declaration is a member of that body's blueprint by the act of declaring,
+    while a module-scope one joins the schema of every blueprint that
+    REFERENCES it (and of no other). Either way the emitted ``input:`` block is
+    ordered by declaration sequence, so where a ref is used never moves the
+    form the HA UI shows.
+    """
     span = capture_span(depth=0)
-    if not _COLLECTOR:
-        raise BlueprintInputOutsideBodyError(name, span)
-    ref = InputRef(name, selector=selector, default=default, description=description, span=span)
-    _COLLECTOR[-1].declare(ref, span)
+    ref = InputRef(
+        name,
+        selector=selector,
+        default=default,
+        description=description,
+        span=span,
+        sequence=len(_DECLARATIONS),
+        in_body=bool(_COLLECTOR),
+    )
+    _DECLARATIONS.append(ref)
+    if _COLLECTOR:
+        _COLLECTOR[-1].declare(ref)
     return ref
 
 
@@ -332,6 +429,48 @@ def check_no_embedded_refs(node: Any, span: SourceSpan | None) -> None:
             continue
         name = text.split(_MARK)[1] if text.count(_MARK) >= 2 else "?"
         raise BlueprintInputInTemplateError(name, span)
+
+
+def resolve_inputs(
+    *, declared_in_body: list[InputRef], body: Any, identity: str
+) -> dict[str, InputRef]:
+    """One blueprint's ``input:`` block: used declarations, in sequence order (§8.2).
+
+    **Use determines membership.** A declaration belongs to this blueprint if a
+    ref to it survives anywhere in the compiled body -- the same
+    :func:`_iter_strings` walk §8.3's template check runs, asked a different
+    question. There is deliberately no second traversal: whatever the recorder
+    can put a ref into, both checks see, and they cannot drift apart.
+
+    **Declaration determines order.** The result is sorted by global sequence
+    number, not by where each ref first appears. First-use order would mean
+    moving a service call reorders the form Home Assistant renders for every
+    user of the blueprint -- a real, user-visible surface changing for a reason
+    that is invisible in the diff.
+
+    ``declared_in_body`` seeds the set because declaring inside a body is also
+    using (§8.2): a body may legitimately declare an input it does not yet
+    reference, and that is also what keeps every pre-existing bundle emitting
+    byte-identical YAML (in-body declaration order IS sequence order).
+
+    Must run BEFORE §8.5's optional-entity templating, which rewrites some refs
+    out of the tree and into a variable binding -- they are used either way.
+    """
+    found: dict[int, InputRef] = {ref.sequence: ref for ref in declared_in_body}
+    for text in _iter_strings(body):
+        if isinstance(text, InputRef):
+            found[text.sequence] = text
+
+    resolved: dict[str, InputRef] = {}
+    for sequence in sorted(found):
+        ref = found[sequence]
+        collision = resolved.get(ref.input_name)
+        if collision is not None:
+            raise DuplicateBlueprintInputError(
+                ref.input_name, identity, collision.declaration_span, ref.declaration_span
+            )
+        resolved[ref.input_name] = ref
+    return resolved
 
 
 # --- §8.5: the structural guarantee -----------------------------------------

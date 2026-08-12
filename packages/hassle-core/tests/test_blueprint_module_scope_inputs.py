@@ -136,9 +136,10 @@ def test_each_document_gets_its_own_entry_with_the_shared_metadata(tmp_path: Pat
     """HA's `!input` namespace is per-document, so sharing is a source-level
     convenience, not a cross-document reference."""
     sources = _sources(tmp_path, SHARED)
+    assert len(sources) == 2
     for text in sources.values():
         parsed = parse_blueprint(text, display_path="x")
-        assert parsed.inputs["light"]["description"] == "The light this room drives."
+        assert parsed.raw_inputs["light"]["description"] == "The light this room drives."
 
 
 # --- membership by use ------------------------------------------------------
